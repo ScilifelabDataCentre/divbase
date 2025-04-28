@@ -1,0 +1,20 @@
+Steps taken to create a MinIO deployment using Bitnami's Helm Chart 
+
+== Local deployment using k3d
+
+[source,console]
+----
+k3d cluster create mycluster
+
+cd charts 
+helm pull oci://registry-1.docker.io/bitnamicharts/minio --untar 
+# renamed folder from minio to bitnami-minio
+
+helm install minio bitnami-minio/ -f bitnami-minio/values-local.yaml --namespace minio --create-namespace
+
+# access console - see values-local.yaml for username and password. 
+kubectl port-forward service/minio 9001:9001 -n minio
+
+# make api available 
+k port-forward service/minio 9000:9000 -n minio
+----

@@ -1,0 +1,15 @@
+= divbase-prototyping
+
+Create a mock DivBase implementation, so that we can prototype/test out ideas
+
+This will require an install of MinIO and creation of various accounts with MinIO. 
+
+Then mock projects can be created to test out how versioning and other features work for users.
+
+Can also be used to test out how a DivBase API could look. 
+
+== Folders: 
+- *charts:* Contains Helm charts for deploying various applications.
+- *docs:* Documentation 
+- *scripts:* Contains scripts for testing out ideas. 
+
