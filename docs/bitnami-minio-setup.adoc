@@ -18,3 +18,33 @@ kubectl port-forward service/minio 9001:9001 -n minio
 # make api available 
 k port-forward service/minio 9000:9000 -n minio
 ----
+
+
+== Remote deployment on scilifelab-2-dev.sys.kth.se
+
+Namespace `divbase-testground` already created via Rancher GUI.
+
+=== Step 1: Create secret for minio admin credentials 
+
+[source,console]
+----
+# password removed from here but can be obtained from the rancher console
+k --namespace divbase-testground \
+    create secret generic minio-credentials \
+    --dry-run=client \
+    --from-literal=MINIO_ROOT_USER="divbaseadmin" \
+    --from-literal=MINIO_ROOT_PASSWORD="" \ 
+    -o json \
+    | kubeseal -o yaml > charts/bitnami-minio/secrets/secret-minio-seal.yaml
+
+k apply -f charts/bitnami-minio/secrets/secret-minio-seal.yaml 
+----
+
+=== Step 2: helm install minio on dev cluster. 
+
+[source,console]
+----
+helm install minio charts/bitnami-minio/ -f charts/bitnami-minio/values-scilifelab-2-dev.yaml --namespace divbase-testground
+----
+
+

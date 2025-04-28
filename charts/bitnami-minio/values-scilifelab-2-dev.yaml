@@ -1,0 +1,41 @@
+namespaceOverride: divbase-testground
+
+auth:
+  existingSecret: "minio-credentials"
+  rootUserSecretKey: "MINIO_ROOT_USER"
+  rootPasswordSecretKey: "MINIO_ROOT_PASSWORD"
+
+persistence:
+  size: 2Gi
+  storageClass: "ontap-nas"
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 200m
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hostname: minio.divbase-testground.scilifelab-2-dev.sys.kth.se
+  path: /
+  pathType: Prefix
+  tls: true
+
+apiIngress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hostname: api.divbase-testground.scilifelab-2-dev.sys.kth.se
+  path: /
+  pathType: Prefix
+  tls: true
