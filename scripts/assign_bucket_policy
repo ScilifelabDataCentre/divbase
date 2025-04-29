@@ -1,0 +1,16 @@
+#!/bin/bash
+# For now, just read a template and assign the policy :) 
+
+BUCKET_NAME=squirrel-proj
+TEMPLATE_PATH=policies_permissions/template_policies
+set -e
+
+sed "s/BUCKET_NAME/$BUCKET_NAME/g" $TEMPLATE_PATH/read-write-template.json > /tmp/read-write-$BUCKET_NAME.json
+mc admin policy create divbase-testground read-write-$BUCKET_NAME /tmp/read-write-$BUCKET_NAME.json 
+
+# squirrel-researcher1 already created in console,
+# command doesn't seem to work if you pass no users. 
+mc admin group add divbase-testground $BUCKET_NAME-read-write-group squirrel-researcher1
+
+mc admin policy attach divbase-testground read-write-$BUCKET_NAME --group $BUCKET_NAME-read-write-group
+

@@ -1,0 +1,31 @@
+== Current understanding of the policies and permissions in the system is:
+
+For each new project, a new bucket is created in MinIO.
+
+A set of policies are created for each project/bucket, e.g:
+- *read-only:* Allows read-only access to the bucket.
+- *read-add:* Allows read and add access to the bucket, so no overwrites?
+- *read-write:* Allows read and write access to the bucket.
+- *project-lead:* Almost full access to the bucket - can't do "dangerous" things like delete the bucket/turn off versioning perhaps? 
+
+Then groups need to be created for each project, with these policies assigned to the groups
+
+So for every new project, new policies and groups need to be created in MinIO (can't somehow use the same policies for all projects - but specify different bucket?). If true, somekind of template policies/group approach (find and replace templates then apply them) could be useful. 
+
+
+
+== Test users and groups created
+
+=== Test users created:
+- squirrel-researcher1: the-best-project-ever  (in console)
+
+
+=== Test group(s) created:
+- squirrel-group:  (in console)
+- squirrel-proj-read-write-group (script via mc admin)
+
+=== Policies created:
+- read-write-squirrel-proj (script via mc admin)
+
+=== Policies assigned to groups:
+- squirrel-proj-read-write-group (script via mc admin)
