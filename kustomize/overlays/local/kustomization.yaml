@@ -13,5 +13,6 @@ helmCharts:
   releaseName: minio
   repo: oci://registry-1.docker.io/bitnamicharts
   version: 16.0.8
+  includeCRDs: true
   additionalValuesFiles:
     - values-local.yaml
