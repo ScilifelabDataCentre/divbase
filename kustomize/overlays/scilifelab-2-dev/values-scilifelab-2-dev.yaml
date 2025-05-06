@@ -45,32 +45,4 @@ provisioning:
   cleanupAfterFinished:
     enabled: true # cannot update/re-run if a completed job already exists
     seconds: 300
-  buckets:
-  - name: squirrel-proj
-    versioning: true
-    quota:
-      type: set
-      size: 1Gi
-  policies:
-    # existing policy
-    - name: read-write-squirrel-proj
-      statements:
-        - resources:
-            - "arn:aws:s3:::squirrel-proj"
-            - "arn:aws:s3:::squirrel-proj/*"
-          actions:
-            - "s3:GetObject"
-            - "s3:PutObject"
-            - "s3:ListBucket"
-          effect: "Allow"
-    # new policy
-    - name: read-write-squirrel-proj-from-kustomize
-      statements:
-        - resources:
-            - "arn:aws:s3:::squirrel-proj"
-            - "arn:aws:s3:::squirrel-proj/*"
-          actions:
-            - "s3:GetObject"
-            - "s3:PutObject"
-            - "s3:ListBucket"
-          effect: "Allow"
+  # buckets, policies etc.. are all defined in seperate values files, see config dir. 

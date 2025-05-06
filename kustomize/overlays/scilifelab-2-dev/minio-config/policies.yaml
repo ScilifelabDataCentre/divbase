@@ -1,0 +1,22 @@
+provisioning:
+  policies:
+    - name: read-write-squirrel-proj
+      statements:
+        - resources:
+            - "arn:aws:s3:::squirrel-proj"
+            - "arn:aws:s3:::squirrel-proj/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:ListBucket"
+          effect: "Allow"
+    - name: read-write-squirrel-proj-from-kustomize
+      statements:
+        - resources:
+            - "arn:aws:s3:::squirrel-proj"
+            - "arn:aws:s3:::squirrel-proj/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:ListBucket"
+          effect: "Allow"
