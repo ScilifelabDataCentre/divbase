@@ -1,3 +1,5 @@
+namespaceOverride: divbase-local
+
 auth:
   rootUser: admin
   rootPassword: squirrel123
