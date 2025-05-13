@@ -20,3 +20,16 @@ provisioning:
             - "s3:PutObject"
             - "s3:ListBucket"
           effect: "Allow"
+
+    - name: read-write-version-bucket-state
+      statements:
+        - resources:
+            - "arn:aws:s3:::version-bucket-state"
+            - "arn:aws:s3:::version-bucket-state/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:GetObjectVersion" # get specific/older versions of files 
+            - "s3:PutObject"
+            - "s3:ListBucket"
+            - "s3:DeleteObject" # soft delete allowed 
+          effect: "Allow"

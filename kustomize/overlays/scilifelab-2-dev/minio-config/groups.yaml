@@ -1,0 +1,9 @@
+provisioning:
+  groups:
+    - name: version-bucket-state-user-group
+      disabled: false
+      members:
+        - squirrel_read_write_versioner
+      policies:
+        - read-write-version-bucket-state
+      setPolicies: true # replaces all existing policies assinged to group

@@ -10,3 +10,8 @@ provisioning:
       quota:
         type: set
         size: 10Mi
+    - name: version-bucket-state
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
