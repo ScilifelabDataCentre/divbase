@@ -21,6 +21,7 @@ import argparse
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 import boto3
 import botocore
@@ -101,12 +102,47 @@ class BucketVersionManager:
             else:
                 print(f"- {version}: {details['timestamp']} (No description provided)")
 
+    def download_files(self, files: str, download_dir: str, bucket_version: str | None) -> None:
+        # TODO split logic into two functions rather than if else.
+        files_list = files.split(",")
+        if not bucket_version:
+            print(f"Downloading the latest state of the files: {files_list}")
+
+            for file in files_list:
+                download_path = Path(download_dir) / file
+
+                self.s3_client.download_file(
+                    Bucket=self.bucket_name,
+                    Key=file,
+                    Filename=download_path,
+                )
+
+        else:
+            try:
+                version_info = self.version_info["versions"][bucket_version]
+            except KeyError:
+                print(f"Version specified: {bucket_version} was not found in the bucket: {self.bucket_name}.")
+                return
+
+            for file in files_list:
+                if file not in version_info["files"]:
+                    continue
+
+                version_id = version_info["files"][file]
+
+                print(f"Downloading file: {file} with versionID: {version_id} from version: {bucket_version}")
+
+                download_path = Path(download_dir) / file
+                self.s3_client.download_file(
+                    Bucket=self.bucket_name, Key=file, Filename=download_path, ExtraArgs={"VersionId": version_id}
+                )
+
     def _create_timestamp(self) -> str:
         return datetime.now(tz=timezone.utc).isoformat()
 
     def _get_bucket_version_file(self) -> dict:
         """
-        If bucket version files exists, download version metadata file exists in the S3 bucket.
+        If bucket version files exists, download version metadata file from the S3 bucket.
         If doesn't exist, return empty dict.
         """
         try:
@@ -120,21 +156,20 @@ class BucketVersionManager:
         return yaml.safe_load(content)
 
     def _get_current_object_versions_ids(self) -> dict[str, str]:
-        """Create a dict of each file in the bucket and its current ETAG (unique identifier)."""
+        """
+        Create a dict of the latest version of each file in the bucket and its unique versionID (hash).
+        # TODO - does this handle soft deleted objects correctly?
+        """
         files = {}
-
-        paginator = self.s3_client.get_paginator("list_objects_v2")
+        paginator = self.s3_client.get_paginator("list_object_versions")
         for page in paginator.paginate(Bucket=self.bucket_name):
-            try:
-                contents = page["Contents"]
-            except KeyError:
-                print("Should only see me if there are no objects in the bucket yet.")
-                continue
-
-            for obj in contents:
-                object_name = obj["Key"]
-                etag = obj["ETag"].strip('"')
-                files[object_name] = etag
+            for obj in page.get("Versions", []):
+                if obj["IsLatest"]:
+                    object_name = obj["Key"]
+                    version_id = obj["VersionId"]
+                    files[object_name] = version_id
+        if not files:
+            print(f"No files found in bucket '{self.bucket_name}'.")
 
         return files
 
@@ -169,7 +204,8 @@ def list_command(args):
 
 def download_files_command(args):
     # TODO - long term this should be seperated somewhat, but good here for POC.
-    pass
+    manager = BucketVersionManager(args.bucket_name)
+    manager.download_files(args.files, args.download_dir, args.bucket_version)
 
 
 def delete_command(args):
@@ -209,10 +245,17 @@ if __name__ == "__main__":
         "--files", required=True, help="Comma seperated list of files to download from the bucket."
     )
     download_files_parser.add_argument(
+        "--download_dir",
+        required=False,
+        default=".",
+        help="Directory to download the files to, defaults to current directory.",
+    )
+    download_files_parser.add_argument(
         "--bucket_version",
         required=False,
-        help="Version of the files to download, if not specified, latest version will be downloaded.",
+        help="Version of the files to download, if not specified, the current state of all files will be downloaded.",
     )
+
     download_files_parser.set_defaults(func=download_files_command)
 
     args = parser.parse_args()

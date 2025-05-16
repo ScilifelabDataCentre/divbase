@@ -11,3 +11,7 @@ kustomize/overlays/**/charts
 __pycache__/
 *.py[cod]
 *$py.class
+
+.vscode/
+
+experiments/version_entire_bucket/downloads/*.txt
