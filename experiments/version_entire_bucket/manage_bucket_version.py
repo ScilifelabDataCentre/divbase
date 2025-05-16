@@ -7,6 +7,14 @@ Versioning specified by updating a file in the bucket called ".bucket_versions.y
 
 Versioning done by setting the version according to the current timestamp.
 The version file is always kept in the bucket, not stored on disk.
+
+TODO:
+- Check how robust timestamping approach is.
+- Add support to delete versions?
+- Add support to specify a timestamp for a version?
+- Better seperation of concerns, currently the class is doing too much.
+    - Creating s3 client should be seperate
+    - Downloading files should be seperate
 """
 
 import argparse
@@ -56,9 +64,13 @@ class BucketVersionManager:
             return
 
         timestamp = self._create_timestamp()
-        version_data = {"versions": {"v0.1.0": {"timestamp": timestamp, "description": "Initial version"}}}
+        files = self._get_current_object_versions_ids()
 
-        self._upload_bucket_version_file(version_data=version_data)
+        version_metadata = {
+            "versions": {"v0.0.0": {"timestamp": timestamp, "description": "First version", "files": files}}
+        }
+
+        self._upload_bucket_version_file(version_data=version_metadata)
         print("Bucket versioning file created successfully.")
 
     def add_version(self, name: str, description: str | None) -> None:
@@ -66,9 +78,11 @@ class BucketVersionManager:
         version_data = self.version_info
 
         timestamp = self._create_timestamp()
+        files = self._get_current_object_versions_ids()
+
         if not description:
             description = ""
-        version_data["versions"][name] = {"timestamp": timestamp, "description": description}
+        version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
 
         self._upload_bucket_version_file(version_data=version_data)
         # only update the version_info if the file was successfully written
@@ -82,7 +96,10 @@ class BucketVersionManager:
         print("Bucket versions:")
         # TODO - perhaps user friendly timestamp format too?
         for version, details in self.version_info["versions"].items():
-            print(f"- {version}: {details['timestamp']} ({details['description']})")
+            if details["description"]:
+                print(f"- {version}: {details['timestamp']} ({details['description']})")
+            else:
+                print(f"- {version}: {details['timestamp']} (No description provided)")
 
     def _create_timestamp(self) -> str:
         return datetime.now(tz=timezone.utc).isoformat()
@@ -102,13 +119,34 @@ class BucketVersionManager:
         # TODO - how would this handle an empty file, aka file exists but is empty?
         return yaml.safe_load(content)
 
+    def _get_current_object_versions_ids(self) -> dict[str, str]:
+        """Create a dict of each file in the bucket and its current ETAG (unique identifier)."""
+        files = {}
+
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name):
+            try:
+                contents = page["Contents"]
+            except KeyError:
+                print("Should only see me if there are no objects in the bucket yet.")
+                continue
+
+            for obj in contents:
+                object_name = obj["Key"]
+                etag = obj["ETag"].strip('"')
+                files[object_name] = etag
+
+        return files
+
     def _upload_bucket_version_file(self, version_data: dict) -> None:
         """
         Upload a version metadata file to the S3 bucket.
         Works for both creating and updating the file.
         """
         try:
-            self.s3_client.put_object(Bucket=self.bucket_name, Key=VERSION_FILE_NAME, Body=yaml.safe_dump(version_data))
+            self.s3_client.put_object(
+                Bucket=self.bucket_name, Key=VERSION_FILE_NAME, Body=yaml.safe_dump(version_data, sort_keys=False)
+            )
             print(f"New version updated in the bucket: {self.bucket_name}.")
         except ClientError as e:
             print(f"Failed to upload version file: {e}")
@@ -127,6 +165,11 @@ def add_command(args):
 def list_command(args):
     manager = BucketVersionManager(args.bucket_name)
     manager.list_versions()
+
+
+def download_files_command(args):
+    # TODO - long term this should be seperated somewhat, but good here for POC.
+    pass
 
 
 def delete_command(args):
@@ -157,6 +200,20 @@ if __name__ == "__main__":
     # Subcommand: list
     list_parser = subparsers.add_parser("list", parents=[parent_parser], help="List all versions.")
     list_parser.set_defaults(func=list_command)
+
+    # Subcommand: download_files
+    download_files_parser = subparsers.add_parser(
+        "download_files", parents=[parent_parser], help="Download files from the bucket"
+    )
+    download_files_parser.add_argument(
+        "--files", required=True, help="Comma seperated list of files to download from the bucket."
+    )
+    download_files_parser.add_argument(
+        "--bucket_version",
+        required=False,
+        help="Version of the files to download, if not specified, latest version will be downloaded.",
+    )
+    download_files_parser.set_defaults(func=download_files_command)
 
     args = parser.parse_args()
     args.func(args)

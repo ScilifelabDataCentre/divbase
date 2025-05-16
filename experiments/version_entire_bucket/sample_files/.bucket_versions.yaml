@@ -1,7 +1,0 @@
-versions:
-  v0.1.0:
-    description: Initial version
-    timestamp: '2025-05-14T14:28:17.861255+00:00'
-  v0.1.1:
-    description: made with argparse :)
-    timestamp: '2025-05-14T14:29:37.772554+00:00'
