@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: divbase-local
+
+resources:
+- namespace.yaml
+# - ../../base/
+# current understanding is that it is not possible (or awkward) to patch a helmChart from the base
+# see: https://github.com/kubernetes-sigs/kustomize/issues/4658
+
+helmCharts:
+- name: minio
+  releaseName: minio
+  repo: oci://registry-1.docker.io/bitnamicharts
+  version: 16.0.8
+  includeCRDs: true
+  additionalValuesFiles:
+    - values-local.yaml

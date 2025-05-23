@@ -1,0 +1,12 @@
+provisioning:
+  buckets:
+    - name: squirrel-proj
+      versioning: true
+      quota:
+        type: set
+        size: 1Gi
+    - name: kustomize-proj
+      versioning: true
+      quota:
+        type: set
+        size: 10Mi

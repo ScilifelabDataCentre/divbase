@@ -4,19 +4,16 @@ Steps taken to create a MinIO deployment using Bitnami's Helm Chart
 
 [source,console]
 ----
+# create a local k3d cluster
 k3d cluster create mycluster
 
-cd charts 
-helm pull oci://registry-1.docker.io/bitnamicharts/minio --untar 
-# renamed folder from minio to bitnami-minio
-
-helm install minio bitnami-minio/ -f bitnami-minio/values-local.yaml --namespace minio --create-namespace
+kustomize build kustomize/overlays/local --enable-helm | kubectl apply -f -
 
 # access console - see values-local.yaml for username and password. 
-kubectl port-forward service/minio 9001:9001 -n minio
+kubectl port-forward service/minio 9001:9001 -n divbase-local
 
 # make api available 
-k port-forward service/minio 9000:9000 -n minio
+k port-forward service/minio 9000:9000 -n divbase-local
 ----
 
 
@@ -24,7 +21,7 @@ k port-forward service/minio 9000:9000 -n minio
 
 Namespace `divbase-testground` already created via Rancher GUI.
 
-=== Step 1: Create secret for minio admin credentials 
+=== Step 1: Create secret for minio admin credentials - one time operation
 
 [source,console]
 ----
@@ -40,11 +37,10 @@ k --namespace divbase-testground \
 k apply -f charts/bitnami-minio/secrets/secret-minio-seal.yaml 
 ----
 
-=== Step 2: helm install minio on dev cluster. 
+=== Step 2: kustomize build and apply
 
 [source,console]
 ----
-helm install minio charts/bitnami-minio/ -f charts/bitnami-minio/values-scilifelab-2-dev.yaml --namespace divbase-testground
+kustomize build kustomize/overlays/scilifelab-2-dev --enable-helm | kubectl apply -f -
 ----
-
 

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: divbase-testground
+
+resources:
+# - ../../base/ # see comment in local kustomization.yaml
+- secret-minio-seal.yaml
+- namespace.yaml
+
+helmCharts:
+- name: minio
+  releaseName: minio
+  repo: oci://registry-1.docker.io/bitnamicharts
+  version: 16.0.8
+  includeCRDs: true
+  additionalValuesFiles:
+    - values-scilifelab-2-dev.yaml
+    - minio-config/buckets.yaml
+    - minio-config/policies.yaml
