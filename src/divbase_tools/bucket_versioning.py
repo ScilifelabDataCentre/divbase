@@ -61,6 +61,7 @@ class BucketVersionManager:
 
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
+        files.pop(VERSION_FILE_NAME, None)
 
         if not description:
             description = ""
