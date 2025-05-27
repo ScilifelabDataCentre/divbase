@@ -18,7 +18,9 @@ from divbase_tools.user_config import (
     set_default_bucket,
 )
 
-config_app = typer.Typer()
+config_app = typer.Typer(
+    help="Manage your user configuration file for the divbase_tools package.", no_args_is_help=True
+)
 
 # Needed by almost all commands, so we define it here.
 CONFIG_PATH_OPTION = typer.Option(
