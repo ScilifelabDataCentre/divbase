@@ -17,3 +17,4 @@ helmCharts:
     - values-scilifelab-2-dev.yaml
     - minio-config/buckets.yaml
     - minio-config/policies.yaml
+    - minio-config/groups.yaml

@@ -1,5 +1,17 @@
 provisioning:
   policies:
+    - name: read-write-version-bucket-state
+      statements:
+        - resources:
+            - "arn:aws:s3:::version-bucket-state"
+            - "arn:aws:s3:::version-bucket-state/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:GetObjectVersion" # get specific/older versions of files 
+            - "s3:PutObject"
+            - "s3:ListBucket"
+            - "s3:DeleteObject" # soft delete allowed 
+          effect: "Allow"
     - name: read-write-squirrel-proj
       statements:
         - resources:
@@ -7,16 +19,8 @@ provisioning:
             - "arn:aws:s3:::squirrel-proj/*"
           actions:
             - "s3:GetObject"
+            - "s3:GetObjectVersion" # get specific/older versions of files 
             - "s3:PutObject"
             - "s3:ListBucket"
-          effect: "Allow"
-    - name: read-write-squirrel-proj-from-kustomize
-      statements:
-        - resources:
-            - "arn:aws:s3:::squirrel-proj"
-            - "arn:aws:s3:::squirrel-proj/*"
-          actions:
-            - "s3:GetObject"
-            - "s3:PutObject"
-            - "s3:ListBucket"
+            - "s3:DeleteObject" # soft delete allowed 
           effect: "Allow"
