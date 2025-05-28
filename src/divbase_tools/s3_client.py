@@ -8,6 +8,7 @@ from pathlib import Path
 import boto3
 from dotenv import load_dotenv
 
+from divbase_tools.exceptions import ObjectDoesNotExistError
 from divbase_tools.user_config import load_user_config
 
 DEFAULT_ACCESS_KEY_ENV_NAME = "MINIO_SQUIRREL_USER_ACCESS_KEY"
@@ -52,7 +53,10 @@ class S3FileManager:
         """
         Get the contents of a file from the S3 bucket as a string.
         """
-        response = self.s3_client.get_object(Bucket=bucket_name, Key=key)
+        try:
+            response = self.s3_client.get_object(Bucket=bucket_name, Key=key)
+        except self.s3_client.exceptions.NoSuchKey as err:
+            raise ObjectDoesNotExistError(key=key, bucket_name=bucket_name) from err
         return response["Body"].read().decode("utf-8")
 
     def upload_file(self, key: str, source: Path, bucket_name: str) -> None:

@@ -14,6 +14,7 @@ from pathlib import Path
 import botocore
 import yaml
 
+from divbase_tools.exceptions import ObjectDoesNotExistError
 from divbase_tools.s3_client import S3FileManager
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
@@ -36,7 +37,7 @@ class BucketVersionManager:
         if self.version_info:
             logger.info(f"Version file found inside Bucket: {self.bucket_name}.")
 
-    def create_metadata_file(self) -> bool:
+    def create_metadata_file(self) -> None:
         """
         Create the initial metadata file with a default version.
         Returns True if the file was created, False if failed
@@ -145,7 +146,11 @@ class BucketVersionManager:
         If bucket version files exists, download version metadata file from the S3 bucket.
         If doesn't exist, return empty dict.
         """
-        content = self.s3_file_manager.download_s3_file_to_str(key=VERSION_FILE_NAME, bucket_name=self.bucket_name)
+        try:
+            content = self.s3_file_manager.download_s3_file_to_str(key=VERSION_FILE_NAME, bucket_name=self.bucket_name)
+        except ObjectDoesNotExistError:
+            logger.info(f"No bucket versioning file found in the bucket: {self.bucket_name}.")
+            return {}
         if not content:
             return {}
 

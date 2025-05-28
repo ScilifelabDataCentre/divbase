@@ -20,12 +20,7 @@ def create_bucket_manager(bucket_name: str, config_path: Path) -> BucketVersionM
 
 def create_version_object_command(bucket_name: str, config_path: Path) -> None:
     manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
-    succeded = manager.create_metadata_file()
-    if not succeded:
-        print(
-            f"Failed to create the versioning metadata file for bucket: {bucket_name}. "
-            "Please check if the bucket exists and you have the necessary permissions."
-        )
+    manager.create_metadata_file()
 
 
 def add_version_command(bucket_name: str, name: str, description: str | None, config_path: Path) -> None:
