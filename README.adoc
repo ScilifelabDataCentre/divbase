@@ -1,15 +1,180 @@
 = divbase-prototyping
 
-Create a mock DivBase implementation, so that we can prototype/test out ideas
-
-This will require an install of MinIO and creation of various accounts with MinIO. 
-
-Then mock projects can be created to test out how versioning and other features work for users.
-
-Can also be used to test out how a DivBase API could look. 
+This repo is designed to prototype and test out ideas for a DivBase implementation.
 
 == Folders: 
-- *charts:* Contains Helm charts for deploying various applications.
+- *experiments:* Contains various experiments and ideas to test out. 
+- *kustomize:* Contains everything needed to deploy the DivBase prototype using Kustomize.
 - *docs:* Documentation 
 - *scripts:* Contains scripts for testing out ideas. 
+
+
+
+== Minio Deployment on Dev cluster
+
+This section is covered in more detail in the link:docs/bitnami-minio-setup.adoc[docs/bitnami-minio-setup.adoc] section. 
+
+
+== divBase_tools CLI
+
+The CLI tool `divbase-tools` is designed to help you interact with your DivBase project. The CLI is built using link:https://typer.tiangolo.com/[Typer].
+
+The package currently has 3 subcommands:
+
+- `config`: Manage the user configuration file for DivBase projects.
+- `file`: Manage files in S3 buckets, including uploading, downloading, and listing files.
+- `version`: Manage the versioning of the entire bucket/project state, including adding and listing versions.
+
+
+== Installation and Getting Started 
+
+=== 1. Setting Up a Python Virtual Environment
+
+You can use either link:https://github.com/astral-sh/uv[uv] or something like `venv` or `pip`.
+
+==== Using `uv` (Recommended): 
+
+- Install `uv`, follow the docs: https://docs.astral.sh/uv/
+
+- In the root of the repository, run:
+
+[source,bash]
+----
+uv sync
+----
+
+This will create a virtual environment and install all dependacies and the package (with the package installed in editable mode).
+
+
+==== Using pip and venv
+[source,bash]
+----
+python3 -m venv .venv
+source .venv/bin/activate
+# The `-e .` flag installs the package in "editable" mode. 
+pip install -e .
+----
+
+
+=== 2. Login to your account and create and download your access and secret keys
+
+With the credentials you recieved, login to the MinIO instance at: 
+
+https://minio.divbase-testground.scilifelab-2-dev.sys.kth.se/browser
+
+
+Go to Access Keys (left side menu) and click create a new access key and secret key. Follow the default settings, and make sure to copy the access key and secret key.
+
+These need to be available as environment variables in order to use the CLI tool.
+
+In the root of the repository, create a file called `.env` and add the following lines:
+
+[source,bash]
+----
+DIVBASE_ACCESS_KEY=[YOUR ACCESS KEY ADDED HERE, WITHOUT BRACKETS]
+DIVBASE_SECRET_KEY=[YOUR SECRET KEY ADDED HERE, WITHOUT BRACKETS]
+----
+
+This `.env` file is personal and should not be committed to the repository (it is `.gitignored` already). This `.env` file will be automatically used by the CLI tool when you run it to give you access to the bucket. 
+
+
+
+=== 3. First time running the CLI Tool
+
+Each CLI command comes with a `--help` or `-h` option. 
+
+To see the available commands and options, run:
+
+[source,bash]
+----
+python -m divbase_tools -h
+----
+
+This will (currently) show you the following commands:
+[source,bash]
+----
+version - Manage bucket versions
+file - Download/upload files to/from the bucket
+config - Manage your user configuration file for the divbase_tools package.
+----
+
+==== 3.1. We can start by creating a user configuration file. This is done by running:
+
+[source,bash]
+----
+python -m divbase_tools config create
+----
+
+Which will create a file called `~/.divbase_tools/config.yaml` with the following content:
+
+We can see the contents of this file by running:
+
+[source,bash]
+----
+python -m divbase_tools config show
+----
+
+==== 3.2. Add a bucket to the configuration file.
+
+This isn't essential, but means you don't have to specify the bucket name every time you run a command.
+
+[source,bash]
+----
+python -m divbase_tools config add-bucket [BUCKET_NAME] --default
+----
+
+By adding the `--default` or `-d` flag, this bucket will be set as the default bucket for all commands (you can have multiple buckets)
+
+If you run: 
+
+[source,bash]
+----
+python -m divbase_tools config show
+----
+
+You'll now see your bucket added to the configuration file and marked as the default bucket.
+
+
+==== 3.3. If you're in a new project, you can create the bucket versioning file by running:
+
+[source,bash]
+----
+python -m divbase_tools version create
+----
+This will create a file in the bucket called `.bucket_versions.yaml`
+
+An already existing bucket likely has this file, we can see the contents of this file by running:
+
+[source,bash]
+----
+python -m divbase_tools version list
+----
+
+These are user specified version of the entire buckets state at a given time. This is useful for keeping track of changes to the bucket or marking important states of the bucket. You do not need to specify this if you're only interested in working with the latest versions of the files in the bucket. 
+
+If after working with the bucket for a while you want to version the current state of the bucket, you can run: 
+[source,bash]
+----
+python -m divbase_tools version add [OPTIONS] NAME 
+----
+
+
+==== 3.4. To upload and download files to and from the bucket, you can use the `file` subcommand.
+
+[source,bash]
+----
+python -m divbase_tools file -h  
+----
+
+Remember that unless you specified the bucket you want to use in the command, the default bucket set in your user config will be used.
+
+
+*Bonus:*
+
+To download files from bucket at a specific bucket version/state, we can use the --bucket-version option and specify the version name we want to download from:
+
+[source,bash]
+----
+python -m divbase_tools file download file1.vcf.gz file2.vcf.gz --bucket-version=v0.1.0
+----
 
