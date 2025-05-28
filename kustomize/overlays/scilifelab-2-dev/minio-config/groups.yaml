@@ -10,10 +10,21 @@ provisioning:
     - name: squirrel-proj-user-group
       disabled: false
       members:
-        - apfuentes
         - brinkdp
-        - kwentine
-        - rmcrean
       policies:
         - read-write-squirrel-proj
+      setPolicies: true
+    - name: apfuentes-proj-user-group
+      disabled: false
+      members:
+        - apfuentes
+      policies:
+        - read-write-apfuentes-proj
+      setPolicies: true
+    - name: kwentine-proj-user-group
+      disabled: false
+      members:
+        - kwentine
+      policies:
+        - read-write-kwentine-proj
       setPolicies: true

@@ -10,3 +10,14 @@ provisioning:
       quota:
         type: set
         size: 1Gi
+    - name: apfuentes-proj
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
+    - name: kwentine-proj
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
+

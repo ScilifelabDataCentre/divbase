@@ -19,6 +19,32 @@ provisioning:
             - "arn:aws:s3:::squirrel-proj/*"
           actions:
             - "s3:GetObject"
+            - "s3:GetObjectVersion" 
+            - "s3:PutObject"
+            - "s3:ListBucket"
+            - "s3:DeleteObject" 
+          effect: "Allow"
+
+    - name: read-write-apfuentes-proj
+      statements:
+        - resources:
+            - "arn:aws:s3:::apfuentes-proj"
+            - "arn:aws:s3:::apfuentes-proj/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:GetObjectVersion" # get specific/older versions of files 
+            - "s3:PutObject"
+            - "s3:ListBucket"
+            - "s3:DeleteObject" # soft delete allowed 
+          effect: "Allow"
+
+    - name: read-write-kwentine-proj
+      statements:
+        - resources:
+            - "arn:aws:s3:::kwentine-proj"
+            - "arn:aws:s3:::kwentine-proj/*"
+          actions:
+            - "s3:GetObject"
             - "s3:GetObjectVersion" # get specific/older versions of files 
             - "s3:PutObject"
             - "s3:ListBucket"
