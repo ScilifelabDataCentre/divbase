@@ -24,6 +24,7 @@ import typer
 from divbase_tools.cli.file_cli import file_app
 from divbase_tools.cli.user_config_cli import config_app
 from divbase_tools.cli.version_cli import version_app
+from divbase_tools.cli.query_cli import query_app
 
 # TODO - check logging config and swap from printing to logging
 # and decide how much logging we want to do.
@@ -43,7 +44,7 @@ app = typer.Typer(
 app.add_typer(version_app, name="version")
 app.add_typer(file_app, name="file")
 app.add_typer(config_app, name="config")
-
+app.add_typer(query_app, name="query")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
