@@ -76,16 +76,17 @@ def tsv_query(
     query_result, query_string = tsv_query_command(file=file, filter=filter)
     unique_sampleIDs = query_result["Sample_ID"].unique().tolist()
     unique_filenames = query_result["Filename"].unique().tolist()
-
+    sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
     if show_sample_results:
         print(f"Name and file for each sample in query results:")  
-        print(f"{query_result[["Sample_ID", "Filename"]].to_string(index=False)}\n")
+        print(f"{sample_and_filename_subset.to_string(index=False)}\n")
 
     print(f"The results for the query ({query_string}):")
     print(f"Unique Sample IDs: {unique_sampleIDs}")
     print(f"Unique filenames: {unique_filenames}\n")
 
     return {
+        "sample_and_filename_subset": sample_and_filename_subset,
         "sampleIDs": unique_sampleIDs, 
         "filenames": unique_filenames,
         }
@@ -122,7 +123,8 @@ def pipe_query(
 
     #TODO Error handling for subprocess calls. 
     #TODO: handle case empty results are returned from tsv_query()
- 
+    #TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?
+    #TODO what if a job fails and the user wants to re-run it? do we store temp files?
     if tsv_filter:
         unique_query_results = tsv_query(
             file=tsv_file,
