@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from rich import print
 import pandas as pd
-from divbase_tools.queries import tsv_query_command
+from divbase_tools.queries import tsv_query_command, pipe_query_command
 
 from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli.utils import resolve_bucket_name
@@ -44,10 +44,14 @@ def tsv_query(
     ),
     bucket_name: str = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
-):
+) -> None:
   
     # TODO it perhaps be useful to set the default download_dir in the config so that we can 
     # look for files there? For now this code just uses file.parent as the download directory.
+
+    # TODO handle when --filter = NONE 
+
+    # TODO handle when the name of the sample column is something other than Sample_ID
     
     if not file.exists():
         logger.info(f"No local copy of the tsv file found at: {file}. Checking bucket for file.")
@@ -77,3 +81,15 @@ def tsv_query(
         print(f"{query_result[["Sample_ID", "Filename"]].to_string(index=False)}\n")
 
     print(f"Unique filenames for query {query_string}: {unique_filenames}")
+
+@query_app.command("bcftools-pipe")
+def pipe_query(
+    command: str = typer.Option(None, 
+        help="""
+        String consisting of the bcftools command to run on the files returned by the tsv query.
+        """,
+    ),
+):
+
+    #TODO Error handling for subprocess calles. Perhaps: subprocess.CalledProcessError
+    pipe_query_command(command=command)
