@@ -2,8 +2,6 @@
 Responsible for managing the versioning of the bucket state.
 
 Note: this means the overall state of the bucket, not the individual files.
-
-# TODO - nothing should be printed here, should be handled by the CLI.
 """
 
 import logging
@@ -14,7 +12,12 @@ from pathlib import Path
 import botocore
 import yaml
 
-from divbase_tools.exceptions import ObjectDoesNotExistError
+from divbase_tools.exceptions import (
+    BucketVersionNotFoundError,
+    FilesAlreadyInBucketError,
+    ObjectDoesNotExistError,
+    ObjectDoesNotExistInSpecifiedVersionError,
+)
 from divbase_tools.s3_client import S3FileManager
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
@@ -57,20 +60,20 @@ class BucketVersionManager:
         logger.info("Bucket versioning file created and uploaded successfully.")
 
     def add_version(self, name: str, description: str | None) -> None:
-        """Add a new version to the metadata file."""
+        """
+        Add a new version to the metadata file.
+        """
         version_data = self.version_info
 
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
-        files.pop(VERSION_FILE_NAME, None)
+        _ = files.pop(VERSION_FILE_NAME, None)
 
         if not description:
             description = ""
         version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
 
         self._upload_bucket_version_file(version_data=version_data)
-        # only update the version_info if the file was successfully written
-        self.version_info = version_data
 
     def get_version_info(self) -> dict[str, dict]:
         if not self.version_info:
@@ -78,30 +81,39 @@ class BucketVersionManager:
             return {}
         return self.version_info["versions"]
 
-    def get_files_in_bucket(self) -> list[str]:
-        file_list = self.s3_file_manager.get_files(bucket_name=self.bucket_name)
+    def list_files_in_bucket(self) -> list[str]:
+        file_list = self.s3_file_manager.list_files(bucket_name=self.bucket_name)
 
         if not file_list:
             logger.warning(f"No files found in bucket '{self.bucket_name}'.")
 
         return file_list
 
-    def download_files(self, files: list[str], download_dir: str, bucket_version: str | None) -> None:
+    def download_files(self, files: list[str], download_dir: str, bucket_version: str | None) -> list[str]:
         """
         Given a list of comma separated files, download the files from the bucket into a specified download dir.
+
+        Return the files that were downloaded.
         """
+        version_info = None
         if bucket_version:
             try:
                 version_info = self.version_info["versions"][bucket_version]
                 logger.info(f"Downloading files from bucket at version: {bucket_version}")
-            except KeyError:
-                print(f"Version specified: {bucket_version} was not found in the bucket: {self.bucket_name}.")
-                return
-        else:
-            # TODO - how best to handle this type of problem, send a status upwards?
-            logger.info(f"Downloading the latest state of the files: {files}")
-            version_info = None
+            except KeyError as err:
+                logger.error(f"Version specified: {bucket_version} was not found in the bucket: {self.bucket_name}.")
+                raise BucketVersionNotFoundError(bucket_name=self.bucket_name, bucket_version=bucket_version) from err
 
+            # Validate all files specified exist for the bucket_version specified.
+            missing_objects = [f for f in files if f not in version_info["files"]]
+            if missing_objects:
+                raise ObjectDoesNotExistInSpecifiedVersionError(
+                    bucket_name=self.bucket_name,
+                    bucket_version=bucket_version,
+                    missing_objects=missing_objects,
+                )
+
+        downloaded_files = []
         for file in files:
             download_path = Path(download_dir) / file
 
@@ -110,20 +122,25 @@ class BucketVersionManager:
             else:
                 version_id = None
 
-            self.s3_file_manager.download_file(
+            dloaded_file = self.s3_file_manager.download_file(
                 key=file, dest=download_path, bucket_name=self.bucket_name, version_id=version_id
             )
+            downloaded_files.append(dloaded_file)
+        return downloaded_files
 
-    def upload_files(self, files: list[Path]) -> None:
+    def upload_files(self, files: list[Path]) -> list[Path]:
         """
         Upload files to the bucket.
         """
+        uploaded_files = []
         for file in files:
             file_name = file.name
             self.s3_file_manager.upload_file(key=file_name, source=file, bucket_name=self.bucket_name)
+            uploaded_files.append(file)
             logger.info(f"Uploaded file: {file.resolve()} to bucket: {self.bucket_name} as {file_name}.")
+        return uploaded_files
 
-    def safe_upload_files(self, files: list[Path]) -> None:
+    def safe_upload_files(self, files: list[Path]) -> list[Path]:
         """
         Upload files to the bucket.
         First check if any of the files already exist in the bucket, exit early if do.
@@ -131,12 +148,11 @@ class BucketVersionManager:
         current_files = self._get_all_objects_names_and_ids().keys()
         file_names = [file.name for file in files]
 
-        if any(file in current_files for file in file_names):
-            # TODO - how best to handle this problem type, send status upwards?
-            print("Some files already exist in the bucket. Exiting.")
-            return
+        existing_objects = set(file_names) & set(current_files)
+        if existing_objects:
+            raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), bucket_name=self.bucket_name)
 
-        self.upload_files(files=files)
+        return self.upload_files(files=files)
 
     def _create_timestamp(self) -> str:
         return datetime.now(tz=timezone.utc).isoformat()
@@ -163,8 +179,7 @@ class BucketVersionManager:
         """
         files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
         if not files:
-            print(f"No files found in bucket '{self.bucket_name}'.")
-
+            logging.info(f"No files found in bucket '{self.bucket_name}'.")
         return files
 
     def _upload_bucket_version_file(self, version_data: dict) -> None:
@@ -177,7 +192,6 @@ class BucketVersionManager:
             self.s3_file_manager.upload_str_as_s3_object(
                 key=VERSION_FILE_NAME, content=text_content, bucket_name=self.bucket_name
             )
-            print(f"New version updated in the bucket: {self.bucket_name}.")
+            logging.log(f"New version updated in the bucket: {self.bucket_name}.")
         except botocore.exceptions.ClientError as e:
-            # TODO - how best to handle this type of problem? Send status upwards?
-            print(f"Failed to upload version file: {e}")
+            logging.error(f"Failed to upload bucket version file: {e}")
