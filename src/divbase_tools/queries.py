@@ -35,16 +35,25 @@ def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
     # is there is message saying that an empty df is returned
     # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
 
-def pipe_query_command(command: str) -> None:
+def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
     """
     Ensure that the bcftools Docker image is available, then pass "query" commands to bcftools.
     """
     IMAGE_NAME = "bcftools-image"
 
+    sampleIDs = bcftools_inputs.get("sampleIDs")
+    filename = bcftools_inputs.get("filenames")
+
+    if sampleIDs:
+        sampleIDs_bcftools_formatted = ",".join(sampleIDs)
+        #TODO: Hard-coded input file for now, should be changed to a user input
+        command = f"view -s {sampleIDs_bcftools_formatted} HOM_20ind_17SNPs.vcf.gz -Oz -o subset_samples.vcf.gz"
+
     if not check_bcftools_docker_image(image_name=IMAGE_NAME):
         logger.info(f"Docker image '{IMAGE_NAME}' not found. Building it now...")
         build_bcftools_docker_image(image_name=IMAGE_NAME)
 
+    
     run_bcftools_docker(command=command)
 
 
@@ -72,17 +81,36 @@ def build_bcftools_docker_image(image_name: str) -> None:
         check=True
     )
 
-def run_bcftools_docker(command: str, input_files: str = None, output_file: str = None) -> None:
+def run_bcftools_docker(command: str) -> None:
     """
     Run a bcftools command in a Docker container.
     """
-    
-    cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{Path.cwd()}:/data",
-        "bcftools-image",
-        "bcftools", command #, input_files, "-o", output_file
-    ]
-    logger.info(f"Using Docker image to run the command: bcftools {command}")
+
+    #TODO /app is used for now since this is where bcftools is installed, might want to change?
+
+    command_args = command.split()
+    try:
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path.cwd()}:/app",
+            "bcftools-image",
+            "bcftools"
+        ] + command_args
+        logger.info(f"Using Docker image to run the command: bcftools {command}")
+        subprocess.run(cmd, check=True)
+        logger.info(f"the bcftools operation completed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"bcftools command failed with return code {e.returncode}")
+        raise
+
+def dummy_pipe_query_command() -> None:
+    """
+    Dummy function that copies over a precompiled results file instead of generating it with bcftools.
+
+    it mocks this command
+    python -m divbase_tools query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F"
+    --comand "[MERGE, SUBSET ON SAMPLES, FILTER on -r 21:15000000-25000000]"
+    (the last flag is not implemented yet)
+    """
+    cmd = ["cp", "tests/fixtures/subset.vcf.gz", "./result.vcf.gz"]
     subprocess.run(cmd, check=True)
-    logger.info(f"bcftools {command} completed successfully.")
