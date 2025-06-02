@@ -31,8 +31,9 @@ def list_files(
     if not files:
         print("No files found in the bucket.")
     else:
+        print(f"Files in bucket '{bucket_name}':")
         for file in files:
-            print(f"- {file}")
+            print(f"- '{file}'")
 
 
 @file_app.command("download")
@@ -72,13 +73,22 @@ def download_files(
         print("No files specified for download.")
         raise typer.Exit(1)
 
-    download_files_command(
+    downloaded_files = download_files_command(
         bucket_name=bucket_name,
         all_files=list(all_files),
         download_dir=download_dir,
         bucket_version=bucket_version,
         config_path=config_path,
     )
+    missing_files = all_files - set(downloaded_files)
+    if missing_files:
+        print("WARNING: The following files were not downloaded:")
+        for file in missing_files:
+            print(f"- {file}")
+    else:
+        print(f"The following files were downloaded to {download_dir.resolve()}:")
+        for file in downloaded_files:
+            print(f"- {file}")
 
 
 @file_app.command("upload")
@@ -124,9 +134,16 @@ def upload_files(
         print("No files specified for upload.")
         raise typer.Exit(1)
 
-    upload_files_command(
+    uploaded_files = upload_files_command(
         bucket_name=bucket_name,
         all_files=list(all_files),
         safe_mode=safe_mode,
         config_path=config_path,
     )
+
+    if uploaded_files:
+        print("Uploaded files:")
+        for file in uploaded_files:
+            print(f"- '{file.resolve()}'")
+    else:
+        print("No files were uploaded.")

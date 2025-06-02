@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import typer
+from rich import print
 
 from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli.utils import resolve_bucket_name
@@ -9,8 +10,6 @@ from divbase_tools.services import (
     create_version_object_command,
     list_versions_command,
 )
-
-# TODO, lower commands should not print anything, instead, these functions should handle printing/display
 
 BUCKET_NAME_OPTION = typer.Option(None, help="Name of the storage bucket for the project.", show_default=False)
 
@@ -25,6 +24,7 @@ def create_version(
     """Create the versioning metadata file to store the bucket in."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
     create_version_object_command(bucket_name=bucket_name, config_path=config_path)
+    print(f"Bucket versioning file created in bucket: '{bucket_name}'")
 
 
 @version_app.command("add")
@@ -37,6 +37,7 @@ def add_version(
     """Add a new bucket version."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
     add_version_command(bucket_name, name, description, config_path=config_path)
+    print(f"New version: '{name}' added to the bucket: '{bucket_name}'")
 
 
 @version_app.command("list")
@@ -46,4 +47,13 @@ def list_versions(
 ):
     """List all bucket versions."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
-    list_versions_command(bucket_name, config_path=config_path)
+    version_info = list_versions_command(bucket_name, config_path=config_path)
+
+    if not version_info:
+        print(f"No versions found for bucket: {bucket_name}.")
+        return
+
+    print("Bucket versions:")
+    for version, details in version_info.items():
+        desc = details["description"] or "No description provided"
+        print(f"- '{version}': {details['timestamp']} : {desc}")
