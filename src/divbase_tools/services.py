@@ -48,6 +48,11 @@ def download_files_command(
 ) -> list[str]:
     s3_file_manager = config_to_s3_file_manager(config_path=config_path)
 
+    if not download_dir.is_dir():
+        raise NotADirectoryError(
+            f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
+        )
+
     # Get the files at the specified version.
     if bucket_version:
         bucket_version_manager = BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
