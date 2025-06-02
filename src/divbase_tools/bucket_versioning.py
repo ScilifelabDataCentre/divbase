@@ -43,7 +43,6 @@ class BucketVersionManager:
     def create_metadata_file(self) -> None:
         """
         Create the initial metadata file with a default version.
-        Returns True if the file was created, False if failed
         """
         if self.version_info:
             logger.error(f"Can't create a new version file as one already exists in the bucket: {self.bucket_name}.")
@@ -192,6 +191,6 @@ class BucketVersionManager:
             self.s3_file_manager.upload_str_as_s3_object(
                 key=VERSION_FILE_NAME, content=text_content, bucket_name=self.bucket_name
             )
-            logging.log(f"New version updated in the bucket: {self.bucket_name}.")
+            logging.info(f"New version updated in the bucket: {self.bucket_name}.")
         except botocore.exceptions.ClientError as e:
             logging.error(f"Failed to upload bucket version file: {e}")

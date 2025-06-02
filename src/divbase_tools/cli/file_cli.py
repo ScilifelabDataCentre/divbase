@@ -94,7 +94,7 @@ def download_files(
 @file_app.command("upload")
 def upload_files(
     files: List[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
-    dir: Path | None = typer.Option(None, "--dir", help="Directory to upload all files from."),
+    upload_dir: Path | None = typer.Option(None, "--dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     safe_mode: Annotated[
         bool,
@@ -115,7 +115,7 @@ def upload_files(
 
     all_files = set()
 
-    if bool(files) + bool(dir) + bool(file_list) > 1:
+    if bool(files) + bool(upload_dir) + bool(file_list) > 1:
         print("Please specify only one of --files, --dir, or --file-list.")
         raise typer.Exit(1)
 
