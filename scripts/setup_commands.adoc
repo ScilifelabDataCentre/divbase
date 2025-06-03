@@ -1,9 +1,0 @@
-
-Setup alias for mc admin: 
-[source,console]
-----
-# $MC_ADMIN_ACCESS_KEY $MC_ADMIN_SECRET_KEY are stored as env varialbes. 
-mc alias set divbase-testground \
-  https://minio.divbase-testground.scilifelab-2-dev.sys.kth.se \
-  $MC_ADMIN_ACCESS_KEY $MC_ADMIN_SECRET_KEY
-----

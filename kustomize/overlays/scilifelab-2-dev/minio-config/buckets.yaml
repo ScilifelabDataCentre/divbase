@@ -1,12 +1,23 @@
 provisioning:
   buckets:
+    - name: version-bucket-state
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
     - name: squirrel-proj
       versioning: true
       quota:
         type: set
         size: 1Gi
-    - name: kustomize-proj
+    - name: apfuentes-proj
       versioning: true
       quota:
         type: set
-        size: 10Mi
+        size: 100Mi
+    - name: kwentine-proj
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
+

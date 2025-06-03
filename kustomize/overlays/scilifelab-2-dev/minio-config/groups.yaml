@@ -1,0 +1,30 @@
+provisioning:
+  groups:
+    - name: version-bucket-state-user-group
+      disabled: false
+      members:
+        - squirrel_read_write_versioner
+      policies:
+        - read-write-version-bucket-state
+      setPolicies: true # replaces all existing policies assinged to group
+    - name: squirrel-proj-user-group
+      disabled: false
+      members:
+        - brinkdp
+      policies:
+        - read-write-squirrel-proj
+      setPolicies: true
+    - name: apfuentes-proj-user-group
+      disabled: false
+      members:
+        - apfuentes
+      policies:
+        - read-write-apfuentes-proj
+      setPolicies: true
+    - name: kwentine-proj-user-group
+      disabled: false
+      members:
+        - kwentine
+      policies:
+        - read-write-kwentine-proj
+      setPolicies: true
