@@ -56,4 +56,4 @@ def list_versions(
     print("Bucket versions:")
     for version, details in version_info.items():
         desc = details["description"] or "No description provided"
-        print(f"- '{version}': {details['timestamp']} : {desc}")
+        print(f"- '{version}': '{details['timestamp']}' : {desc}")
