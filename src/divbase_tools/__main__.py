@@ -22,9 +22,9 @@ import sys
 import typer
 
 from divbase_tools.cli.file_cli import file_app
+from divbase_tools.cli.query_cli import query_app
 from divbase_tools.cli.user_config_cli import config_app
 from divbase_tools.cli.version_cli import version_app
-from divbase_tools.cli.query_cli import query_app
 
 # TODO - check logging config and swap from printing to logging
 # and decide how much logging we want to do.

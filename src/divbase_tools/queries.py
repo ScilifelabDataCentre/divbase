@@ -1,14 +1,17 @@
-from pathlib import Path
-import pandas as pd
-import subprocess
-import os
 import logging
+import os
+import subprocess
+from pathlib import Path
+
+import pandas as pd
+
 logger = logging.getLogger(__name__)
+
 
 def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
     """
-    Query a TSV file for specific key-value pairs. Assumes that the TSV file has a header row 
-    and a column named Filename. The user can use any column header as a key, and the values 
+    Query a TSV file for specific key-value pairs. Assumes that the TSV file has a header row
+    and a column named Filename. The user can use any column header as a key, and the values
     can be any string. Returns the unique filenames that match the query.
     """
 
@@ -30,8 +33,8 @@ def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
 
     return query_result, query_string
 
-    #TODO if key not in df.columns, there is currently no warning or error
-    #TODO if value not in df[key], there is no warning or error. only if both values are missing 
+    # TODO if key not in df.columns, there is currently no warning or error
+    # TODO if value not in df[key], there is no warning or error. only if both values are missing
     # is there is message saying that an empty df is returned
     # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
 
@@ -42,8 +45,8 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
 
     Current implementation is a "merge-last" strategy. In short, all subsetting and filtering commands
     are executed on each input files, temp files are created, and the results are merged at the end.
-    The benefit of this approach is that merge operations can be memory intensive, and by subsetting first, 
-    the row-columns of the input files for the eventual merge operation are smaller. 
+    The benefit of this approach is that merge operations can be memory intensive, and by subsetting first,
+    the row-columns of the input files for the eventual merge operation are smaller.
     Downside is that the logic is more complex than in a "merge-first" strategy.
     """
     IMAGE_NAME = "bcftools-image"
@@ -70,48 +73,39 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
 def check_bcftools_docker_image(image_name: str) -> bool:
     """
     Check if the bcftools Docker image is available locally.
-    The docker comand returns the image ID if the image exists, 
+    The docker comand returns the image ID if the image exists,
     or an empty string if it does not.
     """
     result = subprocess.run(
-        ["docker", "images", "-q", image_name],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=True
+        ["docker", "images", "-q", image_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
     )
 
     return bool(result.stdout.strip())
 
+
 def build_bcftools_docker_image(image_name: str) -> None:
     dockerfile_path = "./docker/tools.dockerfile"
 
-    subprocess.run(
-        ["docker", "build", "-f", dockerfile_path, "-t", image_name, "."],
-        check=True
-    )
+    subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
+
 
 def run_bcftools_docker(command: str) -> None:
     """
     Run a bcftools command in a Docker container.
     """
 
-    #TODO /app is used for now since this is where bcftools is installed, might want to change?
+    # TODO /app is used for now since this is where bcftools is installed, might want to change?
 
     command_args = command.split()
     try:
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{Path.cwd()}:/app",
-            "bcftools-image",
-            "bcftools"
-        ] + command_args
+        cmd = ["docker", "run", "--rm", "-v", f"{Path.cwd()}:/app", "bcftools-image", "bcftools"] + command_args
         logger.info(f"Using Docker image to run the command: bcftools {command}")
         subprocess.run(cmd, check=True)
-        logger.info(f"the bcftools operation completed successfully.\n")
+        logger.info("the bcftools operation completed successfully.\n")
     except subprocess.CalledProcessError as e:
         logger.error(f"bcftools command failed with return code {e.returncode}")
         raise
+
 
 def dummy_pipe_query_command() -> None:
     """
@@ -141,14 +135,18 @@ def ensure_csi_index(file: str) -> None:
         run_bcftools_docker(command=index_command)
 
 
-def process_bcftools_command(cmd: str, current_inputs: list, c_counter: int, sample_and_filename_subset: pd.DataFrame) -> list:
+def process_bcftools_command(
+    cmd: str, current_inputs: list, c_counter: int, sample_and_filename_subset: pd.DataFrame
+) -> list:
     """
     Helper function for pipe_query_command. For each file in current_inputs,
     Process a single command for all input files and return the list of temporary files generated.
     """
     temp_files = []
     for f_counter, file in enumerate(current_inputs):
-        samples_in_file = sample_and_filename_subset[sample_and_filename_subset["Filename"] == file]["Sample_ID"].tolist()
+        samples_in_file = sample_and_filename_subset[sample_and_filename_subset["Filename"] == file][
+            "Sample_ID"
+        ].tolist()
         samples_in_file_bcftools_formatted = ",".join(samples_in_file)
         temp_file = f"temp_subset_{c_counter}_{f_counter}.vcf.gz"
         temp_files.append(temp_file)
@@ -172,7 +170,7 @@ def merge_bcftools_temp_files(temp_files: list) -> None:
 
 def delete_temp_files(temp_files: list) -> None:
     """
-    Delete all temporary files and their associated .csi index files 
+    Delete all temporary files and their associated .csi index files
     generated during the pipe_query_command execution.
     """
     for temp_file in temp_files:
