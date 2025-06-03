@@ -14,6 +14,10 @@ def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
     and a column named Filename. The user can use any column header as a key, and the values
     can be any string. Returns the unique filenames that match the query.
     """
+    # TODO if key not in df.columns, there is currently no warning or error
+    # TODO if value not in df[key], there is no warning or error. only if both values are missing
+    # is there is message saying that an empty df is returned
+    # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
 
     df = pd.read_csv(file, sep="\t")
     df.columns = df.columns.str.lstrip("#")
@@ -32,11 +36,6 @@ def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
     query_result = df.query(query_string)
 
     return query_result, query_string
-
-    # TODO if key not in df.columns, there is currently no warning or error
-    # TODO if value not in df[key], there is no warning or error. only if both values are missing
-    # is there is message saying that an empty df is returned
-    # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
 
 
 def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
@@ -94,14 +93,11 @@ def run_bcftools_docker(command: str) -> None:
     Run a bcftools command in a Docker container.
     """
 
-    # TODO /app is used for now since this is where bcftools is installed, might want to change?
-
     command_args = command.split()
     try:
         cmd = ["docker", "run", "--rm", "-v", f"{Path.cwd()}:/app", "bcftools-image", "bcftools"] + command_args
         logger.info(f"Using Docker image to run the command: bcftools {command}")
         subprocess.run(cmd, check=True)
-        logger.info("the bcftools operation completed successfully.\n")
     except subprocess.CalledProcessError as e:
         logger.error(f"bcftools command failed with return code {e.returncode}")
         raise
@@ -130,7 +126,6 @@ def ensure_csi_index(file: str) -> None:
     """
     index_file = f"{file}.csi"
     if not os.path.exists(index_file):
-        logger.info(f"Index file {index_file} not found. Creating index...")
         index_command = f"index -f {file}"
         run_bcftools_docker(command=index_command)
 

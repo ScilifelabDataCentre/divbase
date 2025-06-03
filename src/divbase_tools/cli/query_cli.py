@@ -12,10 +12,7 @@ from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli.utils import resolve_bucket_name
 from divbase_tools.cli.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import dummy_pipe_query_command, pipe_query_command, tsv_query_command
-from divbase_tools.services import (
-    download_files_command,
-    list_files_command,
-)
+from divbase_tools.services import download_files_command
 
 logger = logging.getLogger(__name__)
 
@@ -56,21 +53,13 @@ def tsv_query(
     if not file.exists():
         logger.info(f"No local copy of the tsv file found at: {file}. Checking bucket for file.")
         bucket_name = resolve_bucket_name(bucket_name, config_path)
-        bucket_files = list_files_command(
+        download_files_command(
             bucket_name=bucket_name,
+            all_files=[file.name],
+            download_dir=file.parent,
+            bucket_version=None,
             config_path=config_path,
         )
-        if file.name in bucket_files:
-            download_files_command(
-                bucket_name=bucket_name,
-                all_files=[file.name],
-                download_dir=file.parent,
-                bucket_version=None,
-                config_path=config_path,
-            )
-        else:
-            logger.error(f"{file} does not exist in the bucket. Exiting.")
-            raise typer.Exit(1)
 
     logger.info(f"Quering {file}\n")
     query_result, query_string = tsv_query_command(file=file, filter=filter)
@@ -81,7 +70,7 @@ def tsv_query(
         print("Name and file for each sample in query results:")
         print(f"{sample_and_filename_subset.to_string(index=False)}\n")
 
-    print(f"The results for the query ({query_string}):")
+    print(f"The results for the query ([bright_blue]{query_string}[/bright_blue]):")
     print(f"Unique Sample IDs: {unique_sampleIDs}")
     print(f"Unique filenames: {unique_filenames}\n")
 
@@ -132,6 +121,23 @@ def pipe_query(
             filter=tsv_filter,
             show_sample_results=False,
             bucket_name=bucket_name,
+            config_path=config_path,
+        )
+
+    missing_files = []
+    for filename in unique_query_results.get("filenames", []):
+        file_path = Path.cwd() / filename
+        if not file_path.exists():
+            missing_files.append(filename)
+
+    if missing_files:
+        logger.warning(f"The following files were not found locally: {missing_files}")
+        bucket_name = resolve_bucket_name(bucket_name, config_path)
+        download_files_command(
+            bucket_name=bucket_name,
+            all_files=missing_files,
+            download_dir=Path.cwd(),
+            bucket_version=None,
             config_path=config_path,
         )
 
