@@ -1,16 +1,16 @@
-FROM python:3.12-slim
+FROM python:3.12-alpine
 
 ARG BCFTOOLS_VERSION="1.22"
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
+RUN apk add --no-cache \
+    build-base \
     curl \
-    zlib1g-dev \
-    libbz2-dev \
-    liblzma-dev \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    && apt-get clean
+    zlib-dev \
+    bzip2-dev \
+    xz-dev \
+    curl-dev \
+    openssl-dev \
+    perl-dev 
 
 RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
     | tar -C /tmp -xjf- \
