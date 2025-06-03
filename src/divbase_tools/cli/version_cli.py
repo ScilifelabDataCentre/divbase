@@ -13,7 +13,9 @@ from divbase_tools.services import (
 
 BUCKET_NAME_OPTION = typer.Option(None, help="Name of the storage bucket for the project.", show_default=False)
 
-version_app = typer.Typer(no_args_is_help=True, help="Manage bucket versions.")
+version_app = typer.Typer(
+    no_args_is_help=True, help="Version the state of all files in the entire bucket at a given timestamp."
+)
 
 
 @version_app.command("create")

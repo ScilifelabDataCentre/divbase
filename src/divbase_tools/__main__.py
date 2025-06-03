@@ -1,19 +1,10 @@
 """
-Manage versions of the entire bucket
-
-This script is interacted with via argparse.
-
-Versioning specified by updating a file in the bucket called ".bucket_versions.yaml".
-
-Versioning done by setting the version according to the current timestamp.
-The version file is always kept in the bucket, not stored on disk.
+A CLI tool to interact with DivBase project(s)/bucket(s).
 
 TODOs:
 - Check how robust timestamping approach is.
 - Add support to delete versions?
 - Add support to specify a timestamp for a version?
-- Hoist I/O
-- How to handle parsing errors/failures upwards to the CLI?
 """
 
 import logging
@@ -32,9 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 app = typer.Typer(
-    help="""This tool lets you interact with your DivBase project's bucket and do:
-        - Upload and download files to/from the bucket.
-        - Managed the Version the state of the entire bucket.
+    help="""
+    This tool lets you interact with your DivBase project(s) bucket(s) in order to: \n
+        - Query the metadata for the VCF files stored in the bucket. \n
+        - Upload/download files to/from the bucket. \n
+        - Version the state of all files in the entire bucket at a given timestamp.
     """,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -48,5 +41,5 @@ app.add_typer(query_app, name="query")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
-    logger.info("Starting divbase_tools CLI application.")
+    logger.debug("Starting divbase_tools CLI application.")
     app()
