@@ -1,19 +1,15 @@
 provisioning:
   groups:
-    - name: version-bucket-state-user-group
-      disabled: false
-      members:
-        - squirrel_read_write_versioner
-      policies:
-        - read-write-version-bucket-state
-      setPolicies: true # replaces all existing policies assinged to group
-    - name: squirrel-proj-user-group
+    - name: divbase-demo-user-group
       disabled: false
       members:
         - brinkdp
+        - rmcrean
       policies:
         - read-write-squirrel-proj
-      setPolicies: true
+        - read-write-ahm-console-demo
+        - read-write-ahm-cli-demo
+      setPolicies: true # replaces all existing policies assinged to group
     - name: apfuentes-proj-user-group
       disabled: false
       members:

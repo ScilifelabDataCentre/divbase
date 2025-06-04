@@ -1,6 +1,11 @@
 provisioning:
   buckets:
-    - name: version-bucket-state
+    - name: ahm-console-demo
+      versioning: true
+      quota:
+        type: set
+        size: 100Mi
+    - name: ahm-cli-demo
       versioning: true
       quota:
         type: set
@@ -20,4 +25,8 @@ provisioning:
       quota:
         type: set
         size: 100Mi
+
+
+
+
 

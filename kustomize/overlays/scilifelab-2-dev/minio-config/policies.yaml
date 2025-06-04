@@ -1,16 +1,28 @@
 provisioning:
   policies:
-    - name: read-write-version-bucket-state
+    - name: read-write-ahm-console-demo
       statements:
         - resources:
-            - "arn:aws:s3:::version-bucket-state"
-            - "arn:aws:s3:::version-bucket-state/*"
+            - "arn:aws:s3:::ahm-console-demo"
+            - "arn:aws:s3:::ahm-console-demo/*"
           actions:
             - "s3:GetObject"
             - "s3:GetObjectVersion" # get specific/older versions of files 
             - "s3:PutObject"
             - "s3:ListBucket"
             - "s3:DeleteObject" # soft delete allowed 
+          effect: "Allow"
+    - name: read-write-ahm-cli-demo
+      statements:
+        - resources:
+            - "arn:aws:s3:::ahm-cli-demo"
+            - "arn:aws:s3:::ahm-cli-demo/*"
+          actions:
+            - "s3:GetObject"
+            - "s3:GetObjectVersion" 
+            - "s3:PutObject"
+            - "s3:ListBucket"
+            - "s3:DeleteObject" 
           effect: "Allow"
     - name: read-write-squirrel-proj
       statements:
@@ -24,7 +36,6 @@ provisioning:
             - "s3:ListBucket"
             - "s3:DeleteObject" 
           effect: "Allow"
-
     - name: read-write-apfuentes-proj
       statements:
         - resources:
@@ -32,10 +43,10 @@ provisioning:
             - "arn:aws:s3:::apfuentes-proj/*"
           actions:
             - "s3:GetObject"
-            - "s3:GetObjectVersion" # get specific/older versions of files 
+            - "s3:GetObjectVersion" 
             - "s3:PutObject"
             - "s3:ListBucket"
-            - "s3:DeleteObject" # soft delete allowed 
+            - "s3:DeleteObject" 
           effect: "Allow"
 
     - name: read-write-kwentine-proj
@@ -45,8 +56,8 @@ provisioning:
             - "arn:aws:s3:::kwentine-proj/*"
           actions:
             - "s3:GetObject"
-            - "s3:GetObjectVersion" # get specific/older versions of files 
+            - "s3:GetObjectVersion" 
             - "s3:PutObject"
             - "s3:ListBucket"
-            - "s3:DeleteObject" # soft delete allowed 
+            - "s3:DeleteObject" 
           effect: "Allow"
