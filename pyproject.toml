@@ -16,3 +16,6 @@ dependencies = [
 [build-system]
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
+
+[project.scripts]
+divbase-tools = "divbase_tools.__main__:app"
