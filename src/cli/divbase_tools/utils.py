@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from divbase_tools.exceptions import BucketNameNotSpecifiedError
+from divbase_lib.exceptions import BucketNameNotSpecifiedError
+
 from divbase_tools.user_config import get_default_bucket
 
 

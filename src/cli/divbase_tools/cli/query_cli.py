@@ -6,13 +6,13 @@ import logging
 from pathlib import Path
 
 import typer
+from divbase_lib.queries import dummy_pipe_query_command, pipe_query_command, tsv_query_command
 from rich import print
 
 from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
-from divbase_tools.cli.utils import resolve_bucket_name
 from divbase_tools.cli.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import dummy_pipe_query_command, pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
+from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,24 @@
+[project]
+name = "divbase-lib"
+description="Shared code used by webAPI and CLI."
+version = "0.1.0"
+# Note pypi does not like AsciiDoc, may want to change to .md or .rst
+readme = { file = "../../README.adoc", content-type = "text/plain" }
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.38.15",
+    "minio==7.2.15",
+    "python-dotenv>=1.1.0",
+    "pyyaml>=6.0.2",
+    "pandas>=2.2.3",
+]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["divbase_lib"]

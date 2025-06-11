@@ -1,0 +1,17 @@
+[project]
+name = "divbase-api"
+version = "0.1.0"
+# Note pypi does not like AsciiDoc, may want to change to .md or .rst
+readme = { file = "../../README.adoc", content-type = "text/plain" }
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.3",
+]
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+divbase-api = "divbase_api.__main__:main"

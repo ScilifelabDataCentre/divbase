@@ -1,0 +1,24 @@
+[project]
+name = "divbase-tools"
+version = "0.1.0"
+description = "DivBase command line interface"
+# Note pypi does not like AsciiDoc, may want to change to .md or .rst
+readme = { file = "../../README.adoc", content-type = "text/plain" }
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.15.4",
+]
+
+[project.scripts]
+divbase-tools = "divbase_tools.__main__:app"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["divbase_tools"]
+

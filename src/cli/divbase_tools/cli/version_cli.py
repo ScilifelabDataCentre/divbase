@@ -4,12 +4,12 @@ import typer
 from rich import print
 
 from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
-from divbase_tools.cli.utils import resolve_bucket_name
 from divbase_tools.services import (
     add_version_command,
     create_version_object_command,
     list_versions_command,
 )
+from divbase_tools.utils import resolve_bucket_name
 
 BUCKET_NAME_OPTION = typer.Option(None, help="Name of the storage bucket for the project.", show_default=False)
 

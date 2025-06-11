@@ -7,10 +7,10 @@ from pathlib import Path
 
 import boto3
 import botocore
+from divbase_tools.user_config import load_user_config
 from dotenv import load_dotenv
 
-from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
-from divbase_tools.user_config import load_user_config
+from divbase_lib.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
 
 MINIO_URL = "api.divbase-testground.scilifelab-2-dev.sys.kth.se"
 

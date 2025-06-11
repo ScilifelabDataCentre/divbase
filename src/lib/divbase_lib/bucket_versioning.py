@@ -11,11 +11,11 @@ from datetime import datetime, timezone
 import botocore
 import yaml
 
-from divbase_tools.exceptions import (
+from divbase_lib.exceptions import (
     BucketVersionNotFoundError,
     ObjectDoesNotExistError,
 )
-from divbase_tools.s3_client import S3FileManager
+from divbase_lib.s3_client import S3FileManager
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
 
