@@ -1,0 +1,20 @@
+services:
+  tools:
+    image: "bcftools-image"
+    build:
+      context: .
+      dockerfile: tools.dockerfile
+  rabbitmq:
+    image: "rabbitmq:alpine"
+    ports:
+    - 5672:5672
+  worker:
+    build:
+      context: .. 
+      dockerfile: docker/worker.dockerfile
+    depends_on:
+      - rabbitmq
+    environment:
+      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+    volumes:
+      - ../src:/app/src
