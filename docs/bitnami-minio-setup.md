@@ -1,9 +1,8 @@
-Steps taken to create a MinIO deployment using Bitnami's Helm Chart 
+# Steps Taken to Create a MinIO Deployment Using Bitnami's Helm Chart
 
-== Local deployment using k3d
+## Local Deployment Using k3d
 
-[source,console]
-----
+```bash
 # create a local k3d cluster
 k3d cluster create mycluster
 
@@ -12,19 +11,18 @@ kustomize build kustomize/overlays/local --enable-helm | kubectl apply -f -
 # access console - see values-local.yaml for username and password. 
 kubectl port-forward service/minio 9001:9001 -n divbase-local
 
-# make api available 
+# make API available 
 k port-forward service/minio 9000:9000 -n divbase-local
-----
+```
 
 
-== Remote deployment on scilifelab-2-dev.sys.kth.se
+## Remote deployment on scilifelab-2-dev.sys.kth.se
 
 Namespace `divbase-testground` already created via Rancher GUI.
 
-=== Step 1: Create secret for minio admin credentials - one time operation
+### Step 1: Create secret for minio admin credentials - one time operation
 
-[source,console]
-----
+```bash
 # password removed from here but can be obtained from the rancher console
 k --namespace divbase-testground \
     create secret generic minio-credentials \
@@ -35,12 +33,10 @@ k --namespace divbase-testground \
     | kubeseal -o yaml > charts/bitnami-minio/secrets/secret-minio-seal.yaml
 
 k apply -f charts/bitnami-minio/secrets/secret-minio-seal.yaml 
-----
+```
 
-=== Step 2: kustomize build and apply
+### Step 2: kustomize build and apply
 
-[source,console]
-----
+```bash
 kustomize build kustomize/overlays/scilifelab-2-dev --enable-helm | kubectl apply -f -
-----
-
+```

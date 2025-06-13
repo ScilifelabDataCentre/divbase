@@ -1,8 +1,7 @@
 [project]
 name = "divbase_tools"
 version = "0.1.0"
-# Note pypi does not like AsciiDoc, may want to change to .md or .rst
-readme = { file = "README.adoc", content-type = "text/plain" }
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.38.15",
