@@ -71,6 +71,23 @@ class BucketVersionManager:
 
         self._upload_bucket_version_file(version_data=version_data)
 
+    def delete_version(self, bucket_version: str) -> str:
+        """
+        Delete the version specified from the bucket versioning metadata file.
+
+        Returns the version name deleted.
+        """
+        if not self.version_info:
+            raise ObjectDoesNotExistError(key=VERSION_FILE_NAME, bucket_name=self.bucket_name)
+
+        try:
+            del self.version_info["versions"][bucket_version]
+        except KeyError as err:
+            raise BucketVersionNotFoundError(bucket_name=self.bucket_name, bucket_version=bucket_version) from err
+
+        self._upload_bucket_version_file(version_data=self.version_info)
+        return bucket_version
+
     def get_version_info(self) -> dict[str, dict]:
         if not self.version_info:
             logger.info("No bucket level versioning has been created for this bucket as of yet.")

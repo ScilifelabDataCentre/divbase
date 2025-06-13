@@ -7,6 +7,7 @@ from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.services import (
     add_version_command,
     create_version_object_command,
+    delete_version_command,
     list_versions_command,
 )
 from divbase_tools.utils import resolve_bucket_name
@@ -59,3 +60,15 @@ def list_versions(
     for version, details in version_info.items():
         desc = details["description"] or "No description provided"
         print(f"- '{version}': '{details['timestamp']}' : {desc}")
+
+
+@version_app.command("delete")
+def delete_version(
+    name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
+    bucket_name: str | None = BUCKET_NAME_OPTION,
+    config_path: Path = CONFIG_PATH_OPTION,
+):
+    """Delete an entry in the bucket versioning file specfying a specific state of all files in the bucket. Does not delete the files themselves."""
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
+    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_name, config_path=config_path)
+    print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_name}'")

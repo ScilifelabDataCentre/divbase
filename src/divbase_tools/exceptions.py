@@ -45,6 +45,25 @@ class ObjectDoesNotExistInSpecifiedVersionError(KeyError):
         return self.error_message
 
 
+class BucketVersioningFileDoesNotExist(FileNotFoundError):
+    """
+    Raised when the bucket versioning file does not exist in the bucket,
+    and it needs to be for the given operation (e.g. add/delete version).
+    """
+
+    def __init__(self, bucket_name: str):
+        error_message = (
+            f"The bucket: '{bucket_name}', does not have a bucket versioning file.\n"
+            "please create one first using the 'divbase version create' command."
+        )
+        super().__init__(error_message)
+        self.bucket_name = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
 class BucketVersionNotFoundError(KeyError):
     """Raised when the specified bucket version file is not found in the bucket versioning dictionary"""
 

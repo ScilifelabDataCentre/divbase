@@ -33,9 +33,9 @@ def list_versions_command(bucket_name: str, config_path: Path) -> dict[str, dict
     return manager.get_version_info()
 
 
-def delete_version_command(bucket_name: str, version_name: str, config_path: Path) -> None:
-    # TODO should this even be a command?
-    pass
+def delete_version_command(bucket_version: str, bucket_name: str, config_path: Path) -> None:
+    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+    return manager.delete_version(bucket_version=bucket_version)
 
 
 def list_files_command(bucket_name: str, config_path: Path) -> None:
