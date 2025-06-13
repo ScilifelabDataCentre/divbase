@@ -26,7 +26,7 @@ def create_version(
 ):
     """Create a bucket versioning file that is stored in the bucket."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
-    create_version_object_command(bucket_name=bucket_name, config_path=config_path)
+    create_version_object_command(bucket_name=bucket_name)
     print(f"Bucket versioning file created in bucket: '{bucket_name}'")
 
 
@@ -39,7 +39,7 @@ def add_version(
 ):
     """Add an entry to the bucket versioning file specfying the current state of all files in the bucket."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
-    add_version_command(bucket_name, name, description, config_path=config_path)
+    add_version_command(bucket_name, name, description)
     print(f"New version: '{name}' added to the bucket: '{bucket_name}'")
 
 
@@ -50,7 +50,7 @@ def list_versions(
 ):
     """List all entries in the bucket versioning file."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
-    version_info = list_versions_command(bucket_name, config_path=config_path)
+    version_info = list_versions_command(bucket_name)
 
     if not version_info:
         print(f"No versions found for bucket: {bucket_name}.")
@@ -70,5 +70,5 @@ def delete_version(
 ):
     """Delete an entry in the bucket versioning file specfying a specific state of all files in the bucket. Does not delete the files themselves."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
-    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_name, config_path=config_path)
+    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_name)
     print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_name}'")

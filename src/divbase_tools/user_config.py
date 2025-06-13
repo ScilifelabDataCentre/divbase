@@ -16,8 +16,6 @@ DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
 TEMPLATE_USER_CONFIG = {
     "buckets": [],
     "default_bucket": None,
-    "DivBase_Access_Key_Env_Name": "DIVBASE_ACCESS_KEY",
-    "DivBase_Secret_Key_Env_Name": "DIVBASE_SECRET_KEY",
 }
 
 

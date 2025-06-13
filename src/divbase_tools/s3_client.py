@@ -10,9 +10,10 @@ import botocore
 from dotenv import load_dotenv
 
 from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
-from divbase_tools.user_config import load_user_config
 
 MINIO_URL = "api.divbase-testground.scilifelab-2-dev.sys.kth.se"
+DIVBASE_ACCESS_KEY_NAME = "DIVBASE_ACCESS_KEY"
+DIVBASE_SECRET_KEY_NAME = "DIVBASE_SECRET_KEY"
 
 
 class S3FileManager:
@@ -96,30 +97,17 @@ class S3FileManager:
         return files
 
 
-def get_credentials(access_key_name: str, secret_key_name: str) -> tuple[str, str]:
+def create_s3_file_manager() -> S3FileManager:
     """
-    Get the S3 credentials from environment variables, unless they are provided as arguments.
+    Creates an S3FileManager instance using users environment variables credentials
     """
     load_dotenv()
-    access_key = os.getenv(access_key_name)
-    secret_key = os.getenv(secret_key_name)
-    return access_key, secret_key
-
-
-def config_to_s3_file_manager(config_path: Path) -> S3FileManager:
-    """
-    Creates an S3FileManager instance from the user config file.
-    """
-    user_config = load_user_config(config_path)
-
-    access_key_name = user_config.get("DivBase_Access_Key_Env_Name")
-    secret_key_name = user_config.get("DivBase_Secret_Key_Env_Name")
-
-    access_key, secret_key = get_credentials(access_key_name=access_key_name, secret_key_name=secret_key_name)
+    access_key = os.getenv(DIVBASE_ACCESS_KEY_NAME)
+    secret_key = os.getenv(DIVBASE_SECRET_KEY_NAME)
 
     if not access_key or not secret_key:
         raise DivBaseCredentialsNotFoundError(
-            access_key_name=access_key_name, secret_key_name=secret_key_name, config_path=config_path
+            access_key_name=DIVBASE_ACCESS_KEY_NAME, secret_key_name=DIVBASE_SECRET_KEY_NAME
         )
 
     return S3FileManager(

@@ -6,47 +6,47 @@ from pathlib import Path
 
 from divbase_tools.bucket_versioning import BucketVersionManager
 from divbase_tools.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_tools.s3_client import config_to_s3_file_manager
+from divbase_tools.s3_client import create_s3_file_manager
 
 
-def create_bucket_manager(bucket_name: str, config_path: Path) -> BucketVersionManager:
+def create_bucket_manager(bucket_name: str) -> BucketVersionManager:
     """
     Helper function to create a BucketVersionManager instance.
     Used by the version and file subcommands of the CLI
     """
-    s3_file_manager = config_to_s3_file_manager(config_path=config_path)
+    s3_file_manager = create_s3_file_manager()
     return BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
 
-def create_version_object_command(bucket_name: str, config_path: Path) -> None:
-    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+def create_version_object_command(bucket_name: str) -> None:
+    manager = create_bucket_manager(bucket_name=bucket_name)
     manager.create_metadata_file()
 
 
-def add_version_command(bucket_name: str, name: str, description: str | None, config_path: Path) -> None:
-    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+def add_version_command(bucket_name: str, name: str, description: str | None) -> None:
+    manager = create_bucket_manager(bucket_name=bucket_name)
     manager.add_version(name=name, description=description)
 
 
-def list_versions_command(bucket_name: str, config_path: Path) -> dict[str, dict]:
-    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+def list_versions_command(bucket_name: str) -> dict[str, dict]:
+    manager = create_bucket_manager(bucket_name=bucket_name)
     return manager.get_version_info()
 
 
-def delete_version_command(bucket_version: str, bucket_name: str, config_path: Path) -> None:
-    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+def delete_version_command(bucket_name: str, bucket_version: str) -> None:
+    manager = create_bucket_manager(bucket_name=bucket_name)
     return manager.delete_version(bucket_version=bucket_version)
 
 
-def list_files_command(bucket_name: str, config_path: Path) -> None:
-    manager = create_bucket_manager(bucket_name=bucket_name, config_path=config_path)
+def list_files_command(bucket_name: str) -> None:
+    manager = create_bucket_manager(bucket_name=bucket_name)
     return manager.list_files_in_bucket()
 
 
 def download_files_command(
-    bucket_name: str, all_files: list[str], download_dir: Path, bucket_version: str, config_path: Path
+    bucket_name: str, all_files: list[str], download_dir: Path, bucket_version: str
 ) -> list[str]:
-    s3_file_manager = config_to_s3_file_manager(config_path=config_path)
+    s3_file_manager = create_s3_file_manager()
 
     if not download_dir.is_dir():
         raise NotADirectoryError(
@@ -82,14 +82,14 @@ def download_files_command(
     return download_files
 
 
-def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: bool, config_path: Path) -> list[Path]:
+def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: bool) -> list[Path]:
     """
     Upload files to the specified S3 bucket.
     Files uploaded returned as a list Paths
 
     Safe mode checks if any of the files that are to be uploaded already exist in the bucket.
     """
-    s3_file_manager = config_to_s3_file_manager(config_path=config_path)
+    s3_file_manager = create_s3_file_manager()
 
     if safe_mode:
         bucket_version_manager = BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
@@ -108,6 +108,6 @@ def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: boo
     return uploaded_files
 
 
-def delete_files_command(bucket_name: str, config_path: Path) -> None:
+def delete_files_command(bucket_name: str) -> None:
     # TODO should this even be a command?
     pass

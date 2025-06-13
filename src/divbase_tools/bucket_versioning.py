@@ -42,6 +42,7 @@ class BucketVersionManager:
         Create the initial metadata file with a default version.
         """
         if self.version_info:
+            # TODO this should be a custom error
             logger.error(f"Can't create a new version file as one already exists in the bucket: {self.bucket_name}.")
             return
 

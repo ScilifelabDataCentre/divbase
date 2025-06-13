@@ -116,11 +116,9 @@ class DivBaseCredentialsNotFoundError(Exception):
 
     def __init__(self, access_key_name: str, secret_key_name: str, config_path: Path):
         error_message = (
-            "\n"
-            "Either your DivBase Access and/or secret key was not found in your enviroment variables'.\n"
+            "Your DivBase Access and/or secret key was not found in your enviroment variables'.\n"
             f"Please ensure that the environment variables '{access_key_name}' and '{secret_key_name}' are set.\n"
             f"The simplest way to do this is to create a .env file in the directory you run your commands from.\n"
-            f"If you want to use a different name for the environment variables, you can set them in your user config file: {config_path}\n"
         )
         super().__init__(error_message)
         self.config_path = config_path

@@ -26,7 +26,6 @@ def list_files(
     bucket_name = resolve_bucket_name(bucket_name, config_path)
     files = list_files_command(
         bucket_name=bucket_name,
-        config_path=config_path,
     )
     if not files:
         print("No files found in the bucket.")
@@ -78,7 +77,6 @@ def download_files(
         all_files=list(all_files),
         download_dir=download_dir,
         bucket_version=bucket_version,
-        config_path=config_path,
     )
     missing_files = all_files - set(downloaded_files)
     if missing_files:
@@ -138,7 +136,6 @@ def upload_files(
         bucket_name=bucket_name,
         all_files=list(all_files),
         safe_mode=safe_mode,
-        config_path=config_path,
     )
 
     if uploaded_files:
