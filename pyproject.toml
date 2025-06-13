@@ -1,8 +1,7 @@
 [project]
 name = "divbase_tools"
 version = "0.1.0"
-# Note pypi does not like AsciiDoc, may want to change to .md or .rst
-readme = { file = "README.adoc", content-type = "text/plain" }
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.38.15",
@@ -11,6 +10,9 @@ dependencies = [
     "pyyaml>=6.0.2",
     "typer>=0.15.4",
     "pandas>=2.2.3",
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.3",
+    "pytest>=8.4.0",
 ]
 
 [build-system]
@@ -18,4 +20,5 @@ requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-divbase-tools = "divbase_tools.__main__:app"
+divbase-cli = "divbase_tools.divbase_cli:main"
+divbase-api = "divbase_tools.divbase_api:main"

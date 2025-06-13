@@ -8,15 +8,15 @@ from pathlib import Path
 import typer
 from rich import print
 
-from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
-from divbase_tools.cli.utils import resolve_bucket_name
-from divbase_tools.cli.version_cli import BUCKET_NAME_OPTION
+from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
+from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import dummy_pipe_query_command, pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
+from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
-query_app = typer.Typer(help="Query the metadata for the VCF files stored in the bucket.", no_args_is_help=True)
+query_app = typer.Typer(help="Query the VCF files stored in the bucket.", no_args_is_help=True)
 
 
 @query_app.command("tsv")
@@ -43,6 +43,7 @@ def tsv_query(
     bucket_name: str = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
 ) -> dict:
+    """Query the tsv sidecar metadata file for the VCF files stored in the bucket. Returns the sample IDs and filenames that match the query."""
     # TODO it perhaps be useful to set the default download_dir in the config so that we can
     # look for files there? For now this code just uses file.parent as the download directory.
 
@@ -111,6 +112,9 @@ def pipe_query(
         help="""Dry run that copies over a hard-coded query results file rather than generating it with bcftools""",
     ),
 ) -> None:
+    """
+    Run bcftools commands on the files returned by an optional tsv query. Returns a merged VCF file.
+    """
     # TODO Error handling for subprocess calls.
     # TODO: handle case empty results are returned from tsv_query()
     # TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?

@@ -5,16 +5,16 @@ import typer
 from rich import print
 from typing_extensions import Annotated
 
-from divbase_tools.cli.user_config_cli import CONFIG_PATH_OPTION
-from divbase_tools.cli.utils import resolve_bucket_name
-from divbase_tools.cli.version_cli import BUCKET_NAME_OPTION
+from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
+from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.services import (
     download_files_command,
     list_files_command,
     upload_files_command,
 )
+from divbase_tools.utils import resolve_bucket_name
 
-file_app = typer.Typer(no_args_is_help=True, help="Download/upload files to/from the bucket.")
+file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the bucket.")
 
 
 @file_app.command("list")

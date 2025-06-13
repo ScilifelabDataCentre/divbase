@@ -1,2 +1,0 @@
-experiments/version_entire_bucket/downloads/file1.txt
-experiments/version_entire_bucket/downloads/file2.txt
