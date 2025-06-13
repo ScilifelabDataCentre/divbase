@@ -16,4 +16,6 @@ __pycache__/
 
 # project specific files
 /sample_metadata.tsv
-/*.vcf.gz
+*.vcf
+*.vcf.gz
+!tests/fixtures/*.vcf.gz
