@@ -14,4 +14,6 @@ __pycache__/
 
 .vscode/
 
-experiments/version_entire_bucket/downloads/*.txt
+# project specific files
+/sample_metadata.tsv
+/*.vcf.gz
