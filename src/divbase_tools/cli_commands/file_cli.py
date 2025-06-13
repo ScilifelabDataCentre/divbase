@@ -14,7 +14,7 @@ from divbase_tools.services import (
 )
 from divbase_tools.utils import resolve_bucket_name
 
-file_app = typer.Typer(no_args_is_help=True, help="Download/upload files to/from the bucket.")
+file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the bucket.")
 
 
 @file_app.command("list")

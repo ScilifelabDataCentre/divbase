@@ -23,7 +23,7 @@ def create_version(
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
 ):
-    """Create the versioning metadata file to store the bucket in."""
+    """Create a bucket versioning file that is stored in the bucket."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
     create_version_object_command(bucket_name=bucket_name, config_path=config_path)
     print(f"Bucket versioning file created in bucket: '{bucket_name}'")
@@ -36,7 +36,7 @@ def add_version(
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
 ):
-    """Add a new bucket version."""
+    """Add an entry to the bucket versioning file specfying the current state of all files in the bucket."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
     add_version_command(bucket_name, name, description, config_path=config_path)
     print(f"New version: '{name}' added to the bucket: '{bucket_name}'")
@@ -47,7 +47,7 @@ def list_versions(
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
 ):
-    """List all bucket versions."""
+    """List all entries in the bucket versioning file."""
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
     version_info = list_versions_command(bucket_name, config_path=config_path)
 

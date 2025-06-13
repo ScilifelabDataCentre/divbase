@@ -18,7 +18,7 @@ from divbase_tools.user_config import (
     set_default_bucket,
 )
 
-config_app = typer.Typer(help="Manage your user configuration file for the divbase_tools CLI.", no_args_is_help=True)
+config_app = typer.Typer(help="Manage your user configuration file for the DivBase CLI.", no_args_is_help=True)
 
 # Needed by almost all commands, so we define it here.
 CONFIG_PATH_OPTION = typer.Option(
@@ -68,7 +68,7 @@ def set_default_bucket_command(
 def show_default_bucket_command(
     config_path: Path = CONFIG_PATH_OPTION,
 ) -> None:
-    """Set the default bucket to use."""
+    """Show the currently set default bucket."""
     default = get_default_bucket(config_path=config_path)
 
     if default is None:
@@ -81,7 +81,7 @@ def show_default_bucket_command(
 def show_user_config(
     config_path: Path = CONFIG_PATH_OPTION,
 ):
-    """Show your current config files contents."""
+    """Show the contents of your current config file."""
     config = load_user_config(config_path)
     print(f"Current user configuration from {config_path}:")
     for key, value in config.items():

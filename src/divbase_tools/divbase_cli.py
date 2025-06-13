@@ -33,7 +33,7 @@ app = typer.Typer(
 
 
 app.add_typer(version_app, name="version")
-app.add_typer(file_app, name="file")
+app.add_typer(file_app, name="files")
 app.add_typer(config_app, name="config")
 app.add_typer(query_app, name="query")
 
