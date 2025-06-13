@@ -29,7 +29,7 @@ Deployment for testing/development purposes. The deployment and how it was set u
 
 ## divBase CLI
 
-The CLI tool `divbase-cli` is designed to help you interact with your DivBase project. The CLI is built using link:<https://typer.tiangolo.com/[Typer>].
+The CLI tool `divbase-cli` is designed to help you interact with your DivBase project. The CLI is built using [Typer](https://typer.tiangolo.com).
 
 - See the basic usage/documentation at [docs/using_divbase_cli.md](docs/using_divbase_cli.md)
 - See the [Developer Setup](#developer-setup) section to install the CLI tool in develop mode.
@@ -38,11 +38,11 @@ The CLI tool `divbase-cli` is designed to help you interact with your DivBase pr
 
 First setup your python virtual environment.
 
-You can use either link:<https://github.com/astral-sh/uv[uv>] or something like `venv` or `pip`.
+You can use either [uv](https://github.com/astral-sh/uv) or something like `venv` or `pip`.
 
 ### Using `uv` (Recommended)
 
-- Install `uv`, follow the docs: <https://docs.astral.sh/uv/>
+- Install `uv`, follow the docs: https://docs.astral.sh/uv/
 
 - In the root of the repository, run:
 
@@ -68,4 +68,12 @@ You can now run the cli tool and webAPI/server with the following commands.
 ```bash
 divbase-cli
 divbase-api
+```
+
+### Pre-commit
+
+We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on every commit. 
+
+```bash
+pre-commit install
 ```
