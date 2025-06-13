@@ -42,7 +42,7 @@ You can use either [uv](https://github.com/astral-sh/uv) or something like `venv
 
 ### Using `uv` (Recommended)
 
-- Install `uv`, follow the docs: https://docs.astral.sh/uv/
+- Install `uv`, follow the docs: <https://docs.astral.sh/uv/>
 
 - In the root of the repository, run:
 
@@ -72,7 +72,7 @@ divbase-api
 
 ### Pre-commit
 
-We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on every commit. 
+We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on every commit.
 
 ```bash
 pre-commit install
