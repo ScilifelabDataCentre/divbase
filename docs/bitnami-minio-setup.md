@@ -8,13 +8,12 @@ k3d cluster create mycluster
 
 kustomize build kustomize/overlays/local --enable-helm | kubectl apply -f -
 
-# access console - see values-local.yaml for username and password. 
+# access console - see values-local.yaml for username and password.
 kubectl port-forward service/minio 9001:9001 -n divbase-local
 
-# make API available 
+# make API available
 k port-forward service/minio 9000:9000 -n divbase-local
 ```
-
 
 ## Remote deployment on scilifelab-2-dev.sys.kth.se
 
@@ -28,11 +27,11 @@ k --namespace divbase-testground \
     create secret generic minio-credentials \
     --dry-run=client \
     --from-literal=MINIO_ROOT_USER="divbaseadmin" \
-    --from-literal=MINIO_ROOT_PASSWORD="" \ 
+    --from-literal=MINIO_ROOT_PASSWORD="" \
     -o json \
     | kubeseal -o yaml > charts/bitnami-minio/secrets/secret-minio-seal.yaml
 
-k apply -f charts/bitnami-minio/secrets/secret-minio-seal.yaml 
+k apply -f charts/bitnami-minio/secrets/secret-minio-seal.yaml
 ```
 
 ### Step 2: kustomize build and apply
