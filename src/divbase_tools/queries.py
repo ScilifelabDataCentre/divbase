@@ -64,14 +64,13 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
     command_list = command.split(";")
     commands_config_structure = []
     current_inputs = filenames
-    serializable_samples = sample_and_filename_subset.to_dict(orient="records")
 
     for c_counter, cmd in enumerate(command_list):
         command_details = {
             "command": cmd,
             "counter": c_counter,
             "input_files": current_inputs,
-            "sample_subset": serializable_samples,
+            "sample_subset": sample_and_filename_subset,
         }
 
         temp_files = [f"temp_subset_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)]
@@ -152,17 +151,3 @@ def build_bcftools_docker_image(image_name: str) -> None:
     dockerfile_path = "./docker/tools.dockerfile"
 
     subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
-
-
-def dummy_pipe_query_command() -> None:
-    """
-    Dummy function that copies over a precompiled results file instead of generating it with bcftools.
-
-    it mocks this command
-    python -m divbase_tools query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F"
-    --comand "[MERGE, SUBSET ON SAMPLES, FILTER on -r 21:15000000-25000000]"
-    (the last flag is not implemented yet)
-    """
-    cmd = ["cp", "tests/fixtures/subset.vcf.gz", "./result.vcf.gz"]
-    subprocess.run(cmd, check=True)
-    logger.info("Dry-run results are found in 'result.vcf.gz'.")

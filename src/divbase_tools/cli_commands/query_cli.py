@@ -10,8 +10,9 @@ from rich import print
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import dummy_pipe_query_command, pipe_query_command, tsv_query_command
+from divbase_tools.queries import pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
+from divbase_tools.tasks import bcftools_pipe_task
 from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ def tsv_query(
     unique_sampleIDs = query_result["Sample_ID"].unique().tolist()
     unique_filenames = query_result["Filename"].unique().tolist()
     sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
+    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
+
     if show_sample_results:
         print("Name and file for each sample in query results:")
         print(f"{sample_and_filename_subset.to_string(index=False)}\n")
@@ -76,7 +79,7 @@ def tsv_query(
     print(f"Unique filenames: {unique_filenames}\n")
 
     return {
-        "sample_and_filename_subset": sample_and_filename_subset,
+        "sample_and_filename_subset": serialized_samples,
         "sampleIDs": unique_sampleIDs,
         "filenames": unique_filenames,
     }
@@ -107,10 +110,7 @@ def pipe_query(
     ),
     bucket_name: str = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_PATH_OPTION,
-    dry: bool = typer.Option(
-        False,
-        help="""Dry run that copies over a hard-coded query results file rather than generating it with bcftools""",
-    ),
+    run_async: bool = typer.Option(False, "--async", help="Run as async job using Celery"),
 ) -> None:
     """
     Run bcftools commands on the files returned by an optional tsv query. Returns a merged VCF file.
@@ -145,10 +145,12 @@ def pipe_query(
             config_path=config_path,
         )
 
-    if not dry:
-        unique_query_results = (
-            unique_query_results or {}
-        )  # TODO handle this better, empty values will likely break downstream calls anyway
-        pipe_query_command(command=command, bcftools_inputs=unique_query_results)
+    unique_query_results = (
+        unique_query_results or {}
+    )  # TODO handle this better, empty values will likely break downstream calls anyway
+
+    if run_async:
+        result = bcftools_pipe_task.delay(command=command, bcftools_inputs=unique_query_results)
+        typer.echo(f"Job submitted with task ID: {result.id}")
     else:
-        dummy_pipe_query_command()
+        pipe_query_command(command=command, bcftools_inputs=unique_query_results)

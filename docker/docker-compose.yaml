@@ -16,7 +16,9 @@ services:
       dockerfile: docker/worker.dockerfile
     depends_on:
       - rabbitmq
+      - tools
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     volumes:
       - ../src:/app/src
+      - /var/run/docker.sock:/var/run/docker.sock
