@@ -20,3 +20,5 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
     && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
 WORKDIR /app
+
+CMD ["tail", "-f", "/dev/null"]

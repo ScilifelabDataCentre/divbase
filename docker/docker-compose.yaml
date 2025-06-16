@@ -1,6 +1,8 @@
 services:
   tools:
     image: "bcftools-image"
+    volumes:
+      - ..:/app
     build:
       context: .
       dockerfile: tools.dockerfile
