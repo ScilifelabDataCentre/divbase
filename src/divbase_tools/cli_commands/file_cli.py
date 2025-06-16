@@ -5,7 +5,7 @@ import typer
 from rich import print
 from typing_extensions import Annotated
 
-from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
+from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.services import (
     download_files_command,
@@ -20,10 +20,10 @@ file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to
 @file_app.command("list")
 def list_files(
     bucket_name: str = BUCKET_NAME_OPTION,
-    config_path: Path = CONFIG_PATH_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """list all files in the bucket."""
-    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
     files = list_files_command(
         bucket_name=bucket_name,
     )
@@ -45,14 +45,14 @@ def download_files(
     ),
     bucket_version: str = typer.Option(default=None, help="Version of the bucket at which to download the files."),
     bucket_name: str = BUCKET_NAME_OPTION,
-    config_path: Path = CONFIG_PATH_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Download files from the bucket. This can be done by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to download the files to.
     """
-    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -101,7 +101,7 @@ def upload_files(
         ),
     ] = False,
     bucket_name: str = BUCKET_NAME_OPTION,
-    config_path: Path = CONFIG_PATH_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Upload files to the bucket/DivBase project by either:
@@ -109,7 +109,7 @@ def upload_files(
         2. providing a directory to upload
         3. providing a text file with or a file list.
     """
-    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
 
     all_files = set()
 

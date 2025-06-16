@@ -56,10 +56,31 @@ def get_default_bucket(config_path: Path) -> str | None:
 def set_default_bucket(bucket_name: str, config_path: Path) -> None:
     """
     Set the default bucket in the user configuration file.
-    If the file does not exist, it will be created.
     """
     config = load_user_config(config_path)
+
+    if bucket_name not in config["buckets"]:
+        config["buckets"].append(bucket_name)
     config["default_bucket"] = bucket_name
+
+    save_user_config(config, config_path)
+
+
+def remove_bucket_from_config(bucket_name: str, config_path: Path) -> str:
+    """
+    Remove a bucket from the user configuration file.
+    Returns the bucket name if it was removed successfully.
+    """
+    config = load_user_config(config_path)
+
+    if bucket_name in config["buckets"]:
+        config["buckets"].remove(bucket_name)
+    else:
+        raise ValueError(f"The bucket specified: '{bucket_name}', was not found in your config file.")
+
+    if config.get("default_bucket") == bucket_name:
+        config["default_bucket"] = None
+
     save_user_config(config, config_path)
 
 
