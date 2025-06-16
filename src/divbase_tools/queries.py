@@ -1,6 +1,8 @@
+import json
 import logging
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -62,13 +64,14 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
     command_list = command.split(";")
     commands_config_structure = []
     current_inputs = filenames
+    serializable_samples = sample_and_filename_subset.to_dict(orient="records")
 
     for c_counter, cmd in enumerate(command_list):
         command_details = {
             "command": cmd,
             "counter": c_counter,
             "input_files": current_inputs,
-            "sample_subset": sample_and_filename_subset,
+            "sample_subset": serializable_samples,
         }
 
         temp_files = [f"temp_subset_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)]
@@ -79,19 +82,36 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
         all_temp_files.extend(temp_files)
         current_inputs = temp_files
 
-    for cmd_details in commands_config_structure:
-        logger.info(f"Executing command: {cmd_details['command']}")
-        temp_files = process_bcftools_command(
-            cmd=cmd_details["command"],
-            current_inputs=cmd_details["input_files"],
-            c_counter=cmd_details["counter"],
-            sample_and_filename_subset=cmd_details["sample_subset"],
-            temp_files=cmd_details["temp_files"],
-            container_id=container_id,
+    execute_bcftools_job_in_container(commands_config_structure=commands_config_structure, container_id=container_id)
+
+
+def execute_bcftools_job_in_container(commands_config_structure: list[dict], container_id: str) -> str:
+    with tempfile.NamedTemporaryFile(prefix="bcftools_config_", suffix=".json", mode="w", delete=False) as f:
+        json.dump(commands_config_structure, f, indent=2)
+        temp_config_file = f.name
+    try:
+        container_config_file = "/app/bcftools_divbase_job_config.json"
+        subprocess.run(["docker", "cp", temp_config_file, f"{container_id}:{container_config_file}"], check=True)
+
+        logger.info("Executing bcftools job with commands structure in container...")
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-w",
+                "/app",
+                container_id,
+                "python",
+                "/app/src/divbase_tools/bcftools_runner_for_container.py",
+                "--config",
+                container_config_file,
+            ],
+            check=True,
         )
 
-    merge_bcftools_temp_files(temp_files=temp_files, container_id=container_id)
-    delete_temp_files(all_temp_files)
+        logger.info("Job completed successfully.")
+    finally:
+        os.remove(temp_config_file)
 
 
 def check_bcftools_docker_image(image_name: str) -> bool:
@@ -134,21 +154,6 @@ def build_bcftools_docker_image(image_name: str) -> None:
     subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
 
 
-def run_bcftools_docker(command: str, container_id: str) -> None:
-    """
-    Run a bcftools command in a Docker container.
-    """
-
-    command_args = command.split()
-    try:
-        cmd = ["docker", "exec", "-w", "/app", container_id, "bcftools"] + command_args
-        logger.info(f"Using existing container {container_id} to run: bcftools {command}")
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"bcftools command failed with return code {e.returncode}")
-        raise
-
-
 def dummy_pipe_query_command() -> None:
     """
     Dummy function that copies over a precompiled results file instead of generating it with bcftools.
@@ -161,68 +166,3 @@ def dummy_pipe_query_command() -> None:
     cmd = ["cp", "tests/fixtures/subset.vcf.gz", "./result.vcf.gz"]
     subprocess.run(cmd, check=True)
     logger.info("Dry-run results are found in 'result.vcf.gz'.")
-
-
-def ensure_csi_index(file: str, container_id: str) -> None:
-    """
-    Ensure that the given VCF file has a .csi index. If not, create it using bcftools.
-
-    bcftools can often work on VCF files that lack an index file, but for consistency
-    it is better to create an index file for all VCF files.
-    """
-    index_file = f"{file}.csi"
-    if not os.path.exists(index_file):
-        index_command = f"index -f {file}"
-        run_bcftools_docker(command=index_command, container_id=container_id)
-
-
-def process_bcftools_command(
-    cmd: str,
-    current_inputs: list,
-    c_counter: int,
-    sample_and_filename_subset: pd.DataFrame,
-    temp_files: list,
-    container_id: str,
-) -> list:
-    """
-    Helper function for pipe_query_command. For each file in current_inputs,
-    Process a single command for all input files and return the list of temporary files generated.
-    """
-    for f_counter, file in enumerate(current_inputs):
-        temp_file = temp_files[f_counter]
-        samples_in_file = sample_and_filename_subset[sample_and_filename_subset["Filename"] == file][
-            "Sample_ID"
-        ].tolist()
-        samples_in_file_bcftools_formatted = ",".join(samples_in_file)
-
-        cmd_with_samples = cmd.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
-        formatted_cmd = f"{cmd_with_samples} {file} -Oz -o {temp_file}"
-        run_bcftools_docker(command=formatted_cmd, container_id=container_id)
-        ensure_csi_index(temp_file, container_id)
-    return temp_files
-
-
-def merge_bcftools_temp_files(temp_files: list, container_id: str) -> None:
-    """
-    Merge all temporary files produced by pipe_query_command into a single output file.
-    """
-    if len(temp_files) > 1:
-        merge_command = f"merge --force-samples -Oz -o merged.vcf.gz {' '.join(temp_files)}"
-        run_bcftools_docker(command=merge_command, container_id=container_id)
-        logger.info("Merged all temporary files into 'merged.vcf.gz'.")
-
-
-def delete_temp_files(temp_files: list) -> None:
-    """
-    Delete all temporary files and their associated .csi index files
-    generated during the pipe_query_command execution.
-    """
-    for temp_file in temp_files:
-        try:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            index_file = f"{temp_file}.csi"
-            if os.path.exists(index_file):
-                os.remove(index_file)
-        except Exception as e:
-            logger.error(f"Failed to delete temporary file or index {temp_file}: {e}")
