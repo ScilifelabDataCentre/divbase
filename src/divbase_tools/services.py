@@ -39,8 +39,8 @@ def delete_version_command(bucket_name: str, bucket_version: str) -> None:
 
 
 def list_files_command(bucket_name: str) -> None:
-    manager = create_bucket_manager(bucket_name=bucket_name)
-    return manager.list_files_in_bucket()
+    s3_file_manager = create_s3_file_manager()
+    return s3_file_manager.list_files(bucket_name=bucket_name)
 
 
 def download_files_command(
