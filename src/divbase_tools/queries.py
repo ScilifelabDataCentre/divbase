@@ -1,8 +1,6 @@
 import json
 import logging
-import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -85,32 +83,40 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
 
 
 def execute_bcftools_job_in_container(commands_config_structure: list[dict], container_id: str) -> str:
-    with tempfile.NamedTemporaryFile(prefix="bcftools_config_", suffix=".json", mode="w", delete=False) as f:
-        json.dump(commands_config_structure, f, indent=2)
-        temp_config_file = f.name
-    try:
-        container_config_file = "/app/bcftools_divbase_job_config.json"
-        subprocess.run(["docker", "cp", temp_config_file, f"{container_id}:{container_config_file}"], check=True)
+    """
+    Execute the bcftools query as a batch job in the Docker container using the provided commands structure.
+    Uses stdin to pass the JSON configuration directly to the container script. -i and input is used to
+    send the serialized config to the docker container via stdin.
+    """
+    config_json = json.dumps(commands_config_structure)
 
-        logger.info("Executing bcftools job with commands structure in container...")
-        subprocess.run(
-            [
-                "docker",
-                "exec",
-                "-w",
-                "/app",
-                container_id,
-                "python",
-                "/app/src/divbase_tools/bcftools_runner_for_container.py",
-                "--config",
-                container_config_file,
-            ],
-            check=True,
-        )
+    logger.info("Executing bcftools job with commands structure in container...")
 
-        logger.info("Job completed successfully.")
-    finally:
-        os.remove(temp_config_file)
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            "-w",
+            "/app",
+            container_id,
+            "python",
+            "/app/src/divbase_tools/bcftools_runner_for_container.py",
+        ],
+        input=config_json.encode(),
+        check=True,
+    )
+
+
+def get_container_id():
+    """Helper function to get the container ID of the running bcftools Docker container."""
+    result = subprocess.run(
+        ["docker", "ps", "--filter", "name=docker-tools", "--format", "{{.ID}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 def check_bcftools_docker_image(image_name: str) -> bool:
@@ -120,21 +126,10 @@ def check_bcftools_docker_image(image_name: str) -> bool:
     or an empty string if it does not.
     """
 
-    def get_container_id():
-        """Helper function to get the container ID of the running bcftools Docker container."""
-        result = subprocess.run(
-            ["docker", "ps", "--filter", "name=docker-tools", "--format", "{{.ID}}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
-
     result = subprocess.run(
         ["docker", "images", "-q", image_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
     )
     image_exists = bool(result.stdout.strip())
-
     container_id = get_container_id()
 
     if not container_id:
