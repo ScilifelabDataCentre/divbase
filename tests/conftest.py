@@ -1,30 +1,67 @@
 """
 Tests for the "divbase-cli files" commands
+
+Pytest fixtures set up (and tear down) a MinIO server on localhost with test buckets and files.
+
+The S3FileManager class is patched in all tests to use this test MinIO server,
+it is autoused, so it does not need to be specified in each test.
+
 """
 
 import shlex
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
+from minio_setup import BUCKETS, UPLOADED_FILES, setup_minio_data, start_minio, stop_minio
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
+from divbase_tools.s3_client import S3FileManager
 
 runner = CliRunner()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def CONSTANTS():
     return {
-        "BUCKETS": ["bucket1", "bucket2", "bucket3"],
+        "BAD_ACCESS_KEY": "minioadmin",
+        "BAD_SECRET_KEY": "badpassword",
+        "BUCKETS": BUCKETS,
         "DEFAULT_BUCKET": "bucket1",
-        "FILES_IN_BUCKET": [
-            "file1.vcf.gz",
-            "file2.vcf.gz",
-            "file3.vcf.gz",
+        "FILES_IN_BUCKET": UPLOADED_FILES,
+        "FILES_TO_UPLOAD_DOWNLOAD": [
+            "file1.txt",
+            "file2.txt",
+            "file3.txt",
         ],
-        "FILES_TO_DOWNLOAD": "file1.vcf.gz",
     }
+
+
+@pytest.fixture(scope="session")
+def minio_server():
+    """Start Minio server, set up test buckets, users etc... and stop after all tests run"""
+    try:
+        start_minio()
+        setup_minio_data()
+        yield "http://localhost:9000"
+    finally:
+        print("Stopping Minio server...")
+        stop_minio()
+
+
+@pytest.fixture(autouse=True)
+def patch_s3_file_manager(minio_server, CONSTANTS):
+    """Fixture to patch create_s3_file_manager to use the test Minio server."""
+
+    def mock_create_s3_file_manager():
+        return S3FileManager(
+            url=minio_server,
+            access_key=CONSTANTS["BAD_ACCESS_KEY"],
+            secret_key=CONSTANTS["BAD_SECRET_KEY"],
+        )
+
+    with patch("divbase_tools.services.create_s3_file_manager", side_effect=mock_create_s3_file_manager) as mock:
+        yield mock
 
 
 @pytest.fixture
@@ -68,14 +105,3 @@ def user_config_path(tmp_path, CONSTANTS):
     runner.invoke(app, shlex.split(f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"))
 
     return existing_config_path
-
-
-@pytest.fixture
-def mock_s3_manager(CONSTANTS):
-    """Mock S3FileManager for testing, mocks return values of the S3 managers methods."""
-    mock_manager = MagicMock()
-
-    mock_manager.list_files.return_value = CONSTANTS["FILES_IN_BUCKET"]
-    mock_manager.download_file.return_value = CONSTANTS["FILES_TO_DOWNLOAD"]
-
-    return mock_manager

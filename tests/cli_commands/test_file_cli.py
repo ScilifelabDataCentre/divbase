@@ -1,9 +1,11 @@
 """
 Tests for the "divbase-cli files" commands
+
+All tests are run against a MinIO server on localhost from docker-compose.
 """
 
 import shlex
-from unittest.mock import patch
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -11,14 +13,14 @@ from divbase_tools.divbase_cli import app
 
 runner = CliRunner()
 
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
-def test_list_files_command(mock_s3_manager, user_config_path, CONSTANTS):
-    """Test the list_files command with a mocked S3FileManager."""
+
+def test_list_files_command(user_config_path, CONSTANTS):
+    """Test the list_files command"""
     command = f"files list --config {user_config_path}"
 
-    with patch("divbase_tools.services.create_s3_file_manager", return_value=mock_s3_manager):
-        result = runner.invoke(app, shlex.split(command))
-
+    result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
 
     for file in CONSTANTS["FILES_IN_BUCKET"]:
