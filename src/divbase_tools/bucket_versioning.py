@@ -95,14 +95,6 @@ class BucketVersionManager:
             return {}
         return self.version_info["versions"]
 
-    def list_files_in_bucket(self) -> list[str]:
-        file_list = self.s3_file_manager.list_files(bucket_name=self.bucket_name)
-
-        if not file_list:
-            logger.warning(f"No files found in bucket '{self.bucket_name}'.")
-
-        return file_list
-
     def all_files_at_bucket_version(self, bucket_version: str) -> dict[str, str]:
         """
         Get all files in the bucket at a user specified bucket version.
