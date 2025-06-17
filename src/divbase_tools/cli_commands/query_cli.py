@@ -12,7 +12,7 @@ from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
-from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.tasks import app, bcftools_pipe_task
 from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,27 @@ def pipe_query(
 
     if run_async:
         result = bcftools_pipe_task.delay(command=command, bcftools_inputs=unique_query_results)
-        typer.echo(f"Job submitted with task ID: {result.id}")
+        print(f"Job submitted with task ID: {result.id}")
     else:
         pipe_query_command(command=command, bcftools_inputs=unique_query_results)
+
+
+@query_app.command("task-status")
+def celery_task_status(
+    task_id: str = typer.Option(
+        None,
+        help="""
+        The ID of the Celery task to check the status of.
+        """,
+    ),
+) -> None:
+    """
+    Check the status of a Celery task by its ID.
+    """
+
+    result = app.AsyncResult(task_id)
+    if not result.ready():
+        print(f"Task {task_id} is still running with status {result.state}.")
+    else:
+        print(f"Task {task_id} completed with status {result.state}.")
+        print(f"Results are in file: {result.get()['output_file']}")

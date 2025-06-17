@@ -10,6 +10,13 @@ services:
     image: "rabbitmq:alpine"
     ports:
     - 5672:5672
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
   worker:
     build:
       context: .. 
@@ -17,8 +24,12 @@ services:
     depends_on:
       - rabbitmq
       - tools
+      - redis
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ../src:/app/src
       - /var/run/docker.sock:/var/run/docker.sock
+volumes:
+  redis-data:
