@@ -59,6 +59,10 @@ def setup_minio_data() -> None:
 
     for bucket in BUCKETS:
         s3_client.create_bucket(Bucket=bucket)
+        s3_client.put_bucket_versioning(
+            Bucket=bucket,
+            VersioningConfiguration={"Status": "Enabled"},
+        )
 
     for file in UPLOADED_FILES:
         s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket="bucket1", Key=file)
