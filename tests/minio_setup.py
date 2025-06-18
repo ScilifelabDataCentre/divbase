@@ -19,9 +19,13 @@ HEALTH_CHECK_COMMAND = shlex.split(f"curl -I {URL}/minio/health/live")
 STOP_COMMAND = shlex.split(f"docker-compose -f {DOCKER_COMPOSE_FILE} down")
 
 
-BUCKETS = ["bucket1", "bucket2", "empty-bucket"]
 FIXTURES_DIR = Path(__file__).parent.parent / "tests" / "fixtures"
-UPLOADED_FILES = ["file1.txt", "file2.txt", "file3.txt"]
+
+BUCKETS = {
+    "bucket1": ["file1.txt", "file2.txt"],
+    "bucket2": ["file1.txt"],
+    "empty-bucket": [],
+}
 
 
 def start_minio() -> None:
@@ -64,6 +68,21 @@ def setup_minio_data() -> None:
             VersioningConfiguration={"Status": "Enabled"},
         )
 
-    for file in UPLOADED_FILES:
-        s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket="bucket1", Key=file)
-    s3_client.upload_file(Filename=str(FIXTURES_DIR / "file1.txt"), Bucket="bucket2", Key="file1.txt")
+    for bucket, files in BUCKETS.items():
+        for file in files:
+            s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket=bucket, Key=file)
+
+
+def clean_bucket(bucket_name: str) -> None:
+    """Helper function to delete all objects in the bucket if the test needs that."""
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=URL,
+        aws_access_key_id=MINIO_FAKE_ACCESS_KEY,
+        aws_secret_access_key=MINIO_FAKE_SECRET_KEY,
+    )
+
+    objects = s3_client.list_objects_v2(Bucket=bucket_name)
+    if "Contents" in objects:
+        for obj in objects["Contents"]:
+            s3_client.delete_object(Bucket=bucket_name, Key=obj["Key"])

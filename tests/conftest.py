@@ -12,7 +12,7 @@ import shlex
 from unittest.mock import patch
 
 import pytest
-from minio_setup import BUCKETS, UPLOADED_FILES, setup_minio_data, start_minio, stop_minio
+from minio_setup import BUCKETS, setup_minio_data, start_minio, stop_minio
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
@@ -28,12 +28,9 @@ def CONSTANTS():
         "BAD_SECRET_KEY": "badpassword",
         "BUCKETS": BUCKETS,
         "DEFAULT_BUCKET": "bucket1",
-        "FILES_IN_BUCKET": UPLOADED_FILES,
-        "FILES_TO_UPLOAD_DOWNLOAD": [
-            "file1.txt",
-            "file2.txt",
-            "file3.txt",
-        ],
+        "NON_DEFAULT_BUCKET": "bucket2",
+        "EMPTY_BUCKET": "empty-bucket",
+        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
     }
 
 
