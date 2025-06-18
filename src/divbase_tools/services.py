@@ -58,7 +58,7 @@ def download_files_command(
         bucket_version_manager = BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         files_at_version = bucket_version_manager.all_files_at_bucket_version(bucket_version=bucket_version)
 
-        # check if all files specified exist for download exist a this bucket version
+        # check if all files specified exist for download exist at this bucket version
         missing_objects = [f for f in all_files if f not in files_at_version]
         if missing_objects:
             raise ObjectDoesNotExistInSpecifiedVersionError(
@@ -71,21 +71,19 @@ def download_files_command(
     else:
         files_to_download = {file: None for file in all_files}
 
-    download_files = []
-    for file_name, version_id in files_to_download.items():
-        destination_path = download_dir / file_name
-        dloaded_file = s3_file_manager.download_file(
-            key=file_name, dest=destination_path, bucket_name=bucket_name, version_id=version_id
-        )
-        download_files.append(dloaded_file)
+    download_files = s3_file_manager.download_files(
+        objects=files_to_download,
+        download_dir=download_dir,
+        bucket_name=bucket_name,
+    )
 
     return download_files
 
 
-def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: bool) -> list[Path]:
+def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: bool) -> dict[str, Path]:
     """
     Upload files to the specified S3 bucket.
-    Files uploaded returned as a list Paths
+    Files uploaded and there names in  returned as a list Paths
 
     Safe mode checks if any of the files that are to be uploaded already exist in the bucket.
     """
@@ -100,14 +98,18 @@ def upload_files_command(bucket_name: str, all_files: list[Path], safe_mode: boo
         if existing_objects:
             raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), bucket_name=bucket_name)
 
-    uploaded_files = []
-    for file_path in all_files:
-        file_name = file_path.name
-        s3_file_manager.upload_file(key=file_name, source=file_path, bucket_name=bucket_name)
-        uploaded_files.append(file_path.resolve())
+    uploaded_files = s3_file_manager.upload_files(
+        to_upload={file.name: file for file in all_files},
+        bucket_name=bucket_name,
+    )
+
     return uploaded_files
 
 
-def delete_files_command(bucket_name: str) -> None:
-    # TODO should this even be a command?
-    pass
+def delete_objects_command(bucket_name: str, all_files: list[str]) -> list[str]:
+    """
+    Delete objects from the specified S3 bucket.
+    Returns a list of the deleted objects
+    """
+    s3_file_manager = create_s3_file_manager()
+    return s3_file_manager.delete_objects(objects=all_files, bucket_name=bucket_name)
