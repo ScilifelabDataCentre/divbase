@@ -37,7 +37,7 @@ def add(x, y):
 
 
 @app.task(name="tasks.bcftools_pipe")
-def bcftools_pipe_task(command, bcftools_inputs):
+def bcftools_pipe_task(command, bcftools_inputs, submitter=None):
     """
     Run pipe_query_command as a Celery task.
 
@@ -49,7 +49,7 @@ def bcftools_pipe_task(command, bcftools_inputs):
 
     try:
         pipe_query_command(command=command, bcftools_inputs=bcftools_inputs)
-        return {"status": "completed", "output_file": "merged.vcf.gz"}
+        return {"status": "completed", "output_file": "merged.vcf.gz", "submitter": submitter}
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": str(e), "submitter": submitter}

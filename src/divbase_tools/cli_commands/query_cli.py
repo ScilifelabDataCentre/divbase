@@ -2,11 +2,14 @@
 Query subcommand for the divbase_tools CLI.
 """
 
+import ast
 import logging
+import os
 from pathlib import Path
 
 import requests
 import typer
+from dotenv import load_dotenv
 from rich import print
 from rich.console import Console
 from rich.table import Table
@@ -153,7 +156,18 @@ def pipe_query(
     )  # TODO handle this better, empty values will likely break downstream calls anyway
 
     if run_async:
-        result = bcftools_pipe_task.delay(command=command, bcftools_inputs=unique_query_results)
+        load_dotenv()
+        current_divbase_user = os.environ.get("DIVBASE_USER")
+        if not current_divbase_user:
+            logger.error("DIVBASE_USER environment variable not set")
+
+        result = bcftools_pipe_task.apply_async(
+            kwargs={
+                "command": command,
+                "bcftools_inputs": unique_query_results,
+                "submitter": current_divbase_user,
+            }
+        )
         print(f"Job submitted with task ID: {result.id}")
     else:
         pipe_query_command(command=command, bcftools_inputs=unique_query_results)
@@ -172,9 +186,9 @@ def celery_task_status(
     """
     console = Console()
 
-    flower_user = "floweradmin"
-    flower_password = "badpassword"
-
+    load_dotenv()
+    flower_user = os.environ.get("FLOWER_USER")
+    flower_password = os.environ.get("FLOWER_PASSWORD")
     if not flower_password:
         logger.error("FLOWER_PASSWORD environment variable not set")
 
@@ -184,22 +198,60 @@ def celery_task_status(
     if task_id:
         url = f"{flower_host_and_port}/api/task/info/{task_id}"
     else:
-        url = f"{flower_host_and_port}/api/tasks?limit={limit}"
+        api_limit = min(100, limit * 5)  # return more tasks than requested by the --limit arg to allow for sorting
+        url = f"{flower_host_and_port}/api/tasks?limit={api_limit}"
 
     response = requests.get(url, auth=auth, timeout=3)
 
     if response.status_code == 200:
         tasks = response.json()
+
+        task_items = []
+        for task_id, task_data in tasks.items():
+            started_time = task_data.get("started", 0)
+            if isinstance(started_time, str) and started_time.replace(".", "").isdigit():
+                started_time = float(started_time)
+
+            task_items.append((task_id, task_data, started_time))
+
+        sorted_tasks = sorted(task_items, key=lambda x: x[2], reverse=True)
+        limited_tasks = sorted_tasks[:limit]
+
         table = Table(title="DivBase Task Status", show_lines=True)
+        table.add_column("Submitting user")
         table.add_column("Task ID", style="cyan")
-        table.add_column("State", style="green")
+        table.add_column("State")
+        table.add_column("Received", style="yellow")
         table.add_column("Started", style="yellow")
         table.add_column("Runtime (s)", style="blue")
         table.add_column("Result", style="white")
-        for id, task in tasks.items():
+
+        state_colors = {
+            "SUCCESS": "green",
+            "FAILURE": "red",
+            "PENDING": "yellow",
+            "STARTED": "blue",
+            "PROGRESS": "blue",
+            "REVOKED": "magenta",
+        }
+
+        for id, task, _ in limited_tasks:
+            state = task.get("state", "N/A")
+            color = state_colors.get(state, "white")
+            state_with_color = f"[{color}]{state}[/{color}]"
+
+            kwargs = task.get("kwargs", "{}")  # this returns a python literal and not a propoer JSON string
+            kwargs_dict = ast.literal_eval(kwargs)  # thus need to use ast.literal_eval rather than json.loads
+            if "submitter" in kwargs_dict:
+                submitter = kwargs_dict["submitter"]
+            else:
+                submitter = "Unknown"
+
             table.add_row(
-                task.get("uuid", "N/A"),
-                task.get("state", "N/A"),
+                submitter,
+                id,
+                state_with_color,
+                format_unix_timestamp(task.get("received", "N/A")),
                 format_unix_timestamp(task.get("started", "N/A")),
                 str(task.get("runtime", "N/A")),
                 str(task.get("result", "N/A")),
