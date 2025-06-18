@@ -177,20 +177,26 @@ def pipe_query(
 def celery_task_status(
     task_id: str = typer.Option(
         None,
-        help="Optional task ID for the Celery task to get the status of.",
+        help="Optional: task ID for the Celery task to get the status of.",
     ),
-    limit: int = typer.Option(10, help="Number of tasks to show (when not filtering by ID)"),
+    limit: int = typer.Option(10, help="Optional: number of tasks to show (when not filtering by ID)"),
 ) -> None:
     """
     Check the status of a Celery task by its ID.
     """
     console = Console()
 
+    # TODO if status is FAILURE, print the error message from the task result. the response contains Exception and Traceback
+
     load_dotenv()
     flower_user = os.environ.get("FLOWER_USER")
     flower_password = os.environ.get("FLOWER_PASSWORD")
     if not flower_password:
         logger.error("FLOWER_PASSWORD environment variable not set")
+
+    current_divbase_user = os.environ.get("DIVBASE_USER")
+    if not current_divbase_user:
+        logger.error("DIVBASE_USER environment variable not set")
 
     auth = (flower_user, flower_password)
     flower_host_and_port = "http://localhost:5555"
@@ -207,24 +213,30 @@ def celery_task_status(
         tasks = response.json()
 
         task_items = []
-        for task_id, task_data in tasks.items():
+        if task_id:
+            task_data = tasks
             started_time = task_data.get("started", 0)
             if isinstance(started_time, str) and started_time.replace(".", "").isdigit():
                 started_time = float(started_time)
-
             task_items.append((task_id, task_data, started_time))
+        else:
+            for task_id, task_data in tasks.items():
+                started_time = task_data.get("started", 0)
+                if isinstance(started_time, str) and started_time.replace(".", "").isdigit():
+                    started_time = float(started_time)
+                task_items.append((task_id, task_data, started_time))
 
         sorted_tasks = sorted(task_items, key=lambda x: x[2], reverse=True)
         limited_tasks = sorted_tasks[:limit]
 
-        table = Table(title="DivBase Task Status", show_lines=True)
-        table.add_column("Submitting user")
+        table = Table(title=f"DivBase Task Status for user: {current_divbase_user}", show_lines=True)
+        table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
-        table.add_column("State")
-        table.add_column("Received", style="yellow")
-        table.add_column("Started", style="yellow")
-        table.add_column("Runtime (s)", style="blue")
-        table.add_column("Result", style="white")
+        table.add_column("State", width=8)
+        table.add_column("Received", style="yellow", width=19, overflow="fold")
+        table.add_column("Started", style="yellow", width=19, overflow="fold")
+        table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
+        table.add_column("Result", style="white", width=35, overflow="fold")
 
         state_colors = {
             "SUCCESS": "green",
@@ -247,6 +259,13 @@ def celery_task_status(
             else:
                 submitter = "Unknown"
 
+            if state == "FAILURE":
+                exception_message = task.get("exception", "Unknown error")
+                result = f"[red]{exception_message}[/red]"
+            else:
+                result_message = str(task.get("result", "N/A"))
+                result = f"[green]{result_message}[/green]"
+
             table.add_row(
                 submitter,
                 id,
@@ -254,7 +273,7 @@ def celery_task_status(
                 format_unix_timestamp(task.get("received", "N/A")),
                 format_unix_timestamp(task.get("started", "N/A")),
                 str(task.get("runtime", "N/A")),
-                str(task.get("result", "N/A")),
+                result,
             )
         console.print(table)
     else:
