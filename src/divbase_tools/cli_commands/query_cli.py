@@ -5,15 +5,18 @@ Query subcommand for the divbase_tools CLI.
 import logging
 from pathlib import Path
 
+import requests
 import typer
 from rich import print
+from rich.console import Console
+from rich.table import Table
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
-from divbase_tools.tasks import app, bcftools_pipe_task
-from divbase_tools.utils import resolve_bucket_name
+from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.utils import format_unix_timestamp, resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
@@ -160,18 +163,47 @@ def pipe_query(
 def celery_task_status(
     task_id: str = typer.Option(
         None,
-        help="""
-        The ID of the Celery task to check the status of.
-        """,
+        help="Optional task ID for the Celery task to get the status of.",
     ),
+    limit: int = typer.Option(10, help="Number of tasks to show (when not filtering by ID)"),
 ) -> None:
     """
     Check the status of a Celery task by its ID.
     """
+    console = Console()
 
-    result = app.AsyncResult(task_id)
-    if not result.ready():
-        print(f"Task {task_id} is still running with status {result.state}.")
+    flower_user = "floweradmin"
+    flower_password = "badpassword"
+
+    if not flower_password:
+        logger.error("FLOWER_PASSWORD environment variable not set")
+
+    auth = (flower_user, flower_password)
+    flower_host_and_port = "http://localhost:5555"
+
+    if task_id:
+        url = f"{flower_host_and_port}/api/task/info/{task_id}"
     else:
-        print(f"Task {task_id} completed with status {result.state}.")
-        print(f"Results are in file: {result.get()['output_file']}")
+        url = f"{flower_host_and_port}/api/tasks?limit={limit}"
+
+    response = requests.get(url, auth=auth, timeout=3)
+
+    if response.status_code == 200:
+        tasks = response.json()
+        table = Table(title="DivBase Task Status", show_lines=True)
+        table.add_column("Task ID", style="cyan")
+        table.add_column("State", style="green")
+        table.add_column("Started", style="yellow")
+        table.add_column("Runtime (s)", style="blue")
+        table.add_column("Result", style="white")
+        for id, task in tasks.items():
+            table.add_row(
+                task.get("uuid", "N/A"),
+                task.get("state", "N/A"),
+                format_unix_timestamp(task.get("started", "N/A")),
+                str(task.get("runtime", "N/A")),
+                str(task.get("result", "N/A")),
+            )
+        console.print(table)
+    else:
+        print(f"Failed to fetch tasks: {response.status_code} - {response.text}")

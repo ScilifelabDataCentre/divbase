@@ -5,7 +5,7 @@ services:
       - ..:/app
     build:
       context: .
-      dockerfile: tools.dockerfile
+      dockerfile: docker/tools.dockerfile
   rabbitmq:
     image: "rabbitmq:alpine"
     ports:
@@ -32,7 +32,9 @@ services:
       - ../src:/app/src
       - /var/run/docker.sock:/var/run/docker.sock
   flower:
-    image: mher/flower:0.9.7
+    build:
+      context: ..
+      dockerfile: docker/flower.dockerfile
     ports:
       - 5555:5555
     depends_on:
@@ -42,6 +44,14 @@ services:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - FLOWER_PORT=5555
-    command: ["flower", "--broker=pyamqp://guest@rabbitmq:5672//", "--persistent=True"]
+      - FLOWER_BASIC_AUTH=floweradmin:badpassword
+    command: [
+      "--broker=pyamqp://guest@rabbitmq:5672//", 
+      "--persistent=True",
+      "--db=/data/flower.db",
+      ]
+    volumes:
+    - flower-data:/data
 volumes:
   redis-data:
+  flower-data:

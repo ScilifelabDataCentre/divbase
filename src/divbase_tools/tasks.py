@@ -49,7 +49,7 @@ def bcftools_pipe_task(command, bcftools_inputs):
 
     try:
         pipe_query_command(command=command, bcftools_inputs=bcftools_inputs)
-        return {"status": "completed", "task_id": task_id, "output_file": "merged.vcf.gz"}
+        return {"status": "completed", "output_file": "merged.vcf.gz"}
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")
-        return {"status": "error", "task_id": task_id, "error": str(e)}
+        return {"status": "error", "error": str(e)}
