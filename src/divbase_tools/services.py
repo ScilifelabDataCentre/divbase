@@ -38,12 +38,12 @@ def list_files_at_version_command(bucket_name: str, bucket_version: str) -> dict
     return manager.all_files_at_bucket_version(bucket_version=bucket_version)
 
 
-def delete_version_command(bucket_name: str, bucket_version: str) -> None:
+def delete_version_command(bucket_name: str, bucket_version: str) -> str:
     manager = create_bucket_manager(bucket_name=bucket_name)
     return manager.delete_version(bucket_version=bucket_version)
 
 
-def list_files_command(bucket_name: str) -> None:
+def list_files_command(bucket_name: str) -> list[str]:
     s3_file_manager = create_s3_file_manager()
     return s3_file_manager.list_files(bucket_name=bucket_name)
 

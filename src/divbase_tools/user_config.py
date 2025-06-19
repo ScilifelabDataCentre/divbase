@@ -66,7 +66,7 @@ def set_default_bucket(bucket_name: str, config_path: Path) -> None:
     save_user_config(config, config_path)
 
 
-def remove_bucket_from_config(bucket_name: str, config_path: Path) -> str:
+def remove_bucket_from_config(bucket_name: str, config_path: Path) -> None:
     """
     Remove a bucket from the user configuration file.
     Returns the bucket name if it was removed successfully.

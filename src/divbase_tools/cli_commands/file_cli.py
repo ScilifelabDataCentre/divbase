@@ -30,7 +30,12 @@ def list_files(
     bucket_name: str = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """list all files in the bucket."""
+    """
+    list all files in the bucket.
+
+    To see files at a user specified bucket version (controlled by the 'divbase-cli version' subcommand),
+    you can instead use the 'divbase version info [VERSION_NAME]' command.
+    """
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
     files = list_files_command(
         bucket_name=bucket_name,
