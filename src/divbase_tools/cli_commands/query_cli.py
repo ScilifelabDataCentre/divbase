@@ -2,24 +2,21 @@
 Query subcommand for the divbase_tools CLI.
 """
 
-import ast
 import logging
 import os
 from pathlib import Path
 
-import requests
 import typer
 from dotenv import load_dotenv
 from rich import print
-from rich.console import Console
-from rich.table import Table
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import pipe_query_command, tsv_query_command
 from divbase_tools.services import download_files_command
+from divbase_tools.task_history import dotenv_to_task_history_manager
 from divbase_tools.tasks import bcftools_pipe_task
-from divbase_tools.utils import format_unix_timestamp, resolve_bucket_name
+from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
@@ -182,99 +179,8 @@ def celery_task_status(
     limit: int = typer.Option(10, help="Optional: number of tasks to show (when not filtering by ID)"),
 ) -> None:
     """
-    Check the status of a Celery task by its ID.
+    Check the query task history for the current user, either by task ID or by showing the last N tasks.
     """
-    console = Console()
 
-    load_dotenv()
-    flower_user = os.environ.get("FLOWER_USER")
-    flower_password = os.environ.get("FLOWER_PASSWORD")
-    if not flower_password:
-        logger.error("FLOWER_PASSWORD environment variable not set")
-
-    current_divbase_user = os.environ.get("DIVBASE_USER")
-    if not current_divbase_user:
-        logger.error("DIVBASE_USER environment variable not set")
-
-    auth = (flower_user, flower_password)
-    flower_host_and_port = "http://localhost:5555"
-
-    if task_id:
-        url = f"{flower_host_and_port}/api/task/info/{task_id}"
-    else:
-        api_limit = min(100, limit * 5)  # return more tasks than requested by the --limit arg to allow for sorting
-        url = f"{flower_host_and_port}/api/tasks?limit={api_limit}"
-
-    response = requests.get(url, auth=auth, timeout=3)
-
-    if response.status_code == 200:
-        tasks = response.json()
-
-        task_items = []
-        if task_id:
-            task_data = tasks
-            started_time = task_data.get("started", 0)
-            if isinstance(started_time, str) and started_time.replace(".", "").isdigit():
-                started_time = float(started_time)
-            task_items.append((task_id, task_data, started_time))
-        else:
-            for task_id, task_data in tasks.items():
-                started_time = task_data.get("started", 0)
-                if isinstance(started_time, str) and started_time.replace(".", "").isdigit():
-                    started_time = float(started_time)
-                task_items.append((task_id, task_data, started_time))
-
-        sorted_tasks = sorted(task_items, key=lambda x: x[2], reverse=True)
-        limited_tasks = sorted_tasks[:limit]
-
-        table = Table(title=f"DivBase Task Status for user: {current_divbase_user}", show_lines=True)
-        table.add_column("Submitting user", width=12, overflow="fold")
-        table.add_column("Task ID", style="cyan")
-        table.add_column("State", width=8)
-        table.add_column("Received", style="yellow", width=19, overflow="fold")
-        table.add_column("Started", style="yellow", width=19, overflow="fold")
-        table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
-        table.add_column("Result", style="white", width=35, overflow="fold")
-
-        state_colors = {
-            "SUCCESS": "green",
-            "FAILURE": "red",
-            "PENDING": "yellow",
-            "STARTED": "blue",
-            "PROGRESS": "blue",
-            "REVOKED": "magenta",
-        }
-
-        for id, task, _ in limited_tasks:
-            state = task.get("state", "N/A")
-            color = state_colors.get(state, "white")
-            state_with_color = f"[{color}]{state}[/{color}]"
-
-            kwargs = task.get("kwargs", "{}")  # this returns a python literal and not a propoer JSON string
-            kwargs_dict = ast.literal_eval(kwargs)  # thus need to use ast.literal_eval rather than json.loads
-            if "submitter" in kwargs_dict:
-                submitter = kwargs_dict["submitter"]
-            else:
-                submitter = "Unknown"
-
-            if state == "FAILURE":
-                exception_message = task.get("exception", "Unknown error")
-                result = f"[red]{exception_message}[/red]"
-            else:
-                result_message = str(task.get("result", "N/A"))
-                result = f"[green]{result_message}[/green]"
-
-            if current_divbase_user == submitter or current_divbase_user == "divbase_admin":
-                table.add_row(
-                    submitter,
-                    id,
-                    state_with_color,
-                    format_unix_timestamp(task.get("received", "N/A")),
-                    format_unix_timestamp(task.get("started", "N/A")),
-                    str(task.get("runtime", "N/A")),
-                    result,
-                )
-
-        console.print(table)
-    else:
-        print(f"Failed to fetch tasks: {response.status_code} - {response.text}")
+    task_history_manager = dotenv_to_task_history_manager()
+    task_history_manager.get_task_history(task_id=task_id, display_limit=limit)
