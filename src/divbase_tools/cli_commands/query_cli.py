@@ -12,7 +12,7 @@ from rich import print
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import pipe_query_command, tsv_query_command
+from divbase_tools.queries import BcftoolsQueryManager, tsv_query_command
 from divbase_tools.services import download_files_command
 from divbase_tools.task_history import dotenv_to_task_history_manager
 from divbase_tools.tasks import bcftools_pipe_task
@@ -167,7 +167,10 @@ def pipe_query(
         )
         print(f"Job submitted with task ID: {result.id}")
     else:
-        pipe_query_command(command=command, bcftools_inputs=unique_query_results, run_local_docker=True)
+        bcftools_query_manager = BcftoolsQueryManager()
+        bcftools_query_manager.execute_pipe(
+            command=command, bcftools_inputs=unique_query_results, run_local_docker=True
+        )
 
 
 @query_app.command("task-status")

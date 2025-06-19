@@ -4,7 +4,7 @@ from time import sleep
 
 from celery import Celery
 
-from divbase_tools.queries import pipe_query_command
+from divbase_tools.queries import BcftoolsQueryManager
 
 broker_url = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
@@ -48,7 +48,8 @@ def bcftools_pipe_task(command, bcftools_inputs, submitter=None):
     logger.info(f"Starting bcftools pipe task with Celery task ID: {task_id}")
 
     try:
-        pipe_query_command(command=command, bcftools_inputs=bcftools_inputs)
+        bcftools_manager = BcftoolsQueryManager()
+        bcftools_manager.execute_pipe(command, bcftools_inputs)
         return {"status": "completed", "output_file": "merged.vcf.gz", "submitter": submitter}
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")
