@@ -33,6 +33,11 @@ def list_versions_command(bucket_name: str) -> dict[str, dict]:
     return manager.get_version_info()
 
 
+def list_files_at_version_command(bucket_name: str, bucket_version: str) -> dict[str, str]:
+    manager = create_bucket_manager(bucket_name=bucket_name)
+    return manager.all_files_at_bucket_version(bucket_version=bucket_version)
+
+
 def delete_version_command(bucket_name: str, bucket_version: str) -> None:
     manager = create_bucket_manager(bucket_name=bucket_name)
     return manager.delete_version(bucket_version=bucket_version)

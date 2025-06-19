@@ -8,6 +8,7 @@ from divbase_tools.services import (
     add_version_command,
     create_version_object_command,
     delete_version_command,
+    list_files_at_version_command,
     list_versions_command,
 )
 from divbase_tools.utils import resolve_bucket_name
@@ -72,3 +73,22 @@ def delete_version(
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
     deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_name)
     print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_name}'")
+
+
+@version_app.command("info")
+def get_version_info(
+    version: str = typer.Argument(help="Specific version to retrieve information for"),
+    bucket_name: str | None = BUCKET_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """Provide detailed information about a user specified bucket version, including all files present and their unique hashes."""
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    files_at_version = list_files_at_version_command(bucket_name=bucket_name, bucket_version=version)
+
+    if not files_at_version:
+        print("No files were registered at this version.")
+        return
+
+    print(f"State of each file in the bucket: '{bucket_name}' at version: '{version}'")
+    for object_name, hash in files_at_version.items():
+        print(f"- '{object_name}' : '{hash}'")
