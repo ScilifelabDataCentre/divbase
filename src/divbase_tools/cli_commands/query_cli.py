@@ -105,7 +105,7 @@ def pipe_query(
         """,
     ),
     command: str = typer.Option(
-        None,
+        ...,
         help="""
         String consisting of the bcftools command to run on the files returned by the tsv query.
         """,
@@ -121,6 +121,13 @@ def pipe_query(
     # TODO: handle case empty results are returned from tsv_query()
     # TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?
     # TODO what if a job fails and the user wants to re-run it? do we store temp files?
+    # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
+    # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
+
+    if not command or command.strip() == "" or command.strip() == ";":
+        logger.error("Empty command provided. Please specify at least one valid bcftools command.")
+        raise typer.Exit(code=1)
+
     filter = tsv_filter if tsv_filter else ""
 
     unique_query_results = tsv_query(

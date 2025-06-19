@@ -100,12 +100,7 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
     assert result[0]["command"] == "view -s SAMPLES", "Leading/trailing spaces should be stripped"
     assert result[1]["command"] == "view -G", "Leading/trailing spaces should be stripped"
 
-    # Case 4: Single semicolon (i.e. two empty commands)
-    semicolon_cmd = ";"
-    result = bcftools_manager.build_commands_config(semicolon_cmd, example_sidecar_metadata_inputs_outputs)
-    assert len(result) == 0, "Should create no command configurations (all empty)"
-
-    # Case 5: Command with quotation marks and complex filtering
+    # Case 4: Command with quotation marks and complex filtering
     quoted_cmd = "view -s \"SAMPLE1,SAMPLE2\"; view -r 1:1000-2000; view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
     result = bcftools_manager.build_commands_config(quoted_cmd, example_sidecar_metadata_inputs_outputs)
 
@@ -114,7 +109,7 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
     assert result[1]["command"] == "view -r 1:1000-2000"
     assert result[2]["command"] == "view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
 
-    # Case 6: Command with multiple consecutive semicolons
+    # Case 5: Command with multiple consecutive semicolons
     multi_semicolon_cmd = "view -s SAMPLES;;;view -m2 -M2 -v snps"
     result = bcftools_manager.build_commands_config(multi_semicolon_cmd, example_sidecar_metadata_inputs_outputs)
     assert len(result) == 2, "Should create two command configurations (empty ones are skipped)"
@@ -143,3 +138,19 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
     error_msg = str(exc_info.value)
     assert "Unsupported bcftools command 'norm'" in error_msg
     assert "position 1" in error_msg, "Error should indicate the position of the invalid command"
+
+
+def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
+    """Test that fails on various variations of when user inputs empty --command to bcftools-pipe in the CLI."""
+
+    with pytest.raises(ValueError) as exc_info:
+        bcftools_manager.build_commands_config("", example_sidecar_metadata_inputs_outputs)
+    assert "Empty command provided" in str(exc_info.value)
+
+    with pytest.raises(ValueError) as exc_info:
+        bcftools_manager.build_commands_config(";", example_sidecar_metadata_inputs_outputs)
+    assert "Empty command provided" in str(exc_info.value)
+
+    with pytest.raises(ValueError) as exc_info:
+        bcftools_manager.build_commands_config("  ;  ", example_sidecar_metadata_inputs_outputs)
+    assert "Empty command provided" in str(exc_info.value)

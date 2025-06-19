@@ -43,6 +43,9 @@ class BcftoolsQueryManager:
     def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
         filenames = bcftools_inputs.get("filenames")
         sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
+
+        if not command or command.strip() == ";" or command.strip() == "":
+            raise ValueError("Empty command provided. Please specify at least one valid bcftools command.")
         command_list = command.split(";")
         commands_config_structure = []
         current_inputs = filenames
