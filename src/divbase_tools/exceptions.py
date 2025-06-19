@@ -98,11 +98,29 @@ class FilesAlreadyInBucketError(FileExistsError):
         error_message = (
             f"In the bucket: '{bucket_name}'\n"
             "The following objects that you're trying to upload already exist in the bucket:\n"
-            f"'{files_list}'."
+            f"{files_list}."
         )
         super().__init__(error_message)
         self.existing_objects = existing_objects
         self.bucket = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class BucketVersioningFileAlreadyExistsError(FileExistsError):
+    """
+    Raised when trying to create a bucket versioning file that already exists in the bucket.
+    """
+
+    def __init__(self, bucket_name: str):
+        error_message = (
+            f"The bucket versioning file already exists for the bucket: '{bucket_name}'.\n"
+            "You can already add a new bucket version to this file using the 'add' command"
+        )
+        super().__init__(error_message)
+        self.bucket_name = bucket_name
         self.error_message = error_message
 
     def __str__(self):
