@@ -228,31 +228,55 @@ class BcftoolsQueryManager:
         subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
 
 
-def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
+def tsv_query_command(file: Path, filter: str = None) -> tuple[pd.DataFrame, str]:
     """
     Query a TSV file for specific key-value pairs. Assumes that the TSV file has a header row
     and a column named Filename. The user can use any column header as a key, and the values
     can be any string. Returns the unique filenames that match the query.
     """
-    # TODO if key not in df.columns, there is currently no warning or error
     # TODO if value not in df[key], there is no warning or error. only if both values are missing
     # is there is message saying that an empty df is returned
     # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
 
     df = pd.read_csv(file, sep="\t")
-    df.columns = df.columns.str.lstrip("#")
+
+    if any(col.startswith("#") for col in df.columns):
+        df.columns = df.columns.str.lstrip("#")
+
+    if filter == "":
+        logger.warning("Empty filter provided - returning ALL records. This may be a large result set.")
+        return df, "ALL RECORDS (no filter)"
+
+    if filter is None:
+        raise ValueError("Filter cannot be None. Use an empty string ('') if you want all records.")
 
     key_values = filter.split(";")
     filter_conditions = []
+
     for key_value in key_values:
-        key, values = key_value.split(":", 1)
-        values_list = values.split(",")
+        if not key_value.strip():
+            continue
+        try:
+            key, values = key_value.split(":", 1)
+            values_list = values.split(",")
 
-        if key in df.columns:
-            condition = f"{key} in {values_list}"
-            filter_conditions.append(condition)
+            if key in df.columns:
+                condition = df[key].isin(values_list)
+                if not condition.any():
+                    logger.warning(f"None of the values {values_list} were found in column '{key}'")
+                filter_conditions.append(condition)
+            else:
+                logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
+        except ValueError:
+            logger.warning(f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'")
 
-    query_string = " and ".join(filter_conditions)
-    query_result = df.query(query_string)
+    if filter_conditions:
+        combined_condition = pd.Series(True, index=df.index)
+        for condition in filter_conditions:
+            combined_condition = combined_condition & condition
 
-    return query_result, query_string
+        filtered_df = df[combined_condition].copy()
+        return filtered_df, filter
+
+    logger.warning("Invalid filter conditions found - returning ALL records. This may be a large result set.")
+    return df, "Invalid filter conditions - returning ALL records"

@@ -29,8 +29,8 @@ def tsv_query(
         default=Path("./sample_metadata.tsv"),
         help="Path to the tsv metadata file.",
     ),
-    filter: str = typer.Option(
-        None,
+    filter: str = typer.Argument(
+        ...,
         help="""
         String consisting of keys:values in the tsv file to filter on.
         The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
@@ -38,6 +38,7 @@ def tsv_query(
         Multiple values for a key are separated by commas, and multiple keys are 
         separated by semicolons. When multple keys are provided, an intersect query 
         will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
+        Use '' (empty string in quotes) to return ALL records.
         """,
     ),
     show_sample_results: bool = typer.Option(
@@ -50,8 +51,6 @@ def tsv_query(
     """Query the tsv sidecar metadata file for the VCF files stored in the bucket. Returns the sample IDs and filenames that match the query."""
     # TODO it perhaps be useful to set the default download_dir in the config so that we can
     # look for files there? For now this code just uses file.parent as the download directory.
-
-    # TODO handle when --filter = NONE
 
     # TODO handle when the name of the sample column is something other than Sample_ID
 
@@ -66,8 +65,8 @@ def tsv_query(
             config_path=config_path,
         )
 
-    logger.info(f"Quering {file}\n")
-    query_result, query_string = tsv_query_command(file=file, filter=filter)
+    logger.info(f"Querying {file}\n")
+    query_result, query_message = tsv_query_command(file=file, filter=filter)
     unique_sampleIDs = query_result["Sample_ID"].unique().tolist()
     unique_filenames = query_result["Filename"].unique().tolist()
     sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
@@ -77,7 +76,7 @@ def tsv_query(
         print("Name and file for each sample in query results:")
         print(f"{sample_and_filename_subset.to_string(index=False)}\n")
 
-    print(f"The results for the query ([bright_blue]{query_string}[/bright_blue]):")
+    print(f"The results for the query ([bright_blue]{query_message}[/bright_blue]):")
     print(f"Unique Sample IDs: {unique_sampleIDs}")
     print(f"Unique filenames: {unique_filenames}\n")
 
@@ -122,14 +121,18 @@ def pipe_query(
     # TODO: handle case empty results are returned from tsv_query()
     # TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?
     # TODO what if a job fails and the user wants to re-run it? do we store temp files?
-    if tsv_filter:
-        unique_query_results = tsv_query(
-            file=tsv_file,
-            filter=tsv_filter,
-            show_sample_results=False,
-            bucket_name=bucket_name,
-            config_path=config_path,
-        )
+    filter = tsv_filter if tsv_filter else ""
+
+    unique_query_results = tsv_query(
+        file=tsv_file,
+        filter=filter,
+        show_sample_results=False,
+        bucket_name=bucket_name,
+        config_path=config_path,
+    )
+
+    if not tsv_filter:
+        logger.info(f"No filter provided - using all {len(unique_query_results['sampleIDs'])} samples from {tsv_file}")
 
     missing_files = []
     for filename in unique_query_results.get("filenames", []):
@@ -148,9 +151,15 @@ def pipe_query(
             config_path=config_path,
         )
 
-    unique_query_results = (
-        unique_query_results or {}
-    )  # TODO handle this better, empty values will likely break downstream calls anyway
+    if not unique_query_results.get("filenames"):
+        logger.error("No files found matching your query criteria. Cannot proceed with bcftools commands.")
+        raise typer.Exit(code=1)
+
+    if not unique_query_results.get("sampleIDs"):
+        logger.error("No samples found matching your query criteria. Cannot proceed with bcftools commands.")
+        raise typer.Exit(code=1)
+
+    bcftools_inputs = unique_query_results
 
     if run_async:
         load_dotenv()
@@ -161,16 +170,14 @@ def pipe_query(
         result = bcftools_pipe_task.apply_async(
             kwargs={
                 "command": command,
-                "bcftools_inputs": unique_query_results,
+                "bcftools_inputs": bcftools_inputs,
                 "submitter": current_divbase_user,
             }
         )
         print(f"Job submitted with task ID: {result.id}")
     else:
         bcftools_query_manager = BcftoolsQueryManager()
-        bcftools_query_manager.execute_pipe(
-            command=command, bcftools_inputs=unique_query_results, run_local_docker=True
-        )
+        bcftools_query_manager.execute_pipe(command=command, bcftools_inputs=bcftools_inputs, run_local_docker=True)
 
 
 @query_app.command("task-status")
