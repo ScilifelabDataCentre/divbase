@@ -135,18 +135,21 @@ def test_delete_nonexistent_version(user_config_path):
 
 
 def test_get_version_info(user_config_path, CONSTANTS):
-    runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
+    default_bucket = CONSTANTS["DEFAULT_BUCKET"]
+    files_in_bucket = CONSTANTS["BUCKET_CONTENTS"][default_bucket]
+
+    result = runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
+    assert result.exit_code == 0
 
     command = f"version info {VERSION_1_NAME} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
 
     assert result.exit_code == 0
-    assert f"'{VERSION_1_NAME}'" in result.stdout
-    assert f"'{CONSTANTS['DEFAULT_BUCKET']}'" in result.stdout
+    assert f"{VERSION_1_NAME}" in result.stdout
+    assert f"{default_bucket}" in result.stdout
 
-    CONSTANTS["BUCKET_CONTENTS"]
-
-    print(result.stdout)
+    for file in files_in_bucket:
+        assert f"- '{file}' :" in result.stdout
 
 
 def test_get_version_updates_hashes_on_new_upload(user_config_path, CONSTANTS, fixtures_dir):

@@ -24,6 +24,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "tests" / "fixtures"
 BUCKETS = {
     "bucket1": ["file1.txt", "file2.txt"],
     "bucket2": ["file1.txt"],
+    "cleaned-bucket": [],  # this bucket is always cleaned before a test
     "empty-bucket": [],
 }
 
@@ -71,18 +72,3 @@ def setup_minio_data() -> None:
     for bucket, files in BUCKETS.items():
         for file in files:
             s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket=bucket, Key=file)
-
-
-def clean_bucket(bucket_name: str) -> None:
-    """Helper function to delete all objects in the bucket if the test needs that."""
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=URL,
-        aws_access_key_id=MINIO_FAKE_ACCESS_KEY,
-        aws_secret_access_key=MINIO_FAKE_SECRET_KEY,
-    )
-
-    objects = s3_client.list_objects_v2(Bucket=bucket_name)
-    if "Contents" in objects:
-        for obj in objects["Contents"]:
-            s3_client.delete_object(Bucket=bucket_name, Key=obj["Key"])

@@ -29,6 +29,7 @@ def CONSTANTS():
         "BAD_SECRET_KEY": "badpassword",
         "DEFAULT_BUCKET": "bucket1",
         "NON_DEFAULT_BUCKET": "bucket2",
+        "CLEANED_BUCKET": "cleaned-bucket",
         "EMPTY_BUCKET": "empty-bucket",
         "BUCKET_CONTENTS": BUCKETS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
