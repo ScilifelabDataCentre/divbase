@@ -186,8 +186,6 @@ def celery_task_status(
     """
     console = Console()
 
-    # TODO if status is FAILURE, print the error message from the task result. the response contains Exception and Traceback
-
     load_dotenv()
     flower_user = os.environ.get("FLOWER_USER")
     flower_password = os.environ.get("FLOWER_PASSWORD")
@@ -266,15 +264,17 @@ def celery_task_status(
                 result_message = str(task.get("result", "N/A"))
                 result = f"[green]{result_message}[/green]"
 
-            table.add_row(
-                submitter,
-                id,
-                state_with_color,
-                format_unix_timestamp(task.get("received", "N/A")),
-                format_unix_timestamp(task.get("started", "N/A")),
-                str(task.get("runtime", "N/A")),
-                result,
-            )
+            if current_divbase_user == submitter or current_divbase_user == "divbase_admin":
+                table.add_row(
+                    submitter,
+                    id,
+                    state_with_color,
+                    format_unix_timestamp(task.get("received", "N/A")),
+                    format_unix_timestamp(task.get("started", "N/A")),
+                    str(task.get("runtime", "N/A")),
+                    result,
+                )
+
         console.print(table)
     else:
         print(f"Failed to fetch tasks: {response.status_code} - {response.text}")
