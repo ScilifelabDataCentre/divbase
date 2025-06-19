@@ -100,7 +100,7 @@ def test_show_user_config_command(user_config_path, CONSTANTS):
     result = runner.invoke(app, shlex.split(command))
 
     assert result.exit_code == 0
-    for bucket in CONSTANTS["BUCKETS"]:
+    for bucket in CONSTANTS["BUCKET_CONTENTS"]:
         assert bucket in result.output
     assert f"default_bucket: {CONSTANTS['DEFAULT_BUCKET']}" in result.output
 
@@ -115,7 +115,7 @@ def test_show_user_config_with_no_buckets_command(fresh_config):
 
 
 def test_remove_bucket_command(user_config_path, CONSTANTS):
-    for bucket_name in CONSTANTS["BUCKETS"]:
+    for bucket_name in CONSTANTS["BUCKET_CONTENTS"]:
         command = f"config remove-bucket {bucket_name} --config {user_config_path}"
         result = runner.invoke(app, shlex.split(command))
         assert result.exit_code == 0

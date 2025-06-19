@@ -49,7 +49,7 @@ def start_minio() -> None:
 
 def stop_minio() -> None:
     subprocess.run(STOP_COMMAND, check=True)
-    time.sleep(2)
+    print("\nStopping Minio server...")
 
 
 def setup_minio_data() -> None:

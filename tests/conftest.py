@@ -9,6 +9,7 @@ it is autoused, so it does not need to be specified in each test.
 """
 
 import shlex
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -26,10 +27,10 @@ def CONSTANTS():
     return {
         "BAD_ACCESS_KEY": "minioadmin",
         "BAD_SECRET_KEY": "badpassword",
-        "BUCKETS": BUCKETS,
         "DEFAULT_BUCKET": "bucket1",
         "NON_DEFAULT_BUCKET": "bucket2",
         "EMPTY_BUCKET": "empty-bucket",
+        "BUCKET_CONTENTS": BUCKETS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
     }
 
@@ -42,7 +43,6 @@ def minio_server():
         setup_minio_data()
         yield "http://localhost:9000"
     finally:
-        print("Stopping Minio server...")
         stop_minio()
 
 
@@ -95,10 +95,16 @@ def user_config_path(tmp_path, CONSTANTS):
     result = runner.invoke(app, shlex.split(create_command))
     assert result.exit_code == 0
 
-    for bucket in CONSTANTS["BUCKETS"]:
+    for bucket in CONSTANTS["BUCKET_CONTENTS"]:
         add_command = f"config add-bucket {bucket} --config {existing_config_path}"
         result = runner.invoke(app, shlex.split(add_command))
         assert result.exit_code == 0
     runner.invoke(app, shlex.split(f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"))
 
     return existing_config_path
+
+
+@pytest.fixture
+def fixtures_dir():
+    """Path to the fixtures directory."""
+    return Path(__file__).parent.parent / "tests" / "fixtures"
