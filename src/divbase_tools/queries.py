@@ -26,6 +26,7 @@ class BcftoolsQueryManager:
 
     """
 
+    VALID_BCFTOOLS_COMMANDS = ["view"]
     IMAGE_NAME = "docker/worker"
 
     def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> None:
@@ -47,6 +48,21 @@ class BcftoolsQueryManager:
         current_inputs = filenames
 
         for c_counter, cmd in enumerate(command_list):
+            cmd = cmd.strip()
+
+            if not cmd:
+                logger.warning(f"Skipping empty command at position {c_counter + 1} in command pipeline")
+                continue
+
+            cmd_name = cmd.split()[0] if cmd and " " in cmd else cmd
+            if cmd_name not in self.VALID_BCFTOOLS_COMMANDS:
+                error_msg = (
+                    f"Unsupported bcftools command '{cmd_name}' at position {c_counter + 1}. "
+                    f"Only the following commands are supported for DivBase queries: {', '.join(self.VALID_BCFTOOLS_COMMANDS)}"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
             output_temp_files = [
                 f"temp_subset_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)
             ]
@@ -62,6 +78,9 @@ class BcftoolsQueryManager:
             commands_config_structure.append(command_details)
 
             current_inputs = output_temp_files
+
+        if not commands_config_structure:
+            logger.error("No valid commands provided in input string")
 
         return commands_config_structure
 
