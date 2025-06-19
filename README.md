@@ -36,11 +36,11 @@ The CLI tool `divbase-cli` is designed to help you interact with your DivBase pr
 
 ## Developer Setup
 
-First setup your python virtual environment.
+### 1. Setup your python virtual environment
 
 You can use either [uv](https://github.com/astral-sh/uv) or something like `venv` or `pip`.
 
-### Using `uv` (Recommended)
+#### Using `uv` (Recommended)
 
 - Install `uv`, follow the docs: <https://docs.astral.sh/uv/>
 
@@ -52,7 +52,7 @@ uv sync
 
 This will create a virtual environment at the root of the repo and install all dependacies and the package (with all code in the src folder installed in "editable" mode).
 
-### Using pip and venv
+#### Using pip and venv
 
 ```bash
 python3 -m venv .venv
@@ -61,7 +61,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### Available commands
+#### Available commands
 
 You can now run the cli tool and webAPI/server with the following commands.
 
@@ -70,10 +70,30 @@ divbase-cli
 divbase-api
 ```
 
-### Pre-commit
+### 2. Install pre-commit hooks
 
 We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on every commit.
 
 ```bash
 pre-commit install
 ```
+
+### 3. Running tests
+
+We currently have e2e tests for the CLI tool which are written using `pytest` and can be run as follows:
+
+```bash
+pytest # you may want to append the -s flag to print standard output.
+```
+
+For the tests inside:
+
+- `test_file_cli.py`
+- `test_version_cli.py`
+
+We use docker-compose to create a local MinIO instance.
+The MinIO instance is populated with some default buckets and data and provided to each test.
+
+**The tests will be slower the first time you run them as the docker image will need to be downloaded, otherwise setup takes ~3 seconds.**
+
+**The MinIO instance is shared between tests (aka `@pytest.fixture(scope="session")` ). This is important to think about when you add new tests.**
