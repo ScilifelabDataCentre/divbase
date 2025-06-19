@@ -2,7 +2,8 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
-# Install Alpine-specific packages
+ARG BCFTOOLS_VERSION="1.22"
+
 RUN apk update && \
     apk add --no-cache \
     gcc \
@@ -12,7 +13,21 @@ RUN apk update && \
     docker \
     ca-certificates \
     curl \
-    libffi-dev
+    libffi-dev \
+    zlib-dev \
+    bzip2-dev \
+    xz-dev \
+    curl-dev \
+    openssl-dev \
+    perl-dev
+
+
+RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
+    | tar -C /tmp -xjf- \
+    && cd /tmp/bcftools-${BCFTOOLS_VERSION} \
+    && make \
+    && make install \
+    && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
 # copy readme to avoid pip complaining about missing files
 COPY pyproject.toml README.md ./

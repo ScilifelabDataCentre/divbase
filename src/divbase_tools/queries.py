@@ -1,7 +1,8 @@
-import json
 import logging
+import os
 import subprocess
 from pathlib import Path
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -38,7 +39,7 @@ def tsv_query_command(file: Path, filter: str) -> tuple[pd.DataFrame, str]:
     return query_result, query_string
 
 
-def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
+def pipe_query_command(command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> None:
     """
     Ensure that the bcftools Docker image is available, then pass "query" commands to bcftools.
 
@@ -48,13 +49,6 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
     the row-columns of the input files for the eventual merge operation are smaller.
     Downside is that the logic is more complex than in a "merge-first" strategy.
     """
-    IMAGE_NAME = "bcftools-image"
-
-    image_exists, container_id = check_bcftools_docker_image(image_name=IMAGE_NAME)
-
-    if not image_exists:
-        logger.info(f"Docker image '{IMAGE_NAME}' not found. Building it now...")
-        build_bcftools_docker_image(image_name=IMAGE_NAME)
 
     filenames = bcftools_inputs.get("filenames")
     sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
@@ -79,33 +73,109 @@ def pipe_query_command(command: str, bcftools_inputs: dict) -> None:
         all_temp_files.extend(temp_files)
         current_inputs = temp_files
 
-    execute_bcftools_job_in_container(commands_config_structure=commands_config_structure, container_id=container_id)
+    if run_local_docker:
+        IMAGE_NAME = "docker/worker"
+
+        image_exists = check_bcftools_docker_image(image_name=IMAGE_NAME)
+
+        if not image_exists:
+            logger.info(f"Docker image '{IMAGE_NAME}' not found. Building it now...")
+            build_bcftools_docker_image(image_name=IMAGE_NAME)
+
+    process_bcftools_commands(commands_config_structure)
 
 
-def execute_bcftools_job_in_container(commands_config_structure: list[dict], container_id: str) -> str:
+def run_bcftools(command: str) -> None:
+    logger.info(f"Running: bcftools {command}")
+    subprocess.run(["bcftools"] + command.split(), check=True)
+
+
+def ensure_csi_index(file: str) -> None:
     """
-    Execute the bcftools query as a batch job in the Docker container using the provided commands structure.
-    Uses stdin to pass the JSON configuration directly to the container script. -i and input is used to
-    send the serialized config to the docker container via stdin.
+    Ensure that the given VCF file has a .csi index. If not, create it using bcftools.
+
+    bcftools can often work on VCF files that lack an index file, but for consistency
+    it is better to create an index file for all VCF files.
     """
-    config_json = json.dumps(commands_config_structure)
+    index_file = f"{file}.csi"
+    if not os.path.exists(index_file):
+        index_command = f"index -f {file}"
+        run_bcftools(command=index_command)
 
-    logger.info("Executing bcftools job with commands structure in container...")
 
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "-i",
-            "-w",
-            "/app",
-            container_id,
-            "python",
-            "/app/src/divbase_tools/bcftools_runner_for_container.py",
-        ],
-        input=config_json.encode(),
-        check=True,
-    )
+def process_command_config(cmd_config):
+    """Process a single command configuration."""
+    command = cmd_config["command"]
+    input_files = cmd_config["input_files"]
+    temp_files = cmd_config["temp_files"]
+    sample_subset = cmd_config["sample_subset"]
+
+    for f_counter, file in enumerate(input_files):
+        temp_file = temp_files[f_counter]
+
+        samples_in_file = []
+        for record in sample_subset:
+            if record["Filename"] == file:
+                samples_in_file.append(record["Sample_ID"])
+
+        samples_in_file_bcftools_formatted = ",".join(samples_in_file)
+
+        cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
+        formatted_cmd = f"{cmd_with_samples} {file} -Oz -o {temp_file}"
+        run_bcftools(command=formatted_cmd)
+        ensure_csi_index(temp_file)
+    return temp_files
+
+
+def merge_bcftools_temp_files(temp_files):
+    """
+    Merge all temporary files produced by pipe_query_command into a single output file.
+    """
+    # TODO error handling for when temp files are missing or has not been cleaned up since last run (e.g. if the last run aborted)
+    if len(temp_files) > 1:
+        merge_command = f"merge --force-samples -Oz -o merged.vcf.gz {' '.join(temp_files)}"
+        run_bcftools(command=merge_command)
+        logger.info("Merged all temporary files into 'merged.vcf.gz'.")
+
+
+def cleanup_temp_files(temp_files: list) -> None:
+    """
+    Delete all temporary files and their associated .csi index files
+    generated during the pipe_query_command execution.
+    """
+    for temp_file in temp_files:
+        try:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            index_file = f"{temp_file}.csi"
+            if os.path.exists(index_file):
+                os.remove(index_file)
+        except Exception as e:
+            logger.error(f"Failed to delete temporary file or index {temp_file}: {e}")
+
+
+def process_bcftools_commands(commands_config: List[Dict[str, Any]]) -> None:
+    """
+    Process a JSON-like list of bcftools command configurations.
+    Interprets the JSON configuration, processes and runs each command, ensures that files are indexed, and merges the results.
+    """
+
+    logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
+
+    all_temp_files = []
+    final_temp_files = None
+
+    for cmd_config in commands_config:
+        logger.info(f"Processing command #{cmd_config['counter'] + 1}: {cmd_config['command']}")
+        temp_files = process_command_config(cmd_config)
+        final_temp_files = temp_files
+        all_temp_files.extend(temp_files)
+
+    merge_bcftools_temp_files(final_temp_files)
+
+    cleanup_temp_files(all_temp_files)
+
+    logger.info("bcftools processing completed successfully")
 
 
 def get_container_id():
@@ -133,16 +203,16 @@ def check_bcftools_docker_image(image_name: str) -> bool:
     container_id = get_container_id()
 
     if not container_id:
-        logger.warning("Starting bcftools-image...")
+        logger.warning(f"Starting {image_name}...")
         subprocess.run(["docker", "compose", "-f", "docker/docker-compose.yaml", "up", "-d"], check=True)
         container_id = get_container_id()
 
     logger.info(f"Using existing docker-compose container: {container_id}")
 
-    return image_exists, container_id
+    return image_exists
 
 
 def build_bcftools_docker_image(image_name: str) -> None:
-    dockerfile_path = "./docker/tools.dockerfile"
+    dockerfile_path = "./docker/worker.dockerfile"
 
     subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)

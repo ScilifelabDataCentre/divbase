@@ -167,7 +167,7 @@ def pipe_query(
         )
         print(f"Job submitted with task ID: {result.id}")
     else:
-        pipe_query_command(command=command, bcftools_inputs=unique_query_results)
+        pipe_query_command(command=command, bcftools_inputs=unique_query_results, run_local_docker=True)
 
 
 @query_app.command("task-status")

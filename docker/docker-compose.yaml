@@ -1,11 +1,4 @@
 services:
-  tools:
-    image: "bcftools-image"
-    volumes:
-      - ..:/app
-    build:
-      context: .
-      dockerfile: docker/tools.dockerfile
   rabbitmq:
     image: "rabbitmq:alpine"
     ports:
@@ -23,14 +16,13 @@ services:
       dockerfile: docker/worker.dockerfile
     depends_on:
       - rabbitmq
-      - tools
       - redis
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ../src:/app/src
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/app
   flower:
     build:
       context: ..
