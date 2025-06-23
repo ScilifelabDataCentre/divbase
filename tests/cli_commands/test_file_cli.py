@@ -14,7 +14,7 @@ from minio_setup import MINIO_FAKE_ACCESS_KEY, MINIO_FAKE_SECRET_KEY, URL
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import FilesAlreadyInBucketError
+from divbase_tools.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistError
 
 runner = CliRunner()
 
@@ -157,3 +157,171 @@ def test_no_file_uploaded_if_some_duplicated_with_safe_mode(user_config_path, CO
     assert test_files[0].name in result.stdout
     for file in test_files[1:]:
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
+
+
+def test_download_1_file(user_config_path, CONSTANTS, tmp_path):
+    file_name = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]][0]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    command = f"files download {file_name} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    assert file_name in result.stdout
+    assert (download_dir / file_name).exists()
+
+
+def test_download_multiple_files(user_config_path, CONSTANTS, tmp_path):
+    files_in_bucket = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    command = f"files download {' '.join(files_in_bucket)} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    for file_name in files_in_bucket:
+        assert file_name in result.stdout
+        assert (download_dir / file_name).exists()
+
+
+def test_download_from_non_default_bucket(user_config_path, CONSTANTS, tmp_path):
+    non_default_bucket = CONSTANTS["NON_DEFAULT_BUCKET"]
+    file_to_download = CONSTANTS["BUCKET_CONTENTS"][non_default_bucket][0]
+
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    command = f"files download {file_to_download} --bucket-name {non_default_bucket} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    assert file_to_download in result.stdout
+    assert (download_dir / file_to_download).exists()
+
+
+def test_download_using_file_list(user_config_path, CONSTANTS, tmp_path):
+    files_in_bucket = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_list = tmp_path / "file_list.txt"
+    with open(file_list, "w") as f:
+        f.write("\n".join(files_in_bucket))
+
+    command = f"files download --file-list {file_list} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    for file_name in files_in_bucket:
+        assert file_name in result.stdout
+        assert (download_dir / file_name).exists()
+
+
+def test_download_nonexistent_file(user_config_path, tmp_path):
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    command = f"files download nonexistent_file.txt --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, ObjectDoesNotExistError)
+
+
+def test_download_at_a_bucket_version(user_config_path, CONSTANTS, tmp_path, fixtures_dir):
+    """Test downloading at specified bucket versions."""
+    clean_bucket = CONSTANTS["CLEANED_BUCKET"]
+
+    download_dir = tmp_path / "download_v1"
+    download_dir.mkdir()
+
+    file_name = "test_file.txt"
+    file_path = tmp_path / file_name
+    v1_content = "This is version 1.0.0 content"
+    v2_content = "This is version 2.0.0 content - UPDATED"
+
+    # Create file, upload v1 contents and create bucket version v1.0.0
+    with open(file_path, "w") as f:
+        f.write(v1_content)
+
+    command = f"files upload {file_path} --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    command = f"version add v1.0.0 --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    # Create file, upload v2 contents and create bucket version v2.0.0
+    with open(file_path, "w") as f:
+        f.write(v2_content)
+
+    command = f"files upload {file_path} --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    command = f"version add v2.0.0 --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    # Download + assert contents at v1.0.0
+    command = f"files download {file_name} --bucket-version v1.0.0 --bucket-name {clean_bucket} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert (download_dir / file_name).exists()
+
+    with open(download_dir / file_name) as f:
+        downloaded_content = f.read()
+    assert downloaded_content == v1_content
+
+    # Download + assert contents at v2.0.0
+    command = f"files download {file_name} --bucket-version v2.0.0 --bucket-name {clean_bucket} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert (download_dir / file_name).exists()
+
+    with open(download_dir / file_name) as f:
+        downloaded_content = f.read()
+    assert downloaded_content == v2_content
+
+    # Download without specifiying bucket version works like "latest"
+    command = f"files download {file_name} --bucket-name {clean_bucket} --download-dir {download_dir} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert (download_dir / file_name).exists()
+
+    with open(download_dir / file_name) as f:
+        downloaded_content = f.read()
+    assert downloaded_content == v2_content
+
+
+def test_remove_with_dry_run(user_config_path, CONSTANTS):
+    file_name = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]][0]
+
+    command = f"files remove {file_name} --dry-run --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    assert f"{file_name}" in result.stdout
+
+    command = f"files list --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert file_name in result.stdout
+
+
+def test_remove_file(user_config_path, CONSTANTS):
+    file_name = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]][0]
+
+    command = f"files remove {file_name} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code == 0
+    assert f"{file_name}" in result.stdout
+
+    command = f"files list --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert file_name not in result.stdout
