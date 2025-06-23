@@ -29,7 +29,7 @@ class BcftoolsQueryManager:
     VALID_BCFTOOLS_COMMANDS = ["view"]
     IMAGE_NAME = "docker/worker"
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> None:
+    def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         """
@@ -38,7 +38,8 @@ class BcftoolsQueryManager:
         if run_local_docker:
             self.ensure_docker_image()
 
-        self.process_bcftools_commands(commands_config_structure)
+        output_file = self.process_bcftools_commands(commands_config_structure)
+        return output_file
 
     def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
         filenames = bcftools_inputs.get("filenames")
@@ -87,7 +88,7 @@ class BcftoolsQueryManager:
 
         return commands_config_structure
 
-    def process_bcftools_commands(self, commands_config: List[Dict[str, Any]]) -> None:
+    def process_bcftools_commands(self, commands_config: List[Dict[str, Any]]) -> str:
         """
         Process a JSON-like list of bcftools command configurations.
         Interprets the JSON configuration, processes and runs each command, ensures that files are indexed, and merges the results.
@@ -104,11 +105,13 @@ class BcftoolsQueryManager:
             final_output_temp_files = output_temp_files
             all_output_temp_files.extend(output_temp_files)
 
-        self.merge_bcftools_temp_files(final_output_temp_files)
+        output_file = self.merge_bcftools_temp_files(final_output_temp_files)
 
         self.cleanup_temp_files(all_output_temp_files)
 
         logger.info("bcftools processing completed successfully")
+
+        return output_file
 
     def run_current_command(self, cmd_config: Dict[str, Any]) -> List[str]:
         """Process a single command configuration."""
@@ -149,15 +152,21 @@ class BcftoolsQueryManager:
             index_command = f"index -f {file}"
             self.run_bcftools(command=index_command)
 
-    def merge_bcftools_temp_files(self, output_temp_files: List[str]) -> None:
+    def merge_bcftools_temp_files(self, output_temp_files: List[str]) -> str:
         """
         Merge all temporary files produced by pipe_query_command into a single output file.
         """
         # TODO error handling for when temp files are missing or has not been cleaned up since last run (e.g. if the last run aborted)
+        # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
+
+        output_file = "merged.vcf.gz"
+
         if len(output_temp_files) > 1:
-            merge_command = f"merge --force-samples -Oz -o merged.vcf.gz {' '.join(output_temp_files)}"
+            merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
             self.run_bcftools(command=merge_command)
-            logger.info("Merged all temporary files into 'merged.vcf.gz'.")
+            logger.info(f"Merged all temporary files into '{output_file}'.")
+
+        return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
         """

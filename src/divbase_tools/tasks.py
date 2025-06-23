@@ -49,8 +49,8 @@ def bcftools_pipe_task(command, bcftools_inputs, submitter=None):
 
     try:
         bcftools_manager = BcftoolsQueryManager()
-        bcftools_manager.execute_pipe(command, bcftools_inputs)
-        return {"status": "completed", "output_file": "merged.vcf.gz", "submitter": submitter}
+        output_file = bcftools_manager.execute_pipe(command, bcftools_inputs)
+        return {"status": "completed", "output_file": f"{output_file}", "submitter": submitter}
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")
         return {"status": "error", "error": str(e), "submitter": submitter}
