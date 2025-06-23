@@ -53,3 +53,25 @@ def tsv_with_hash_headers(tmp_path):
     df.to_csv(file_path, sep="\t", index=False)
 
     return file_path
+
+
+@pytest.fixture
+def demo_sidecar_metadata_inputs_outputs():
+    """Return sample inputs for bcftools tests using the VCF files and tsv query results from the initial demo."""
+    test_filenames = [
+        "/app/tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+        "/app/tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+    ]
+    sample_and_filename_subset = [
+        {"Sample_ID": "5a_HOM-I13", "Filename": test_filenames[1]},
+        {"Sample_ID": "5a_HOM-I14", "Filename": test_filenames[1]},
+        {"Sample_ID": "5a_HOM-I20", "Filename": test_filenames[1]},
+        {"Sample_ID": "5a_HOM-I21", "Filename": test_filenames[1]},
+        {"Sample_ID": "5a_HOM-I7", "Filename": test_filenames[0]},
+        {"Sample_ID": "1b_HOM-G58", "Filename": test_filenames[0]},
+    ]
+
+    return {
+        "filenames": test_filenames,
+        "sample_and_filename_subset": sample_and_filename_subset,
+    }

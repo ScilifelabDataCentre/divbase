@@ -1,4 +1,9 @@
+import time
 from unittest.mock import MagicMock, patch
+
+import pytest
+from celery.backends.redis import RedisBackend
+from kombu.connection import Connection
 
 from divbase_tools.tasks import app, bcftools_pipe_task
 
@@ -16,12 +21,16 @@ def test_bcftools_pipe_task_directly(mock_bcftools_manager, example_sidecar_meta
     mock_manager_instance.execute_pipe.return_value = output_file
 
     command = "view -s SAMPLES"
-    result = bcftools_pipe_task(command, example_sidecar_metadata_inputs_outputs, submitter=None)
+    result = bcftools_pipe_task(command, example_sidecar_metadata_inputs_outputs, submitter="test_user")
 
     mock_bcftools_manager.assert_called_once()
     mock_manager_instance.execute_pipe.assert_called_once_with(command, example_sidecar_metadata_inputs_outputs)
 
-    assert result == {"status": "completed", "output_file": f"{output_file}", "submitter": None}
+    assert result == {
+        "status": "completed",
+        "output_file": f"{output_file}",
+        "submitter": "test_user",
+    }
 
 
 def test_bcftools_pipe_task_using_eager_mode(example_sidecar_metadata_inputs_outputs):
@@ -55,12 +64,76 @@ def test_bcftools_pipe_task_using_eager_mode(example_sidecar_metadata_inputs_out
             mock_manager_instance.execute_pipe.return_value = output_file
             command = "view -s SAMPLES"
 
-            result = bcftools_pipe_task.delay(command, {"filenames": ["test.vcf"]}, submitter=None)
+            result = bcftools_pipe_task.delay(command, {"filenames": ["test.vcf"]}, submitter="test_user")
 
             task_result = result.get()
 
-            assert task_result["status"] == "completed"
-            assert task_result["output_file"] == output_file
+            assert task_result == {
+                "status": "completed",
+                "output_file": f"{output_file}",
+                "submitter": "test_user",
+            }
     finally:
         app.conf.task_always_eager = original_task_always_eager_value
         app.conf.task_eager_propagates = original_task_eager_propagates_value
+
+
+@pytest.mark.integration
+def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_outputs):
+    """
+    Integration test in which bcftools_pipe_task is run with a real Celery worker.
+    Runs locally using the docker-compose setup defined in the tests/queries/docker-compose.yml file.
+    It runs a real bcftools query by loading VCF files from the tests/fixtures dir.
+    (this test does not download fixture from bucket, since that is handled by the CLI layer)
+
+    This test requires the setup defined in the docker-compose.yml file for queries.
+    It was designed for having RabbitMQ as the broker, Redis as the backend,
+    and a custom Celery worker image that has bcftools installed.
+
+    At the time of writing, this test imports the broker and backend URLs from divbase_tools.tasks.
+    These match the docker-compose setup. For future refernce, these two calls for broker and backend
+    could also be set as a pytest fixture that returns:
+    broker_url = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
+    result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+    This test is marked with 'integration' so it can be skipped by: pytest -m "not integration"
+    Likewise, all tests marked thusly can be run with: pytest -m integration
+    """
+    command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    output_file = "merged.vcf.gz"
+
+    try:
+        broker_url = app.conf.broker_url
+        with Connection(broker_url) as conn:
+            conn.ensure_connection(max_retries=1)
+
+        if isinstance(app.backend, RedisBackend):
+            app.backend.client.ping()
+
+    except Exception as e:
+        pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
+
+    async_result = bcftools_pipe_task.delay(command, demo_sidecar_metadata_inputs_outputs, submitter="test_user")
+
+    max_wait = 30
+    start_time = time.time()
+
+    while not async_result.ready():  # this data is expecte to take <30s to query, so we can allow us to wait for it
+        if time.time() - start_time > max_wait:
+            pytest.fail(f"Task timed out after {max_wait} seconds")
+        time.sleep(1)
+
+    result = async_result.get()
+
+    assert result == {
+        "status": "completed",
+        "output_file": f"{output_file}",
+        "submitter": "test_user",
+    }
+
+
+# TODO: write a test that uses the CLI level. it should detect missing files, download them, and run the task.
+# TODO: can it mock a connection to the bucket and "download" the files from the fixture dir to root instead?
+
+
+# TODO: investigate how pytest-celery can be used to utilize its built in docker support for running tests with Celery.

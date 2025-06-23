@@ -123,6 +123,7 @@ def pipe_query(
     # TODO what if a job fails and the user wants to re-run it? do we store temp files?
     # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
     # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
+    # TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
 
     if not command or command.strip() == "" or command.strip() == ";":
         logger.error("Empty command provided. Please specify at least one valid bcftools command.")

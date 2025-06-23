@@ -23,6 +23,7 @@ services:
     volumes:
       - ../src:/app/src
       - ..:/app
+      - ../tests/fixtures:/app/tests/fixtures 
   flower:
     build:
       context: ..
