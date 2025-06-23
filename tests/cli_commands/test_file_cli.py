@@ -312,16 +312,29 @@ def test_remove_with_dry_run(user_config_path, CONSTANTS):
     assert file_name in result.stdout
 
 
-def test_remove_file(user_config_path, CONSTANTS):
-    file_name = CONSTANTS["BUCKET_CONTENTS"][CONSTANTS["DEFAULT_BUCKET"]][0]
+def test_remove_file(user_config_path, CONSTANTS, fixtures_dir):
+    """Test removing a file from the bucket, using a clean bucket to avoid side effects in other tests."""
+    clean_bucket = CONSTANTS["CLEANED_BUCKET"]
 
-    command = f"files remove {file_name} --config {user_config_path}"
+    file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
+    file_path = f"{fixtures_dir}/{file_name}"
+
+    command = f"files upload {file_path} --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    command = f"files list --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert file_name in result.stdout
+
+    command = f"files remove {file_name} --bucket-name {clean_bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
 
     assert result.exit_code == 0
     assert f"{file_name}" in result.stdout
 
-    command = f"files list --config {user_config_path}"
+    command = f"files list --bucket-name {clean_bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
     assert file_name not in result.stdout
