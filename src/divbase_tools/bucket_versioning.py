@@ -12,6 +12,7 @@ import botocore
 import yaml
 
 from divbase_tools.exceptions import (
+    BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,
     ObjectDoesNotExistError,
@@ -59,16 +60,19 @@ class BucketVersionManager:
         """
         Add a new version to the metadata file.
         """
+        version_data = self.version_info
+        if not version_data:  # aka file not created for this project yet.
+            version_data["versions"] = {}
+
+        if name in version_data["versions"]:
+            raise BucketVersionAlreadyExistsError(bucket_name=self.bucket_name, version_name=name)
+
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
         _ = files.pop(VERSION_FILE_NAME, None)
 
         if not description:
             description = ""
-
-        version_data = self.version_info
-        if not version_data:  # aka file not created for this project yet.
-            version_data["versions"] = {}
 
         version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
         self._upload_bucket_version_file(version_data=version_data)

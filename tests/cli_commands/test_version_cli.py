@@ -14,7 +14,11 @@ from typer.testing import CliRunner
 
 from divbase_tools.bucket_versioning import VERSION_FILE_NAME
 from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import BucketVersioningFileAlreadyExistsError, BucketVersionNotFoundError
+from divbase_tools.exceptions import (
+    BucketVersionAlreadyExistsError,
+    BucketVersioningFileAlreadyExistsError,
+    BucketVersionNotFoundError,
+)
 
 runner = CliRunner()
 
@@ -98,6 +102,34 @@ def test_add_multiple_versions(user_config_path):
         assert version in result.stdout
 
 
+def test_attempt_add_version_that_already_exists_fails(user_config_path):
+    command = f"version add v1.0.0 --config {user_config_path}"
+
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code != 0
+    assert isinstance(result.exception, BucketVersionAlreadyExistsError)
+
+
+def test_add_version_works_with_clean_bucket(user_config_path, CONSTANTS):
+    """
+    Using the clean bucket which has no files at all (not even the bucket metadata one)
+    So validating you don't need to run `version create` first.
+    """
+    clean_bucket = CONSTANTS["CLEANED_BUCKET"]
+
+    command = f"version add {VERSION_1_NAME} --bucket-name {clean_bucket} --config {user_config_path} "
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    command = f"version list --bucket-name {clean_bucket} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+
+
 def test_list_versions(user_config_path):
     runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
     runner.invoke(app, shlex.split(f"version add {VERSION_2_NAME} --config {user_config_path}"))
@@ -150,6 +182,14 @@ def test_get_version_info(user_config_path, CONSTANTS):
 
     for file in files_in_bucket:
         assert f"- '{file}' :" in result.stdout
+
+
+def test_get_version_info_for_version_that_does_not_exist(user_config_path, CONSTANTS):
+    command = f"version info does_not_exist --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, BucketVersionNotFoundError)
 
 
 def test_get_version_updates_hashes_on_new_upload(user_config_path, CONSTANTS, fixtures_dir):

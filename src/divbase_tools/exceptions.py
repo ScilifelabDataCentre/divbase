@@ -80,6 +80,22 @@ class BucketVersionNotFoundError(KeyError):
         return self.error_message
 
 
+class BucketVersionAlreadyExistsError(Exception):
+    """Raised when user tries to add new version with version name same as prexisting version. To prevent overwrite"""
+
+    def __init__(self, version_name: str, bucket_name: str):
+        error_message = (
+            f"You're trying to add a version: '{version_name}' that already exists in the bucket '{bucket_name}'."
+        )
+        super().__init__(error_message)
+        self.version_name = version_name
+        self.bucket_name = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
 class FilesAlreadyInBucketError(FileExistsError):
     """
     Raised when trying to upload file(s) that already exists in the bucket

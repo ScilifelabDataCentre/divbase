@@ -54,6 +54,19 @@ def test_add_bucket_as_default_command(fresh_config):
     assert config_contents["default_bucket"] == "test_bucket"
 
 
+def test_add_bucket_that_already_exists(fresh_config):
+    """Don't want to raise error, but should not be duplicated."""
+    command = f"config add-bucket test_bucket --config {fresh_config}"
+
+    result = runner.invoke(app, shlex.split(command))
+    assert result.exit_code == 0
+
+    config_contents = load_user_config(fresh_config)
+    assert "test_bucket" in config_contents["buckets"]
+
+    result = runner.invoke(app, shlex.split(command))
+
+
 def test_set_default_bucket_command(user_config_path):
     config_contents = load_user_config(user_config_path)
     assert config_contents["default_bucket"] != "bucket2"
