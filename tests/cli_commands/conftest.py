@@ -1,11 +1,10 @@
 """
-Tests for the "divbase-cli files" commands
+Setup for pytest fixtures for CLI commands.
 
 Pytest fixtures set up (and tear down) a MinIO server on localhost with test buckets and files.
 
 The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
-
 """
 
 import shlex
@@ -13,11 +12,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from minio_setup import BUCKETS, setup_minio_data, start_minio, stop_minio
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
 from divbase_tools.s3_client import S3FileManager
+from tests.helpers.minio_setup import (
+    BUCKETS,
+    MINIO_FAKE_ACCESS_KEY,
+    MINIO_FAKE_SECRET_KEY,
+    setup_minio_data,
+    start_minio,
+    stop_minio,
+)
 
 runner = CliRunner()
 
@@ -25,8 +31,9 @@ runner = CliRunner()
 @pytest.fixture(scope="session")
 def CONSTANTS():
     return {
-        "BAD_ACCESS_KEY": "minioadmin",
-        "BAD_SECRET_KEY": "badpassword",
+        "BAD_ACCESS_KEY": MINIO_FAKE_ACCESS_KEY,
+        "BAD_SECRET_KEY": MINIO_FAKE_SECRET_KEY,
+        "MINIO_URL": "http://localhost:9000",
         "DEFAULT_BUCKET": "bucket1",
         "NON_DEFAULT_BUCKET": "bucket2",
         "CLEANED_BUCKET": "cleaned-bucket",
@@ -108,4 +115,4 @@ def user_config_path(tmp_path, CONSTANTS):
 @pytest.fixture
 def fixtures_dir():
     """Path to the fixtures directory."""
-    return Path(__file__).parent.parent / "tests" / "fixtures"
+    return Path(__file__).parent.parent / "fixtures"

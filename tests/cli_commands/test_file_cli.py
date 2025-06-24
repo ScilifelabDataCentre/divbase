@@ -10,7 +10,6 @@ import shlex
 
 import boto3
 import pytest
-from minio_setup import MINIO_FAKE_ACCESS_KEY, MINIO_FAKE_SECRET_KEY, URL
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
@@ -30,7 +29,10 @@ def start_with_clean_bucket(CONSTANTS):
     The files need to be actually deleted.
     """
     s3_resource = boto3.resource(
-        "s3", endpoint_url=URL, aws_access_key_id=MINIO_FAKE_ACCESS_KEY, aws_secret_access_key=MINIO_FAKE_SECRET_KEY
+        "s3",
+        endpoint_url=CONSTANTS["MINIO_URL"],
+        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
     )
 
     # pylance does not understand boto3 resource returns types, hence ignore below

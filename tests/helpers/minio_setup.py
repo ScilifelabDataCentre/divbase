@@ -13,13 +13,13 @@ URL = "http://localhost:9000"
 MINIO_FAKE_ACCESS_KEY = "minioadmin"
 MINIO_FAKE_SECRET_KEY = "badpassword"
 
-DOCKER_COMPOSE_FILE = "docker/minio/docker-compose.yaml"
-COMPOSE_COMMAND = shlex.split(f"docker-compose -f {DOCKER_COMPOSE_FILE} up -d minio")
+DOCKER_COMPOSE_FILE = "docker/minio/minio_compose.yaml"
+COMPOSE_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} up -d minio")
 HEALTH_CHECK_COMMAND = shlex.split(f"curl -I {URL}/minio/health/live")
-STOP_COMMAND = shlex.split(f"docker-compose -f {DOCKER_COMPOSE_FILE} down")
+STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} down")
 
 
-FIXTURES_DIR = Path(__file__).parent.parent / "tests" / "fixtures"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 BUCKETS = {
     "bucket1": ["file1.txt", "file2.txt"],

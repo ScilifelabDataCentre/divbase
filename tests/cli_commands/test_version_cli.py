@@ -9,7 +9,6 @@ import shlex
 
 import boto3
 import pytest
-from minio_setup import MINIO_FAKE_ACCESS_KEY, MINIO_FAKE_SECRET_KEY, URL
 from typer.testing import CliRunner
 
 from divbase_tools.bucket_versioning import VERSION_FILE_NAME
@@ -36,9 +35,9 @@ def clean_versions(user_config_path, CONSTANTS):
     for bucket_name in CONSTANTS["BUCKET_CONTENTS"]:
         s3_client = boto3.client(
             "s3",
-            endpoint_url=URL,
-            aws_access_key_id=MINIO_FAKE_ACCESS_KEY,
-            aws_secret_access_key=MINIO_FAKE_SECRET_KEY,
+            endpoint_url=CONSTANTS["MINIO_URL"],
+            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
         )
         s3_client.delete_object(Bucket=bucket_name, Key=VERSION_FILE_NAME)
 
