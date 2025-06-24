@@ -5,6 +5,7 @@ import pytest
 from divbase_tools.queries import tsv_query_command
 
 
+@pytest.mark.unit
 def test_tsv_query_empty_filter(sample_tsv_file, caplog):
     """Test that empty filter returns all records with a warning."""
     with caplog.at_level(logging.WARNING):
@@ -15,6 +16,7 @@ def test_tsv_query_empty_filter(sample_tsv_file, caplog):
     assert "ALL RECORDS" in query_message
 
 
+@pytest.mark.unit
 def test_tsv_query_none_filter(sample_tsv_file):
     """Test that None filter raises an appropriate error."""
     with pytest.raises(ValueError) as exc_info:
@@ -23,6 +25,7 @@ def test_tsv_query_none_filter(sample_tsv_file):
     assert "Filter cannot be None" in str(exc_info.value)
 
 
+@pytest.mark.unit
 def test_tsv_query_column_not_found(sample_tsv_file, caplog):
     """Test handling of filter with non-existent column."""
     with caplog.at_level(logging.WARNING):
@@ -33,6 +36,7 @@ def test_tsv_query_column_not_found(sample_tsv_file, caplog):
     assert query_message == "Invalid filter conditions - returning ALL records"
 
 
+@pytest.mark.unit
 def test_tsv_query_value_not_found(sample_tsv_file, caplog):
     """Test handling of filter with non-existent values."""
     with caplog.at_level(logging.WARNING):
@@ -42,6 +46,7 @@ def test_tsv_query_value_not_found(sample_tsv_file, caplog):
     assert "None of the values ['NonExistentPop'] were found in column 'Population'" in caplog.text
 
 
+@pytest.mark.unit
 def test_tsv_query_invalid_filter_format(sample_tsv_file, caplog):
     """Test handling of incorrectly formatted filter."""
     with caplog.at_level(logging.WARNING):
@@ -52,6 +57,7 @@ def test_tsv_query_invalid_filter_format(sample_tsv_file, caplog):
     assert query_message == "Invalid filter conditions - returning ALL records"
 
 
+@pytest.mark.unit
 def test_tsv_query_filename_filter(sample_tsv_file):
     """Test filtering by Filename column."""
     query_result, _ = tsv_query_command(sample_tsv_file, filter="Filename:file1.vcf.gz")
@@ -60,6 +66,7 @@ def test_tsv_query_filename_filter(sample_tsv_file):
     assert list(query_result["Sample_ID"]) == ["S1", "S2"], "Should return correct samples"
 
 
+@pytest.mark.unit
 def test_tsv_query_multiple_conditions(sample_tsv_file):
     """Test filtering with multiple conditions (intersect query)."""
     query_result, _ = tsv_query_command(sample_tsv_file, filter="Population:Pop1;Sex:F")
@@ -68,6 +75,7 @@ def test_tsv_query_multiple_conditions(sample_tsv_file):
     assert list(query_result["Sample_ID"]) == ["S2"], "Should return correct sample"
 
 
+@pytest.mark.unit
 def test_tsv_query_multiple_values(sample_tsv_file):
     """Test filtering with multiple values for a single column."""
     query_result, _ = tsv_query_command(sample_tsv_file, filter="Population:Pop1,Pop3")
@@ -76,6 +84,7 @@ def test_tsv_query_multiple_values(sample_tsv_file):
     assert sorted(list(query_result["Sample_ID"])) == ["S1", "S2", "S5"], "Should return correct samples"
 
 
+@pytest.mark.unit
 def test_tsv_query_strip_hash_headers(tsv_with_hash_headers):
     """Test that column headers with # prefix are handled correctly."""
     query_result, _ = tsv_query_command(tsv_with_hash_headers, filter="Sample_ID:S1")

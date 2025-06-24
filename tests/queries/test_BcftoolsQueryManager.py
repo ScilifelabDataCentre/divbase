@@ -1,6 +1,7 @@
 import pytest
 
 
+@pytest.mark.unit
 def test_build_commands_config_single_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config correctly structures a configuration for a single command."""
     command = "view -s SAMPLES"
@@ -26,6 +27,7 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
     assert len(cmd_config["output_temp_files"]) == len(example_sidecar_metadata_inputs_outputs["filenames"])
 
 
+@pytest.mark.unit
 def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config correctly structures a configuration for two commands."""
     commands = "view -s SAMPLES; view -r 21:15000000-25000000"
@@ -73,6 +75,7 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
         assert len(cmd_config["output_temp_files"]) == expected["output_files_count"]
 
 
+@pytest.mark.unit
 def test_build_commands_config_special_characters(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config handles edge cases correctly with valid bcftools commands."""
 
@@ -117,6 +120,7 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
     assert result[1]["command"] == "view -m2 -M2 -v snps", "Should select biallelic SNPs"
 
 
+@pytest.mark.unit
 def test_build_commands_config_invalid_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config rejects unsupported bcftools commands."""
 
@@ -140,6 +144,7 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
     assert "position 1" in error_msg, "Error should indicate the position of the invalid command"
 
 
+@pytest.mark.unit
 def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that fails on various variations of when user inputs empty --command to bcftools-pipe in the CLI."""
 

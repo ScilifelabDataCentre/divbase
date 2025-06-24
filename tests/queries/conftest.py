@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -75,3 +78,35 @@ def demo_sidecar_metadata_inputs_outputs():
         "filenames": test_filenames,
         "sample_and_filename_subset": sample_and_filename_subset,
     }
+
+
+@pytest.fixture
+def copy_fixtures_to_mock_download_from_bucket():
+    """
+    Fixture to simulate downloading files from a bucket by copying them from the fixtures directory.
+    Designed to mock divbase_tools.services.download_files_command.
+    It needs the same inputs as the download_files_command function that it is mocking, but it does not use them.
+    Pytest fixtures cannot take parameters, and thus the actual function is defined and returned from inside the fixture.
+    """
+
+    def mock_download_files_command(
+        file_list,
+        bucket_name=None,
+        all_files=None,
+        download_dir=None,
+        bucket_version=None,
+        config_path=None,
+    ):
+        for file_path in file_list:
+            file_name = Path(file_path).name
+            destination = Path(file_name)
+            if Path(file_path).exists():
+                if not destination.exists():
+                    shutil.copy(file_path, destination)
+                    print(f"Copied {file_name} from fixtures to current directory", flush=True)
+                else:
+                    print(f"File {file_name} already exists in current directory, skipping copy", flush=True)
+            else:
+                print(f"File not found in fixtures: {file_name}")
+
+    return mock_download_files_command

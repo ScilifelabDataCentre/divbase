@@ -1,13 +1,19 @@
+import os
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
+from divbase_tools.cli_commands.query_cli import pipe_query
 from divbase_tools.tasks import app, bcftools_pipe_task
 
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
+
+@pytest.mark.unit
 @patch("divbase_tools.tasks.BcftoolsQueryManager")
 def test_bcftools_pipe_task_directly(mock_bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """
@@ -33,6 +39,7 @@ def test_bcftools_pipe_task_directly(mock_bcftools_manager, example_sidecar_meta
     }
 
 
+@pytest.mark.unit
 def test_bcftools_pipe_task_using_eager_mode(example_sidecar_metadata_inputs_outputs):
     """
     Test Celery task in eager mode (no worker needed).
@@ -132,8 +139,42 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
     }
 
 
-# TODO: write a test that uses the CLI level. it should detect missing files, download them, and run the task.
-# TODO: can it mock a connection to the bucket and "download" the files from the fixture dir to root instead?
+@pytest.mark.integration
+@patch("divbase_tools.cli_commands.query_cli.download_files_command")
+def test_pipe_query_e2e_run_async_false(
+    mock_download, demo_sidecar_metadata_inputs_outputs, copy_fixtures_to_mock_download_from_bucket
+):
+    """
+    End-to-end test for the pipe_query function, i.e. the CLI command that runs the bcftools query.
+    """
+
+    output_file = Path("merged.vcf.gz")
+    if output_file.exists():
+        print("Output file exists; deleting it to ensure a clean test run")
+        output_file.unlink()
+
+    demo_sidecar_metadata_inputs_outputs["filenames"] = [
+        f.replace("/app", ".") for f in demo_sidecar_metadata_inputs_outputs["filenames"]
+    ]
+
+    mock_download.side_effect = copy_fixtures_to_mock_download_from_bucket(
+        demo_sidecar_metadata_inputs_outputs["filenames"]
+    )
+    os.environ["DIVBASE_USER"] = "test_user"
+
+    tsv_filter = "Area:West of Ireland,Northern Portugal;Sex:F"
+    command = "view -s SAMPLES; view -r 21:15000000-25000000"
+
+    pipe_query(
+        tsv_file=Path("tests/fixtures/sample_metadata.tsv"),
+        tsv_filter=tsv_filter,
+        command=command,
+        bucket_name="test-bucket",
+        config_path=None,
+        run_async=False,
+    )
+
+    assert output_file.exists(), "Output file was not created"
 
 
-# TODO: investigate how pytest-celery can be used to utilize its built in docker support for running tests with Celery.
+# TODO: write a e2e test for the CLI entry, with run_async=True. It should use the MinIO test image to handle file downloads instead of the mock function
