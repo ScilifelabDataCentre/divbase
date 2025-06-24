@@ -138,7 +138,8 @@ class BcftoolsQueryManager:
 
     def run_bcftools(self, command: str) -> None:
         logger.info(f"Running: bcftools {command}")
-        subprocess.run(["bcftools"] + command.split(), check=True)
+        docker_cmd = ["docker", "exec", self.get_container_id("worker"), "bcftools"] + command.split()
+        subprocess.run(docker_cmd, check=True)
 
     def ensure_csi_index(self, file: str) -> None:
         """
