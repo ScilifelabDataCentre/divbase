@@ -3,8 +3,6 @@ A CLI tool to interact with DivBase project(s)/bucket(s).
 
 TODOs:
 - Check how robust timestamping approach is.
-- Add support to delete versions?
-- Add support to specify a timestamp for a version?
 """
 
 import logging

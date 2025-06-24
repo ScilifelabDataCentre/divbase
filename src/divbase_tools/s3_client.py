@@ -10,16 +10,17 @@ import botocore
 from dotenv import load_dotenv
 
 from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
-from divbase_tools.user_config import load_user_config
 
-MINIO_URL = "api.divbase-testground.scilifelab-2-dev.sys.kth.se"
+MINIO_URL = "https://api.divbase-testground.scilifelab-2-dev.sys.kth.se"
+DIVBASE_ACCESS_KEY_NAME = "DIVBASE_ACCESS_KEY"
+DIVBASE_SECRET_KEY_NAME = "DIVBASE_SECRET_KEY"
 
 
 class S3FileManager:
     def __init__(self, url: str, access_key: str, secret_key: str):
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=f"https://{url}",
+            endpoint_url=url,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
         )
@@ -35,7 +36,97 @@ class S3FileManager:
                 files.append(obj["Key"])
         return files
 
-    def download_file(self, key: str, dest: Path, bucket_name: str, version_id: str | None = None) -> str:
+    def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[str]:
+        """
+        Download objects/files from the S3 bucket to a local directory.
+
+        objects is a dict with keys being the S3 object keys and values being the version IDs or None.
+        """
+        downloaded_files = []
+
+        for key, version_id in objects.items():
+            dest = download_dir / Path(key).name
+            downloaded_files.append(self._download_single_file(key, dest, bucket_name, version_id))
+
+        return downloaded_files
+
+    def download_s3_file_to_str(self, key: str, bucket_name: str) -> str:
+        """
+        Get the contents of a file from the S3 bucket as a string.
+        """
+        try:
+            response = self.s3_client.get_object(Bucket=bucket_name, Key=key)
+        except self.s3_client.exceptions.NoSuchKey as err:
+            raise ObjectDoesNotExistError(key=key, bucket_name=bucket_name) from err
+        return response["Body"].read().decode("utf-8")
+
+    def upload_files(self, to_upload: dict[str, Path], bucket_name: str) -> dict[str, Path]:
+        """
+        Upload a list of files to the S3 bucket
+
+        to_upload is a dict where keys are the name of the (to be) object and values is the path to the file to upload.
+        Returns a dict with the keys and the source paths of the uploaded files.
+        """
+        uploaded_files = {}
+        for key, source in to_upload.items():
+            self.s3_client.upload_file(
+                Filename=str(source),
+                Bucket=bucket_name,
+                Key=key,
+            )
+            uploaded_files[key] = source.resolve()
+
+        return uploaded_files
+
+    def upload_str_as_s3_object(self, key: str, content: str, bucket_name: str) -> None:
+        """
+        Upload a string (e.g. output of yaml.safe_dump()) as a new file to the S3 bucket.
+        """
+        self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content.encode("utf-8"))
+
+    def delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
+        """
+        Delete files/objects from the S3 bucket, returns a list of the deleted objects.
+
+        NOTE:
+            - If the object was previously deleted (aka has a deletion marker) OR
+            - If the object does not exist in the bucket,
+        it will still be returned in the response as deleted and you cant distinguish between the two cases.
+        Would need to check if the files exist to prevent this behaviour, but have to decide if this is worth doing.
+        """
+        delete_dict = {"Objects": [{"Key": obj} for obj in objects]}
+        response = self.s3_client.delete_objects(
+            Bucket=bucket_name,
+            Delete=delete_dict,
+        )
+        deleted_object_names = [object_dict["Key"] for object_dict in response["Deleted"]]
+        return deleted_object_names
+
+    def delete_specific_object_versions(self, versioned_objects: dict[str, str], bucket_name: str) -> None:
+        """Delete files from the S3 bucket by specifying the version of the object to delete."""
+        delete_dict = {"Objects": []}
+        for key, version in versioned_objects.items():
+            delete_dict["Objects"].append({"Key": key, "VersionId": version})
+
+        self.s3_client.delete_objects(
+            Bucket=bucket_name,
+            Delete=delete_dict,
+        )
+
+    def latest_version_of_all_files(self, bucket_name: str) -> dict[str, str]:
+        """
+        Identify the latest version of each file in the bucket.
+        Returns a dictionary with the file name as the key and the version ID as the value.
+        """
+        files = {}
+        paginator = self.s3_client.get_paginator("list_object_versions")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Versions", []):
+                if obj["IsLatest"]:
+                    files[obj["Key"]] = obj["VersionId"]
+        return files
+
+    def _download_single_file(self, key: str, dest: Path, bucket_name: str, version_id: str | None = None) -> str:
         """
         Download a file from S3 to a local path.
         Downloads the latest version of the file by default unless the the version_id is provided.
@@ -56,74 +147,22 @@ class S3FileManager:
 
         return key
 
-    def download_s3_file_to_str(self, key: str, bucket_name: str) -> str:
-        """
-        Get the contents of a file from the S3 bucket as a string.
-        """
-        try:
-            response = self.s3_client.get_object(Bucket=bucket_name, Key=key)
-        except self.s3_client.exceptions.NoSuchKey as err:
-            raise ObjectDoesNotExistError(key=key, bucket_name=bucket_name) from err
-        return response["Body"].read().decode("utf-8")
 
-    def upload_file(self, key: str, source: Path, bucket_name: str) -> None:
-        """
-        Upload a file to the S3 bucket
-        """
-        self.s3_client.upload_file(
-            Filename=str(source),
-            Bucket=bucket_name,
-            Key=key,
-        )
-
-    def upload_str_as_s3_object(self, key: str, content: str, bucket_name: str) -> None:
-        """
-        Upload a string (e.g. output of yaml.safe_dump()) as a new file to the S3 bucket.
-        """
-        self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content.encode("utf-8"))
-
-    def latest_version_of_all_files(self, bucket_name: str) -> dict[str, str]:
-        """
-        Identify the latest version of each file in the bucket.
-        Returns a dictionary with the file name as the key and the version ID as the value.
-        """
-        files = {}
-        paginator = self.s3_client.get_paginator("list_object_versions")
-        for page in paginator.paginate(Bucket=bucket_name):
-            for obj in page.get("Versions", []):
-                if obj["IsLatest"]:
-                    files[obj["Key"]] = obj["VersionId"]
-        return files
-
-
-def get_credentials(access_key_name: str, secret_key_name: str) -> tuple[str, str]:
+def create_s3_file_manager(url: str = MINIO_URL) -> S3FileManager:
     """
-    Get the S3 credentials from environment variables, unless they are provided as arguments.
+    Creates an S3FileManager instance using users environment variables credentials
     """
     load_dotenv()
-    access_key = os.getenv(access_key_name)
-    secret_key = os.getenv(secret_key_name)
-    return access_key, secret_key
-
-
-def config_to_s3_file_manager(config_path: Path) -> S3FileManager:
-    """
-    Creates an S3FileManager instance from the user config file.
-    """
-    user_config = load_user_config(config_path)
-
-    access_key_name = user_config.get("DivBase_Access_Key_Env_Name")
-    secret_key_name = user_config.get("DivBase_Secret_Key_Env_Name")
-
-    access_key, secret_key = get_credentials(access_key_name=access_key_name, secret_key_name=secret_key_name)
+    access_key = os.getenv(DIVBASE_ACCESS_KEY_NAME)
+    secret_key = os.getenv(DIVBASE_SECRET_KEY_NAME)
 
     if not access_key or not secret_key:
         raise DivBaseCredentialsNotFoundError(
-            access_key_name=access_key_name, secret_key_name=secret_key_name, config_path=config_path
+            access_key_name=DIVBASE_ACCESS_KEY_NAME, secret_key_name=DIVBASE_SECRET_KEY_NAME
         )
 
     return S3FileManager(
-        url=MINIO_URL,
+        url=url,
         access_key=access_key,
         secret_key=secret_key,
     )
