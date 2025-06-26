@@ -1,10 +1,10 @@
 import os
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from celery.backends.redis import RedisBackend
+from conftest import wait_for_celery_task_completion
 from kombu.connection import Connection
 
 from divbase_tools.cli_commands.query_cli import pipe_query
@@ -122,17 +122,9 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
 
     async_result = bcftools_pipe_task.delay(command, demo_sidecar_metadata_inputs_outputs, submitter="test_user")
 
-    max_wait = 30
-    start_time = time.time()
+    task_result = wait_for_celery_task_completion(async_result=async_result, max_wait=30)
 
-    while not async_result.ready():  # this data is expecte to take <30s to query, so we can allow us to wait for it
-        if time.time() - start_time > max_wait:
-            pytest.fail(f"Task timed out after {max_wait} seconds")
-        time.sleep(1)
-
-    result = async_result.get()
-
-    assert result == {
+    assert task_result == {
         "status": "completed",
         "output_file": f"{output_file}",
         "submitter": "test_user",
@@ -140,12 +132,14 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("run_async", [False, True])
 @patch("divbase_tools.cli_commands.query_cli.download_files_command")
-def test_pipe_query_e2e_run_async_false(
-    mock_download, demo_sidecar_metadata_inputs_outputs, copy_fixtures_to_mock_download_from_bucket
+def test_pipe_query_e2e(
+    mock_download, demo_sidecar_metadata_inputs_outputs, copy_fixtures_to_mock_download_from_bucket, run_async
 ):
     """
     End-to-end test for the pipe_query function, i.e. the CLI command that runs the bcftools query.
+    Tests both synchronous (run_async=False) and asynchronous (run_async=True) modes.
     """
 
     output_file = Path("merged.vcf.gz")
@@ -165,16 +159,24 @@ def test_pipe_query_e2e_run_async_false(
     tsv_filter = "Area:West of Ireland,Northern Portugal;Sex:F"
     command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    pipe_query(
+    result = pipe_query(
         tsv_file=Path("tests/fixtures/sample_metadata.tsv"),
         tsv_filter=tsv_filter,
         command=command,
         bucket_name="test-bucket",
         config_path=None,
-        run_async=False,
+        run_async=run_async,
     )
 
+    if run_async:
+        task_result = wait_for_celery_task_completion(async_result=result, max_wait=30)
+
+        assert task_result == {
+            "status": "completed",
+            "output_file": f"{output_file}",
+            "submitter": "test_user",
+        }
     assert output_file.exists(), "Output file was not created"
 
 
-# TODO: write a e2e test for the CLI entry, with run_async=True. It should use the MinIO test image to handle file downloads instead of the mock function
+# TODO: write a e2e test for the CLI level entrypoint, with run_async=True. It should use the MinIO test image to handle file downloads instead of the mock function

@@ -12,7 +12,7 @@ from rich import print
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import BcftoolsQueryManager, tsv_query_command
+from divbase_tools.queries import tsv_query_command
 from divbase_tools.services import download_files_command
 from divbase_tools.task_history import dotenv_to_task_history_manager
 from divbase_tools.tasks import bcftools_pipe_task
@@ -169,23 +169,22 @@ def pipe_query(
 
     bcftools_inputs = unique_query_results
 
-    if run_async:
-        load_dotenv()
-        current_divbase_user = os.environ.get("DIVBASE_USER")
-        if not current_divbase_user:
-            logger.error("DIVBASE_USER environment variable not set")
+    load_dotenv()
+    current_divbase_user = os.environ.get("DIVBASE_USER")
+    if not current_divbase_user:
+        logger.error("DIVBASE_USER environment variable not set")
 
-        result = bcftools_pipe_task.apply_async(
-            kwargs={
-                "command": command,
-                "bcftools_inputs": bcftools_inputs,
-                "submitter": current_divbase_user,
-            }
-        )
+    task_kwargs = {
+        "command": command,
+        "bcftools_inputs": bcftools_inputs,
+        "submitter": current_divbase_user,
+    }
+
+    if run_async:
+        result = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
         print(f"Job submitted with task ID: {result.id}")
     else:
-        bcftools_query_manager = BcftoolsQueryManager()
-        bcftools_query_manager.execute_pipe(command=command, bcftools_inputs=bcftools_inputs, run_local_docker=True)
+        bcftools_pipe_task.apply(kwargs=task_kwargs)
 
 
 @query_app.command("task-status")

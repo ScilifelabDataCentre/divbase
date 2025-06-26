@@ -1,4 +1,5 @@
 import shutil
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -110,3 +111,15 @@ def copy_fixtures_to_mock_download_from_bucket():
                 print(f"File not found in fixtures: {file_name}")
 
     return mock_download_files_command
+
+
+def wait_for_celery_task_completion(async_result, max_wait=30):
+    """Wait for a Celery task to complete, with timeout."""
+    start_time = time.time()
+
+    while not async_result.ready():
+        if time.time() - start_time > max_wait:
+            pytest.fail(f"Task timed out after {max_wait} seconds")
+        time.sleep(1)
+
+    return async_result.get()
