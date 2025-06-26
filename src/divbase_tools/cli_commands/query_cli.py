@@ -10,7 +10,7 @@ import typer
 from dotenv import load_dotenv
 from rich import print
 
-from divbase_tools.cli_commands.user_config_cli import CONFIG_PATH_OPTION
+from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import tsv_query_command
 from divbase_tools.services import download_files_command
@@ -46,7 +46,7 @@ def tsv_query(
         help="Print sample_ID and Filename results from the query.",
     ),
     bucket_name: str = BUCKET_NAME_OPTION,
-    config_path: Path = CONFIG_PATH_OPTION,
+    config_path: Path = CONFIG_FILE_OPTION,
 ) -> dict:
     """Query the tsv sidecar metadata file for the VCF files stored in the bucket. Returns the sample IDs and filenames that match the query."""
     # TODO it perhaps be useful to set the default download_dir in the config so that we can
@@ -62,7 +62,6 @@ def tsv_query(
             all_files=[file.name],
             download_dir=file.parent,
             bucket_version=None,
-            config_path=config_path,
         )
 
     logger.info(f"Querying {file}\n")
@@ -111,7 +110,7 @@ def pipe_query(
         """,
     ),
     bucket_name: str = BUCKET_NAME_OPTION,
-    config_path: Path = CONFIG_PATH_OPTION,
+    config_path: Path = CONFIG_FILE_OPTION,
     run_async: bool = typer.Option(False, "--async", help="Run as async job using Celery"),
 ) -> None:
     """
@@ -156,7 +155,6 @@ def pipe_query(
             all_files=missing_files,
             download_dir=Path.cwd(),
             bucket_version=None,
-            config_path=config_path,
         )
 
     if not unique_query_results.get("filenames"):
