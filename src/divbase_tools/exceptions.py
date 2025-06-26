@@ -45,6 +45,25 @@ class ObjectDoesNotExistInSpecifiedVersionError(KeyError):
         return self.error_message
 
 
+class BucketVersioningFileDoesNotExist(FileNotFoundError):
+    """
+    Raised when the bucket versioning file does not exist in the bucket,
+    and it needs to be for the given operation (e.g. add/delete version).
+    """
+
+    def __init__(self, bucket_name: str):
+        error_message = (
+            f"The bucket: '{bucket_name}', does not have a bucket versioning file.\n"
+            "please create one first using the 'divbase version create' command."
+        )
+        super().__init__(error_message)
+        self.bucket_name = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
 class BucketVersionNotFoundError(KeyError):
     """Raised when the specified bucket version file is not found in the bucket versioning dictionary"""
 
@@ -54,6 +73,22 @@ class BucketVersionNotFoundError(KeyError):
         )
         super().__init__(error_message)
         self.bucket_version = bucket_version
+        self.bucket_name = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class BucketVersionAlreadyExistsError(Exception):
+    """Raised when user tries to add new version with version name same as prexisting version. To prevent overwrite"""
+
+    def __init__(self, version_name: str, bucket_name: str):
+        error_message = (
+            f"You're trying to add a version: '{version_name}' that already exists in the bucket '{bucket_name}'."
+        )
+        super().__init__(error_message)
+        self.version_name = version_name
         self.bucket_name = bucket_name
         self.error_message = error_message
 
@@ -79,11 +114,29 @@ class FilesAlreadyInBucketError(FileExistsError):
         error_message = (
             f"In the bucket: '{bucket_name}'\n"
             "The following objects that you're trying to upload already exist in the bucket:\n"
-            f"'{files_list}'."
+            f"{files_list}."
         )
         super().__init__(error_message)
         self.existing_objects = existing_objects
         self.bucket = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class BucketVersioningFileAlreadyExistsError(FileExistsError):
+    """
+    Raised when trying to create a bucket versioning file that already exists in the bucket.
+    """
+
+    def __init__(self, bucket_name: str):
+        error_message = (
+            f"The bucket versioning file already exists for the bucket: '{bucket_name}'.\n"
+            "You can already add a new bucket version to this file using the 'add' command"
+        )
+        super().__init__(error_message)
+        self.bucket_name = bucket_name
         self.error_message = error_message
 
     def __str__(self):
@@ -95,16 +148,13 @@ class DivBaseCredentialsNotFoundError(Exception):
     Raised when the credentials for accessing DivBase API, which are stored as enviroment variables are not found.
     """
 
-    def __init__(self, access_key_name: str, secret_key_name: str, config_path: Path):
+    def __init__(self, access_key_name: str, secret_key_name: str):
         error_message = (
-            "\n"
-            "Either your DivBase Access and/or secret key was not found in your enviroment variables'.\n"
+            "Your DivBase Access and/or secret key was not found in your enviroment variables'.\n"
             f"Please ensure that the environment variables '{access_key_name}' and '{secret_key_name}' are set.\n"
             f"The simplest way to do this is to create a .env file in the directory you run your commands from.\n"
-            f"If you want to use a different name for the environment variables, you can set them in your user config file: {config_path}\n"
         )
         super().__init__(error_message)
-        self.config_path = config_path
         self.access_key_name = access_key_name
         self.secret_key_name = secret_key_name
         self.error_message = error_message

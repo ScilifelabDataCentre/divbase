@@ -12,6 +12,8 @@ import botocore
 import yaml
 
 from divbase_tools.exceptions import (
+    BucketVersionAlreadyExistsError,
+    BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,
     ObjectDoesNotExistError,
 )
@@ -42,8 +44,7 @@ class BucketVersionManager:
         Create the initial metadata file with a default version.
         """
         if self.version_info:
-            logger.error(f"Can't create a new version file as one already exists in the bucket: {self.bucket_name}.")
-            return
+            raise BucketVersioningFileAlreadyExistsError(bucket_name=self.bucket_name)
 
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
@@ -60,6 +61,11 @@ class BucketVersionManager:
         Add a new version to the metadata file.
         """
         version_data = self.version_info
+        if not version_data:  # aka file not created for this project yet.
+            version_data["versions"] = {}
+
+        if name in version_data["versions"]:
+            raise BucketVersionAlreadyExistsError(bucket_name=self.bucket_name, version_name=name)
 
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
@@ -67,23 +73,32 @@ class BucketVersionManager:
 
         if not description:
             description = ""
-        version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
 
+        version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
         self._upload_bucket_version_file(version_data=version_data)
+
+    def delete_version(self, bucket_version: str) -> str:
+        """
+        Delete the version specified from the bucket versioning metadata file.
+
+        Returns the version name deleted.
+        """
+        if not self.version_info:
+            raise ObjectDoesNotExistError(key=VERSION_FILE_NAME, bucket_name=self.bucket_name)
+
+        try:
+            del self.version_info["versions"][bucket_version]
+        except KeyError as err:
+            raise BucketVersionNotFoundError(bucket_name=self.bucket_name, bucket_version=bucket_version) from err
+
+        self._upload_bucket_version_file(version_data=self.version_info)
+        return bucket_version
 
     def get_version_info(self) -> dict[str, dict]:
         if not self.version_info:
             logger.info("No bucket level versioning has been created for this bucket as of yet.")
             return {}
         return self.version_info["versions"]
-
-    def list_files_in_bucket(self) -> list[str]:
-        file_list = self.s3_file_manager.list_files(bucket_name=self.bucket_name)
-
-        if not file_list:
-            logger.warning(f"No files found in bucket '{self.bucket_name}'.")
-
-        return file_list
 
     def all_files_at_bucket_version(self, bucket_version: str) -> dict[str, str]:
         """
