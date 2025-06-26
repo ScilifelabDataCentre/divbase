@@ -12,7 +12,7 @@ from rich import print
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import fetch_query_files_from_bucket, tsv_query_command
+from divbase_tools.queries import SidecarQueryManager, fetch_query_files_from_bucket
 from divbase_tools.task_history import dotenv_to_task_history_manager
 from divbase_tools.tasks import bcftools_pipe_task
 
@@ -59,9 +59,12 @@ def tsv_query(
         )
 
     logger.info(f"Querying {file}\n")
-    query_result, query_message = tsv_query_command(file=file, filter=filter)
-    unique_sampleIDs = query_result["Sample_ID"].unique().tolist()
-    unique_filenames = query_result["Filename"].unique().tolist()
+    sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter)
+    query_result = sidecar_manager.query_result
+    query_message = sidecar_manager.query_message
+
+    unique_sampleIDs = sidecar_manager.get_unique_values("Sample_ID")
+    unique_filenames = sidecar_manager.get_unique_values("Filename")
     sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
     serialized_samples = sample_and_filename_subset.to_dict(orient="records")
 
@@ -173,8 +176,10 @@ def pipe_query(
     if run_async:
         result = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
         print(f"Job submitted with task ID: {result.id}")
+        return result
     else:
-        bcftools_pipe_task.apply(kwargs=task_kwargs)
+        result = bcftools_pipe_task.apply(kwargs=task_kwargs)
+        return result
 
 
 @query_app.command("task-status")

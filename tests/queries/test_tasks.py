@@ -133,7 +133,7 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
 
 @pytest.mark.integration
 @pytest.mark.parametrize("run_async", [False, True])
-@patch("divbase_tools.cli_commands.query_cli.download_files_command")
+@patch("divbase_tools.queries.fetch_query_files_from_bucket")
 def test_pipe_query_e2e(
     mock_download, demo_sidecar_metadata_inputs_outputs, copy_fixtures_to_mock_download_from_bucket, run_async
 ):

@@ -1,21 +1,28 @@
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
+from celery.result import AsyncResult
 
-from divbase_tools.queries import BcftoolsQueryManager
+from divbase_tools.queries import BcftoolsQueryManager, SidecarQueryManager
 
 
 @pytest.fixture
-def bcftools_manager():
+def bcftools_manager() -> BcftoolsQueryManager:
     """Return a BcftoolsQueryManager instance for testing."""
     return BcftoolsQueryManager()
 
 
+def create_sidecar_manager(file: Path) -> SidecarQueryManager:
+    """Return a SidecarQueryManager instance for testing."""
+    return SidecarQueryManager(file=file)
+
+
 @pytest.fixture
-def example_sidecar_metadata_inputs_outputs():
+def example_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
     """Return sample inputs for bcftools tests."""
     test_filenames = ["sample1.vcf.gz", "sample2.vcf.gz"]
     test_samples = [
@@ -32,7 +39,7 @@ def example_sidecar_metadata_inputs_outputs():
 
 
 @pytest.fixture
-def sample_tsv_file(tmp_path):
+def sample_tsv_file(tmp_path: Path) -> Path:
     """Create a sample TSV file for testing."""
     data = {
         "Sample_ID": ["S1", "S2", "S3", "S4", "S5"],
@@ -49,7 +56,7 @@ def sample_tsv_file(tmp_path):
 
 
 @pytest.fixture
-def tsv_with_hash_headers(tmp_path):
+def tsv_with_hash_headers(tmp_path: Path) -> Path:
     """Create a TSV file with # prefix in headers."""
     data = {"#Sample_ID": ["S1", "S2"], "Population": ["Pop1", "Pop2"], "Filename": ["file1.vcf.gz", "file2.vcf.gz"]}
     df = pd.DataFrame(data)
@@ -60,7 +67,7 @@ def tsv_with_hash_headers(tmp_path):
 
 
 @pytest.fixture
-def demo_sidecar_metadata_inputs_outputs():
+def demo_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
     """Return sample inputs for bcftools tests using the VCF files and tsv query results from the initial demo."""
     test_filenames = [
         "/app/tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz",
@@ -113,7 +120,7 @@ def copy_fixtures_to_mock_download_from_bucket():
     return mock_download_files_command
 
 
-def wait_for_celery_task_completion(async_result, max_wait=30):
+def wait_for_celery_task_completion(async_result: AsyncResult, max_wait: int = 30) -> Any:
     """Wait for a Celery task to complete, with timeout."""
     start_time = time.time()
 

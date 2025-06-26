@@ -255,58 +255,90 @@ class BcftoolsQueryManager:
         subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
 
 
-def tsv_query_command(file: Path, filter: str = None) -> tuple[pd.DataFrame, str]:
-    """
-    Query a TSV file for specific key-value pairs. Assumes that the TSV file has a header row
-    and a column named Filename. The user can use any column header as a key, and the values
-    can be any string. Returns the unique filenames that match the query.
-    """
-    # TODO if value not in df[key], there is no warning or error. only if both values are missing
-    # is there is message saying that an empty df is returned
-    # TODO what if the user wants to make queries on the Filename column? It should work, but might result in wierd edge-cases?
+class SidecarQueryManager:
+    """Class to manage queries on sidecar metadata files."""
 
-    df = pd.read_csv(file, sep="\t")
+    def __init__(self, file: Path):
+        self.file = file
+        self.filter_string = None
+        self.df = None
+        self.query_result = None
+        self.query_message = ""
+        self.load_file()
 
-    if any(col.startswith("#") for col in df.columns):
-        df.columns = df.columns.str.lstrip("#")
+    def load_file(self) -> "SidecarQueryManager":
+        """
+        Load the TSV file into a pandas DataFrame.
+        Assumes that the first row is a header row and that the file is tab-separated.
+        Also removes any leading '#' characters from the column names
+        """
+        self.df = pd.read_csv(self.file, sep="\t")
+        self.df.columns = self.df.columns.str.lstrip("#")
+        return self
 
-    if filter == "":
-        logger.warning("Empty filter provided - returning ALL records. This may be a large result set.")
-        return df, "ALL RECORDS (no filter)"
+    def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
+        """
+        Run a query against the loaded data
+        """
 
-    if filter is None:
-        raise ValueError("Filter cannot be None. Use an empty string ('') if you want all records.")
+        if self.df is None:
+            raise ValueError("No data loaded. Call load_file() first")
 
-    key_values = filter.split(";")
-    filter_conditions = []
+        if filter_string is not None:
+            self.filter_string = filter_string
 
-    for key_value in key_values:
-        if not key_value.strip():
-            continue
-        try:
-            key, values = key_value.split(":", 1)
-            values_list = values.split(",")
+        if self.filter_string == "":
+            logger.warning("Empty filter provided - returning ALL records. This may be a large result set.")
+            self.query_result = self.df
+            self.query_message = "ALL RECORDS (no filter)"
+            return self
 
-            if key in df.columns:
-                condition = df[key].isin(values_list)
-                if not condition.any():
-                    logger.warning(f"None of the values {values_list} were found in column '{key}'")
-                filter_conditions.append(condition)
-            else:
-                logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
-        except ValueError:
-            logger.warning(f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'")
+        if self.filter_string is None:
+            raise ValueError("Filter cannot be None. Use an empty string ('') if you want all records.")
 
-    if filter_conditions:
-        combined_condition = pd.Series(True, index=df.index)
-        for condition in filter_conditions:
-            combined_condition = combined_condition & condition
+        key_values = self.filter_string.split(";")
+        filter_conditions = []
 
-        filtered_df = df[combined_condition].copy()
-        return filtered_df, filter
+        for key_value in key_values:
+            if not key_value.strip():
+                continue
+            try:
+                key, values = key_value.split(":", 1)
+                values_list = values.split(",")
 
-    logger.warning("Invalid filter conditions found - returning ALL records. This may be a large result set.")
-    return df, "Invalid filter conditions - returning ALL records"
+                if key in self.df.columns:
+                    condition = self.df[key].isin(values_list)
+                    if not condition.any():
+                        logger.warning(f"None of the values {values_list} were found in column '{key}'")
+                    filter_conditions.append(condition)
+                else:
+                    logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
+            except ValueError:
+                logger.warning(f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'")
+
+        if filter_conditions:
+            combined_condition = pd.Series(True, index=self.df.index)
+            for condition in filter_conditions:
+                combined_condition = combined_condition & condition
+
+            self.query_result = self.df[combined_condition].copy()
+            self.query_message = self.filter_string
+        else:
+            logger.warning("Invalid filter conditions found - returning ALL records. This may be a large result set.")
+            self.query_result = self.df
+            self.query_message = "Invalid filter conditions - returning ALL records"
+
+        return self
+
+    def get_unique_values(self, column: str) -> list:
+        """Get unique values from a column in the query result"""
+        if self.query_result is None:
+            raise ValueError("No query result available. Run run_query() first.")
+
+        if column in self.query_result.columns:
+            return self.query_result[column].unique().tolist()
+        else:
+            raise ValueError(f"Column '{column}' not found in query result")
 
 
 def fetch_query_files_from_bucket(
