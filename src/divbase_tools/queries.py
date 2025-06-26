@@ -32,6 +32,8 @@ class BcftoolsQueryManager:
     def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
+        Calls on the sub-methods to build the command structure, ensure the Docker image is available,
+        and process the commands.
         """
         commands_config_structure = self.build_commands_config(command, bcftools_inputs)
 
@@ -42,6 +44,12 @@ class BcftoolsQueryManager:
         return output_file
 
     def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Build a configuration structure for the bcftools commands based on the provided command string and inputs.
+        The command string is expected to be a semicolon-separated list of bcftools commands.
+        Each command is processed to create a list of dictionaries containing the command details,
+        input files, sample subsets, and output temporary files.
+        """
         filenames = bcftools_inputs.get("filenames")
         sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
 
@@ -137,6 +145,9 @@ class BcftoolsQueryManager:
         return output_temp_files
 
     def run_bcftools(self, command: str) -> None:
+        """
+        Run a bcftools command inside the Docker container.
+        """
         logger.info(f"Running: bcftools {command}")
         docker_cmd = ["docker", "exec", self.get_container_id("worker"), "bcftools"] + command.split()
         subprocess.run(docker_cmd, check=True)

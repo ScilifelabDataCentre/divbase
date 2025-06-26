@@ -70,6 +70,62 @@ divbase-cli
 divbase-api
 ```
 
+### Queries
+
+The data and metadata stored in a DivBase project can be queried two main ways:
+
+#### 1. Query sidecar metadata file for sample IDs and VCF filenames
+
+Attributes of the samples that are typically not part of the data in the VCF file can be stored in a tabular sidecar file where each row describe a sample. The file need to start with a header row that contains two mandatory columns: `Sample_ID` and `Filename`. Other columns can be added based on the needs of the project. To accomodate queries of user-defined columns, the following query syntax is used:
+
+```bash
+divbase-cli query tsv [...] --filter “key1: value1, value2; key2: value3, value4 […]”
+```
+where `key` is the column name and “value” is the column value to filter on. Values can be stacked by commas, and (intersect) queries across multiple keys can be done by adding a semicolon.
+
+Example:
+
+```bash
+query tsv --file sample_metadata.tsv --filter "Area:West of Ireland,Northern Portugal;Sex:F"
+```
+
+#### 2. Query the data in the VCF files
+
+DivBase uses bcftools to query data contained in the VCF files. One of the idea of DivBase is that data in a project can split over multiple VCF files. If the VCF file query is combined with a sidecar metadata query (using `--tsv-filter` which accepts the same the query syntax the sidecar queries described above), DivBase will perform the query on all VCF files identified by the sidecar query, apply any chain bcftools subset/filter operation given by the user, and return a single merged VCF file with the results.
+
+Bcftools subset/filters are set by the `--command` option. The syntax is experimental: it uses existing bcftools commands as defined in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html) but automatically handles the filenames based on the sidecar metadata query results. It is possible to create pipes of bcftools operations by semicolon separation:
+
+```bash
+--command "view -s SAMPLES; view -r 21:15000000-25000000" 
+```
+
+Example of a full command that queries the sidecar metadata file and uses the results to perform bcftools subsets:
+
+```bash
+divbase-cli query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F" \
+--command "view -s SAMPLES; view -r 21:15000000-25000000"
+```
+
+### Running query jobs asynchronously using Celery
+
+Queries that require bcftools operations can potentially take long time to complete. Therefore, these queries are submitted to job manager based on Celery. 
+
+Unless specified, the bcftools query jobs are run synchronously in the job manager, meaning that they will be executed directly.
+
+It is also possible to submit asyncronous jobs to Celery from the CLI by adding the `--async` flag to `query bcftools-pipe` commands. 
+For instance, to query of the toy data found in `./tests/fixtures/`:
+
+```bash
+divbase-cli query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F" \
+--command "view -s SAMPLES; view -r 21:15000000-25000000" --async
+```
+
+This will return a Celery task-id to `stdout`. To check the status of the task:
+
+```bash
+divbase-cli query task-status --task-id <ID>
+```
+
 ### Pre-commit
 
 We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on every commit.
