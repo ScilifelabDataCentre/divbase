@@ -12,11 +12,9 @@ from rich import print
 
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
-from divbase_tools.queries import tsv_query_command
-from divbase_tools.services import download_files_command
+from divbase_tools.queries import fetch_query_files_from_bucket, tsv_query_command
 from divbase_tools.task_history import dotenv_to_task_history_manager
 from divbase_tools.tasks import bcftools_pipe_task
-from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +54,8 @@ def tsv_query(
 
     if not file.exists():
         logger.info(f"No local copy of the tsv file found at: {file}. Checking bucket for file.")
-        bucket_name = resolve_bucket_name(bucket_name, config_path)
-        download_files_command(
-            bucket_name=bucket_name,
-            all_files=[file.name],
-            download_dir=file.parent,
-            bucket_version=None,
+        fetch_query_files_from_bucket(
+            bucket_name=bucket_name, config_path=config_path, files=[file.name], download_dir=None, bucket_version=None
         )
 
     logger.info(f"Querying {file}\n")
@@ -137,6 +131,13 @@ def pipe_query(
         bucket_name=bucket_name,
         config_path=config_path,
     )
+    if not unique_query_results.get("filenames"):
+        logger.error("No files found matching your query criteria. Cannot proceed with bcftools commands.")
+        raise typer.Exit(code=1)
+
+    if not unique_query_results.get("sampleIDs"):
+        logger.error("No samples found matching your query criteria. Cannot proceed with bcftools commands.")
+        raise typer.Exit(code=1)
 
     if not tsv_filter:
         logger.info(f"No filter provided - using all {len(unique_query_results['sampleIDs'])} samples from {tsv_file}")
@@ -146,24 +147,15 @@ def pipe_query(
         file_path = Path.cwd() / filename
         if not file_path.exists():
             missing_files.append(filename)
-
     if missing_files:
         logger.warning(f"The following files were not found locally: {missing_files}")
-        bucket_name = resolve_bucket_name(bucket_name, config_path)
-        download_files_command(
+        fetch_query_files_from_bucket(
             bucket_name=bucket_name,
-            all_files=missing_files,
-            download_dir=Path.cwd(),
+            config_path=config_path,
+            files=missing_files,
+            download_dir=None,
             bucket_version=None,
         )
-
-    if not unique_query_results.get("filenames"):
-        logger.error("No files found matching your query criteria. Cannot proceed with bcftools commands.")
-        raise typer.Exit(code=1)
-
-    if not unique_query_results.get("sampleIDs"):
-        logger.error("No samples found matching your query criteria. Cannot proceed with bcftools commands.")
-        raise typer.Exit(code=1)
 
     bcftools_inputs = unique_query_results
 

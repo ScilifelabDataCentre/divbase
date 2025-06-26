@@ -6,6 +6,9 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from divbase_tools.services import download_files_command
+from divbase_tools.utils import resolve_bucket_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -304,3 +307,21 @@ def tsv_query_command(file: Path, filter: str = None) -> tuple[pd.DataFrame, str
 
     logger.warning("Invalid filter conditions found - returning ALL records. This may be a large result set.")
     return df, "Invalid filter conditions - returning ALL records"
+
+
+def fetch_query_files_from_bucket(
+    bucket_name: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
+) -> None:
+    """
+    Helper function to fetch files needed for queries from the bucket if they do not exist locally.
+    """
+    if not download_dir:
+        download_dir = Path.cwd()
+
+    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    download_files_command(
+        bucket_name=bucket_name,
+        all_files=files,
+        download_dir=download_dir,
+        bucket_version=bucket_version,
+    )
