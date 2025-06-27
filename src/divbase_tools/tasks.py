@@ -34,8 +34,7 @@ def bcftools_pipe_task(command, bcftools_inputs, submitter=None):
     logger.info(f"Starting bcftools pipe task with Celery task ID: {task_id}")
 
     try:
-        bcftools_manager = BcftoolsQueryManager()
-        output_file = bcftools_manager.execute_pipe(command, bcftools_inputs)
+        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs)
         return {"status": "completed", "output_file": f"{output_file}", "submitter": submitter}
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")

@@ -16,9 +16,22 @@ class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
 
+    Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
+    The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container
+    upon receiving a task from the queue (async job), or to be run inside the same Docker container as the Celery worker with
+    `docker exec` instead of the queue (synchronous job). Either way, the class expects that the worker container with the
+    name defined in CONTAINER_NAME is running.
+
+    NOTE! The current implementation does not handle starting the container.
+
+    Users are expected to interact with this class through the CLI. The CLI layer handles Celery task management for this class.
+
+    However, it is possible to run a query without Celery using the class directly, e.g.:
+    `output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs)`
+
     The main entry point is the `execute_pipe` method, which takes a semicolon-separated string of
     bcftools commands and a dictionary of inputs. It builds a configuration structure for the commands,
-    ensure that the relevant Docker image is available (for local runs), and processes the commands in
+    ensure that the relevant Docker container is available (for synchronous runs), and processes the commands in
     a structured manner.
 
     Current implementation is a "merge-last" strategy. In short, all subsetting and filtering commands
@@ -30,20 +43,26 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]
-    IMAGE_NAME = "docker-worker-1"
-    CONTAINER_NAME = "docker-worker-1"
+    CONTAINER_NAME = "docker-worker-1"  # for synchronous tasks, use this container name to find the container ID
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> str:
+    def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
-        Calls on the sub-methods to build the command structure, ensure the Docker image is available,
-        and process the commands.
+        Calls on the sub-methods to build the command structure, and process the commands.
         """
+
+        in_docker = os.path.exists("/.dockerenv")
+        if not in_docker:
+            logger.info("Running outside Docker container, ensuring Docker image is available")
+            get_container_id = self.get_container_id(self.CONTAINER_NAME)
+            if get_container_id:
+                logger.info(f"Found running container with ID: {get_container_id}")
+            else:
+                logger.warning(
+                    f"No running container found with name {self.CONTAINER_NAME}. Ensure the Docker image is available."
+                )
+
         commands_config_structure = self.build_commands_config(command, bcftools_inputs)
-
-        if run_local_docker:
-            self.ensure_docker_image()
-
         output_file = self.process_bcftools_commands(commands_config_structure)
         return output_file
 
@@ -176,9 +195,9 @@ class BcftoolsQueryManager:
                 raise
         else:
             try:
-                container_id = self.get_container_id(self.IMAGE_NAME)
+                container_id = self.get_container_id(self.CONTAINER_NAME)
                 if container_id:
-                    logger.debug(f"Excuting command in container with id{container_id}")
+                    logger.info(f"Excuting command in container with id{container_id}")
                     docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
                     subprocess.run(docker_cmd, check=True)
                 else:
@@ -231,67 +250,18 @@ class BcftoolsQueryManager:
             except Exception as e:
                 logger.error(f"Failed to delete temporary file or index {temp_file}: {e}")
 
-    def ensure_docker_image(self) -> None:
-        """
-        Ensure that the image containing bcftools is available; if not, build it.
-        """
-        image_name = self.IMAGE_NAME
-        image_exists = self.check_bcftools_docker_image(image_name=image_name)
-
-        if not image_exists:
-            logger.info(f"Docker image '{image_name}' not found. Building it now...")
-            self.build_bcftools_docker_image(image_name=image_name)
-
-    def check_bcftools_docker_image(self, image_name: str) -> bool:
-        """
-        Check if the bcftools Docker image is available locally.
-        The docker comand returns the image ID if the image exists,
-        or an empty string if it does not.
-        """
-
-        result = subprocess.run(
-            ["docker", "images", "-q", image_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-        image_exists = bool(result.stdout.strip())
-        container_id = self.get_container_id(image_name)
-
-        if not container_id:
-            logger.warning(f"Starting {image_name}...")
-            subprocess.run(["docker", "compose", "-f", "docker/docker-compose.yaml", "up", "-d"], check=True)
-            container_id = self.get_container_id(image_name)
-
-        logger.info(f"Using existing docker-compose container: {container_id}")
-
-        return image_exists
-
-    def get_container_id(self, image_name: str) -> str:
+    def get_container_id(self, container_name: str) -> str:
         """
         Helper function to get the container ID of the running bcftools Docker container.
         """
-        ##debug to list all running containers
-        # list_result = subprocess.run(
-        #     ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, check=False
-        # )
-        # logger.warning(f"Listing all running containers:{list_result}")
 
         result = subprocess.run(
-            ["docker", "ps", "--filter", f"name={image_name}", "--format", "{{.ID}}"],
+            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
             capture_output=True,
             text=True,
             check=True,
         )
         return result.stdout.strip()
-
-    def build_bcftools_docker_image(self, image_name: str) -> None:
-        """
-        Build the Docker image for bcftools if it does not exist.
-        """
-        dockerfile_path = "./docker/worker.dockerfile"
-        subprocess.run(["docker", "build", "-f", dockerfile_path, "-t", image_name, "."], check=True)
 
 
 class SidecarQueryManager:
