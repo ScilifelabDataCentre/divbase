@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from celery.result import AsyncResult
+from celery import current_app
 
 from divbase_tools.queries import BcftoolsQueryManager, SidecarQueryManager
 
@@ -120,8 +120,9 @@ def copy_fixtures_to_mock_download_from_bucket():
     return mock_download_files_command
 
 
-def wait_for_celery_task_completion(async_result: AsyncResult, max_wait: int = 30) -> Any:
+def wait_for_celery_task_completion(task_id: str, max_wait: int = 30) -> Any:
     """Wait for a Celery task to complete, with timeout."""
+    async_result = current_app.AsyncResult(task_id)
     start_time = time.time()
 
     while not async_result.ready():

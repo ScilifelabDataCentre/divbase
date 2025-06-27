@@ -30,7 +30,8 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]
-    IMAGE_NAME = "docker/worker"
+    IMAGE_NAME = "docker-worker-1"
+    CONTAINER_NAME = "docker-worker-1"
 
     def execute_pipe(self, command: str, bcftools_inputs: dict, run_local_docker: bool = False) -> str:
         """
@@ -150,10 +151,42 @@ class BcftoolsQueryManager:
     def run_bcftools(self, command: str) -> None:
         """
         Run a bcftools command inside the Docker container.
+        The method hancles celery sync and async tasks differently:
+
+        sync tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
+        and runs the command inside it using `docker exec` and `subprocess.run`. I.e. the host machine executes the command
+        inside the container.
+
+        async tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
+        inside the containter with `subprocess.run`. I.e. the container itself executes the command inside itself.
+
+        To identify if the job is running async, check if it is process is running inside a docker container by checking
+        for the existence of the /.dockerenv file.
         """
         logger.info(f"Running: bcftools {command}")
-        docker_cmd = ["docker", "exec", self.get_container_id("worker"), "bcftools"] + command.split()
-        subprocess.run(docker_cmd, check=True)
+
+        in_docker = os.path.exists("/.dockerenv")
+
+        if in_docker:
+            logger.info("Running inside Docker container, executing bcftools directly")
+            try:
+                subprocess.run(["bcftools"] + command.split(), check=True)
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to run bcftools directly: {e}")
+                raise
+        else:
+            try:
+                container_id = self.get_container_id(self.IMAGE_NAME)
+                if container_id:
+                    logger.debug(f"Excuting command in container with id{container_id}")
+                    docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
+                    subprocess.run(docker_cmd, check=True)
+                else:
+                    logger.warning("No Docker container found, trying to run bcftools locally")
+                    subprocess.run(["bcftools"] + command.split(), check=True)
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to run bcftools: {e}")
+                raise
 
     def ensure_csi_index(self, file: str) -> None:
         """
@@ -239,6 +272,12 @@ class BcftoolsQueryManager:
         """
         Helper function to get the container ID of the running bcftools Docker container.
         """
+        ##debug to list all running containers
+        # list_result = subprocess.run(
+        #     ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, check=False
+        # )
+        # logger.warning(f"Listing all running containers:{list_result}")
+
         result = subprocess.run(
             ["docker", "ps", "--filter", f"name={image_name}", "--format", "{{.ID}}"],
             capture_output=True,

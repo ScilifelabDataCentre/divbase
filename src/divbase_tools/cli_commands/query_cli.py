@@ -176,10 +176,10 @@ def pipe_query(
     if run_async:
         result = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
         print(f"Job submitted with task ID: {result.id}")
-        return result
+        return result.id
     else:
         result = bcftools_pipe_task.apply(kwargs=task_kwargs)
-        return result
+        return result.id
 
 
 @query_app.command("task-status")

@@ -121,8 +121,8 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
         pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
 
     async_result = bcftools_pipe_task.delay(command, demo_sidecar_metadata_inputs_outputs, submitter="test_user")
-
-    task_result = wait_for_celery_task_completion(async_result=async_result, max_wait=30)
+    task_id = async_result.id
+    task_result = wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
     assert task_result == {
         "status": "completed",
@@ -159,7 +159,7 @@ def test_pipe_query_e2e(
     tsv_filter = "Area:West of Ireland,Northern Portugal;Sex:F"
     command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    result = pipe_query(
+    task_id = pipe_query(
         tsv_file=Path("tests/fixtures/sample_metadata.tsv"),
         tsv_filter=tsv_filter,
         command=command,
@@ -169,7 +169,7 @@ def test_pipe_query_e2e(
     )
 
     if run_async:
-        task_result = wait_for_celery_task_completion(async_result=result, max_wait=30)
+        task_result = wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
         assert task_result == {
             "status": "completed",
