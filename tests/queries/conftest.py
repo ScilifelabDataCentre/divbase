@@ -1,4 +1,5 @@
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -118,6 +119,15 @@ def copy_fixtures_to_mock_download_from_bucket():
                 print(f"File not found in fixtures: {file_name}")
 
     return mock_download_files_command
+
+
+@pytest.fixture
+def valid_tsv_path():
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp:
+        tmp.write("col1\tcol2\nA\t1\nB\t2\nA\t3\n")
+        tmp_path = Path(tmp.name)
+    yield tmp_path
+    tmp_path.unlink()
 
 
 def wait_for_celery_task_completion(task_id: str, max_wait: int = 30) -> Any:

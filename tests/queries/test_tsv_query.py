@@ -3,6 +3,9 @@ import logging
 import pytest
 from conftest import create_sidecar_manager
 
+from divbase_tools.exceptions import (
+    SidecarInvalidFilterError,
+)
 from divbase_tools.queries import SidecarQueryManager
 
 
@@ -42,7 +45,7 @@ def test_tsv_query_empty_filter(sample_tsv_file, caplog):
 def test_tsv_query_none_filter(sample_tsv_file):
     """Test that None filter raises an appropriate error."""
     manager = create_sidecar_manager(sample_tsv_file)
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(SidecarInvalidFilterError) as exc_info:
         manager.run_query(filter_string=None)
 
     assert "Filter cannot be None" in str(exc_info.value)
@@ -79,13 +82,9 @@ def test_tsv_query_invalid_filter_format(sample_tsv_file, caplog):
     """Test handling of incorrectly formatted filter."""
     with caplog.at_level(logging.WARNING):
         manager = create_sidecar_manager(sample_tsv_file)
-        manager.run_query(filter_string="InvalidFormatNoColon")
-        query_result = manager.query_result
-        query_message = manager.query_message
-
-    assert len(query_result) == 5, "Should return all records for invalid format"
-    assert "Invalid filter format: 'InvalidFormatNoColon'" in caplog.text
-    assert query_message == "Invalid filter conditions - returning ALL records"
+        with pytest.raises(SidecarInvalidFilterError) as exc_info:
+            manager.run_query(filter_string="InvalidFormatNoColon")
+        assert "Invalid filter format" in str(exc_info.value)
 
 
 @pytest.mark.unit

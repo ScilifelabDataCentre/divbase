@@ -12,6 +12,9 @@ from divbase_tools.exceptions import (
     BcftoolsEnvironmentError,
     BcftoolsPipeEmptyCommandError,
     BcftoolsPipeUnsupportedCommandError,
+    SidecarColumnNotFoundError,
+    SidecarInvalidFilterError,
+    SidecarNoDataLoadedError,
 )
 from divbase_tools.services import download_files_command
 from divbase_tools.utils import resolve_bucket_name
@@ -294,8 +297,12 @@ class SidecarQueryManager:
         Assumes that the first row is a header row and that the file is tab-separated.
         Also removes any leading '#' characters from the column names
         """
-        self.df = pd.read_csv(self.file, sep="\t")
-        self.df.columns = self.df.columns.str.lstrip("#")
+        # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
+        try:
+            self.df = pd.read_csv(self.file, sep="\t")
+            self.df.columns = self.df.columns.str.lstrip("#")
+        except Exception as e:
+            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file", error_details=e) from e
         return self
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
@@ -304,7 +311,9 @@ class SidecarQueryManager:
         """
 
         if self.df is None:
-            raise ValueError("No data loaded. Call load_file() first")
+            raise SidecarNoDataLoadedError(
+                file_path=self.file, submethod="run_query", error_details="No data loaded. Call load_file() first."
+            )
 
         if filter_string is not None:
             self.filter_string = filter_string
@@ -316,7 +325,7 @@ class SidecarQueryManager:
             return self
 
         if self.filter_string is None:
-            raise ValueError("Filter cannot be None. Use an empty string ('') if you want all records.")
+            raise SidecarInvalidFilterError("Filter cannot be None. Use an empty string ('') if you want all records.")
 
         key_values = self.filter_string.split(";")
         filter_conditions = []
@@ -335,8 +344,10 @@ class SidecarQueryManager:
                     filter_conditions.append(condition)
                 else:
                     logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
-            except ValueError:
-                logger.warning(f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'")
+            except Exception as e:
+                raise SidecarInvalidFilterError(
+                    f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'"
+                ) from e
 
         if filter_conditions:
             combined_condition = pd.Series(True, index=self.df.index)
@@ -355,12 +366,12 @@ class SidecarQueryManager:
     def get_unique_values(self, column: str) -> list:
         """Get unique values from a column in the query result"""
         if self.query_result is None:
-            raise ValueError("No query result available. Run run_query() first.")
+            raise SidecarColumnNotFoundError("No query result available. Run run_query() first.")
 
         if column in self.query_result.columns:
             return self.query_result[column].unique().tolist()
         else:
-            raise ValueError(f"Column '{column}' not found in query result")
+            raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
 
 
 def fetch_query_files_from_bucket(
