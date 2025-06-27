@@ -1,4 +1,14 @@
+import subprocess
+from unittest.mock import patch
+
 import pytest
+
+from divbase_tools.exceptions import (
+    BcftoolsCommandError,
+    BcftoolsEnvironmentError,
+    BcftoolsPipeEmptyCommandError,
+    BcftoolsPipeUnsupportedCommandError,
+)
 
 
 @pytest.mark.unit
@@ -121,22 +131,43 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
 
 
 @pytest.mark.unit
+def test_bcftools_pipe_unsupported_command_error(bcftools_manager):
+    """Test that BcftoolsPipeUnsupportedCommandError contains the expected attributes and message."""
+    command = "merge -m none"
+    cmd_name = command.split()[0]
+    position = 2
+    valid_commands = bcftools_manager.VALID_BCFTOOLS_COMMANDS
+
+    error = BcftoolsPipeUnsupportedCommandError(cmd_name, position, valid_commands)
+
+    assert error.command == cmd_name
+    assert error.position == position
+    assert error.valid_commands == valid_commands
+    print(error)
+    expected_message = (
+        f"Unsupported bcftools command '{cmd_name}' at position {position}. "
+        f"Only the following commands are supported: {', '.join(valid_commands)}"
+    )
+    assert str(error) == expected_message
+
+
+@pytest.mark.unit
 def test_build_commands_config_invalid_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config rejects unsupported bcftools commands."""
 
     merge_command = "view -s SAMPLES; merge -m none; view -i 'GT=\"het\"'"
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(BcftoolsPipeUnsupportedCommandError) as exc_info:
         bcftools_manager.build_commands_config(merge_command, example_sidecar_metadata_inputs_outputs)
 
     error_msg = str(exc_info.value)
     assert "Unsupported bcftools command 'merge'" in error_msg
     assert "position 2" in error_msg, "Error should indicate the position of the invalid command"
-    assert "view" in error_msg, "Error should list valid commands"
+    assert "merge" in error_msg, "Error should list valid commands"
 
     multiple_invalid_cmd = "norm --fasta-ref ref.fa; annotate --annotations file.vcf"
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(BcftoolsPipeUnsupportedCommandError) as exc_info:
         bcftools_manager.build_commands_config(multiple_invalid_cmd, example_sidecar_metadata_inputs_outputs)
 
     error_msg = str(exc_info.value)
@@ -148,14 +179,139 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
 def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that fails on various variations of when user inputs empty --command to bcftools-pipe in the CLI."""
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
         bcftools_manager.build_commands_config("", example_sidecar_metadata_inputs_outputs)
     assert "Empty command provided" in str(exc_info.value)
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
         bcftools_manager.build_commands_config(";", example_sidecar_metadata_inputs_outputs)
     assert "Empty command provided" in str(exc_info.value)
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
         bcftools_manager.build_commands_config("  ;  ", example_sidecar_metadata_inputs_outputs)
     assert "Empty command provided" in str(exc_info.value)
+
+
+@pytest.mark.unit
+def test_bcftools_environment_error():
+    """Test that BcftoolsEnvironmentError contains the expected attributes and message."""
+    container_name = "test-container"
+    error = BcftoolsEnvironmentError(container_name)
+
+    assert error.container_name == container_name
+    assert f"No running container found with name {container_name}" in str(error)
+
+
+@pytest.mark.unit
+def test_bcftools_command_error():
+    """Test that BcftoolsCommandError contains the expected attributes and message."""
+    command = "view -h sample.vcf"
+    error_details = "Command failed"
+    error = BcftoolsCommandError(command=command, error_details=error_details)
+
+    assert error.command == command
+    assert error.error_details == error_details
+
+    assert f"bcftools command failed: '{command}'" in str(error)
+    assert f"with error details: {error_details}" in str(error)
+
+
+@pytest.mark.unit
+@patch("subprocess.run")
+def test_get_container_id_subprocess_error(mock_run, bcftools_manager):
+    """Test that get_container_id raises BcftoolsEnvironmentError on subprocess error."""
+    mock_run.side_effect = subprocess.SubprocessError("Docker command failed")
+
+    with pytest.raises(BcftoolsEnvironmentError) as excinfo:
+        bcftools_manager.get_container_id(bcftools_manager.CONTAINER_NAME)
+
+    assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
+
+    mock_run.assert_called_with(
+        ["docker", "ps", "--filter", f"name={bcftools_manager.CONTAINER_NAME}", "--format", "{{.ID}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+@pytest.mark.unit
+@patch("divbase_tools.queries.BcftoolsQueryManager.get_container_id")
+@patch("os.path.exists")
+def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_container_id, bcftools_manager):
+    """
+    Test that BcftoolsEnvironmentError is raised from self.run_bcftools when container is not found.
+
+    The mock_exists_in_docker simulate the synchronous scenario when the code is not executed in a Docker container (i.e., no /.dockerenv file),
+    which makes the code look for a valid container ID.
+
+    The `mock_run_get_container_id` simulates the scenario where the command to get the container ID returns an empty string, indicating
+    that no container is running with the expected name.
+
+    Together, this should raise a BcftoolsEnvironmentError.
+    """
+    mock_exists_in_docker.return_value = False
+    mock_get_container_id.side_effect = BcftoolsEnvironmentError(bcftools_manager.CONTAINER_NAME)
+
+    with pytest.raises(BcftoolsEnvironmentError) as excinfo:
+        bcftools_manager.run_bcftools("view -h sample.vcf")
+
+    assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
+
+    mock_exists_in_docker.assert_called_with("/.dockerenv")
+    mock_get_container_id.assert_called_with(bcftools_manager.CONTAINER_NAME)
+
+
+@pytest.mark.unit
+@patch("subprocess.run")
+@patch("divbase_tools.queries.BcftoolsQueryManager.get_container_id")
+@patch("os.path.exists")
+def test_command_failure_exec_into_container(mock_exists_in_docker, mock_get_container_id, mock_run, bcftools_manager):
+    """Test that BcftoolsCommandError is raised when a command fails in the container.
+
+    The mock_exists_in_docker simulate the synchronous scenario when the code is not executed in a Docker container (i.e., no /.dockerenv file),
+    which makes the code look for a valid container ID.
+    The mock_get_container_id simulates the scenario where the command to get the container ID returns a valid ID, indicating that a container is running.
+
+    Then mock_run.side_effect simulates a failure when running a bcftools command inside the container.
+    This raises a CalledProcessError in the test, which is caught and re-raised as a BcftoolsCommandError.
+    """
+
+    mock_exists_in_docker.return_value = False
+    mock_get_container_id.return_value = "abc123"
+
+    command_error = subprocess.CalledProcessError(returncode=1, cmd=["bcftools", "view", "-h", "sample.vcf"])
+    command_error.stderr = "non-zero exit status 1d"
+    mock_run.side_effect = command_error
+
+    with pytest.raises(BcftoolsCommandError) as excinfo:
+        bcftools_manager.run_bcftools("view -h sample.vcf")
+
+    assert "view -h sample.vcf" in str(excinfo.value)
+    assert "non-zero exit status 1" in str(excinfo.value)
+
+
+@pytest.mark.unit
+@patch("subprocess.run")
+@patch("os.path.exists")
+def test_command_failure_async_inside_container(mock_exists_in_docker, mock_run, bcftools_manager):
+    """
+    Test that BcftoolsCommandError is raised when a command fails inside a container after being recived from the task queue.
+
+    The mock_exists_in_docker simulate the asynchronous scenario when the task is picked up by a worker and executed inside
+    (i.e. /.dockerenv file exists).
+
+    The mock_run then simulates the scenario where the command to run bcftools fails, raising a BcftoolsCommandError.
+
+    """
+    mock_exists_in_docker.return_value = True
+
+    command_error = subprocess.CalledProcessError(returncode=1, cmd=["bcftools", "view", "-h", "sample.vcf"])
+    command_error.stderr = "non-zero exit status 1"
+    mock_run.side_effect = command_error
+
+    with pytest.raises(BcftoolsCommandError) as excinfo:
+        bcftools_manager.run_bcftools("view -h sample.vcf")
+
+    assert "view -h sample.vcf" in str(excinfo.value)
+    assert "non-zero exit status 1" in str(excinfo.value)

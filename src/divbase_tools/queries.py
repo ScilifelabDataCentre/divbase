@@ -6,6 +6,12 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from divbase_tools.exceptions import (
+    BcftoolsCommandError,
+    BcftoolsEnvironmentError,
+    BcftoolsPipeEmptyCommandError,
+    BcftoolsPipeUnsupportedCommandError,
+)
 from divbase_tools.services import download_files_command
 from divbase_tools.utils import resolve_bucket_name
 
@@ -42,7 +48,7 @@ class BcftoolsQueryManager:
 
     """
 
-    VALID_BCFTOOLS_COMMANDS = ["view"]
+    VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "docker-worker-1"  # for synchronous tasks, use this container name to find the container ID
 
     def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
@@ -53,14 +59,12 @@ class BcftoolsQueryManager:
 
         in_docker = os.path.exists("/.dockerenv")
         if not in_docker:
-            logger.info("Running outside Docker container, ensuring Docker image is available")
-            get_container_id = self.get_container_id(self.CONTAINER_NAME)
-            if get_container_id:
-                logger.info(f"Found running container with ID: {get_container_id}")
-            else:
-                logger.warning(
-                    f"No running container found with name {self.CONTAINER_NAME}. Ensure the Docker image is available."
-                )
+            logger.info("Running outside Docker container, ensuring Docker container is available")
+            try:
+                get_container_id = self.get_container_id(self.CONTAINER_NAME)
+                logger.info(f"Found the required {self.CONTAINER_NAME} container running with ID: {get_container_id}")
+            except BcftoolsEnvironmentError:
+                raise
 
         commands_config_structure = self.build_commands_config(command, bcftools_inputs)
         output_file = self.process_bcftools_commands(commands_config_structure)
@@ -77,7 +81,7 @@ class BcftoolsQueryManager:
         sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
 
         if not command or command.strip() == ";" or command.strip() == "":
-            raise ValueError("Empty command provided. Please specify at least one valid bcftools command.")
+            raise BcftoolsPipeEmptyCommandError()
         command_list = command.split(";")
         commands_config_structure = []
         current_inputs = filenames
@@ -91,12 +95,9 @@ class BcftoolsQueryManager:
 
             cmd_name = cmd.split()[0] if cmd and " " in cmd else cmd
             if cmd_name not in self.VALID_BCFTOOLS_COMMANDS:
-                error_msg = (
-                    f"Unsupported bcftools command '{cmd_name}' at position {c_counter + 1}. "
-                    f"Only the following commands are supported for DivBase queries: {', '.join(self.VALID_BCFTOOLS_COMMANDS)}"
+                raise BcftoolsPipeUnsupportedCommandError(
+                    command=cmd_name, position=c_counter + 1, valid_commands=self.VALID_BCFTOOLS_COMMANDS
                 )
-                logger.error(error_msg)
-                raise ValueError(error_msg)
 
             output_temp_files = [
                 f"temp_subset_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)
@@ -187,25 +188,23 @@ class BcftoolsQueryManager:
         in_docker = os.path.exists("/.dockerenv")
 
         if in_docker:
-            logger.info("Running inside Docker container, executing bcftools directly")
+            logger.debug("Running inside Celery worker's Docker container, executing bcftools directly")
             try:
                 subprocess.run(["bcftools"] + command.split(), check=True)
             except subprocess.CalledProcessError as e:
                 logger.error(f"Failed to run bcftools directly: {e}")
-                raise
+                raise BcftoolsCommandError(command=command, error_details=e) from e
         else:
             try:
                 container_id = self.get_container_id(self.CONTAINER_NAME)
-                if container_id:
-                    logger.info(f"Excuting command in container with id{container_id}")
-                    docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
-                    subprocess.run(docker_cmd, check=True)
-                else:
-                    logger.warning("No Docker container found, trying to run bcftools locally")
-                    subprocess.run(["bcftools"] + command.split(), check=True)
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to run bcftools: {e}")
+                logger.debug(f"Executing command in container with ID: {container_id}")
+                docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
+                subprocess.run(docker_cmd, check=True)
+            except BcftoolsEnvironmentError:
                 raise
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to run bcftools in container: {e}")
+                raise BcftoolsCommandError(command=command, error_details=e) from e
 
     def ensure_csi_index(self, file: str) -> None:
         """
@@ -253,15 +252,20 @@ class BcftoolsQueryManager:
     def get_container_id(self, container_name: str) -> str:
         """
         Helper function to get the container ID of the running bcftools Docker container.
+        Raises BcftoolsEnvironmentError if the container is not found or if the command fails.
+        The error can the be re-raised be the methods that call this method, e.g. run_bcftools() and execute_pipe().
         """
-
-        result = subprocess.run(
-            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return result.stdout.strip()
+        except subprocess.SubprocessError as e:
+            logger.error(f"Docker command failed: {e}")
+            raise BcftoolsEnvironmentError(container_name) from e
 
 
 class SidecarQueryManager:
