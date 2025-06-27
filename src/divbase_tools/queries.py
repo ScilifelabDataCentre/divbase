@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 import subprocess
@@ -70,6 +71,17 @@ class BcftoolsQueryManager:
         output_file = self.process_bcftools_commands(commands_config_structure)
         return output_file
 
+    @contextlib.contextmanager
+    def temp_file_management(self):
+        """Context manager to handle temporary file cleanup, even if processing fails/exits."""
+        self.temp_files = []
+        try:
+            yield self
+        finally:
+            if self.temp_files:
+                logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
+                self.cleanup_temp_files(self.temp_files)
+
     def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Build a configuration structure for the bcftools commands based on the provided command string and inputs.
@@ -125,25 +137,22 @@ class BcftoolsQueryManager:
         Process a JSON-like list of bcftools command configurations.
         Interprets the JSON configuration, processes and runs each command, ensures that files are indexed, and merges the results.
         """
+        with self.temp_file_management() as temp_file_manager:
+            logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
 
-        logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
+            final_output_temp_files = None
 
-        all_output_temp_files = []
-        final_output_temp_files = None
+            for cmd_config in commands_config:
+                logger.info(f"Processing command #{cmd_config['counter'] + 1}: {cmd_config['command']}")
+                output_temp_files = self.run_current_command(cmd_config)
+                temp_file_manager.temp_files.extend(output_temp_files)
+                final_output_temp_files = output_temp_files
 
-        for cmd_config in commands_config:
-            logger.info(f"Processing command #{cmd_config['counter'] + 1}: {cmd_config['command']}")
-            output_temp_files = self.run_current_command(cmd_config)
-            final_output_temp_files = output_temp_files
-            all_output_temp_files.extend(output_temp_files)
+            output_file = self.merge_bcftools_temp_files(final_output_temp_files)
 
-        output_file = self.merge_bcftools_temp_files(final_output_temp_files)
+            logger.info("bcftools processing completed successfully")
 
-        self.cleanup_temp_files(all_output_temp_files)
-
-        logger.info("bcftools processing completed successfully")
-
-        return output_file
+            return output_file
 
     def run_current_command(self, cmd_config: Dict[str, Any]) -> List[str]:
         """Process a single command configuration."""

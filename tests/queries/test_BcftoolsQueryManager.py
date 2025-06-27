@@ -1,5 +1,5 @@
 import subprocess
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -143,7 +143,6 @@ def test_bcftools_pipe_unsupported_command_error(bcftools_manager):
     assert error.command == cmd_name
     assert error.position == position
     assert error.valid_commands == valid_commands
-    print(error)
     expected_message = (
         f"Unsupported bcftools command '{cmd_name}' at position {position}. "
         f"Only the following commands are supported: {', '.join(valid_commands)}"
@@ -315,3 +314,19 @@ def test_command_failure_async_inside_container(mock_exists_in_docker, mock_run,
 
     assert "view -h sample.vcf" in str(excinfo.value)
     assert "non-zero exit status 1" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_temp_file_management_cleans_up_files(bcftools_manager):
+    """
+    Test that temp_file_management context manager cleans up temporary files.
+    To simulate that the `finally` block of the context manager is executed, bcftools_manager.temp_file_management()
+    is called with a `with` statement. The cleanup of temporary files (i.e. the `finally` block) should then be
+    triggered when the `with` block is exited.
+    """
+    bcftools_manager.cleanup_temp_files = MagicMock()
+
+    with bcftools_manager.temp_file_management():
+        bcftools_manager.temp_files.extend(["file1.tmp", "file2.tmp"])
+
+    bcftools_manager.cleanup_temp_files.assert_called_once_with(["file1.tmp", "file2.tmp"])
