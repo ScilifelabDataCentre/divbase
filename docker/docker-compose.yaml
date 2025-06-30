@@ -1,0 +1,50 @@
+services:
+  rabbitmq:
+    image: "rabbitmq:alpine"
+    ports:
+    - 5672:5672
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+  worker:
+    build:
+      context: .. 
+      dockerfile: docker/worker.dockerfile
+    depends_on:
+      - rabbitmq
+      - redis
+    environment:
+      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ../src:/app/src
+      - ..:/app
+      - ../tests/fixtures:/app/tests/fixtures
+  flower:
+    build:
+      context: ..
+      dockerfile: docker/flower.dockerfile
+    ports:
+      - 5555:5555
+    depends_on:
+      - redis
+      - rabbitmq
+    environment:
+      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=floweradmin:badpassword
+    command: [
+      "--broker=pyamqp://guest@rabbitmq:5672//", 
+      "--persistent=True",
+      "--db=/data/flower.db",
+      ]
+    volumes:
+    - flower-data:/data
+volumes:
+  redis-data:
+  flower-data:

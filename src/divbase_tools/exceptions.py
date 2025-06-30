@@ -181,3 +181,94 @@ class BucketNameNotSpecifiedError(Exception):
 
     def __str__(self):
         return self.error_message
+
+
+class BcftoolsEnvironmentError(Exception):
+    """Raised when there's an issue with the execution environment (Docker, etc.)."""
+
+    def __init__(self, container_name: str):
+        self.container_name = container_name
+        error_message = (
+            f"No running container found with name {self.container_name}. Ensure the Docker image is available.\n"
+        )
+        super().__init__(error_message)
+
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class BcftoolsCommandError(Exception):
+    """Raised when a bcftools command fails to execute properly."""
+
+    def __init__(self, command: str, error_details: Exception = None):
+        self.command = command
+        self.error_details = error_details
+
+        error_message = f"bcftools command failed: '{command}'"
+        if error_details:
+            error_message += f" with error details: {error_details}"
+
+        super().__init__(error_message)
+
+    def __str__(self):
+        if hasattr(self.error_details, "stderr") and self.error_details.stderr:
+            return f"bcftools command failed: '{self.command}' with error: {self.error_details.stderr}"
+        return super().__str__()
+
+
+class BcftoolsPipeEmptyCommandError(Exception):
+    """Raised when an empty command is provided to the bcftools pipe."""
+
+    def __init__(self):
+        error_message = "Empty command provided. Please specify at least one valid bcftools command."
+        super().__init__(error_message)
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class BcftoolsPipeUnsupportedCommandError(Exception):
+    """Raised when a bcftools command unsupported by the BcftoolsQueryManager class is provided."""
+
+    def __init__(self, command: str, position: int, valid_commands: list[str]):
+        self.command = command
+        self.position = position
+        self.valid_commands = valid_commands
+
+        message = (
+            f"Unsupported bcftools command '{command}' at position {position}. "
+            f"Only the following commands are supported: {', '.join(valid_commands)}"
+        )
+        super().__init__(message)
+
+
+class SidecarNoDataLoadedError(Exception):
+    """Raised when no data is loaded in SidecarQueryManager."""
+
+    def __init__(self, file_path: Path, submethod=str, error_details: Exception = None):
+        self.file_path = file_path
+        self.error_details = error_details
+
+        error_message = f"No data loaded from file '{file_path}', as raised in submethod '{submethod}'."
+        if error_details:
+            error_message += f". Underlying error: {error_details}"
+        super().__init__(error_message)
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
+class SidecarInvalidFilterError(Exception):
+    """Raised when an invalid filter is provided to SidecarQueryManager."""
+
+    pass
+
+
+class SidecarColumnNotFoundError(Exception):
+    """Raised when a requested column is not found in the query result."""
+
+    pass

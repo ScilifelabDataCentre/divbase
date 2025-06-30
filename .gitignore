@@ -18,4 +18,8 @@ __pycache__/
 /sample_metadata.tsv
 *.vcf
 *.vcf.gz
+*.vcf.gz.csi
 !tests/fixtures/*.vcf.gz
+
+# query job config files
+bcftools_divbase_job_config.json
