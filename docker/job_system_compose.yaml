@@ -3,7 +3,7 @@ services:
   rabbitmq:
     image: "rabbitmq:alpine"
     ports:
-    - 5672:5672
+      - 5672:5672
   redis:
     image: redis:alpine
     ports:
@@ -24,7 +24,6 @@ services:
     volumes:
       - ../src:/app/src
       - ..:/app
-      - ../tests/fixtures:/app/tests/fixtures
   flower:
     build:
       context: ..

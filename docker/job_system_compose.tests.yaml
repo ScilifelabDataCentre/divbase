@@ -1,0 +1,14 @@
+name: divbase-job-system-tests
+services:
+  rabbitmq:
+    ports: !override # port mapping is additive when merging compose files, unless overridden like this
+      - 5673:5672 #host:container. change the host port for the testing env
+  redis:
+    ports: !override
+      - 6380:6379
+  worker:
+    volumes:
+      - ../tests/fixtures:/app/tests/fixtures
+  flower:
+    ports: !override
+      - 5556:5555

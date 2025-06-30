@@ -4,6 +4,7 @@ repos:
   hooks:
   - id: check-yaml
     args: [--allow-multiple-documents]
+    exclude: docker/job_system_compose\.tests\.yaml #fails due to !override, skip for now 
   - id: check-json
   - id: check-added-large-files
   - id: check-merge-conflict
