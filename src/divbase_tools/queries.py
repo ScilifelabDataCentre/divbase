@@ -50,6 +50,15 @@ class BcftoolsQueryManager:
     the row-columns of the input files for the eventual merge operation are smaller.
     Downside is that the logic is more complex than in a "merge-first" strategy.
 
+    The "merge-first" logic in based on nesting of two loops:
+    - Outer loop: iterates over the input bcftools commands in the pipe, and passes each command to `run_current_command()`.
+    - Inner loop: iterates over the input files for each command , and runs the command on each file using `run_bcftools()`.
+    The results of the inner loop are temporary files that are passed to the next command in the outer loop.
+    At the end of the outer loop, the temporary files are merged into a single output file using `merge_bcftools_temp_files()`.
+    The temporary files are cleaned up after the processing is done using `cleanup_temp_files()`.
+    The class also provides a context manager for temporary file management to ensure that temporary files are cleaned
+    up even if the processing fails or exits unexpectedly.
+
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
@@ -58,7 +67,8 @@ class BcftoolsQueryManager:
     def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
-        Calls on the sub-methods to build the command structure, and process the commands.
+        First calls on a method to build a structure of input parameters for bcftools, and then
+        passes that on to another method that process the commands according to the "merge-last" strategy.
         """
 
         in_docker = os.path.exists("/.dockerenv")
@@ -87,10 +97,12 @@ class BcftoolsQueryManager:
 
     def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Build a configuration structure for the bcftools commands based on the provided command string and inputs.
+        Method that builds a configuration structure for the bcftools commands based on the provided command string and inputs.
         The command string is expected to be a semicolon-separated list of bcftools commands.
         Each command is processed to create a list of dictionaries containing the command details,
-        input files, sample subsets, and output temporary files.
+        input files, sample subsets, and output temporary files. Returns a list of dictionaries
+        where each dictionary represents a command configuration with the bcftools command, input files and temporary
+        output files.
         """
         filenames = bcftools_inputs.get("filenames")
         sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
@@ -137,8 +149,10 @@ class BcftoolsQueryManager:
 
     def process_bcftools_commands(self, commands_config: List[Dict[str, Any]]) -> str:
         """
-        Process a JSON-like list of bcftools command configurations.
-        Interprets the JSON configuration, processes and runs each command, ensures that files are indexed, and merges the results.
+        Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
+        the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
+        looping over VCF files). Once the outer loop is done, it calls a method to merge all temporary results files
+        into a single output VCF file.
         """
         with self.temp_file_management() as temp_file_manager:
             logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
@@ -158,7 +172,13 @@ class BcftoolsQueryManager:
             return output_file
 
     def run_current_command(self, cmd_config: Dict[str, Any]) -> List[str]:
-        """Process a single command configuration."""
+        """
+        Method that handles the inner loop of the merge-last strategy: for each command pass from the outer loop,
+        it processes all given input VCF files individually by running the command on each file using run_bcftools().
+        For each processed file, a temporary output file is created, which is then used as input for the next command
+        in the outer loop. Each temporary output file is indexed with a .csi index file using ensure_csi_index().
+        The method returns a list of output temporary files created by running the command on each input file.
+        """
         command = cmd_config["command"]
         input_files = cmd_config["input_files"]
         output_temp_files = cmd_config["output_temp_files"]
@@ -182,18 +202,21 @@ class BcftoolsQueryManager:
 
     def run_bcftools(self, command: str) -> None:
         """
-        Run a bcftools command inside the Docker container.
-        The method hancles celery sync and async tasks differently:
+        Methid to run a bcftools command inside a Docker container that has bcftools installed.
+        This method is specifically designed to with a Celery manager in an upper layer of the architechture.
+        In short, the CLI layer handles the task management and submission to Celery, which can be either synchronous or asynchronous.
 
-        sync tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
+        Synchronous tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
         and runs the command inside it using `docker exec` and `subprocess.run`. I.e. the host machine executes the command
         inside the container.
 
-        async tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
+        Asynchronous tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
         inside the containter with `subprocess.run`. I.e. the container itself executes the command inside itself.
 
-        To identify if the job is running async, check if it is process is running inside a docker container by checking
-        for the existence of the /.dockerenv file.
+        To identify if the job is running async, the method evaluates if the current process is running inside a docker container by checking
+        for the existence of the /.dockerenv file. If the file exists, it assumes that the command is run asynchronously inside the Celery worker
+        container. If the file does not exist, it assumes that the command is run synchronously and tries to find the container ID of the running
+        bcftools container using the get_container_id() method.
         """
         logger.info(f"Running: bcftools {command}")
 
@@ -220,10 +243,10 @@ class BcftoolsQueryManager:
 
     def ensure_csi_index(self, file: str) -> None:
         """
-        Ensure that the given VCF file has a .csi index. If not, create it using bcftools.
+        Helper method that ensures that the given VCF file has a .csi index. If not, create it using bcftools.
 
-        bcftools can often work on VCF files that lack an index file, but for consistency
-        it is better to create an index file for all VCF files.
+        (bcftools can sometimes handle VCF files that lack an index file, but for consistency
+        it is better to create an index file for all VCF files that are created.)
         """
         index_file = f"{file}.csi"
         if not os.path.exists(index_file):
@@ -232,9 +255,8 @@ class BcftoolsQueryManager:
 
     def merge_bcftools_temp_files(self, output_temp_files: List[str]) -> str:
         """
-        Merge all temporary files produced by pipe_query_command into a single output file.
+        Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
         """
-        # TODO error handling for when temp files are missing or has not been cleaned up since last run (e.g. if the last run aborted)
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
         output_file = "merged.vcf.gz"
@@ -248,8 +270,8 @@ class BcftoolsQueryManager:
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
         """
-        Delete all temporary files and their associated .csi index files
-        generated during the pipe_query_command execution.
+        Helper method that handles deletion of all temporary files and their associated .csi index files
+        that were generated during the pipe_query_command execution.
         """
         for temp_file in output_temp_files:
             try:
@@ -263,7 +285,7 @@ class BcftoolsQueryManager:
 
     def get_container_id(self, container_name: str) -> str:
         """
-        Helper function to get the container ID of the running bcftools Docker container.
+        Helper method to get the container ID of the running bcftools Docker container.
         Raises BcftoolsEnvironmentError if the container is not found or if the command fails.
         The error can the be re-raised be the methods that call this method, e.g. run_bcftools() and execute_pipe().
         """
@@ -281,7 +303,14 @@ class BcftoolsQueryManager:
 
 
 class SidecarQueryManager:
-    """Class to manage queries on sidecar metadata files."""
+    """
+    A class that manages the execution queries on sidecar metadata files.
+
+    Expects a TSV file with a header row and tab-separated values.
+    The class provides methods to load the TSV file into a pandas DataFrame, run queries against the data,
+    and retrieve unique values from specific columns.
+
+    """
 
     def __init__(self, file: Path):
         self.file = file
@@ -293,8 +322,7 @@ class SidecarQueryManager:
 
     def load_file(self) -> "SidecarQueryManager":
         """
-        Load the TSV file into a pandas DataFrame.
-        Assumes that the first row is a header row and that the file is tab-separated.
+        Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
@@ -307,7 +335,20 @@ class SidecarQueryManager:
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
         """
-        Run a query against the loaded data
+        Method to run a query against the loaded data. The filter_string should be a semicolon-separated list of key:value pairs,
+        where key is a column name and value is a comma-separated list of values to filter by.
+        For example: "key1:value1,value2;key2:value3,value4".
+
+        Summary of how different input filter values are handled:
+        - If the filter_string is empty, all records are returned.
+        - If the filter_string is None, an error is raised.
+        - If the filter_string is not empty, the method filters the DataFrame based on the provided filter_string.
+        - If any of the keys in the filter_string are not found in the DataFrame columns, a warning is logged and those conditions are skipped.
+        - If none of the values in the filter_string are found in the DataFrame, a warning is logged and all records are returned.
+        - If the filter_string is invalid, a SidecarInvalidFilterError is raised.
+
+        The method returns the SidecarQueryManager instance with the query_result and query_message. The former is the filtered DataFrame results,
+        and the latter is filter_string used for the query.
         """
 
         if self.df is None:
@@ -364,7 +405,10 @@ class SidecarQueryManager:
         return self
 
     def get_unique_values(self, column: str) -> list:
-        """Get unique values from a column in the query result"""
+        """
+        Method to fetch unique values from a specific column in the query result. Intended to be invoked on a SidecarQueryManager
+        instance after a query has been run with run_query().
+        """
         if self.query_result is None:
             raise SidecarColumnNotFoundError("No query result available. Run run_query() first.")
 
