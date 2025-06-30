@@ -1,3 +1,4 @@
+name: divbase-job-system
 services:
   rabbitmq:
     image: "rabbitmq:alpine"
