@@ -115,8 +115,9 @@ def test_upload_dir_contents(user_config_path, CONSTANTS, fixtures_dir):
     result = runner.invoke(app, shlex.split(command))
 
     assert result.exit_code == 0
+    clean_stdout = result.stdout.replace("\n", "")  # newlines can cause issues in the assert below
     for file in files:
-        assert f"{file.resolve()}" in result.stdout
+        assert str(file.resolve()) in clean_stdout
 
 
 def test_upload_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
