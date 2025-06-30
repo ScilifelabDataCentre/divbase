@@ -17,9 +17,12 @@ def bcftools_manager() -> BcftoolsQueryManager:
     return BcftoolsQueryManager()
 
 
-def create_sidecar_manager(file: Path) -> SidecarQueryManager:
-    """Return a SidecarQueryManager instance for testing."""
-    return SidecarQueryManager(file=file)
+@pytest.fixture
+def create_sidecar_manager():
+    def create_manager(file: Path):
+        return SidecarQueryManager(file=file)
+
+    return create_manager
 
 
 @pytest.fixture
@@ -130,14 +133,18 @@ def valid_tsv_path():
     tmp_path.unlink()
 
 
-def wait_for_celery_task_completion(task_id: str, max_wait: int = 30) -> Any:
-    """Wait for a Celery task to complete, with timeout."""
-    async_result = current_app.AsyncResult(task_id)
-    start_time = time.time()
+@pytest.fixture
+def wait_for_celery_task_completion():
+    def wait_for_task_completion(task_id: str, max_wait: int = 30) -> Any:
+        """Wait for a Celery task to complete, with timeout."""
+        async_result = current_app.AsyncResult(task_id)
+        start_time = time.time()
 
-    while not async_result.ready():
-        if time.time() - start_time > max_wait:
-            pytest.fail(f"Task timed out after {max_wait} seconds")
-        time.sleep(1)
+        while not async_result.ready():
+            if time.time() - start_time > max_wait:
+                pytest.fail(f"Task timed out after {max_wait} seconds")
+            time.sleep(1)
 
-    return async_result.get()
+        return async_result.get()
+
+    return wait_for_task_completion

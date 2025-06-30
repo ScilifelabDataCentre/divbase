@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from celery.backends.redis import RedisBackend
-from conftest import wait_for_celery_task_completion
 from kombu.connection import Connection
 
 from divbase_tools.cli_commands.query_cli import pipe_query
@@ -86,7 +85,7 @@ def test_bcftools_pipe_task_using_eager_mode(example_sidecar_metadata_inputs_out
 
 
 @pytest.mark.integration
-def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_outputs):
+def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_outputs, wait_for_celery_task_completion):
     """
     Integration test in which bcftools_pipe_task is run with a real Celery worker.
     Runs locally using the docker-compose setup defined in the tests/queries/docker-compose.yml file.
@@ -135,7 +134,11 @@ def test_bcftools_pipe_task_with_real_worker(demo_sidecar_metadata_inputs_output
 @pytest.mark.parametrize("run_async", [False, True])
 @patch("divbase_tools.queries.fetch_query_files_from_bucket")
 def test_pipe_query_e2e(
-    mock_download, demo_sidecar_metadata_inputs_outputs, copy_fixtures_to_mock_download_from_bucket, run_async
+    mock_download,
+    demo_sidecar_metadata_inputs_outputs,
+    copy_fixtures_to_mock_download_from_bucket,
+    run_async,
+    wait_for_celery_task_completion,
 ):
     """
     End-to-end test for the pipe_query function, i.e. the CLI command that runs the bcftools query.
