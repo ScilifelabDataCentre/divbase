@@ -21,6 +21,26 @@ logger = logging.getLogger(__name__)
 query_app = typer.Typer(help="Query the VCF files stored in the bucket.", no_args_is_help=True)
 
 
+TSV_FILTER_ARGUEMENT = typer.Option(
+    None,
+    help="""
+    String consisting of keys:values in the tsv file to filter on.
+    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
+    are the column header names in the tsv, and values are the column values. 
+    Multiple values for a key are separated by commas, and multiple keys are 
+    separated by semicolons. When multple keys are provided, an intersect query 
+    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
+    """,
+)
+
+BCFTOOLS_ARGUEMENT = typer.Option(
+    ...,
+    help="""
+        String consisting of the bcftools command to run on the files returned by the tsv query.
+        """,
+)
+
+
 @query_app.command("tsv")
 def tsv_query(
     file: Path = typer.Option(
@@ -89,23 +109,8 @@ def pipe_query(
         default=Path("./sample_metadata.tsv"),
         help="Path to the tsv metadata file.",
     ),
-    tsv_filter: str = typer.Option(
-        None,
-        help="""
-        String consisting of keys:values in the tsv file to filter on.
-        The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-        are the column header names in the tsv, and values are the column values. 
-        Multiple values for a key are separated by commas, and multiple keys are 
-        separated by semicolons. When multple keys are provided, an intersect query 
-        will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-        """,
-    ),
-    command: str = typer.Option(
-        ...,
-        help="""
-        String consisting of the bcftools command to run on the files returned by the tsv query.
-        """,
-    ),
+    tsv_filter: str = TSV_FILTER_ARGUEMENT,
+    command: str = BCFTOOLS_ARGUEMENT,
     bucket_name: str = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_FILE_OPTION,
     run_async: bool = typer.Option(False, "--async", help="Run as async job using Celery"),
