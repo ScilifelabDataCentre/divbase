@@ -46,6 +46,7 @@ def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str =
         "command": command,
         "bcftools_inputs": bcftools_inputs,
         "submitter": user_name,
+        "bucket_name": bucket_name,
     }
 
     result = bcftools_pipe_task.apply_async(kwargs=task_kwargs)

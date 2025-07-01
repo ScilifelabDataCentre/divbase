@@ -141,6 +141,8 @@ def test_pipe_query_e2e(
     wait_for_celery_task_completion,
 ):
     """
+    TODO - this function no longer works because now expexts to upload results file to bucket.
+
     End-to-end test for the pipe_query function, i.e. the CLI command that runs the bcftools query.
     Tests both synchronous (run_async=False) and asynchronous (run_async=True) modes.
     """

@@ -44,7 +44,6 @@ def check_status(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Check status of all jobs submitted by the user."""
-    print("TODO")
     task_items = httpx.get(f"{DIVBASE_API_URL}/jobs/").json()
     task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
     task_history_manager.print_task_history()

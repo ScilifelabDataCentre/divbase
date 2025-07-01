@@ -15,6 +15,7 @@ from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryManager, fetch_query_files_from_bucket
 from divbase_tools.task_history import TaskHistoryManager, get_task_history
 from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ def pipe_query(
     # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
     # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     # TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
 
     if not command or command.strip() == "" or command.strip() == ";":
         logger.error("Empty command provided. Please specify at least one valid bcftools command.")
@@ -176,6 +178,7 @@ def pipe_query(
         "command": command,
         "bcftools_inputs": bcftools_inputs,
         "submitter": current_divbase_user,
+        "bucket_name": bucket_name,
     }
 
     if run_async:
