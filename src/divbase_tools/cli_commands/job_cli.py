@@ -11,6 +11,7 @@ from rich import print
 from divbase_tools.cli_commands.query_cli import BCFTOOLS_ARGUEMENT, TSV_FILTER_ARGUEMENT
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
+from divbase_tools.task_history import TaskHistoryManager
 from divbase_tools.utils import resolve_bucket_name
 
 DIVBASE_API_URL = "http://localhost:8000"
@@ -44,3 +45,6 @@ def check_status(
 ):
     """Check status of all jobs submitted by the user."""
     print("TODO")
+    task_items = httpx.get(f"{DIVBASE_API_URL}/jobs/").json()
+    task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
+    task_history_manager.print_task_history()

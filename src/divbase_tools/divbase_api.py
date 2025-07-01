@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from divbase_tools.queries import SidecarQueryManager
+from divbase_tools.task_history import get_task_history
 from divbase_tools.tasks import bcftools_pipe_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
@@ -25,7 +26,7 @@ def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str =
     """
     Create a new query job in the specified bucket.
 
-    user_name would later be determined by the authentication system.
+    TODO: user_name would later be determined by the authentication system.
     """
     sidecar_manager = SidecarQueryManager(file=TSV_FILE).run_query(filter_string=tsv_filter)
 
@@ -51,12 +52,13 @@ def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str =
     return result.id
 
 
-@app.get("/jobs")
-def get_jobs_by_user():
+@app.get("/jobs/")
+def get_jobs_by_user(user_name: str = "Default User"):
     """
-    Retrieve a list of jobs submitted by the user.
+    TODO: user_name would later be determined by the authentication system.
     """
-    return {"message": "List of jobs"}
+    task_items = get_task_history()
+    return task_items
 
 
 def main():
