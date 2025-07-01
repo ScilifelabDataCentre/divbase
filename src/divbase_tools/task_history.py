@@ -16,7 +16,7 @@ FLOWER_URL = "http://localhost:5555"
 class TaskHistoryManager:
     """
     A class that manages interactions with the Flower API.
-    It fetches, filters, and displays the task history based on the current user.
+    It filters, and displays the task history based on the current user.
     """
 
     STATE_COLOURS = {
@@ -28,45 +28,14 @@ class TaskHistoryManager:
         "REVOKED": "magenta",
     }
 
-    def __init__(self, url: str, flower_user: str = None, flower_password: str = None, divbase_user: str = None):
-        self.url = url
-        self.flower_API_user = flower_user
-        self.flower_API_password = flower_password
+    def __init__(self, task_items: list, divbase_user: str = None):
+        self.task_items = task_items
         self.current_divbase_user = divbase_user
 
-    def get_task_history(self, task_id: str = None, display_limit: int = 10) -> None:
-        """
-        Get the task history from the Flower API.
-        """
-
-        auth = (self.flower_API_user, self.flower_API_password)
-
-        if task_id:
-            request_url = f"{self.url}/api/task/info/{task_id}"
-        else:
-            api_limit = min(
-                100, display_limit * 5
-            )  # return more tasks than requested by the --limit arg to allow for downstream sorting
-            request_url = f"{self.url}/api/tasks?limit={api_limit}"
-
-        response = requests.get(request_url, auth=auth, timeout=3)
-
-        if response.status_code == 200:
-            self.print_task_history(response=response, task_id=task_id, display_limit=display_limit)
-        else:
-            print(f"Failed to fetch tasks: {response.status_code} - {response.text}")
-
-    def print_task_history(self, response, task_id: str = None, display_limit: int = 10) -> None:
+    def print_task_history(self, display_limit: int = 10) -> None:
         """Display the task history fetched from the Flowwre APIin a formatted table."""
-        tasks = response.json()
 
-        task_items = []
-        if task_id:
-            task_items = [(task_id, tasks, self.parse_timestamp(tasks.get("started", 0)))]
-        else:
-            task_items = [(tid, data, self.parse_timestamp(data.get("started", 0))) for tid, data in tasks.items()]
-
-        sorted_tasks = sorted(task_items, key=lambda x: x[2], reverse=True)
+        sorted_tasks = sorted(self.task_items, key=lambda x: x[2], reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self.create_task_history_table()
@@ -98,14 +67,6 @@ class TaskHistoryManager:
         Sort tasks by their runtime in descending order.
         """
         return sorted(tasks, key=lambda x: x.get("runtime", 0), reverse=True)
-
-    def parse_timestamp(self, timestamp):
-        """
-        Convert timestamp to float, if it is a numeric string.
-        """
-        if isinstance(timestamp, str) and timestamp.replace(".", "").isdigit():
-            return float(timestamp)
-        return timestamp
 
     def format_unix_timestamp(self, timestamp):
         """
@@ -158,9 +119,11 @@ class TaskHistoryManager:
         return self.current_divbase_user == submitter or self.current_divbase_user == "divbase_admin"
 
 
-def dotenv_to_task_history_manager() -> TaskHistoryManager:
+def get_task_history(task_id: str = None, display_limit: int = 10) -> list:
     """
-    Create a TaskHistoryManager instance using the user's .env file.
+    Get the task history from the Flower API.
+
+    Returns a list of tasks.
     """
     load_dotenv()
     flower_user = os.environ.get("FLOWER_USER")
@@ -174,9 +137,35 @@ def dotenv_to_task_history_manager() -> TaskHistoryManager:
     if not divbase_user:
         logger.warning("DIVBASE_USER not set in environment")
 
-    return TaskHistoryManager(
-        url=FLOWER_URL,
-        flower_user=flower_user,
-        flower_password=flower_password,
-        divbase_user=divbase_user,
-    )
+    if task_id:
+        request_url = f"{FLOWER_URL}/api/task/info/{task_id}"
+    else:
+        # TODO - if multiple users, this will get tasks from all users and not give correct number of results back.
+        api_limit = min(
+            100, display_limit * 5
+        )  # return more tasks than requested by the --limit arg to allow for downstream sorting
+        request_url = f"{FLOWER_URL}/api/tasks?limit={api_limit}"
+
+    auth = (flower_user, flower_password)
+    response = requests.get(request_url, auth=auth, timeout=3)
+
+    if response.status_code != 200:
+        print(f"Failed to fetch tasks for task ID {task_id}. Status code: {response.status_code}")
+
+    tasks = response.json()
+    task_items = []
+    if task_id:
+        task_items = [(task_id, tasks, parse_timestamp(tasks.get("started", 0)))]
+    else:
+        task_items = [(tid, data, parse_timestamp(data.get("started", 0))) for tid, data in tasks.items()]
+
+    return task_items
+
+
+def parse_timestamp(timestamp):
+    """
+    Convert timestamp to float, if it is a numeric string.
+    """
+    if isinstance(timestamp, str) and timestamp.replace(".", "").isdigit():
+        return float(timestamp)
+    return timestamp

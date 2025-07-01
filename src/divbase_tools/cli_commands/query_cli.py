@@ -13,7 +13,7 @@ from rich import print
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryManager, fetch_query_files_from_bucket
-from divbase_tools.task_history import dotenv_to_task_history_manager
+from divbase_tools.task_history import TaskHistoryManager, get_task_history
 from divbase_tools.tasks import bcftools_pipe_task
 
 logger = logging.getLogger(__name__)
@@ -198,6 +198,6 @@ def celery_task_status(
     """
     Check the query task history for the current user, either by task ID or by showing the last N tasks.
     """
-
-    task_history_manager = dotenv_to_task_history_manager()
-    task_history_manager.get_task_history(task_id=task_id, display_limit=limit)
+    task_items = get_task_history(task_id=task_id, display_limit=limit)
+    task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user=os.environ.get("DIVBASE_USER"))
+    task_history_manager.print_task_history()
