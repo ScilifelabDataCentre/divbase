@@ -13,12 +13,33 @@ from rich import print
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryManager, fetch_query_files_from_bucket
-from divbase_tools.task_history import dotenv_to_task_history_manager
+from divbase_tools.task_history import TaskHistoryManager, get_task_history
 from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
 query_app = typer.Typer(help="Query the VCF files stored in the bucket.", no_args_is_help=True)
+
+
+TSV_FILTER_ARGUEMENT = typer.Option(
+    None,
+    help="""
+    String consisting of keys:values in the tsv file to filter on.
+    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
+    are the column header names in the tsv, and values are the column values. 
+    Multiple values for a key are separated by commas, and multiple keys are 
+    separated by semicolons. When multple keys are provided, an intersect query 
+    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
+    """,
+)
+
+BCFTOOLS_ARGUEMENT = typer.Option(
+    ...,
+    help="""
+        String consisting of the bcftools command to run on the files returned by the tsv query.
+        """,
+)
 
 
 @query_app.command("tsv")
@@ -89,23 +110,8 @@ def pipe_query(
         default=Path("./sample_metadata.tsv"),
         help="Path to the tsv metadata file.",
     ),
-    tsv_filter: str = typer.Option(
-        None,
-        help="""
-        String consisting of keys:values in the tsv file to filter on.
-        The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-        are the column header names in the tsv, and values are the column values. 
-        Multiple values for a key are separated by commas, and multiple keys are 
-        separated by semicolons. When multple keys are provided, an intersect query 
-        will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-        """,
-    ),
-    command: str = typer.Option(
-        ...,
-        help="""
-        String consisting of the bcftools command to run on the files returned by the tsv query.
-        """,
-    ),
+    tsv_filter: str = TSV_FILTER_ARGUEMENT,
+    command: str = BCFTOOLS_ARGUEMENT,
     bucket_name: str = BUCKET_NAME_OPTION,
     config_path: Path = CONFIG_FILE_OPTION,
     run_async: bool = typer.Option(False, "--async", help="Run as async job using Celery"),
@@ -120,6 +126,7 @@ def pipe_query(
     # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
     # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     # TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
+    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_path)
 
     if not command or command.strip() == "" or command.strip() == ";":
         logger.error("Empty command provided. Please specify at least one valid bcftools command.")
@@ -171,6 +178,7 @@ def pipe_query(
         "command": command,
         "bcftools_inputs": bcftools_inputs,
         "submitter": current_divbase_user,
+        "bucket_name": bucket_name,
     }
 
     if run_async:
@@ -193,6 +201,6 @@ def celery_task_status(
     """
     Check the query task history for the current user, either by task ID or by showing the last N tasks.
     """
-
-    task_history_manager = dotenv_to_task_history_manager()
-    task_history_manager.get_task_history(task_id=task_id, display_limit=limit)
+    task_items = get_task_history(task_id=task_id, display_limit=limit)
+    task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user=os.environ.get("DIVBASE_USER"))
+    task_history_manager.print_task_history()
