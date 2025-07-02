@@ -4,6 +4,7 @@ kustomize/overlays/**/charts
 
 # repo secrets 
 .env 
+.env*
 
 # python stuff 
 .venv
