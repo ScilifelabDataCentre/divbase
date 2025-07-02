@@ -25,6 +25,12 @@ services:
     build:
       context: .. 
       dockerfile: docker/worker.dockerfile
+    healthcheck:
+      test: ["CMD", "celery", "inspect", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -40,6 +46,11 @@ services:
     build:
       context: ..
       dockerfile: docker/flower.dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-u", "floweradmin:badpassword", "http://localhost:5555/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     ports:
       - 5555:5555
     depends_on:
