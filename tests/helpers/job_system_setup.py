@@ -15,8 +15,6 @@ STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_
 
 TESTING_STACK_NAME = "divbase-job-system-tests"
 
-# FLOWER_HEALTH_CHECK_COMMAND = shlex.split("curl -I http://localhost:5556")
-
 
 def start_job_system() -> None:
     """Start job system docker stack using Docker compose, the call helper function to ensure that all services in stack are healthy."""
@@ -67,7 +65,10 @@ def wait_for_docker_stack_healthy(stack_name, timeout=120):
             else:
                 unhealthy.append(c)
 
-        print("Healthcheck passed:", [c.get("Service") or c.get("Name") for c in healthy])
+        print(
+            "Healthcheck passed (or not configured in compose file):",
+            [c.get("Service") or c.get("Name") for c in healthy],
+        )
         print("Healthcheck not yet passed:", [c.get("Service") or c.get("Name") for c in unhealthy])
 
         if not unhealthy:

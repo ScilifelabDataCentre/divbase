@@ -7,13 +7,8 @@ services:
     ports: !override
       - 6380:6379
     volumes: !reset [] # reset to avoid conflicts with the redis settings in the main compose file
-    command: [
-        "redis-server",
-        "--appendonly", "yes",
-        "--dir", "/data/redis_data"
-      ]
     tmpfs:
-      - /data/redis_data
+      - /data/
   worker:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
@@ -21,10 +16,5 @@ services:
     ports: !override
       - 5556:5555
     volumes: !reset []
-    command: [
-      "flower", 
-      "--persistent=True",
-      "--db=/data/flower_data/flower.db",
-      ]
     tmpfs:
-      - /data/flower_data
+      - /data/
