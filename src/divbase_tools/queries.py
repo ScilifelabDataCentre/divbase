@@ -62,7 +62,9 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = "docker-worker-1"  # for synchronous tasks, use this container name to find the container ID
+    CONTAINER_NAME = (
+        "divbase-job-system-worker-1"  # for synchronous tasks, use this container name to find the container ID
+    )
 
     def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
         """

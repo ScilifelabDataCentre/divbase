@@ -20,4 +20,4 @@ COPY src/ ./src/
 
 RUN pip install --upgrade pip && pip install -e .
 
-ENTRYPOINT ["celery", "-A", "divbase_tools.tasks", "flower"]
+ENTRYPOINT ["celery", "-A", "divbase_tools.tasks"]
