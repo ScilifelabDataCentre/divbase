@@ -20,9 +20,6 @@ from tests.helpers.minio_setup import (
     BUCKETS,
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
-    setup_minio_data,
-    start_minio,
-    stop_minio,
 )
 
 runner = CliRunner()
@@ -41,17 +38,6 @@ def CONSTANTS():
         "BUCKET_CONTENTS": BUCKETS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
     }
-
-
-@pytest.fixture(scope="session")
-def minio_server():
-    """Start Minio server, set up test buckets, users etc... and stop after all tests run"""
-    try:
-        start_minio()
-        setup_minio_data()
-        yield "http://localhost:9000"
-    finally:
-        stop_minio()
 
 
 @pytest.fixture(autouse=True)
