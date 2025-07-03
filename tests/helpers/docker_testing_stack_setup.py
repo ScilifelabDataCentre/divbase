@@ -1,5 +1,5 @@
 """
-Helper module to set up and tear down a Minio instance used for testing purposes.
+Helper module to set up and tear down the docker compose stack used for testing purposes.
 """
 
 import json
@@ -7,16 +7,16 @@ import shlex
 import subprocess
 import time
 
-DOCKER_COMPOSE_FILE = "docker/job_system_compose.yaml"
-DOCKER_COMPOSE_OVERIIDE_FILE = "docker/job_system_compose.tests.yaml"
+DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
+DOCKER_COMPOSE_OVERIIDE_FILE = "docker/divbase_compose.tests.yaml"
 COMPOSE_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} up -d")
 
-STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} down")
+STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} down -v")
 
-TESTING_STACK_NAME = "divbase-job-system-tests"
+TESTING_STACK_NAME = "divbase-tests"
 
 
-def start_job_system() -> None:
+def start_compose_stack() -> None:
     """Start job system docker stack using Docker compose, the call helper function to ensure that all services in stack are healthy."""
     subprocess.run(COMPOSE_COMMAND, check=True)
     print("Waiting for job system docker stack to start and perform healthchecks...")
@@ -24,8 +24,12 @@ def start_job_system() -> None:
     wait_for_docker_stack_healthy(stack_name=TESTING_STACK_NAME, timeout=120)
 
 
-def stop_job_system() -> None:
-    """Stop job system docker stack."""
+def stop_compose_stack() -> None:
+    """
+    Stop job system docker stack.
+    Using -v in the stop command ensures tha anonymous docker volumes created by tmpfs are removed from disk upon tear down.
+    This prevents disk space leaks.
+    """
     subprocess.run(STOP_COMMAND, check=True)
     print("\nStopping job system docker stack...")
 

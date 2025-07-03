@@ -7,12 +7,8 @@ import os
 
 import pytest
 
-from tests.helpers.job_system_setup import start_job_system, stop_job_system
-from tests.helpers.minio_setup import (
-    setup_minio_data,
-    start_minio,
-    stop_minio,
-)
+from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
+from tests.helpers.minio_setup import MINIO_URL, setup_minio_data
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -28,24 +24,13 @@ def set_celery_env_vars():
 
 
 @pytest.fixture(autouse=True, scope="session")
-def job_system_docker_stack():
+def docker_testing_stack():
     """
     Start job system docker stack, and stop after all tests run.
-    (The print message is only displayed when pytest is run with the -s option)
     """
     try:
-        start_job_system()
-        yield
-    finally:
-        stop_job_system()
-
-
-@pytest.fixture(scope="session")
-def minio_server():
-    """Start Minio server, set up test buckets, users etc... and stop after all tests run"""
-    try:
-        start_minio()
+        start_compose_stack()
         setup_minio_data()
-        yield "http://localhost:9000"
+        yield MINIO_URL  # MinIO server URL
     finally:
-        stop_minio()
+        stop_compose_stack()

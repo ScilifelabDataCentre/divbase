@@ -20,6 +20,7 @@ from tests.helpers.minio_setup import (
     BUCKETS,
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
+    MINIO_URL,
 )
 
 runner = CliRunner()
@@ -30,7 +31,7 @@ def CONSTANTS():
     return {
         "BAD_ACCESS_KEY": MINIO_FAKE_ACCESS_KEY,
         "BAD_SECRET_KEY": MINIO_FAKE_SECRET_KEY,
-        "MINIO_URL": "http://localhost:9000",
+        "MINIO_URL": MINIO_URL,
         "DEFAULT_BUCKET": "bucket1",
         "NON_DEFAULT_BUCKET": "bucket2",
         "CLEANED_BUCKET": "cleaned-bucket",
@@ -41,12 +42,12 @@ def CONSTANTS():
 
 
 @pytest.fixture(autouse=True)
-def patch_s3_file_manager(minio_server, CONSTANTS):
+def patch_s3_file_manager(docker_testing_stack, CONSTANTS):
     """Fixture to patch create_s3_file_manager to use the test Minio server."""
 
     def mock_create_s3_file_manager():
         return S3FileManager(
-            url=minio_server,
+            url=docker_testing_stack,
             access_key=CONSTANTS["BAD_ACCESS_KEY"],
             secret_key=CONSTANTS["BAD_SECRET_KEY"],
         )
