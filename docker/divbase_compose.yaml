@@ -98,8 +98,8 @@ services:
       - 8000:8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 3s
+      interval: 5s
+      timeout: 5s
       retries: 5
     environment:
     - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower

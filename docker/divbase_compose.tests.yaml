@@ -25,3 +25,6 @@ services:
     volumes: !reset []
     tmpfs:
       - /data/
+  fastapi:
+    ports: !override
+      - 8001:8000
