@@ -10,7 +10,7 @@ from rich.table import Table
 
 logger = logging.getLogger(__name__)
 
-FLOWER_URL = "http://localhost:5555"
+FLOWER_URL = os.environ.get("FLOWER_HOST", "http://localhost:5555")
 
 
 class TaskHistoryManager:

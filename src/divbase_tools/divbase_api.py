@@ -21,6 +21,11 @@ async def root():
     return {"message": "DivBase API is running!"}
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/jobs/")
 def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
     """

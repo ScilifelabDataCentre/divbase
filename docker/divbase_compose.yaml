@@ -84,10 +84,29 @@ services:
       timeout: 3s
       retries: 5
     user: "0:0" #for local dev, run minio volume as root to avoid permission issues
-    # tmpfs:
-    #   - /data
     volumes:
       - minio-data:/data
+  fastapi:
+    build:
+      context: ..
+      dockerfile: docker/fastapi.dockerfile
+    ports:
+      - 8000:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    environment:
+    - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
+    - FLOWER_USER=floweradmin
+    - FLOWER_PASSWORD=badpassword
+    - DIVBASE_USER=divbase_user_set_in_compose_file
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   redis-data:
   flower-data:
