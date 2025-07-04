@@ -2,17 +2,8 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
-# Install Alpine-specific packages
-RUN apk update && \
-    apk add --no-cache \
-    gcc \
-    musl-dev \
-    python3-dev \
-    build-base \
-    docker \
-    ca-certificates \
-    curl \
-    libffi-dev
+# Install curl for healthcheck
+RUN apk add --no-cache curl
 
 # copy readme to avoid pip complaining about missing files
 COPY pyproject.toml README.md ./
