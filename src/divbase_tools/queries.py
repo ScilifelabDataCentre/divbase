@@ -1,7 +1,12 @@
+"""
+TODO - consider split metadata query and bcftools query into two separate modules.
+"""
+
 import contextlib
 import logging
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -20,6 +25,44 @@ from divbase_tools.services import download_files_command
 from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SidecarQueryResult:
+    """
+    Hold the results of a query run on a sidecar metadata TSV file.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    sampleIDs: List[str]
+    filenames: List[str]
+    query_message: str
+
+
+def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> SidecarQueryResult:
+    """Run a query on a sidecar metadata TSV file."""
+    sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
+
+    query_result = sidecar_manager.query_result
+    query_message = sidecar_manager.query_message
+
+    unique_sampleIDs = sidecar_manager.get_unique_values("Sample_ID")
+    unique_filenames = sidecar_manager.get_unique_values("Filename")
+    sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
+    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
+
+    # TODO, these should raise error instead.
+    # if not unique_query_results.get("filenames"):
+    #     logger.error("No files found matching your query criteria. Cannot proceed with bcftools commands.")
+    # if not unique_query_results.get("sampleIDs"):
+    #     logger.error("No samples found matching your query criteria. Cannot proceed with bcftools commands.")
+
+    return SidecarQueryResult(
+        sample_and_filename_subset=serialized_samples,
+        sampleIDs=unique_sampleIDs,
+        filenames=unique_filenames,
+        query_message=query_message,
+    )
 
 
 class BcftoolsQueryManager:
@@ -312,6 +355,8 @@ class SidecarQueryManager:
     The class provides methods to load the TSV file into a pandas DataFrame, run queries against the data,
     and retrieve unique values from specific columns.
 
+    TODO - consider seperation of concerns: this class currently handles both loading the TSV file and running queries on it.
+    TODO - some of the __init__ params are perhaps better as properties?
     """
 
     def __init__(self, file: Path):
@@ -319,7 +364,7 @@ class SidecarQueryManager:
         self.filter_string = None
         self.df = None
         self.query_result = None
-        self.query_message = ""
+        self.query_message: str = ""
         self.load_file()
 
     def load_file(self) -> "SidecarQueryManager":
