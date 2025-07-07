@@ -31,6 +31,6 @@ def docker_testing_stack():
     try:
         start_compose_stack()
         setup_minio_data()
-        yield MINIO_URL  # MinIO server URL
+        yield
     finally:
         stop_compose_stack()

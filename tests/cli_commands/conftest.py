@@ -42,12 +42,12 @@ def CONSTANTS():
 
 
 @pytest.fixture(autouse=True)
-def patch_s3_file_manager(docker_testing_stack, CONSTANTS):
+def patch_s3_file_manager(CONSTANTS):
     """Fixture to patch create_s3_file_manager to use the test Minio server."""
 
     def mock_create_s3_file_manager():
         return S3FileManager(
-            url=docker_testing_stack,
+            url=MINIO_URL,
             access_key=CONSTANTS["BAD_ACCESS_KEY"],
             secret_key=CONSTANTS["BAD_SECRET_KEY"],
         )

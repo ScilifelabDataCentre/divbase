@@ -10,7 +10,7 @@ services:
     ports:
       - 5672:5672
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq #to avoid anynymous volumes being created
+      - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
   redis:
     image: redis:alpine
     healthcheck:
@@ -88,8 +88,8 @@ services:
     user: "0:0" #for local dev, run minio volume as root to avoid permission issues
     volumes:
       - minio-data:/data
-      - minio-bitnami-data:/bitnami/minio/data #to avoid anynymous volumes being created
-      - minio-certs:/certs #to avoid anynymous volumes being created
+      - minio-bitnami-data:/bitnami/minio/data #to avoid anonymous volumes being created
+      - minio-certs:/certs #to avoid anonymous volumes being created
   fastapi:
     build:
       context: ..
