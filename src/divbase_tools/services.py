@@ -50,7 +50,7 @@ def list_files_command(bucket_name: str) -> list[str]:
 
 def download_files_command(
     bucket_name: str, all_files: list[str], download_dir: Path, bucket_version: str
-) -> list[str]:
+) -> list[Path]:
     s3_file_manager = create_s3_file_manager()
 
     if not download_dir.is_dir():

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 query_app = typer.Typer(help="Query the VCF files stored in the bucket.", no_args_is_help=True)
 
+DEFAULT_METADATA_TSV = Path("sample_metadata.tsv")
 
 TSV_FILTER_ARGUEMENT = typer.Option(
     None,
@@ -45,7 +46,7 @@ BCFTOOLS_ARGUEMENT = typer.Option(
 @query_app.command("tsv")
 def tsv_query(
     file: Path = typer.Option(
-        default=Path("./sample_metadata.tsv"),
+        default=Path(DEFAULT_METADATA_TSV),
         help="Path to the tsv metadata file.",
     ),
     filter: str = typer.Argument(
@@ -107,7 +108,7 @@ def tsv_query(
 @query_app.command("bcftools-pipe")
 def pipe_query(
     tsv_file: Path = typer.Option(
-        default=Path("./sample_metadata.tsv"),
+        default=Path(DEFAULT_METADATA_TSV),
         help="Path to the tsv metadata file.",
     ),
     tsv_filter: str = TSV_FILTER_ARGUEMENT,

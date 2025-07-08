@@ -7,9 +7,8 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from divbase_tools.queries import SidecarQueryManager
 from divbase_tools.task_history import get_task_history
-from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.tasks import bcftools_full_query_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 
@@ -33,29 +32,15 @@ def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str =
 
     TODO: user_name would later be determined by the authentication system.
     """
-    sidecar_manager = SidecarQueryManager(file=TSV_FILE).run_query(filter_string=tsv_filter)
-
-    unique_sampleIDs = sidecar_manager.get_unique_values("Sample_ID")
-    unique_filenames = sidecar_manager.get_unique_values("Filename")
-    sample_and_filename_subset = sidecar_manager.query_result[["Sample_ID", "Filename"]]
-    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
-
-    bcftools_inputs = {
-        "sample_and_filename_subset": serialized_samples,
-        "sampleIDs": unique_sampleIDs,
-        "filenames": unique_filenames,
-    }
-    # TODO - assuming all files needed already available locally.
-
     task_kwargs = {
+        "tsv_filter": tsv_filter,
         "command": command,
-        "bcftools_inputs": bcftools_inputs,
-        "submitter": user_name,
         "bucket_name": bucket_name,
+        "user_name": user_name,
     }
 
-    result = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
-    return result.id
+    results = bcftools_full_query_task.apply_async(kwargs=task_kwargs)
+    return results.id
 
 
 @app.get("/jobs/")

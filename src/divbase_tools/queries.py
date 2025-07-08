@@ -51,11 +51,7 @@ def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> Sidecar
     sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
     serialized_samples = sample_and_filename_subset.to_dict(orient="records")
 
-    # TODO, these should raise error instead.
-    # if not unique_query_results.get("filenames"):
-    #     logger.error("No files found matching your query criteria. Cannot proceed with bcftools commands.")
-    # if not unique_query_results.get("sampleIDs"):
-    #     logger.error("No samples found matching your query criteria. Cannot proceed with bcftools commands.")
+    # TODO - we should handle the case where no samples match the query.
 
     return SidecarQueryResult(
         sample_and_filename_subset=serialized_samples,
@@ -65,9 +61,22 @@ def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> Sidecar
     )
 
 
+@dataclass
+class BCFToolsInput:
+    """
+    Contains the inputs required to run a bcftools query.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    sampleIDs: List[str]
+    filenames: List[str]
+
+
 class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
+
+    # TODO - support different file paths for input files.
 
     Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
     The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container

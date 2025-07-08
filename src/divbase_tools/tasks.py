@@ -1,16 +1,18 @@
+import dataclasses
 import logging
 import os
 from pathlib import Path
 
 from celery import Celery
 
-from divbase_tools.queries import BcftoolsQueryManager
-from divbase_tools.s3_client import create_s3_file_manager
+from divbase_tools.cli_commands.query_cli import DEFAULT_METADATA_TSV
+from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
+from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 
-broker_url = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
-result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
+RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
-app = Celery("divbase_tools", broker=broker_url, backend=result_backend)
+app = Celery("divbase_tools", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Redis-specific config
 app.conf.update(
@@ -24,6 +26,63 @@ app.conf.update(
 logger = logging.getLogger(__name__)
 
 
+@app.task(name="tasks.sample_metadata_query")
+def sample_metadata_query_task():
+    """
+    Run a sample metadata query task as a Celery task.
+    TODO:
+    """
+    pass
+
+
+@app.task(name="tasks.bcftools_query")
+def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+    """
+    Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
+
+    TODO - how MinIO URL is handled needs a lot of thought here.
+    Unlike rest of API, might not be in same "local network"
+    """
+    task_id = bcftools_full_query_task.request.id
+    logger.info(f"Starting bcftools_query_task with Celery, task ID: {task_id}")
+
+    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
+    download_sample_metadata(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+
+    metadata_result = run_sidecar_metadata_query(
+        file=DEFAULT_METADATA_TSV,
+        filter_string=tsv_filter,
+    )
+
+    print(f"Metadata result: {metadata_result}")
+
+    _ = download_vcf_files(
+        files_to_download=metadata_result.filenames,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+    )
+
+    bcftools_inputs = dataclasses.asdict(
+        BCFToolsInput(
+            sample_and_filename_subset=metadata_result.sample_and_filename_subset,
+            sampleIDs=metadata_result.sampleIDs,
+            filenames=metadata_result.filenames,
+        )
+    )
+
+    try:
+        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs)
+    except Exception as e:
+        logger.error(f"Error in bcftools task: {str(e)}")
+        return {"status": "error", "error": str(e), "task_id": task_id}
+
+    if bucket_name:
+        upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+
+    return {"status": "completed", "output_file": f"{output_file}", "submitter": "celery"}
+
+
 @app.task(name="tasks.bcftools_pipe")
 def bcftools_pipe_task(
     command: str,
@@ -32,6 +91,7 @@ def bcftools_pipe_task(
     bucket_name: str | None = None,
 ):
     """
+    NOTE: THIS COMMAND WILL BE DEPRECIATED SOON, use bcftools_full_query_task instead.
     Run pipe_query_command as a Celery task.
 
     TODO - bucket_name is currently optional so query_cli tests works, but will later be required.
@@ -42,6 +102,8 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools pipe task with Celery task ID: {task_id}")
 
+    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
     # TODO - move dload of metadata file + filtering of tsv here, then download of files from S3 if needed.
 
     try:
@@ -51,16 +113,38 @@ def bcftools_pipe_task(
         return {"status": "error", "error": str(e), "submitter": submitter}
 
     if bucket_name:
-        upload_results_file(output_file=Path(output_file), bucket_name=bucket_name)
+        upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
     return {"status": "completed", "output_file": f"{output_file}", "submitter": submitter}
 
 
-def upload_results_file(output_file: Path, bucket_name: str) -> None:
+def download_sample_metadata(bucket_name: str, s3_file_manager: S3FileManager) -> Path:
+    """
+    Download the metadata file from the specified S3 bucket.
+    """
+    return s3_file_manager.download_files(
+        objects={DEFAULT_METADATA_TSV.name: None},
+        download_dir=Path.cwd(),
+        bucket_name=bucket_name,
+    )[0]
+
+
+def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
+    """
+    Fetch input VCF files for bcftools run from the s3 bucket.
+    """
+    objects = {file_name: None for file_name in files_to_download}
+    return s3_file_manager.download_files(
+        objects=objects,
+        download_dir=Path.cwd(),
+        bucket_name=bucket_name,
+    )
+
+
+def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
     Upon completion of the task, upload the results file to the specified bucket.
     """
-    s3_file_manager = create_s3_file_manager()
     _ = s3_file_manager.upload_files(
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
