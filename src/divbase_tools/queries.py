@@ -386,7 +386,7 @@ class SidecarQueryManager:
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
         except Exception as e:
-            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file", error_details=e) from e
+            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
