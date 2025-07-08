@@ -11,4 +11,5 @@ COPY src/ ./src/
 
 RUN pip install --upgrade pip && pip install -e .
 
-ENTRYPOINT ["celery", "-A", "divbase_tools.tasks"]
+# host needs to be set to 0.0.0.0 to be accessible from outside the container
+CMD ["uvicorn", "divbase_tools.divbase_api:app", "--host", "0.0.0.0", "--port", "8000"]

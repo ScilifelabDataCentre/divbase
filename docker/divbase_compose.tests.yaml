@@ -1,4 +1,4 @@
-name: divbase-job-system-tests
+name: divbase-tests
 services:
   rabbitmq:
     ports: !override # port mapping is additive when merging compose files, unless overridden like this
@@ -18,3 +18,13 @@ services:
     volumes: !reset []
     tmpfs:
       - /data/
+  minio:
+    ports: !override
+      - "9002:9000"
+      - "9003:9001"
+    volumes: !reset []
+    tmpfs:
+      - /data/
+  fastapi:
+    ports: !override
+      - 8001:8000

@@ -1,4 +1,4 @@
-name: divbase-job-system
+name: divbase
 services:
   rabbitmq:
     image: "rabbitmq:alpine"
@@ -9,6 +9,8 @@ services:
       retries: 5
     ports:
       - 5672:5672
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
   redis:
     image: redis:alpine
     healthcheck:
@@ -69,6 +71,50 @@ services:
       ]
     volumes:
       - flower-data:/data
+  minio:
+    image: bitnami/minio:2025.5.24
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: badpassword
+    command: server --console-address ":9001" /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    user: "0:0" #for local dev only! To avoid volume permission issues with Docker on macOS
+    volumes:
+      - minio-data:/data
+      - minio-bitnami-data:/bitnami/minio/data #to avoid anonymous volumes being created
+      - minio-certs:/certs #to avoid anonymous volumes being created
+  fastapi:
+    build:
+      context: ..
+      dockerfile: docker/fastapi.dockerfile
+    ports:
+      - 8000:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+    - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
+    - FLOWER_USER=floweradmin
+    - FLOWER_PASSWORD=badpassword
+    - DIVBASE_USER=divbase_user_set_in_compose_file
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
+  rabbitmq-data:
   redis-data:
   flower-data:
+  minio-data:
+  minio-bitnami-data:
+  minio-certs:

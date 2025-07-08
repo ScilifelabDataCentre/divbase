@@ -10,14 +10,13 @@ RUN apk update && \
     musl-dev \
     python3-dev \
     build-base \
-    docker \
     ca-certificates \
     curl \
+    curl-dev \
     libffi-dev \
     zlib-dev \
     bzip2-dev \
     xz-dev \
-    curl-dev \
     openssl-dev \
     perl-dev
 
