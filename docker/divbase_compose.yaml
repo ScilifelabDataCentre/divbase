@@ -85,7 +85,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    user: "0:0" #for local dev, run minio volume as root to avoid permission issues
+    user: "0:0" #for local dev only! To avoid volume permission issues with Docker on macOS
     volumes:
       - minio-data:/data
       - minio-bitnami-data:/bitnami/minio/data #to avoid anonymous volumes being created
