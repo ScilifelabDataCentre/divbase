@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from time import sleep
 
 from celery import Celery
 
@@ -22,6 +23,19 @@ app.conf.update(
 )
 
 logger = logging.getLogger(__name__)
+
+
+@app.task(name="tasks.simulate_quick_task")
+def simulate_quick_task(wait_time: int = 2):
+    """
+    A simple task to simulate a quick operation.
+    Intended for testing of celery concurrency and task management.
+    """
+    task_id = simulate_quick_task.request.id
+    logger.info(f"Starting quick task with Celery task ID: {task_id}")
+
+    sleep(wait_time)
+    return {"status": "completed", "message": "Quick task completed successfully."}
 
 
 @app.task(name="tasks.bcftools_pipe")
