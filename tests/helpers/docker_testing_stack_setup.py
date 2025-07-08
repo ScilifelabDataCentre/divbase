@@ -9,7 +9,9 @@ import time
 
 DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
 DOCKER_COMPOSE_OVERIIDE_FILE = "docker/divbase_compose.tests.yaml"
-COMPOSE_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} up -d")
+COMPOSE_COMMAND = shlex.split(
+    f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} up -d --build"
+)
 
 STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} down -v")
 
