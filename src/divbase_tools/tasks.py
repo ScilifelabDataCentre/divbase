@@ -26,16 +26,25 @@ app.conf.update(
 logger = logging.getLogger(__name__)
 
 
-@app.task(name="tasks.sample_metadata_query")
-def sample_metadata_query_task():
+@app.task(name="tasks.sample_metadata_query", tags=["quick"])
+def sample_metadata_query_task(tsv_filter: str, bucket_name: str) -> dict:
     """
     Run a sample metadata query task as a Celery task.
-    TODO:
     """
-    pass
+    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
+    download_sample_metadata(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+
+    metadata_result = run_sidecar_metadata_query(
+        file=DEFAULT_METADATA_TSV,
+        filter_string=tsv_filter,
+    )
+    logger.info(f"Type of metadata_result: {type(metadata_result)}")
+    # celery serializes the return value, hence conversion to dict.
+    return dataclasses.asdict(metadata_result)
 
 
-@app.task(name="tasks.bcftools_query")
+@app.task(name="tasks.bcftools_query", tags=["slow"])
 def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -44,7 +53,7 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
     Unlike rest of API, might not be in same "local network"
     """
     task_id = bcftools_full_query_task.request.id
-    logger.info(f"Starting bcftools_query_task with Celery, task ID: {task_id}")
+    logger.info(f"Starting bcftools_full_query_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
@@ -54,8 +63,6 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
         file=DEFAULT_METADATA_TSV,
         filter_string=tsv_filter,
     )
-
-    print(f"Metadata result: {metadata_result}")
 
     _ = download_vcf_files(
         files_to_download=metadata_result.filenames,
@@ -81,41 +88,6 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
         upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
     return {"status": "completed", "output_file": f"{output_file}", "submitter": "celery"}
-
-
-@app.task(name="tasks.bcftools_pipe")
-def bcftools_pipe_task(
-    command: str,
-    bcftools_inputs: dict,
-    submitter: str | None,
-    bucket_name: str | None = None,
-):
-    """
-    NOTE: THIS COMMAND WILL BE DEPRECIATED SOON, use bcftools_full_query_task instead.
-    Run pipe_query_command as a Celery task.
-
-    TODO - bucket_name is currently optional so query_cli tests works, but will later be required.
-
-    The return messages defined here can be fetched by:
-    result = app.AsyncResult(task_id); result.get()
-    """
-    task_id = bcftools_pipe_task.request.id
-    logger.info(f"Starting bcftools pipe task with Celery task ID: {task_id}")
-
-    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
-
-    # TODO - move dload of metadata file + filtering of tsv here, then download of files from S3 if needed.
-
-    try:
-        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs)
-    except Exception as e:
-        logger.error(f"Error in bcftools task: {str(e)}")
-        return {"status": "error", "error": str(e), "submitter": submitter}
-
-    if bucket_name:
-        upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-
-    return {"status": "completed", "output_file": f"{output_file}", "submitter": submitter}
 
 
 def download_sample_metadata(bucket_name: str, s3_file_manager: S3FileManager) -> Path:

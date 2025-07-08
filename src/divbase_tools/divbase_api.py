@@ -1,5 +1,7 @@
 """
 The API server for DivBase.
+
+TODO: user_name would later be determined by the authentication system.
 """
 
 from pathlib import Path
@@ -8,7 +10,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from divbase_tools.task_history import get_task_history
-from divbase_tools.tasks import bcftools_full_query_task
+from divbase_tools.tasks import bcftools_full_query_task, sample_metadata_query_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 
@@ -25,12 +27,34 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/jobs/")
-def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+@app.get("/query/")
+def get_jobs_by_user(user_name: str = "Default User"):
     """
-    Create a new query job in the specified bucket.
-
     TODO: user_name would later be determined by the authentication system.
+    """
+    task_items = get_task_history()
+    return task_items
+
+
+@app.post("/query/sample-metadata/")
+def sample_metadata_query(tsv_filter: str, bucket_name: str):
+    """
+    Create a new bcftools query job in the specified bucket.
+    """
+    task_kwargs = {
+        "tsv_filter": tsv_filter,
+        "bucket_name": bucket_name,
+    }
+
+    results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
+    result_dict = results.get(timeout=10)
+    return result_dict
+
+
+@app.post("/query/bcftools-pipe/")
+def create_bcftools_jobs(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+    """
+    Create a new bcftools query job in the specified bucket.
     """
     task_kwargs = {
         "tsv_filter": tsv_filter,
@@ -41,15 +65,6 @@ def create_job(tsv_filter: str, command: str, bucket_name: str, user_name: str =
 
     results = bcftools_full_query_task.apply_async(kwargs=task_kwargs)
     return results.id
-
-
-@app.get("/jobs/")
-def get_jobs_by_user(user_name: str = "Default User"):
-    """
-    TODO: user_name would later be determined by the authentication system.
-    """
-    task_items = get_task_history()
-    return task_items
 
 
 def main():

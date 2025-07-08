@@ -34,8 +34,8 @@ class SidecarQueryResult:
     """
 
     sample_and_filename_subset: List[Dict[str, str]]
-    sampleIDs: List[str]
-    filenames: List[str]
+    unique_sample_ids: List[str]
+    unique_filenames: List[str]
     query_message: str
 
 
@@ -46,8 +46,9 @@ def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> Sidecar
     query_result = sidecar_manager.query_result
     query_message = sidecar_manager.query_message
 
-    unique_sampleIDs = sidecar_manager.get_unique_values("Sample_ID")
     unique_filenames = sidecar_manager.get_unique_values("Filename")
+    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
+
     sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
     serialized_samples = sample_and_filename_subset.to_dict(orient="records")
 
@@ -55,8 +56,8 @@ def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> Sidecar
 
     return SidecarQueryResult(
         sample_and_filename_subset=serialized_samples,
-        sampleIDs=unique_sampleIDs,
-        filenames=unique_filenames,
+        unique_sample_ids=unique_sample_ids,
+        unique_filenames=unique_filenames,
         query_message=query_message,
     )
 
