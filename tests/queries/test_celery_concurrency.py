@@ -1,11 +1,19 @@
+import os
 from time import sleep
 
 import pytest
+import requests
 from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_tools.tasks import app, simulate_quick_task
+from divbase_tools.tasks import app, simulate_long_task, simulate_quick_task
+
+FLOWER_URL_TESTING_STACK = (
+    "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
+)
+flower_user = os.environ.get("FLOWER_USER")
+flower_password = os.environ.get("FLOWER_PASSWORD")
 
 
 @pytest.mark.integration
@@ -63,10 +71,68 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_ce
         wait_for_celery_task_completion(task_id=result.id, max_wait=30)
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "tasks_to_test, wait_time, expected_queue",
+    [
+        (simulate_quick_task, 1, "quick"),  # Quick task with a short wait time
+        (simulate_long_task, 5, "long"),
+    ],
+)
+def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time, expected_queue):
+    """
+    This test checks that the task routing is set up correctly for the 'simulate_quick_task' task.
+    A worker can be assigned to multiple queues, so the test should check that the task is routed to the correct queue,
+    in this case the 'quick' queue. Getting logs on which worker executeted the task is easiest done via the Flower API.
+
+    The logic of the test is as follows:
+    1. Get the current task routes and the active queues of the workers.
+    2. Create a mapping of queues to workers.
+    3. Submit a task that is routed to go to the to the 'quick' queue (defined in tasks.py, registered in the app.conf.task_routes).
+    5. Use the Flower API to get the task result and check which worker executed the task.
+    6. Assert that the worker is in the list of workers assigned to the 'quick' queue.
+    """
+    current_task_routes = current_app.conf.task_routes
+    queue_info = current_app.control.inspect().active_queues()
+
+    current_queue_to_workers_assignment = {}
+    for worker, queues in queue_info.items():
+        for queue in queues:
+            qname = queue["name"]
+            if qname not in current_queue_to_workers_assignment:
+                current_queue_to_workers_assignment[qname] = []
+            current_queue_to_workers_assignment[qname].append(worker)
+
+    result = tasks_to_test.apply_async(wait_time=wait_time)
+
+    task_id = result.id
+    assert current_task_routes["tasks.simulate_quick_task"]
+
+    wait_for_celery_task_completion(task_id=task_id, max_wait=30)
+    flower_url = f"{FLOWER_URL_TESTING_STACK}/api/tasks"
+    auth = (flower_user, flower_password)
+
+    try:
+        response = requests.get(flower_url, auth=auth, timeout=3)
+    except requests.exceptions.RequestException as e:
+        pytest.fail(f"Could not connect to Flower API: {e}")
+
+    if response.ok:
+        worker = response.json().get(task_id, {}).get("worker")
+        assert worker in current_queue_to_workers_assignment.get(expected_queue), (
+            f"Expected task {task_id} to be executed by a worker in the {expected_queue} queue, but got {worker}"
+        )
+    else:
+        print(f"Task {task_id} not found in Flower.")
+        raise AssertionError(f"Task {task_id} not found in Flower. Response: {response.text}")
+
+
+####
+## Helper functions here for now to keep the experiment branch more contained. Should be moved to conftest later.
 def get_concurrency_of_worker_containers() -> dict:
     """
     Return the concurrency for each running celery worker.
-    In Python, you can use the `app.control.inspect().stats()` method to get the concurrency of each worker.
+    In Python, use the `app.control.inspect().stats()` method to get the concurrency of each worker.
     (From the Celery CLI in the terminal, it is: celery -A divbase_tools.tasks inspect stats)
     """
 

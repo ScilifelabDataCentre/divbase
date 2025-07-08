@@ -22,6 +22,12 @@ app.conf.update(
     result_serializer="json",
 )
 
+app.conf.task_routes = {
+    "tasks.simulate_quick_task": {"queue": "quick"},
+    "tasks.simulate_long_task": {"queue": "long"},
+    "tasks.bcftools_pipe": {"queue": "long"},
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,6 +42,19 @@ def simulate_quick_task(wait_time: int = 2):
 
     sleep(wait_time)
     return {"status": "completed", "message": "Quick task completed successfully."}
+
+
+@app.task(name="tasks.simulate_long_task")
+def simulate_long_task(wait_time: int = 20):
+    """
+    A simple task to simulate a long(er) operation.
+    Intended for testing of celery concurrency and task management.
+    """
+    task_id = simulate_long_task.request.id
+    logger.info(f"Starting long task with Celery task ID: {task_id}")
+
+    sleep(wait_time)
+    return {"status": "completed", "message": "Long task completed successfully."}
 
 
 @app.task(name="tasks.bcftools_pipe")
