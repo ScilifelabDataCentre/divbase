@@ -11,7 +11,7 @@ If bcftools query:
     After task completed, a merged VCF file will be added to the bucket which can be downloaded by the user.
 
 
-TODOs:
+TODO:
 - Ability to download results file given task id with the file cli?
 -
 """
@@ -35,24 +35,23 @@ logger = logging.getLogger(__name__)
 DIVBASE_API_URL = "http://localhost:8000"
 DEFAULT_METADATA_TSV = Path("sample_metadata.tsv")
 
-TSV_FILTER_ARGUEMENT = typer.Option(
-    None,
-    help="""
-    String consisting of keys:values in the tsv file to filter on.
-    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-    are the column header names in the tsv, and values are the column values. 
-    Multiple values for a key are separated by commas, and multiple keys are 
-    separated by semicolons. When multple keys are provided, an intersect query 
-    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-    """,
-)
-
 BCFTOOLS_ARGUEMENT = typer.Option(
     ...,
     help="""
         String consisting of the bcftools command to run on the files returned by the tsv query.
         """,
 )
+
+
+# In 1 command this is required, other optional, hence only defining the text up here.
+TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to filter on.
+    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
+    are the column header names in the tsv, and values are the column values. 
+    Multiple values for a key are separated by commas, and multiple keys are 
+    separated by semicolons. When multple keys are provided, an intersect query 
+    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
+    """
+
 
 query_app = typer.Typer(
     help="Run queries on the VCF files stored in the bucket. Queries are run on the DivBase API", no_args_is_help=True
@@ -63,15 +62,7 @@ query_app = typer.Typer(
 def sample_metadata_query(
     filter: str = typer.Argument(
         ...,
-        help="""
-        String consisting of keys:values in the tsv file to filter on.
-        The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-        are the column header names in the tsv, and values are the column values. 
-        Multiple values for a key are separated by commas, and multiple keys are 
-        separated by semicolons. When multple keys are provided, an intersect query 
-        will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-        Use '' (empty string in quotes) to return ALL records.
-        """,
+        help=TSV_FILTER_HELP_TEXT,
     ),
     show_sample_results: bool = typer.Option(
         default=False,
@@ -108,7 +99,7 @@ def sample_metadata_query(
 
 @query_app.command("bcftools-pipe")
 def pipe_query(
-    tsv_filter: str = TSV_FILTER_ARGUEMENT,
+    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
     command: str = BCFTOOLS_ARGUEMENT,
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
@@ -123,7 +114,7 @@ def pipe_query(
     TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
     TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
-    Submit a query job (aka  bcftools-pipe) to the DivBase API."""
+    """
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
 
     params = {"tsv_filter": tsv_filter, "command": command, "bucket_name": bucket_name}
@@ -136,14 +127,18 @@ def pipe_query(
 
 @query_app.command("task-status")
 def check_status(
-    bucket_name: str | None = BUCKET_NAME_OPTION,
+    task_id: str | None = typer.Argument(None, help="Optional task id to check the status of a specific query job."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Check status of all query jobs submitted by the user.
 
     TODO - non bcftools query jobs should not show up here (but this should be handled by the API).
+    TODO - Consider if representation of single task should be different from the list of tasks.
     """
-    task_items = httpx.get(f"{DIVBASE_API_URL}/query/").json()
+    if task_id:
+        task_items = httpx.get(f"{DIVBASE_API_URL}/query/{task_id}").json()
+    else:
+        task_items = httpx.get(f"{DIVBASE_API_URL}/query/").json()
     task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
     task_history_manager.print_task_history()

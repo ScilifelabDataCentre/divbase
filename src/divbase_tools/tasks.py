@@ -45,15 +45,15 @@ def sample_metadata_query_task(tsv_filter: str, bucket_name: str) -> dict:
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
-def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+def bcftools_pipe_task(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
 
     TODO - how MinIO URL is handled needs a lot of thought here.
     Unlike rest of API, might not be in same "local network"
     """
-    task_id = bcftools_full_query_task.request.id
-    logger.info(f"Starting bcftools_full_query_task with Celery, task ID: {task_id}")
+    task_id = bcftools_pipe_task.request.id
+    logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
@@ -65,7 +65,7 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
     )
 
     _ = download_vcf_files(
-        files_to_download=metadata_result.filenames,
+        files_to_download=metadata_result.unique_filenames,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
@@ -73,8 +73,8 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
             sample_and_filename_subset=metadata_result.sample_and_filename_subset,
-            sampleIDs=metadata_result.sampleIDs,
-            filenames=metadata_result.filenames,
+            sampleIDs=metadata_result.unique_sample_ids,
+            filenames=metadata_result.unique_filenames,
         )
     )
 
@@ -84,10 +84,9 @@ def bcftools_full_query_task(tsv_filter: str, command: str, bucket_name: str, us
         logger.error(f"Error in bcftools task: {str(e)}")
         return {"status": "error", "error": str(e), "task_id": task_id}
 
-    if bucket_name:
-        upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
-    return {"status": "completed", "output_file": f"{output_file}", "submitter": "celery"}
+    return {"status": "completed", "output_file": output_file, "submitter": "celery"}
 
 
 def download_sample_metadata(bucket_name: str, s3_file_manager: S3FileManager) -> Path:

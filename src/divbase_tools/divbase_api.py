@@ -10,7 +10,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from divbase_tools.task_history import get_task_history
-from divbase_tools.tasks import bcftools_full_query_task, sample_metadata_query_task
+from divbase_tools.tasks import bcftools_pipe_task, sample_metadata_query_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 
@@ -33,6 +33,12 @@ def get_jobs_by_user(user_name: str = "Default User"):
     TODO: user_name would later be determined by the authentication system.
     """
     task_items = get_task_history()
+    return task_items
+
+
+@app.get("/query/{task_id}")
+def get_task_by_id(task_id: str):
+    task_items = get_task_history(task_id=task_id)
     return task_items
 
 
@@ -63,7 +69,7 @@ def create_bcftools_jobs(tsv_filter: str, command: str, bucket_name: str, user_n
         "user_name": user_name,
     }
 
-    results = bcftools_full_query_task.apply_async(kwargs=task_kwargs)
+    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
     return results.id
 
 
