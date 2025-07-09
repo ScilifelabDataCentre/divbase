@@ -1,7 +1,7 @@
 """
-Setup for pytest fixtures for CLI commands.
+Setup for pytest fixtures for e2e testing of the CLI commands.
 
-Pytest fixtures set up (and tear down) a MinIO server on localhost with test buckets and files.
+Pytest fixtures set up (and tear down) a test environment with the full DivBase stack running locally,
 
 The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
@@ -34,6 +34,7 @@ def CONSTANTS():
         "MINIO_URL": MINIO_URL,
         "DEFAULT_BUCKET": "bucket1",
         "NON_DEFAULT_BUCKET": "bucket2",
+        "QUERY_BUCKET": "query-bucket",
         "CLEANED_BUCKET": "cleaned-bucket",
         "EMPTY_BUCKET": "empty-bucket",
         "BUCKET_CONTENTS": BUCKETS,
