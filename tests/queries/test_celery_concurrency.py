@@ -75,24 +75,57 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_ce
 @pytest.mark.parametrize(
     "tasks_to_test, wait_time, expected_queue",
     [
-        (simulate_quick_task, 1, "quick"),  # Quick task with a short wait time
+        (simulate_quick_task, 1, "quick"),
         (simulate_long_task, 5, "long"),
     ],
 )
 def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time, expected_queue):
     """
-    This test checks that the task routing is set up correctly for the 'simulate_quick_task' task.
-    A worker can be assigned to multiple queues, so the test should check that the task is routed to the correct queue,
-    in this case the 'quick' queue. Getting logs on which worker executeted the task is easiest done via the Flower API.
+    This test checks that the task routing is set up correctly for the 'simulate_quick_task' and 'simulate_long_task' tasks.
+    A worker can be assigned to multiple queues, so the test should check that each task is routed to the correct queue (either via static or dynamic task routing).
+    Getting logs on which worker executeted the task is easiest done via the Flower API.
 
     The logic of the test is as follows:
-    1. Get the current task routes and the active queues of the workers.
-    2. Create a mapping of queues to workers.
-    3. Submit a task that is routed to go to the to the 'quick' queue (defined in tasks.py, registered in the app.conf.task_routes).
-    5. Use the Flower API to get the task result and check which worker executed the task.
-    6. Assert that the worker is in the list of workers assigned to the 'quick' queue.
+    1. Get the current task routes and assert that the task to be tested by the current test parameter is in the current task routes.
+       The logic is different for static and dynamic routing (see also more details below):
+       - If static routing is used, the task should be in the current task routes dictionary.
+       - If dynamic routing is used, the current task routes is a tuple of functions that each can be called to return a dictionary with routing information.
+    2. Get the active queues of the workers and create a mapping of queues to workers.
+    3. Submit a task that is routed to go to the to the queue defined in the router in tasks.py (and registered in the app.conf.task_routes).
+    4. Use the Flower API to get the task result and check which worker executed the task and assert that the worker is in the list of workers assigned to the
+       expected_queue of the current test parameter
+
+    More details on the logic for asserting static vs dynamic routing for tasks in step 1:
+    - if static routing is used, current_task_routes is a dict. the functions in the test parameter tasks_to_test are celery tasks and thus have a .name attribute
+    - If dynamic routing is used, current_task_routes is a tuple of functions
+      There can be multiple dynamic router functions in the tuple, and each return value from each dynamic router function
+      becomes an function object that can be called to route a task.
+      each function object folow the this pattern from the Celery router docs:
+      'route_task(name, args, kwargs, options, task=None, **kw)'
+      By calling the function object with the task name and other parameters, a dictionary with the routing information is
+      returned (comparable to the dict of the static routing).
     """
+    ## Step 1
     current_task_routes = current_app.conf.task_routes
+
+    if isinstance(current_task_routes, dict):
+        # For when static routing is used in the celery app
+        assert tasks_to_test.name in current_task_routes
+    if isinstance(current_task_routes, tuple):
+        # For when dynamic routing is used in the celery app
+        route_dict = None
+        for router_function_object in current_task_routes:
+            route_dict = router_function_object(
+                name=tasks_to_test.name, args=None, kwargs={}, options={}, task=tasks_to_test
+            )
+            if route_dict:
+                break
+        assert route_dict is not None, f"No route found for task {tasks_to_test.name} using dynamic router"
+        assert route_dict.get("queue") == expected_queue, (
+            f"Dynamic router did not route {tasks_to_test.name} to expected queue '{expected_queue}', got '{route_dict.get('queue')}'"
+        )
+
+    ## Step 2
     queue_info = current_app.control.inspect().active_queues()
 
     current_queue_to_workers_assignment = {}
@@ -103,11 +136,11 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time,
                 current_queue_to_workers_assignment[qname] = []
             current_queue_to_workers_assignment[qname].append(worker)
 
+    ## Step 3
     result = tasks_to_test.apply_async(wait_time=wait_time)
-
     task_id = result.id
-    assert current_task_routes["tasks.simulate_quick_task"]
 
+    ## Step 4
     wait_for_celery_task_completion(task_id=task_id, max_wait=30)
     flower_url = f"{FLOWER_URL_TESTING_STACK}/api/tasks"
     auth = (flower_user, flower_password)
@@ -128,7 +161,7 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time,
 
 
 ####
-## Helper functions here for now to keep the experiment branch more contained. Should be moved to conftest later.
+## Helper functions here for now to keep the experiment branch more contained. Should be moved to conftest later if we decide to merge the branch.
 def get_concurrency_of_worker_containers() -> dict:
     """
     Return the concurrency for each running celery worker.

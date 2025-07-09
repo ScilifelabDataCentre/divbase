@@ -8,6 +8,8 @@ from celery import Celery
 from divbase_tools.queries import BcftoolsQueryManager
 from divbase_tools.s3_client import create_s3_file_manager
 
+logger = logging.getLogger(__name__)
+
 broker_url = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
@@ -22,13 +24,34 @@ app.conf.update(
     result_serializer="json",
 )
 
-app.conf.task_routes = {
-    "tasks.simulate_quick_task": {"queue": "quick"},
-    "tasks.simulate_long_task": {"queue": "long"},
-    "tasks.bcftools_pipe": {"queue": "long"},
-}
 
-logger = logging.getLogger(__name__)
+def dynamic_router(name, args, kwargs, options, task=None, **kw):
+    """
+    Function to dynamically route tasks based on their name and arguments.
+    The input arguments of the function are taken from the Celery docs.
+
+    Advanced logic can be implemented here to route tasks to different queues
+    based on the task names or arguments.
+
+    For now, just use a simple routing based on substrings in the task name.
+
+    To use static routing instead, use the following the call instead of the dynamic_router function:
+        app.conf.task_routes = {
+        "tasks.simulate_quick_task": {"queue": "quick"},
+        "tasks.simulate_long_task": {"queue": "long"},
+        "tasks.bcftools_pipe": {"queue": "long"},
+        }
+    """
+    if "quick" in name:
+        return {"queue": "quick"}
+    if "long" in name:
+        return {"queue": "long"}
+    if name == "tasks.bcftools_pipe":
+        return {"queue": "long"}
+    return {"queue": "celery"}
+
+
+app.conf.task_routes = (dynamic_router,)
 
 
 @app.task(name="tasks.simulate_quick_task")
@@ -49,6 +72,8 @@ def simulate_long_task(wait_time: int = 20):
     """
     A simple task to simulate a long(er) operation.
     Intended for testing of celery concurrency and task management.
+    Code duplication with simulate_quick_task is intentional to be able test different
+    task routing for the two different tasks.
     """
     task_id = simulate_long_task.request.id
     logger.info(f"Starting long task with Celery task ID: {task_id}")
