@@ -8,7 +8,7 @@ import os
 import pytest
 
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
-from tests.helpers.minio_setup import MINIO_URL, setup_minio_data
+from tests.helpers.minio_setup import setup_minio_data
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -100,7 +100,7 @@ def sample_metadata_query(
 @query_app.command("bcftools-pipe")
 def pipe_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
- command: str = BCFTOOLS_ARGUMENT,
+    command: str = BCFTOOLS_ARGUMENT,
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
