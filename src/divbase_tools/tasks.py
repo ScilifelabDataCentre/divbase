@@ -47,7 +47,9 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
         return {"queue": "quick"}
     if "long" in name:
         return {"queue": "long"}
-    if name == "tasks.bcftools_pipe":
+    if name == "tasks.sample_metadata_query":
+        return {"queue": "quick"}
+    if name == "tasks.bcftools_query":
         return {"queue": "long"}
     return {"queue": "celery"}
 
@@ -62,25 +64,10 @@ def simulate_quick_task(wait_time: int = 2):
     Intended for testing of celery concurrency and task management.
     """
     task_id = simulate_quick_task.request.id
-    logger.info(f"Starting quick task with Celery task ID: {task_id}")
+    print(f"Starting quick task with Celery task ID: {task_id}")
 
     sleep(wait_time)
     return {"status": "completed", "message": "Quick task completed successfully."}
-
-
-@app.task(name="tasks.simulate_long_task")
-def simulate_long_task(wait_time: int = 20):
-    """
-    A simple task to simulate a long(er) operation.
-    Intended for testing of celery concurrency and task management.
-    Code duplication with simulate_quick_task is intentional to be able test different
-    task routing for the two different tasks.
-    """
-    task_id = simulate_long_task.request.id
-    logger.info(f"Starting long task with Celery task ID: {task_id}")
-
-    sleep(wait_time)
-    return {"status": "completed", "message": "Long task completed successfully."}
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])

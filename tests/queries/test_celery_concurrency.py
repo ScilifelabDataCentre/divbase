@@ -7,7 +7,7 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_tools.tasks import app, simulate_long_task, simulate_quick_task
+from divbase_tools.tasks import app, bcftools_pipe_task, sample_metadata_query_task, simulate_quick_task
 
 FLOWER_URL_TESTING_STACK = (
     "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
@@ -17,7 +17,10 @@ flower_password = os.environ.get("FLOWER_PASSWORD")
 
 
 @pytest.mark.integration
-def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_celery_task_completion):
+def test_concurrency_of_worker_containers_connected_to_default_queue(
+    wait_for_celery_task_completion,
+    concurrency_of_default_queue,
+):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
     unless specifically set when initiating the celery app, the concurrency of the worker is based on the number of CPUs available on the host machine.
@@ -44,13 +47,10 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_ce
     except Exception as e:
         pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
 
-    wait_time = 5
-    max_concurrency_per_worker = get_concurrency_of_worker_containers()
-    concurrency_of_workers_connected_to_default_queue = get_concurrency_of_default_queue(max_concurrency_per_worker)
-    total_concurrency_on_host = sum(concurrency_of_workers_connected_to_default_queue.values())
-    task_count = total_concurrency_on_host + 1
+    total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
+    task_count = total_default_queue_concurrency_on_host + 1
 
-    async_results = [simulate_quick_task.apply_async(wait_time=wait_time, queue="celery") for _ in range(task_count)]
+    async_results = [simulate_quick_task.apply_async(wait_time=2, queue="celery") for _ in range(task_count)]
 
     sleep(1)
 
@@ -60,8 +60,8 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_ce
     started_count = states.count("STARTED")
     pending_count = states.count("PENDING")
     assert started_count > 1, "Expected multiple tasks to run concurrently"
-    assert started_count <= total_concurrency_on_host, (
-        f"Expected at most {total_concurrency_on_host} concurrent tasks on the current machine"
+    assert started_count <= total_default_queue_concurrency_on_host, (
+        f"Expected at most {total_default_queue_concurrency_on_host} concurrent tasks on the current machine"
     )
     assert pending_count == task_count - started_count, (
         "Expected more tasks to be pending when concurrency limit is exceeded"
@@ -73,15 +73,23 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(wait_for_ce
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "tasks_to_test, wait_time, expected_queue",
+    "tasks_to_test, kwargs_fixture, expected_queue",
     [
-        (simulate_quick_task, 1, "quick"),
-        (simulate_long_task, 5, "long"),
+        (
+            sample_metadata_query_task,
+            "sample_metadata_query_kwargs_fixture",
+            "quick",
+        ),
+        (
+            bcftools_pipe_task,
+            "bcftools_pipe_kwargs_fixture",
+            "long",
+        ),
     ],
 )
-def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time, expected_queue):
+def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fixture, expected_queue, request):
     """
-    This test checks that the task routing is set up correctly for the 'simulate_quick_task' and 'simulate_long_task' tasks.
+    This test checks that the task routing is set up correctly for the tasks in the test parameter.
     A worker can be assigned to multiple queues, so the test should check that each task is routed to the correct queue (either via static or dynamic task routing).
     Getting logs on which worker executeted the task is easiest done via the Flower API.
 
@@ -137,7 +145,8 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time,
             current_queue_to_workers_assignment[qname].append(worker)
 
     ## Step 3
-    result = tasks_to_test.apply_async(wait_time=wait_time)
+    task_kwargs = request.getfixturevalue(kwargs_fixture)
+    result = tasks_to_test.apply_async(kwargs=task_kwargs)
     task_id = result.id
 
     ## Step 4
@@ -158,34 +167,3 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, wait_time,
     else:
         print(f"Task {task_id} not found in Flower.")
         raise AssertionError(f"Task {task_id} not found in Flower. Response: {response.text}")
-
-
-####
-## Helper functions here for now to keep the experiment branch more contained. Should be moved to conftest later if we decide to merge the branch.
-def get_concurrency_of_worker_containers() -> dict:
-    """
-    Return the concurrency for each running celery worker.
-    In Python, use the `app.control.inspect().stats()` method to get the concurrency of each worker.
-    (From the Celery CLI in the terminal, it is: celery -A divbase_tools.tasks inspect stats)
-    """
-
-    app_stats = current_app.control.inspect().stats()
-    max_concurrency_per_worker = {}
-    for worker, stats in app_stats.items():
-        max_concurrency_per_worker[worker] = stats.get("pool", {}).get("max-concurrency")
-
-    return max_concurrency_per_worker
-
-
-def get_concurrency_of_default_queue(max_concurrency_per_worker: dict) -> dict:
-    """
-    The default queue is the 'celery' queue, which gets used by tasks that do not specify a queue.
-    To find which of the workers that are running the 'celery' queue, get the active queues of each worker.
-    Then use the worker ID to filter the max_concurrency_per_worker dictionary.
-    """
-
-    queue_info = current_app.control.inspect().active_queues()
-    for worker, queues in queue_info.items():
-        for queue in queues:
-            if queue["name"] == "celery":
-                return {worker: max_concurrency_per_worker[worker]}
