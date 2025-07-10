@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from divbase_tools.exceptions import BucketNameNotSpecifiedError
-from divbase_tools.user_config import get_default_bucket
+from divbase_tools.user_config import load_user_config
 
 
 def resolve_bucket_name(bucket_name: str | None, config_path: Path) -> str:
@@ -10,7 +10,8 @@ def resolve_bucket_name(bucket_name: str | None, config_path: Path) -> str:
     Falls back to the default bucket set in the user config if not explicitly provided.
     """
     if not bucket_name:
-        bucket_name = get_default_bucket(config_path)
+        config = load_user_config(config_path)
+        bucket_name = config.default_bucket
     if not bucket_name:
         raise BucketNameNotSpecifiedError(config_path=config_path)
 
