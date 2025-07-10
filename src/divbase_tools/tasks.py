@@ -2,7 +2,6 @@ import dataclasses
 import logging
 import os
 from pathlib import Path
-from time import sleep
 
 from celery import Celery
 
@@ -55,19 +54,6 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 
 
 app.conf.task_routes = (dynamic_router,)
-
-
-@app.task(name="tasks.simulate_quick_task")
-def simulate_quick_task(wait_time: int = 2):
-    """
-    A simple task to simulate a quick operation.
-    Intended for testing of celery concurrency and task management.
-    """
-    task_id = simulate_quick_task.request.id
-    print(f"Starting quick task with Celery task ID: {task_id}")
-
-    sleep(wait_time)
-    return {"status": "completed", "message": "Quick task completed successfully."}
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])

@@ -7,7 +7,7 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_tools.tasks import app, bcftools_pipe_task, sample_metadata_query_task, simulate_quick_task
+from divbase_tools.tasks import app, bcftools_pipe_task, sample_metadata_query_task
 
 FLOWER_URL_TESTING_STACK = (
     "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
@@ -20,6 +20,7 @@ flower_password = os.environ.get("FLOWER_PASSWORD")
 def test_concurrency_of_worker_containers_connected_to_default_queue(
     wait_for_celery_task_completion,
     concurrency_of_default_queue,
+    bcftools_pipe_kwargs_fixture,
 ):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
@@ -34,6 +35,8 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     and the test should be able to accomodate for that case. However, celery does not automatically adjust the max possible concurrency across containers so there is a risk
     that when multiple workers are assigned to the 'celery' queue (without specifying the concurrency parameter in the container), the concurrency will be higher than the CPU count
     of the host machine, which could lead to excessive load on the host machine and potentially cause the test to fail.
+
+    NOTE! This test is potentially flaky since it is dependent on timings. If the completion time for the task is less than 0.01 (which does not seem to be the case during the local dev so far), this test will likely fail.
     """
 
     try:
@@ -50,12 +53,15 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
     task_count = total_default_queue_concurrency_on_host + 1
 
-    async_results = [simulate_quick_task.apply_async(wait_time=2, queue="celery") for _ in range(task_count)]
+    async_results = [
+        bcftools_pipe_task.apply_async(kwargs=bcftools_pipe_kwargs_fixture, queue="celery") for _ in range(task_count)
+    ]
 
-    sleep(1)
+    wait_time = 0.01
+    sleep(wait_time)
 
     states = [result.state for result in async_results]
-    print(f"Task states after 1 second: {states}")
+    print(f"Task states after {wait_time} second: {states}")
 
     started_count = states.count("STARTED")
     pending_count = states.count("PENDING")
@@ -112,15 +118,16 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
       'route_task(name, args, kwargs, options, task=None, **kw)'
       By calling the function object with the task name and other parameters, a dictionary with the routing information is
       returned (comparable to the dict of the static routing).
+
+    Pytest does not allow fixtures to be used as parameters in parametrized tests. The workaround is call the fixture inside the test using request.getfixturevalue;
+    request is a pytest built-in fixture that allows the value of a fixtures to be accessed by calling the fixture name.
     """
     ## Step 1
     current_task_routes = current_app.conf.task_routes
 
-    if isinstance(current_task_routes, dict):
-        # For when static routing is used in the celery app
+    if isinstance(current_task_routes, dict):  # For when static routing is used in the celery app
         assert tasks_to_test.name in current_task_routes
-    if isinstance(current_task_routes, tuple):
-        # For when dynamic routing is used in the celery app
+    if isinstance(current_task_routes, tuple):  # For when dynamic routing is used in the celery app
         route_dict = None
         for router_function_object in current_task_routes:
             route_dict = router_function_object(
