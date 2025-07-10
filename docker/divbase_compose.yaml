@@ -80,7 +80,6 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: badpassword
-      MINIO_DEFAULT_BUCKETS: test2:versioned
     command: server --console-address ":9001" /data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]

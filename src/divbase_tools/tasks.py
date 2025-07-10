@@ -39,7 +39,6 @@ def sample_metadata_query_task(tsv_filter: str, bucket_name: str) -> dict:
         file=DEFAULT_METADATA_TSV,
         filter_string=tsv_filter,
     )
-    logger.info(f"Type of metadata_result: {type(metadata_result)}")
     # celery serializes the return value, hence conversion to dict.
     return dataclasses.asdict(metadata_result)
 
