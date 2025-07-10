@@ -43,12 +43,13 @@ def get_task_by_id(task_id: str):
 
 
 @app.post("/query/sample-metadata/")
-def sample_metadata_query(tsv_filter: str, bucket_name: str):
+def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, bucket_name: str):
     """
     Create a new bcftools query job in the specified bucket.
     """
     task_kwargs = {
         "tsv_filter": tsv_filter,
+        "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": bucket_name,
     }
 
@@ -58,13 +59,16 @@ def sample_metadata_query(tsv_filter: str, bucket_name: str):
 
 
 @app.post("/query/bcftools-pipe/")
-def create_bcftools_jobs(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+def create_bcftools_jobs(
+    tsv_filter: str, metadata_tsv_name: str, command: str, bucket_name: str, user_name: str = "Default User"
+):
     """
     Create a new bcftools query job in the specified bucket.
     """
     task_kwargs = {
         "tsv_filter": tsv_filter,
         "command": command,
+        "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": bucket_name,
         "user_name": user_name,
     }

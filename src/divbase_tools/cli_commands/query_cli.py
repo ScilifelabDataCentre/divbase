@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 DIVBASE_API_URL = "http://localhost:8000"
-DEFAULT_METADATA_TSV = Path("sample_metadata.tsv")
+DEFAULT_METADATA_TSV = "sample_metadata.tsv"
+
+METADATA_TSV_ARGUMENT = typer.Option(DEFAULT_METADATA_TSV, help="Name of the sample metadata TSV file in the bucket.")
 
 BCFTOOLS_ARGUMENT = typer.Option(
     ...,
@@ -41,7 +43,6 @@ BCFTOOLS_ARGUMENT = typer.Option(
         String consisting of the bcftools command to run on the files returned by the tsv query.
         """,
 )
-
 
 # In 1 command this is required, other optional, hence only defining the text up here.
 TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to filter on.
@@ -68,6 +69,7 @@ def sample_metadata_query(
         default=False,
         help="Print sample_ID and Filename results from the query.",
     ),
+    metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     bucket_name: str = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
@@ -81,7 +83,7 @@ def sample_metadata_query(
     """
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
 
-    params = {"tsv_filter": filter, "bucket_name": bucket_name}
+    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "bucket_name": bucket_name}
     response = httpx.post(f"{DIVBASE_API_URL}/query/sample-metadata/", params=params)
     response.raise_for_status()
 
@@ -101,6 +103,7 @@ def sample_metadata_query(
 def pipe_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
     command: str = BCFTOOLS_ARGUMENT,
+    metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
@@ -117,7 +120,12 @@ def pipe_query(
     """
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
 
-    params = {"tsv_filter": tsv_filter, "command": command, "bucket_name": bucket_name}
+    params = {
+        "tsv_filter": tsv_filter,
+        "command": command,
+        "metadata_tsv_name": metadata_tsv_name,
+        "bucket_name": bucket_name,
+    }
     response = httpx.post(f"{DIVBASE_API_URL}/query/bcftools-pipe/", params=params)
     response.raise_for_status()
 

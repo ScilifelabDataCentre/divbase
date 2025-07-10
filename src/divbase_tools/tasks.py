@@ -5,7 +5,6 @@ from pathlib import Path
 
 from celery import Celery
 
-from divbase_tools.cli_commands.query_cli import DEFAULT_METADATA_TSV
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 
@@ -27,16 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
-def sample_metadata_query_task(tsv_filter: str, bucket_name: str) -> dict:
+def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_name: str) -> dict:
     """
     Run a sample metadata query task as a Celery task.
     """
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    download_sample_metadata(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    metadata_path = download_sample_metadata(
+        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
 
     metadata_result = run_sidecar_metadata_query(
-        file=DEFAULT_METADATA_TSV,
+        file=metadata_path,
         filter_string=tsv_filter,
     )
     # celery serializes the return value, hence conversion to dict.
@@ -44,7 +45,9 @@ def sample_metadata_query_task(tsv_filter: str, bucket_name: str) -> dict:
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
-def bcftools_pipe_task(tsv_filter: str, command: str, bucket_name: str, user_name: str = "Default User"):
+def bcftools_pipe_task(
+    tsv_filter: str, command: str, metadata_tsv_name: str, bucket_name: str, user_name: str = "Default User"
+):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
 
@@ -56,10 +59,12 @@ def bcftools_pipe_task(tsv_filter: str, command: str, bucket_name: str, user_nam
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    download_sample_metadata(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    metadata_path = download_sample_metadata(
+        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
 
     metadata_result = run_sidecar_metadata_query(
-        file=DEFAULT_METADATA_TSV,
+        file=metadata_path,
         filter_string=tsv_filter,
     )
 
@@ -87,12 +92,12 @@ def bcftools_pipe_task(tsv_filter: str, command: str, bucket_name: str, user_nam
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
-def download_sample_metadata(bucket_name: str, s3_file_manager: S3FileManager) -> Path:
+def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
     """
     return s3_file_manager.download_files(
-        objects={DEFAULT_METADATA_TSV.name: None},
+        objects={metadata_tsv_name: None},
         download_dir=Path.cwd(),
         bucket_name=bucket_name,
     )[0]
