@@ -15,6 +15,11 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 BUCKETS = {
     "bucket1": ["file1.txt", "file2.txt"],
     "bucket2": ["file1.txt"],
+    "query-bucket": [
+        "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+        "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+        "sample_metadata.tsv",
+    ],
     "cleaned-bucket": [],  # this bucket is always cleaned before a test
     "empty-bucket": [],
 }
