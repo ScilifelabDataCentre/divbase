@@ -89,7 +89,10 @@ def download_files(
         download_dir=download_dir,
         bucket_version=bucket_version,
     )
-    missing_files = all_files - set(downloaded_files)
+
+    downloaded_file_names = [file.name for file in downloaded_files]
+    missing_files = all_files - set(downloaded_file_names)
+
     if missing_files:
         print("WARNING: The following files were not downloaded:")
         for file in missing_files:

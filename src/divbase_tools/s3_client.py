@@ -36,7 +36,7 @@ class S3FileManager:
                 files.append(obj["Key"])
         return files
 
-    def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[str]:
+    def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[Path]:
         """
         Download objects/files from the S3 bucket to a local directory.
 
@@ -46,7 +46,8 @@ class S3FileManager:
 
         for key, version_id in objects.items():
             dest = download_dir / Path(key).name
-            downloaded_files.append(self._download_single_file(key, dest, bucket_name, version_id))
+            self._download_single_file(key, dest, bucket_name, version_id)
+            downloaded_files.append(dest)
 
         return downloaded_files
 

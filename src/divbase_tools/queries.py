@@ -1,7 +1,12 @@
+"""
+TODO - consider split metadata query and bcftools query into two separate modules.
+"""
+
 import contextlib
 import logging
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -22,9 +27,57 @@ from divbase_tools.utils import resolve_bucket_name
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class SidecarQueryResult:
+    """
+    Hold the results of a query run on a sidecar metadata TSV file.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    unique_sample_ids: List[str]
+    unique_filenames: List[str]
+    query_message: str
+
+
+def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> SidecarQueryResult:
+    """Run a query on a sidecar metadata TSV file."""
+    sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
+
+    query_result = sidecar_manager.query_result
+    query_message = sidecar_manager.query_message
+
+    unique_filenames = sidecar_manager.get_unique_values("Filename")
+    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
+
+    sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
+    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
+
+    # TODO - we should handle the case where no samples match the query.
+
+    return SidecarQueryResult(
+        sample_and_filename_subset=serialized_samples,
+        unique_sample_ids=unique_sample_ids,
+        unique_filenames=unique_filenames,
+        query_message=query_message,
+    )
+
+
+@dataclass
+class BCFToolsInput:
+    """
+    Contains the inputs required to run a bcftools query.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    sampleIDs: List[str]
+    filenames: List[str]
+
+
 class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
+
+    # TODO - support different file paths for input files.
 
     Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
     The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container
@@ -312,6 +365,8 @@ class SidecarQueryManager:
     The class provides methods to load the TSV file into a pandas DataFrame, run queries against the data,
     and retrieve unique values from specific columns.
 
+    TODO - consider seperation of concerns: this class currently handles both loading the TSV file and running queries on it.
+    TODO - some of the __init__ params are perhaps better as properties?
     """
 
     def __init__(self, file: Path):
@@ -319,7 +374,7 @@ class SidecarQueryManager:
         self.filter_string = None
         self.df = None
         self.query_result = None
-        self.query_message = ""
+        self.query_message: str = ""
         self.load_file()
 
     def load_file(self) -> "SidecarQueryManager":
@@ -332,7 +387,7 @@ class SidecarQueryManager:
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
         except Exception as e:
-            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file", error_details=e) from e
+            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":

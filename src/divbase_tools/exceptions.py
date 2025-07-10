@@ -248,13 +248,13 @@ class BcftoolsPipeUnsupportedCommandError(Exception):
 class SidecarNoDataLoadedError(Exception):
     """Raised when no data is loaded in SidecarQueryManager."""
 
-    def __init__(self, file_path: Path, submethod=str, error_details: Exception = None):
+    def __init__(self, file_path: Path, submethod: str, error_details: str | None = None):
         self.file_path = file_path
         self.error_details = error_details
 
         error_message = f"No data loaded from file '{file_path}', as raised in submethod '{submethod}'."
         if error_details:
-            error_message += f". Underlying error: {error_details}"
+            error_message += f"More details about the error: {error_details}"
         super().__init__(error_message)
         self.error_message = error_message
 

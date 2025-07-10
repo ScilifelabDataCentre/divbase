@@ -41,9 +41,10 @@ services:
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DIVBASE_ACCESS_KEY=minioadmin
+      - DIVBASE_SECRET_KEY=badpassword
     volumes:
       - ../src:/app/src
-      - ..:/app
   flower:
     build:
       context: ..
@@ -106,6 +107,8 @@ services:
     - FLOWER_USER=floweradmin
     - FLOWER_PASSWORD=badpassword
     - DIVBASE_USER=divbase_user_set_in_compose_file
+    - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+    - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       rabbitmq:
         condition: service_healthy

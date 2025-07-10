@@ -98,6 +98,7 @@ class TaskHistoryManager:
         Extract submitter from task kwargs.
         """
         kwargs = task.get("kwargs", "{}")
+        # TODO, look into literal_eval.
         kwargs_dict = ast.literal_eval(kwargs)
         return kwargs_dict.get("submitter", "Unknown")
 
