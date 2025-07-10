@@ -23,7 +23,7 @@ import httpx
 import typer
 from rich import print
 
-from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION, DIVBASE_API_URL
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryResult
 from divbase_tools.task_history import TaskHistoryManager
@@ -32,7 +32,6 @@ from divbase_tools.utils import resolve_bucket_name
 logger = logging.getLogger(__name__)
 
 
-DIVBASE_API_URL = "http://localhost:8000"
 DEFAULT_METADATA_TSV = "sample_metadata.tsv"
 
 METADATA_TSV_ARGUMENT = typer.Option(DEFAULT_METADATA_TSV, help="Name of the sample metadata TSV file in the bucket.")
