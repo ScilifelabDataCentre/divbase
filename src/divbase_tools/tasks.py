@@ -86,7 +86,7 @@ def bcftools_pipe_task(tsv_filter: str, command: str, bucket_name: str, user_nam
 
     upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
-    return {"status": "completed", "output_file": output_file, "submitter": "celery"}
+return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
 def download_sample_metadata(bucket_name: str, s3_file_manager: S3FileManager) -> Path:

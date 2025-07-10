@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 DIVBASE_API_URL = "http://localhost:8000"
 DEFAULT_METADATA_TSV = Path("sample_metadata.tsv")
 
-BCFTOOLS_ARGUEMENT = typer.Option(
+BCFTOOLS_ARGUMENT = typer.Option(
     ...,
     help="""
         String consisting of the bcftools command to run on the files returned by the tsv query.
@@ -100,7 +100,7 @@ def sample_metadata_query(
 @query_app.command("bcftools-pipe")
 def pipe_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
-    command: str = BCFTOOLS_ARGUEMENT,
+ command: str = BCFTOOLS_ARGUMENT,
     bucket_name: str | None = BUCKET_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
