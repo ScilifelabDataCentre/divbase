@@ -118,6 +118,14 @@ class UserConfig:
         self.dump_config()
         return self.default_download_dir
 
+    def bucket_info(self, name: str) -> BucketConfig | None:
+        """
+        Get the bucket configuration given the bucket name.
+        """
+        for bucket in self.buckets:
+            if bucket.name == name:
+                return bucket
+
 
 def load_user_config(config_path: Path) -> UserConfig:
     """Helper function to load the user config file"""

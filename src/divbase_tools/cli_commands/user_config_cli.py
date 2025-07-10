@@ -80,7 +80,7 @@ def remove_bucket_command(
     removed_bucket = config.remove_bucket(name)
 
     if not removed_bucket:
-        print(f"Bucket '{name}' was not found in your config file located at {config_file.resolve()}.")
+        print(f"The bucket '{name}' was not found in your config file located at {config_file.resolve()}.")
     else:
         print(f"The bucket '{removed_bucket}' was removed from your config.")
 
@@ -143,12 +143,6 @@ def show_user_config(
     table.add_column("S3 URL", style="green")
     table.add_column("Is default", style="yellow")
 
-    for bucket in config.buckets:
-        is_default = "Yes" if bucket.name == config.default_bucket else ""
-        table.add_row(bucket.name, bucket.divbase_url, bucket.s3_url, is_default)
-
-    console.print(table)
-
     if not config.default_download_dir:
         dload_dir_info = "Not specified, meaning the working directory of whereever you run the download command from."
     elif config.default_download_dir == ".":
@@ -157,3 +151,13 @@ def show_user_config(
         dload_dir_info = config.default_download_dir
 
     console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+
+    if not config.buckets:
+        console.print("[bold]No buckets defined in your user config file.[/bold]")
+        console.print("You can add a bucket using the command: 'divbase config add-bucket <bucket_name>'")
+        return
+
+    for bucket in config.buckets:
+        is_default = "Yes" if bucket.name == config.default_bucket else ""
+        table.add_row(bucket.name, bucket.divbase_url, bucket.s3_url, is_default)
+    console.print(table)

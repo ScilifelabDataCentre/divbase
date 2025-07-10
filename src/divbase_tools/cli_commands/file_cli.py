@@ -20,7 +20,7 @@ from divbase_tools.services import (
     list_files_command,
     upload_files_command,
 )
-from divbase_tools.utils import resolve_bucket_name
+from divbase_tools.utils import resolve_bucket_name, resolve_download_dir
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the bucket.")
 
@@ -52,9 +52,12 @@ def list_files(
 def download_files(
     files: List[str] = typer.Argument(None, help="Space seperated list of files/objects to download from the bucket."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    download_dir: Path = typer.Option(
-        default=Path("."),
-        help="Directory to download the files to.",
+    download_dir: str = typer.Option(
+        None,
+        help="""Directory to download the files to. 
+            If not provided, defaults to what you specified in your user config. 
+            If also not specified in your user config, downloads to the current directory.
+            You can also specify "." to download to the current directory.""",
     ),
     bucket_version: str = typer.Option(default=None, help="Version of the bucket at which to download the files."),
     bucket_name: str = BUCKET_NAME_OPTION,
@@ -66,6 +69,7 @@ def download_files(
         2. providing a directory to download the files to.
     """
     bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -86,7 +90,7 @@ def download_files(
     downloaded_files = download_files_command(
         bucket_name=bucket_name,
         all_files=list(all_files),
-        download_dir=download_dir,
+        download_dir=download_dir_path,
         bucket_version=bucket_version,
     )
 
@@ -98,7 +102,7 @@ def download_files(
         for file in missing_files:
             print(f"- {file}")
     else:
-        print(f"The following files were downloaded to {download_dir.resolve()}:")
+        print(f"The following files were downloaded to {download_dir_path.resolve()}:")
         for file in downloaded_files:
             print(f"- '{file}'")
 

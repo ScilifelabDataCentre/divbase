@@ -16,3 +16,19 @@ def resolve_bucket_name(bucket_name: str | None, config_path: Path) -> str:
         raise BucketNameNotSpecifiedError(config_path=config_path)
 
     return bucket_name
+
+
+def resolve_download_dir(download_dir: str | None, config_path: Path) -> Path:
+    """
+    Helper function to resolve the download directory to use for a command that involves downloading files.
+
+    Priority given to `download_dir` argument, then if a default is set in the user config.
+    Note: "." or None should default to the current working directory.
+    """
+    if not download_dir:
+        config = load_user_config(config_path)
+        download_dir = config.default_download_dir
+
+    if download_dir and download_dir != ".":
+        return Path(download_dir)
+    return Path.cwd()
