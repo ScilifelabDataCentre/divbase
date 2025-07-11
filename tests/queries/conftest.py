@@ -187,4 +187,5 @@ def bcftools_pipe_kwargs_fixture():
         "metadata_tsv_name": "sample_metadata.tsv",
         "command": "view -s SAMPLES; view -r 21:15000000-25000000",
         "bucket_name": "query-bucket",
+        "user_name": "Default User",
     }

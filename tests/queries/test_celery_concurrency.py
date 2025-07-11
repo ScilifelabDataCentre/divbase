@@ -122,6 +122,18 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
     Pytest does not allow fixtures to be used as parameters in parametrized tests. The workaround is call the fixture inside the test using request.getfixturevalue;
     request is a pytest built-in fixture that allows the value of a fixtures to be accessed by calling the fixture name.
     """
+
+    try:
+        broker_url = app.conf.broker_url
+        with Connection(broker_url) as conn:
+            conn.ensure_connection(max_retries=1)
+
+        if isinstance(app.backend, RedisBackend):
+            app.backend.client.ping()
+
+    except Exception as e:
+        pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
+
     ## Step 1
     current_task_routes = current_app.conf.task_routes
 
