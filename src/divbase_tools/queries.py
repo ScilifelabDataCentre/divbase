@@ -22,7 +22,7 @@ from divbase_tools.exceptions import (
     SidecarNoDataLoadedError,
 )
 from divbase_tools.services import download_files_command
-from divbase_tools.utils import resolve_bucket_name
+from divbase_tools.utils import resolve_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -475,6 +475,7 @@ class SidecarQueryManager:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
 
 
+# TODO - can this be removed?
 def fetch_query_files_from_bucket(
     bucket_name: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
 ) -> None:
@@ -484,9 +485,9 @@ def fetch_query_files_from_bucket(
     if not download_dir:
         download_dir = Path.cwd()
 
-    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    bucket_config = resolve_bucket(bucket_name, config_path)
     download_files_command(
-        bucket_name=bucket_name,
+        bucket_name=bucket_config.name,
         all_files=files,
         download_dir=download_dir,
         bucket_version=bucket_version,

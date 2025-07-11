@@ -11,7 +11,7 @@ from divbase_tools.services import (
     list_files_at_version_command,
     list_versions_command,
 )
-from divbase_tools.utils import resolve_bucket_name
+from divbase_tools.utils import resolve_bucket
 
 BUCKET_NAME_OPTION = typer.Option(None, help="Name of the storage bucket for the project.", show_default=False)
 
@@ -26,8 +26,8 @@ def create_version(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Create a bucket versioning file that is stored in the bucket."""
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    create_version_object_command(bucket_name=bucket_name)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    create_version_object_command(bucket_config.name)
     print(f"Bucket versioning file created in bucket: '{bucket_name}'")
 
 
@@ -39,9 +39,9 @@ def add_version(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Add an entry to the bucket versioning file specfying the current state of all files in the bucket."""
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    add_version_command(bucket_name, name, description)
-    print(f"New version: '{name}' added to the bucket: '{bucket_name}'")
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    add_version_command(bucket_config.name, name, description)
+    print(f"New version: '{name}' added to the bucket: '{bucket_config.name}'")
 
 
 @version_app.command("list")
@@ -50,11 +50,11 @@ def list_versions(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """List all entries in the bucket versioning file."""
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    version_info = list_versions_command(bucket_name)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    version_info = list_versions_command(bucket_config.name)
 
     if not version_info:
-        print(f"No versions found for bucket: {bucket_name}.")
+        print(f"No versions found for bucket: {bucket_config.name}.")
         return
 
     print("Bucket versions:")
@@ -70,9 +70,9 @@ def delete_version(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Delete an entry in the bucket versioning file specfying a specific state of all files in the bucket. Does not delete the files themselves."""
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_name)
-    print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_name}'")
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_config.name)
+    print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_config.name}'")
 
 
 @version_app.command("info")
@@ -82,13 +82,13 @@ def get_version_info(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Provide detailed information about a user specified bucket version, including all files present and their unique hashes."""
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    files_at_version = list_files_at_version_command(bucket_name=bucket_name, bucket_version=version)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    files_at_version = list_files_at_version_command(bucket_name=bucket_config.name, bucket_version=version)
 
     if not files_at_version:
         print("No files were registered at this version.")
         return
 
-    print(f"State of each file in the bucket: '{bucket_name}' at version: '{version}'")
+    print(f"State of each file in the bucket: '{bucket_config.name}' at version: '{version}'")
     for object_name, hash in files_at_version.items():
         print(f"- '{object_name}' : '{hash}'")

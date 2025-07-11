@@ -18,7 +18,7 @@ class BucketConfig:
     """
     Config of a single bucket.
 
-    TODO - consider adding validation of URLs and names based on known constaints.
+    TODO - consider adding validation of URLs and names based on known constraints.
     """
 
     name: str
@@ -28,10 +28,7 @@ class BucketConfig:
 
 @dataclass
 class UserConfig:
-    """
-    Overall user configuration
-
-    """
+    """Overall user configuration"""
 
     config_path: Path
     buckets: list[BucketConfig] = field(default_factory=list)

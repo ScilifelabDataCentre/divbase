@@ -20,7 +20,7 @@ from divbase_tools.services import (
     list_files_command,
     upload_files_command,
 )
-from divbase_tools.utils import resolve_bucket_name, resolve_download_dir
+from divbase_tools.utils import resolve_bucket, resolve_download_dir
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the bucket.")
 
@@ -36,14 +36,14 @@ def list_files(
     To see files at a user specified bucket version (controlled by the 'divbase-cli version' subcommand),
     you can instead use the 'divbase version info [VERSION_NAME]' command.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
     files = list_files_command(
-        bucket_name=bucket_name,
+        bucket_name=bucket_config.name,
     )
     if not files:
         print("No files found in the bucket.")
     else:
-        print(f"Files in bucket '{bucket_name}':")
+        print(f"Files in bucket '{bucket_config.name}':")
         for file in files:
             print(f"- '{file}'")
 
@@ -68,7 +68,7 @@ def download_files(
         1. providing a list of files paths directly in the command line
         2. providing a directory to download the files to.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
     download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
@@ -88,7 +88,7 @@ def download_files(
         raise typer.Exit(1)
 
     downloaded_files = download_files_command(
-        bucket_name=bucket_name,
+        bucket_name=bucket_config.name,
         all_files=list(all_files),
         download_dir=download_dir_path,
         bucket_version=bucket_version,
@@ -127,7 +127,7 @@ def upload_files(
         2. providing a directory to upload
         3. providing a text file with or a file list.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
 
     if bool(files) + bool(upload_dir) + bool(file_list) > 1:
         print("Please specify only one of --files, --upload_dir, or --file-list.")
@@ -150,7 +150,7 @@ def upload_files(
         raise typer.Exit(1)
 
     uploaded_files = upload_files_command(
-        bucket_name=bucket_name,
+        bucket_name=bucket_config.name,
         all_files=list(all_files),
         safe_mode=safe_mode,
     )
@@ -182,7 +182,7 @@ def remove_files(
 
     'dry_run' mode will not actually delete the files, just print what would be deleted.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -204,7 +204,7 @@ def remove_files(
         return
 
     deleted_files = delete_objects_command(
-        bucket_name=bucket_name,
+        bucket_name=bucket_config.name,
         all_files=list(all_files),
     )
 

@@ -183,6 +183,29 @@ class BucketNameNotSpecifiedError(Exception):
         return self.error_message
 
 
+class BucketNameNotInConfigError(Exception):
+    """
+    Raised when the bucket name was
+        1.specified in the command line arguments or
+        2. set as the default bucket in the user config file,
+    but info about the bucket could not be read from the user config file.
+    """
+
+    def __init__(self, config_path: Path, bucket_name: str):
+        error_message = (
+            "Couldn't get information about the bucket named: '{bucket_name}' \n"
+            f"Please check the bucket is included in '{config_path.resolve()}'.\n"
+            f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
+        )
+        super().__init__(error_message)
+        self.config_path = config_path
+        self.bucket_name = bucket_name
+        self.error_message = error_message
+
+    def __str__(self):
+        return self.error_message
+
+
 class BcftoolsEnvironmentError(Exception):
     """Raised when there's an issue with the execution environment (Docker, etc.)."""
 
