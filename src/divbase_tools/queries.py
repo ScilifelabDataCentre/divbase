@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from divbase_tools.cli_commands.config_resolver import resolve_bucket
 from divbase_tools.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -22,7 +23,6 @@ from divbase_tools.exceptions import (
     SidecarNoDataLoadedError,
 )
 from divbase_tools.services import download_files_command
-from divbase_tools.utils import resolve_bucket
 
 logger = logging.getLogger(__name__)
 

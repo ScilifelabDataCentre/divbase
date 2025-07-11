@@ -1,3 +1,11 @@
+"""
+Functions that resolve for the CLI commands things like:
+    - which bucket to use
+    - which download directory to use
+    - which DivBase API/S3 URL to use
+Based on provider user input and their config file.
+"""
+
 from pathlib import Path
 
 from divbase_tools.exceptions import BucketNameNotSpecifiedError

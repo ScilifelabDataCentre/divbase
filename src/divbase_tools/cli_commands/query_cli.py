@@ -23,11 +23,11 @@ import httpx
 import typer
 from rich import print
 
+from divbase_tools.cli_commands.config_resolver import resolve_bucket, resolve_divbase_api_url
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryResult
 from divbase_tools.task_history import TaskHistoryManager
-from divbase_tools.utils import resolve_bucket, resolve_divbase_api_url
 
 logger = logging.getLogger(__name__)
 

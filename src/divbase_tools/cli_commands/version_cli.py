@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 from rich import print
 
+from divbase_tools.cli_commands.config_resolver import resolve_bucket
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.services import (
     add_version_command,
@@ -11,7 +12,6 @@ from divbase_tools.services import (
     list_files_at_version_command,
     list_versions_command,
 )
-from divbase_tools.utils import resolve_bucket
 
 BUCKET_NAME_OPTION = typer.Option(None, help="Name of the storage bucket for the project.", show_default=False)
 
