@@ -11,8 +11,6 @@ from dotenv import load_dotenv
 
 from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
 
-MINIO_URL = "https://api.divbase-testground.scilifelab-2-dev.sys.kth.se"
-
 
 class S3FileManager:
     def __init__(self, url: str, access_key: str, secret_key: str):
@@ -148,7 +146,7 @@ class S3FileManager:
 
 
 def create_s3_file_manager(
-    url: str = MINIO_URL,
+    url: str,
     s3_env_access_key_name: str = "DIVBASE_S3_ACCESS_KEY",
     s3_env_secret_key_name: str = "DIVBASE_S3_SECRET_KEY",
 ) -> S3FileManager:

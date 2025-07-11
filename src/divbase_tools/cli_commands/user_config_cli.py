@@ -11,13 +11,13 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
-from divbase_tools.s3_client import MINIO_URL
 from divbase_tools.user_config import (
     create_user_config,
     load_user_config,
 )
 
 DIVBASE_API_URL = "http://localhost:8000"
+DIVBASE_S3_URL = "http://localhost:9000"
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
 
 CONFIG_FILE_OPTION = typer.Option(
@@ -43,7 +43,7 @@ def create_user_config_command(
 def add_bucket_command(
     name: str = typer.Argument(..., help="Name of the storage bucket to add to the user configuration file."),
     divbase_url: str = typer.Option(DIVBASE_API_URL, help="DivBase API URL associated with this project."),
-    s3_url: str = typer.Option(MINIO_URL, help="S3 object store URL associated with this project."),
+    s3_url: str = typer.Option(DIVBASE_S3_URL, help="S3 object store URL associated with this project."),
     make_default: bool = typer.Option(
         False,
         "--default",
