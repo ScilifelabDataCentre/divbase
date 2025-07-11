@@ -6,7 +6,6 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A "query" bucket is made available with input files for the tests.
 """
 
-import shlex
 import time
 
 import boto3
@@ -23,7 +22,7 @@ def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
     command = f"query task-status {task_id} --config {config_file}"
     while max_retries > 0:
-        result = runner.invoke(app, shlex.split(command))
+        result = runner.invoke(app, command)
         # job just has to be finished, whether worked or not
         if "FAILURE" in result.stdout or "SUCCESS" in result.stdout:
             return
@@ -56,7 +55,7 @@ def test_sample_metadata_query(CONSTANTS, user_config_path):
     expected_filenames = "['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']"
 
     command = f"query tsv '{query_string}' --bucket-name {bucket} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     assert query_string in result.stdout
@@ -71,7 +70,7 @@ def test_bcftools_pipe_query(user_config_path, CONSTANTS):
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
@@ -79,7 +78,7 @@ def test_bcftools_pipe_query(user_config_path, CONSTANTS):
     wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
     command = f"files list --bucket-name {bucket} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "merged.vcf.gz" in result.stdout
 
@@ -90,7 +89,7 @@ def test_bcftools_pipe_fails_on_bucket_not_in_config(CONSTANTS, user_config_path
     arg_command = "view -s SAMPLES"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket_name} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert isinstance(result.exception, BucketNameNotInConfigError)
 
 
@@ -120,14 +119,15 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
         command = "view -s SAMPLES"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --bucket-name {bucket_name} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
     wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
-    job_status = runner.invoke(app, shlex.split(f"query task-status {task_id} --config {user_config_path}"))
+    command = f"query task-status {task_id} --config {user_config_path}"
+    job_status = runner.invoke(app, command)
     assert job_status.exit_code == 0
     assert expected_error in job_status.stdout
 
@@ -139,16 +139,16 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     task_id = result.stdout.strip().split()[-1]
 
-    other_result = runner.invoke(app, shlex.split(command))
+    other_result = runner.invoke(app, command)
     assert other_result.exit_code == 0
     other_task_id = other_result.stdout.strip().split()[-1]
 
     command = f"query task-status {task_id} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Task ID" in result.stdout
     assert task_id in result.stdout

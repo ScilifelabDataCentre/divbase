@@ -7,7 +7,6 @@ The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
 """
 
-import shlex
 from pathlib import Path
 
 import pytest
@@ -55,7 +54,7 @@ def fresh_config(tmp_path):
     """
     fresh_config_path = tmp_path / ".divbase_config.yaml"
     create_command = f"config create --config-file {fresh_config_path}"
-    result = runner.invoke(app, shlex.split(create_command))
+    result = runner.invoke(app, create_command)
 
     assert result.exit_code == 0
     assert tmp_path.exists(), "Config file was not created"
@@ -71,14 +70,17 @@ def user_config_path(tmp_path, CONSTANTS):
     """
     existing_config_path = tmp_path / ".divbase_config.yaml"
     create_command = f"config create --config-file {existing_config_path}"
-    result = runner.invoke(app, shlex.split(create_command))
+    result = runner.invoke(app, create_command)
     assert result.exit_code == 0
 
     for bucket in CONSTANTS["BUCKET_CONTENTS"]:
         add_command = f"config add-bucket {bucket} --divbase-url http://localhost:8001 --s3-url {MINIO_URL} --config {existing_config_path}"
-        result = runner.invoke(app, shlex.split(add_command))
+        result = runner.invoke(app, add_command)
         assert result.exit_code == 0
-    runner.invoke(app, shlex.split(f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"))
+
+    set_default_command = f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"
+    result = runner.invoke(app, set_default_command)
+    assert result.exit_code == 0
 
     return existing_config_path
 
