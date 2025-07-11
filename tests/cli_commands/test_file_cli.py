@@ -3,7 +3,7 @@ Tests for the "divbase-cli files" commands
 
 All tests are run against a MinIO server on localhost from docker-compose.
 
-A clean bucket (auto emptied before each test) is available to test that require a clean state.
+A clean bucket (auto emptied before each test) is available to any test that requires a clean state.
 """
 
 import shlex

@@ -9,6 +9,7 @@ Tests start from 1 of 3 types of user config files:
 
 import shlex
 
+import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
@@ -76,18 +77,33 @@ def test_add_bucket_and_specify_urls(fresh_config):
 
 
 def test_add_bucket_that_already_exists(fresh_config):
-    """Should raise an error and should not be duplicated in the config."""
+    """
+    Should warn user and not be duplicated in the config.
+    The new version of bucket should not be added.
+    """
     bucket_name = "test_bucket"
+    initial_divbase_url = "https://divbasewebsite.se"
+    new_divbase_url = "https://newdivbasewebsite.se"
 
-    command = f"config add-bucket {bucket_name} --config {fresh_config}"
-
-    result = runner.invoke(app, shlex.split(command))
+    initial_command = f"config add-bucket {bucket_name} --divbase-url {initial_divbase_url} --config {fresh_config}"
+    result = runner.invoke(app, shlex.split(initial_command))
     assert result.exit_code == 0
 
     user_config = load_user_config(fresh_config)
-    assert "test_bucket" in user_config.all_bucket_names
+    bucket_info = user_config.bucket_info(name=bucket_name)
+    assert bucket_info.divbase_url == initial_divbase_url
+    assert bucket_info.name in user_config.all_bucket_names
 
-    result = runner.invoke(app, shlex.split(command))
+    new_command = f"config add-bucket {bucket_name} --divbase-url {new_divbase_url} --config {fresh_config}"
+
+    with pytest.warns(UserWarning, match=f"The bucket: '{bucket_name}' already existed"):
+        result = runner.invoke(app, shlex.split(new_command))
+    assert result.exit_code == 0
+
+    user_config = load_user_config(fresh_config)
+    bucket_info = user_config.bucket_info(name=bucket_name)
+    assert bucket_info.divbase_url == new_divbase_url
+    assert bucket_info.name in user_config.all_bucket_names
 
 
 def test_set_default_bucket_command(user_config_path):

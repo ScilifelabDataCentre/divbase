@@ -9,13 +9,11 @@ it is autoused, so it does not need to be specified in each test.
 
 import shlex
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
-from divbase_tools.s3_client import S3FileManager
 from tests.helpers.minio_setup import (
     BUCKETS,
     MINIO_FAKE_ACCESS_KEY,
@@ -40,21 +38,6 @@ def CONSTANTS():
         "BUCKET_CONTENTS": BUCKETS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
     }
-
-
-@pytest.fixture(autouse=True)
-def patch_s3_file_manager(CONSTANTS):
-    """Fixture to patch create_s3_file_manager to use the test Minio server."""
-
-    def mock_create_s3_file_manager():
-        return S3FileManager(
-            url=MINIO_URL,
-            access_key=CONSTANTS["BAD_ACCESS_KEY"],
-            secret_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-
-    with patch("divbase_tools.services.create_s3_file_manager", side_effect=mock_create_s3_file_manager) as mock:
-        yield mock
 
 
 @pytest.fixture

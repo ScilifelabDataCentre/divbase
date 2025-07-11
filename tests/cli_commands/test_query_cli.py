@@ -8,7 +8,6 @@ A "query" bucket is made available with input files for the tests.
 
 import shlex
 import time
-from unittest.mock import patch
 
 import boto3
 import pytest
@@ -20,9 +19,9 @@ from divbase_tools.exceptions import BucketNameNotInConfigError
 runner = CliRunner()
 
 
-def wait_for_task_complete(task_id, max_retries=30) -> None:
+def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"query task-status {task_id}"
+    command = f"query task-status {task_id} --config {config_file}"
     while max_retries > 0:
         result = runner.invoke(app, shlex.split(command))
         # job just has to be finished, whether worked or not
@@ -31,12 +30,6 @@ def wait_for_task_complete(task_id, max_retries=30) -> None:
         time.sleep(1)
         max_retries -= 1
     pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
-
-
-@pytest.fixture(autouse=True)
-def use_test_api_url():
-    with patch("divbase_tools.cli_commands.query_cli.DIVBASE_API_URL", "http://localhost:8001"):
-        yield
 
 
 @pytest.fixture(autouse=True)
@@ -83,7 +76,7 @@ def test_bcftools_pipe_query(user_config_path, CONSTANTS):
     assert "Job submitted" in result.stdout
 
     task_id = result.stdout.strip().split()[-1]
-    wait_for_task_complete(task_id)
+    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
     command = f"files list --bucket-name {bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
@@ -132,9 +125,9 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    wait_for_task_complete(task_id)
+    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
-    job_status = runner.invoke(app, shlex.split(f"query task-status {task_id}"))
+    job_status = runner.invoke(app, shlex.split(f"query task-status {task_id} --config {user_config_path}"))
     assert job_status.exit_code == 0
     assert expected_error in job_status.stdout
 
@@ -154,7 +147,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     assert other_result.exit_code == 0
     other_task_id = other_result.stdout.strip().split()[-1]
 
-    command = f"query task-status {task_id}"
+    command = f"query task-status {task_id} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
     assert "Task ID" in result.stdout
