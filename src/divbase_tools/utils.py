@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from divbase_tools.exceptions import BucketNameNotInConfigError, BucketNameNotSpecifiedError
+from divbase_tools.exceptions import BucketNameNotSpecifiedError
 from divbase_tools.user_config import BucketConfig, load_user_config
 
 
@@ -19,15 +19,34 @@ def resolve_bucket(bucket_name: str | None, config_path: Path) -> BucketConfig:
         raise BucketNameNotSpecifiedError(config_path=config_path)
 
     config = load_user_config(config_path)
-    bucket = config.bucket_info(bucket_name)
-    if not bucket:
-        raise BucketNameNotInConfigError(config_path=config_path, bucket_name=bucket_name)
-    return bucket
+    return config.bucket_info(bucket_name)
+
+
+def resolve_divbase_api_url(url: str | None, config_path: Path) -> str:
+    """
+    Helper function to resolve the DivBase API URL to use for a CLI command.
+
+    If not provided by the user, it will take the default bucket's API URL from the user config.
+    Otherwise raise an error.
+    """
+    if url:
+        return url
+
+    config = load_user_config(config_path=config_path)
+
+    if not config.default_bucket:
+        raise ValueError(
+            "No default bucket is set in your user config. "
+            "Please set a default bucket or specify the API URL using the --url option."
+        )
+
+    bucket_config = config.bucket_info(name=config.default_bucket)
+    return bucket_config.divbase_url
 
 
 def resolve_download_dir(download_dir: str | None, config_path: Path) -> Path:
     """
-    Helper function to resolve the download directory to use for a command that involves downloading files.
+    Helper function to resolve the download directory to use for a CLI command involving downloading files.
 
     Priority given to `download_dir` argument, then if a default is set in the user config.
     Note: "." or None should default to the current working directory.

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from divbase_tools.exceptions import BucketNameNotInConfigError
+
 
 @dataclass
 class BucketConfig:
@@ -115,13 +117,14 @@ class UserConfig:
         self.dump_config()
         return self.default_download_dir
 
-    def bucket_info(self, name: str) -> BucketConfig | None:
+    def bucket_info(self, name: str) -> BucketConfig:
         """
         Get the bucket configuration given the bucket name.
         """
         for bucket in self.buckets:
             if bucket.name == name:
                 return bucket
+        raise BucketNameNotInConfigError(config_path=self.config_path, bucket_name=name)
 
 
 def load_user_config(config_path: Path) -> UserConfig:

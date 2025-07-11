@@ -193,7 +193,7 @@ class BucketNameNotInConfigError(Exception):
 
     def __init__(self, config_path: Path, bucket_name: str):
         error_message = (
-            "Couldn't get information about the bucket named: '{bucket_name}' \n"
+            f"Couldn't get information about the bucket named: '{bucket_name}' \n"
             f"Please check the bucket is included in '{config_path.resolve()}'.\n"
             f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
         )

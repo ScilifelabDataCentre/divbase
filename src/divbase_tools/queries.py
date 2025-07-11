@@ -487,7 +487,7 @@ def fetch_query_files_from_bucket(
 
     bucket_config = resolve_bucket(bucket_name, config_path)
     download_files_command(
-        bucket_name=bucket_config.name,
+        bucket_config=bucket_config,
         all_files=files,
         download_dir=download_dir,
         bucket_version=bucket_version,

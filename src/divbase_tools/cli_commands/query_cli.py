@@ -23,11 +23,11 @@ import httpx
 import typer
 from rich import print
 
-from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION, DIVBASE_API_URL
+from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
 from divbase_tools.queries import SidecarQueryResult
 from divbase_tools.task_history import TaskHistoryManager
-from divbase_tools.utils import resolve_bucket
+from divbase_tools.utils import resolve_bucket, resolve_divbase_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def sample_metadata_query(
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
 
     params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "bucket_name": bucket_config.name}
-    response = httpx.post(f"{DIVBASE_API_URL}/query/sample-metadata/", params=params)
+    response = httpx.post(f"{bucket_config.divbase_url}/query/sample-metadata/", params=params)
     response.raise_for_status()
 
     results = SidecarQueryResult(**response.json())
@@ -125,7 +125,7 @@ def pipe_query(
         "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": bucket_config.name,
     }
-    response = httpx.post(f"{DIVBASE_API_URL}/query/bcftools-pipe/", params=params)
+    response = httpx.post(f"{bucket_config.divbase_url}/query/bcftools-pipe/", params=params)
     response.raise_for_status()
 
     task_id = response.json()
@@ -135,6 +135,10 @@ def pipe_query(
 @query_app.command("task-status")
 def check_status(
     task_id: str | None = typer.Argument(None, help="Optional task id to check the status of a specific query job."),
+    divbase_url: str | None = typer.Option(
+        None,
+        help="Optional DivBase URL to use for the query. If not provided the default bucket's from your config file will be used.",
+    ),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
@@ -143,9 +147,11 @@ def check_status(
     TODO - non bcftools query jobs should not show up here (but this should be handled by the API).
     TODO - Consider if representation of single task should be different from the list of tasks.
     """
+    divbase_url = resolve_divbase_api_url(url=divbase_url, config_path=config_file)
+
     if task_id:
-        task_items = httpx.get(f"{DIVBASE_API_URL}/query/{task_id}").json()
+        task_items = httpx.get(f"{divbase_url}/query/{task_id}").json()
     else:
-        task_items = httpx.get(f"{DIVBASE_API_URL}/query/").json()
+        task_items = httpx.get(f"{divbase_url}/query/").json()
     task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
     task_history_manager.print_task_history()

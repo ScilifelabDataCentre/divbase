@@ -27,8 +27,8 @@ def create_version(
 ):
     """Create a bucket versioning file that is stored in the bucket."""
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    create_version_object_command(bucket_config.name)
-    print(f"Bucket versioning file created in bucket: '{bucket_name}'")
+    create_version_object_command(bucket_config)
+    print(f"Bucket versioning file created in bucket: '{bucket_config.name}'")
 
 
 @version_app.command("add")
@@ -40,7 +40,7 @@ def add_version(
 ):
     """Add an entry to the bucket versioning file specfying the current state of all files in the bucket."""
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    add_version_command(bucket_config.name, name, description)
+    add_version_command(bucket_config=bucket_config, name=name, description=description)
     print(f"New version: '{name}' added to the bucket: '{bucket_config.name}'")
 
 
@@ -51,7 +51,7 @@ def list_versions(
 ):
     """List all entries in the bucket versioning file."""
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    version_info = list_versions_command(bucket_config.name)
+    version_info = list_versions_command(bucket_config=bucket_config)
 
     if not version_info:
         print(f"No versions found for bucket: {bucket_config.name}.")
@@ -71,7 +71,7 @@ def delete_version(
 ):
     """Delete an entry in the bucket versioning file specfying a specific state of all files in the bucket. Does not delete the files themselves."""
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    deleted_version = delete_version_command(bucket_version=name, bucket_name=bucket_config.name)
+    deleted_version = delete_version_command(bucket_version=name, bucket_config=bucket_config)
     print(f"The version: '{deleted_version}' was deleted from the bucket: '{bucket_config.name}'")
 
 
@@ -83,7 +83,7 @@ def get_version_info(
 ):
     """Provide detailed information about a user specified bucket version, including all files present and their unique hashes."""
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    files_at_version = list_files_at_version_command(bucket_name=bucket_config.name, bucket_version=version)
+    files_at_version = list_files_at_version_command(bucket_config=bucket_config, bucket_version=version)
 
     if not files_at_version:
         print("No files were registered at this version.")

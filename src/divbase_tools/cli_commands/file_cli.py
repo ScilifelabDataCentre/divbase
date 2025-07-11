@@ -37,9 +37,7 @@ def list_files(
     you can instead use the 'divbase version info [VERSION_NAME]' command.
     """
     bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
-    files = list_files_command(
-        bucket_name=bucket_config.name,
-    )
+    files = list_files_command(bucket_config=bucket_config)
     if not files:
         print("No files found in the bucket.")
     else:
@@ -88,7 +86,7 @@ def download_files(
         raise typer.Exit(1)
 
     downloaded_files = download_files_command(
-        bucket_name=bucket_config.name,
+        bucket_config=bucket_config,
         all_files=list(all_files),
         download_dir=download_dir_path,
         bucket_version=bucket_version,
@@ -150,7 +148,7 @@ def upload_files(
         raise typer.Exit(1)
 
     uploaded_files = upload_files_command(
-        bucket_name=bucket_config.name,
+        bucket_config=bucket_config,
         all_files=list(all_files),
         safe_mode=safe_mode,
     )
@@ -204,7 +202,7 @@ def remove_files(
         return
 
     deleted_files = delete_objects_command(
-        bucket_name=bucket_config.name,
+        bucket_config=bucket_config,
         all_files=list(all_files),
     )
 
