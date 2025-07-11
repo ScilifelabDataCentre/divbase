@@ -92,7 +92,7 @@ def user_config_path(tmp_path, CONSTANTS):
     assert result.exit_code == 0
 
     for bucket in CONSTANTS["BUCKET_CONTENTS"]:
-        add_command = f"config add-bucket {bucket} --config {existing_config_path}"
+        add_command = f"config add-bucket {bucket} --divbase-url http://localhost:8001 --s3-url {MINIO_URL} --config {existing_config_path}"
         result = runner.invoke(app, shlex.split(add_command))
         assert result.exit_code == 0
     runner.invoke(app, shlex.split(f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"))

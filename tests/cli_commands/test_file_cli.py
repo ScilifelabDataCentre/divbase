@@ -125,7 +125,7 @@ def test_upload_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
     command = (
-        f"files upload {file_path} --safe-mode --bucket-name {CONSTANTS['CLEANED_BUCKET']} --config {user_config_path} "
+        f"files upload {file_path} --safe-mode --bucket-name {CONSTANTS['CLEANED_BUCKET']} --config {user_config_path}"
     )
 
     result = runner.invoke(app, shlex.split(command))

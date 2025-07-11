@@ -15,6 +15,7 @@ import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
+from divbase_tools.exceptions import BucketNameNotInConfigError
 
 runner = CliRunner()
 
@@ -54,14 +55,14 @@ def reset_query_bucket(CONSTANTS):
     yield
 
 
-def test_sample_metadata_query(CONSTANTS):
+def test_sample_metadata_query(CONSTANTS, user_config_path):
     """Test running a sample metadata query using the CLI."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = "['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7', '1b_HOM-G58']"
     expected_filenames = "['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']"
 
-    command = f"query tsv '{query_string}' --bucket-name {bucket}"
+    command = f"query tsv '{query_string}' --bucket-name {bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
 
@@ -70,32 +71,39 @@ def test_sample_metadata_query(CONSTANTS):
     assert expected_filenames in result.stdout
 
 
-def test_bcftools_pipe_query(CONSTANTS):
+def test_bcftools_pipe_query(user_config_path, CONSTANTS):
     """Test running a bcftools pipe query using the CLI."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
     task_id = result.stdout.strip().split()[-1]
-
     wait_for_task_complete(task_id)
 
-    command = f"files list --bucket-name {bucket}"
+    command = f"files list --bucket-name {bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
     assert "merged.vcf.gz" in result.stdout
 
 
+def test_bcftools_pipe_fails_on_bucket_not_in_config(CONSTANTS, user_config_path):
+    bucket_name = "non_existent_bucket"
+    tsv_filter = "Area:West of Ireland,Northern Portugal;"
+    arg_command = "view -s SAMPLES"
+
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket_name} --config {user_config_path}"
+    result = runner.invoke(app, shlex.split(command))
+    assert isinstance(result.exception, BucketNameNotInConfigError)
+
+
 @pytest.mark.parametrize(
     "bucket_name,tsv_filter,command,expected_error",
     [
-        # Invalid bucket name
-        ("non_existent_bucket", "Area:West of Ireland,Northern Portugal;", "DEFAULT", "ClientError"),
         # Malformed tsv filter (missing colon)
         ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError"),
         # bad command
@@ -104,7 +112,7 @@ def test_bcftools_pipe_query(CONSTANTS):
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
-def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_error, CONSTANTS):
+def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path):
     """
     Test bad formatted input raises errors
 
@@ -118,7 +126,7 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --bucket-name {bucket_name}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --bucket-name {bucket_name} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
 
     task_id = result.stdout.strip().split()[-1]
@@ -131,13 +139,13 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
     assert expected_error in job_status.stdout
 
 
-def test_get_task_status_by_task_id(CONSTANTS):
+def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     """Get the status of a task by its ID."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
     task_id = result.stdout.strip().split()[-1]
