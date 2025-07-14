@@ -7,7 +7,6 @@ from pathlib import Path
 
 import boto3
 import botocore
-from dotenv import load_dotenv
 
 from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
 
@@ -153,8 +152,6 @@ def create_s3_file_manager(
     """
     Creates an S3FileManager instance using credentials from environment variables
     """
-    load_dotenv()
-
     access_key = os.getenv(s3_env_access_key_name)
     secret_key = os.getenv(s3_env_secret_key_name)
 
