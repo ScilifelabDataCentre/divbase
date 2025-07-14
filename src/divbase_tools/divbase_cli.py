@@ -21,30 +21,40 @@ from divbase_tools.cli_commands.version_cli import version_app
 logger = logging.getLogger(__name__)
 
 
-def determine_cli_env() -> None:
+def load_cli_env_vars() -> None:
     """
-    Determine which .env file to use based on enviroment variable passed.
-    If not set, will default to taking settings from '.env'.
-    """
-    ALLOWED_ENVS = ["local", "test", "scilifelab2dev"]
-    env_name = os.getenv("DIVBASE_ENV")
+    Determine and load in the correct env variables to use for DivBase CLI.
+    Env to use controlled by `DIVBASE_ENV` environment variable (can pass in front of any cli command).
+    If not set, will default to taking settings from '.env' (for production user).
 
-    if env_name and env_name not in ALLOWED_ENVS:
+    A note on "test" enviroment. Env variables set in the conftest.py as a fixture.
+    The e2e cli tests use the "app" directly and therefore bypass this function.
+    https://typer.tiangolo.com/tutorial/testing/
+    """
+    ALLOWED_ENVS = ["local", "scilifelab2dev", "scilifelab2prod"]
+    env_name = os.getenv("DIVBASE_ENV")
+    if not env_name:
+        dotenv.load_dotenv(dotenv_path=Path(".env"), override=True)
+        logger.warning("DIVBASE_ENV not set, using default .env file. This should probably only be used by an end user")
+        return
+
+    if env_name not in ALLOWED_ENVS:
         raise ValueError(f"Invalid DIVBASE_ENV value: '{env_name}'. Allowed values are: {', '.join(ALLOWED_ENVS)}")
 
-    if not env_name:
-        dotenv_path = Path(".env")
-        logger.warning("DIVBASE_ENV not set, using default .env file. ")
-    else:
-        dotenv_path = Path(f".env.{env_name}")
+    if env_name == "local":
+        os.environ["DIVBASE_S3_ACCESS_KEY"] = "minioadmin"
+        os.environ["DIVBASE_S3_SECRET_KEY"] = "badpassword"
+        logger.info(f"Using hardcoded '{env_name}' CLI environment settings.")
+        return
 
-    if dotenv_path.exists():
-        dotenv.load_dotenv(dotenv_path=dotenv_path, override=True)
-        logger.info(f"Loaded environment variables from {dotenv_path}")
-    else:
+    dotenv_path = Path(f".env.{env_name}")
+    if not dotenv_path.exists():
         raise FileNotFoundError(
             f"DivBase environment file: '{dotenv_path}' not found. Please create it or set correct ENV variable."
         )
+
+    dotenv.load_dotenv(dotenv_path=dotenv_path, override=True)
+    logger.info(f"Loaded CLI environment variables from {dotenv_path}")
 
 
 app = typer.Typer(
@@ -68,7 +78,7 @@ app.add_typer(query_app, name="query")
 def main():
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
     logger.info("Starting divbase_tools CLI application.")
-    determine_cli_env()
+    load_cli_env_vars()
     app()
 
 
