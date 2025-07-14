@@ -19,6 +19,19 @@ from divbase_tools.divbase_cli import app
 runner = CliRunner()
 
 
+def wait_for_task_complete(task_id, max_retries=30) -> None:
+    """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
+    command = f"query task-status {task_id}"
+    while max_retries > 0:
+        result = runner.invoke(app, shlex.split(command))
+        # job just has to be finished, whether worked or not
+        if "FAILURE" in result.stdout or "SUCCESS" in result.stdout:
+            return
+        time.sleep(1)
+        max_retries -= 1
+    pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
+
+
 @pytest.fixture(autouse=True)
 def use_test_api_url():
     with patch("divbase_tools.cli_commands.query_cli.DIVBASE_API_URL", "http://localhost:8001"):
@@ -68,7 +81,9 @@ def test_bcftools_pipe_query(CONSTANTS):
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
-    time.sleep(3)  # Allow enough time for the job to complete
+    task_id = result.stdout.strip().split()[-1]
+    wait_for_task_complete(task_id)
+
     command = f"files list --bucket-name {bucket}"
     result = runner.invoke(app, shlex.split(command))
     assert result.exit_code == 0
@@ -108,7 +123,7 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    time.sleep(1)
+    wait_for_task_complete(task_id)
 
     job_status = runner.invoke(app, shlex.split(f"query task-status {task_id}"))
     assert job_status.exit_code == 0
