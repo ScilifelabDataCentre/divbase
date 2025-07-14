@@ -59,7 +59,6 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     sleep(wait_time)
 
     states = [result.state for result in async_results]
-    print(f"Task states after {wait_time} second: {states}")
 
     started_count = states.count("STARTED")
     pending_count = states.count("PENDING")
@@ -187,5 +186,4 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
             f"Expected task {task_id} to be executed by a worker in the {expected_queue} queue, but got {worker}"
         )
     else:
-        print(f"Task {task_id} not found in Flower.")
         raise AssertionError(f"Task {task_id} not found in Flower. Response: {response.text}")
