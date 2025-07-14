@@ -6,7 +6,7 @@ from pathlib import Path
 
 import boto3
 
-MINIO_URL = "http://localhost:9002"  # from overide in docker compose tests.yml file
+MINIO_URL = "http://localhost:9002"
 MINIO_FAKE_ACCESS_KEY = "minioadmin"
 MINIO_FAKE_SECRET_KEY = "badpassword"
 

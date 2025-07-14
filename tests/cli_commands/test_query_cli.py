@@ -6,36 +6,29 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A "query" bucket is made available with input files for the tests.
 """
 
-import shlex
 import time
-from unittest.mock import patch
 
 import boto3
 import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
+from divbase_tools.exceptions import BucketNameNotInConfigError
 
 runner = CliRunner()
 
 
-def wait_for_task_complete(task_id, max_retries=30) -> None:
+def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"query task-status {task_id}"
+    command = f"query task-status {task_id} --config {config_file}"
     while max_retries > 0:
-        result = runner.invoke(app, shlex.split(command))
+        result = runner.invoke(app, command)
         # job just has to be finished, whether worked or not
         if "FAILURE" in result.stdout or "SUCCESS" in result.stdout:
             return
         time.sleep(1)
         max_retries -= 1
     pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
-
-
-@pytest.fixture(autouse=True)
-def use_test_api_url():
-    with patch("divbase_tools.cli_commands.query_cli.DIVBASE_API_URL", "http://localhost:8001"):
-        yield
 
 
 @pytest.fixture(autouse=True)
@@ -54,15 +47,15 @@ def reset_query_bucket(CONSTANTS):
     yield
 
 
-def test_sample_metadata_query(CONSTANTS):
+def test_sample_metadata_query(CONSTANTS, user_config_path):
     """Test running a sample metadata query using the CLI."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = "['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7', '1b_HOM-G58']"
     expected_filenames = "['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']"
 
-    command = f"query tsv '{query_string}' --bucket-name {bucket}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"query tsv '{query_string}' --bucket-name {bucket} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     assert query_string in result.stdout
@@ -70,31 +63,39 @@ def test_sample_metadata_query(CONSTANTS):
     assert expected_filenames in result.stdout
 
 
-def test_bcftools_pipe_query(CONSTANTS):
+def test_bcftools_pipe_query(user_config_path, CONSTANTS):
     """Test running a bcftools pipe query using the CLI."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
     task_id = result.stdout.strip().split()[-1]
-    wait_for_task_complete(task_id)
+    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
-    command = f"files list --bucket-name {bucket}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"files list --bucket-name {bucket} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "merged.vcf.gz" in result.stdout
+
+
+def test_bcftools_pipe_fails_on_bucket_not_in_config(CONSTANTS, user_config_path):
+    bucket_name = "non_existent_bucket"
+    tsv_filter = "Area:West of Ireland,Northern Portugal;"
+    arg_command = "view -s SAMPLES"
+
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket_name} --config {user_config_path}"
+    result = runner.invoke(app, command)
+    assert isinstance(result.exception, BucketNameNotInConfigError)
 
 
 @pytest.mark.parametrize(
     "bucket_name,tsv_filter,command,expected_error",
     [
-        # Invalid bucket name
-        ("non_existent_bucket", "Area:West of Ireland,Northern Portugal;", "DEFAULT", "ClientError"),
         # Malformed tsv filter (missing colon)
         ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError"),
         # bad command
@@ -103,7 +104,7 @@ def test_bcftools_pipe_query(CONSTANTS):
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
-def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_error, CONSTANTS):
+def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path):
     """
     Test bad formatted input raises errors
 
@@ -117,36 +118,37 @@ def test_bcftools_pipe_query_errors(bucket_name, tsv_filter, command, expected_e
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --bucket-name {bucket_name}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --bucket-name {bucket_name} --config {user_config_path}"
+    result = runner.invoke(app, command)
 
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    wait_for_task_complete(task_id)
+    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
 
-    job_status = runner.invoke(app, shlex.split(f"query task-status {task_id}"))
+    command = f"query task-status {task_id} --config {user_config_path}"
+    job_status = runner.invoke(app, command)
     assert job_status.exit_code == 0
     assert expected_error in job_status.stdout
 
 
-def test_get_task_status_by_task_id(CONSTANTS):
+def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     """Get the status of a task by its ID."""
     bucket = CONSTANTS["QUERY_BUCKET"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --bucket-name {bucket} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     task_id = result.stdout.strip().split()[-1]
 
-    other_result = runner.invoke(app, shlex.split(command))
+    other_result = runner.invoke(app, command)
     assert other_result.exit_code == 0
     other_task_id = other_result.stdout.strip().split()[-1]
 
-    command = f"query task-status {task_id}"
-    result = runner.invoke(app, shlex.split(command))
+    command = f"query task-status {task_id} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Task ID" in result.stdout
     assert task_id in result.stdout

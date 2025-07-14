@@ -5,8 +5,6 @@ NOTE: All tests are run against a MinIO server on localhost from docker-compose.
 NOTE: The clean versions fixture ensures that the versioning file is removed before and after each test,
 """
 
-import shlex
-
 import boto3
 import pytest
 from typer.testing import CliRunner
@@ -42,7 +40,7 @@ def clean_versions(user_config_path, CONSTANTS):
         s3_client.delete_object(Bucket=bucket_name, Key=VERSION_FILE_NAME)
 
     command = f"version create --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Bucket versioning file created" in result.stdout
 
@@ -51,7 +49,7 @@ def clean_versions(user_config_path, CONSTANTS):
 
 def test_create_version_file_fails_if_already_exists(user_config_path):
     command = f"version create --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, BucketVersioningFileAlreadyExistsError)
 
@@ -59,7 +57,7 @@ def test_create_version_file_fails_if_already_exists(user_config_path):
 def test_create_version_for_non_default_bucket(user_config_path, CONSTANTS):
     bucket_name = CONSTANTS["NON_DEFAULT_BUCKET"]
     command = f"version create --bucket-name {bucket_name} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"Bucket versioning file created in bucket: '{bucket_name}'" in result.stdout
@@ -67,7 +65,7 @@ def test_create_version_for_non_default_bucket(user_config_path, CONSTANTS):
 
 def test_add_version(user_config_path):
     command = f"version add {VERSION_1_NAME} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"New version: '{VERSION_1_NAME}'" in result.stdout
@@ -76,12 +74,12 @@ def test_add_version(user_config_path):
 def test_add_version_with_description(user_config_path):
     description = "Initial release"
     command = f'version add {VERSION_1_NAME} --description "{description}" --config {user_config_path}'
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code == 0
 
     list_cmd = f"version list --config {user_config_path}"
-    list_result = runner.invoke(app, shlex.split(list_cmd))
+    list_result = runner.invoke(app, list_cmd)
 
     assert VERSION_1_NAME in list_result.stdout
     assert description in list_result.stdout
@@ -90,10 +88,11 @@ def test_add_version_with_description(user_config_path):
 def test_add_multiple_versions(user_config_path):
     versions = [VERSION_1_NAME, VERSION_2_NAME, VERSION_3_NAME]
     for version in versions:
-        runner.invoke(app, shlex.split(f"version add {version} --config {user_config_path}"))
+        command = f"version add {version} --config {user_config_path}"
+        runner.invoke(app, command)
 
     command = f"version list --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code == 0
 
@@ -104,10 +103,10 @@ def test_add_multiple_versions(user_config_path):
 def test_attempt_add_version_that_already_exists_fails(user_config_path):
     command = f"version add v1.0.0 --config {user_config_path}"
 
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, BucketVersionAlreadyExistsError)
 
@@ -120,21 +119,21 @@ def test_add_version_works_with_clean_bucket(user_config_path, CONSTANTS):
     clean_bucket = CONSTANTS["CLEANED_BUCKET"]
 
     command = f"version add {VERSION_1_NAME} --bucket-name {clean_bucket} --config {user_config_path} "
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     command = f"version list --bucket-name {clean_bucket} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert VERSION_1_NAME in result.stdout
 
 
 def test_list_versions(user_config_path):
-    runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
-    runner.invoke(app, shlex.split(f"version add {VERSION_2_NAME} --config {user_config_path}"))
+    runner.invoke(app, f"version add {VERSION_1_NAME} --config {user_config_path}")
+    runner.invoke(app, f"version add {VERSION_2_NAME} --config {user_config_path}")
 
     command = f"version list --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"- '{VERSION_1_NAME}':" in result.stdout
@@ -142,24 +141,25 @@ def test_list_versions(user_config_path):
 
 
 def test_delete_version(user_config_path):
-    runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
+    command = f"version add {VERSION_1_NAME} --config {user_config_path}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
 
     command = f"version delete {VERSION_1_NAME} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
-
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
 
     list_cmd = f"version list --config {user_config_path}"
-    list_result = runner.invoke(app, shlex.split(list_cmd))
-
-    assert VERSION_1_NAME not in list_result.stdout
+    result = runner.invoke(app, list_cmd)
+    assert result.exit_code == 0
+    assert VERSION_1_NAME not in result.stdout
 
 
 def test_delete_nonexistent_version(user_config_path):
     nonexistent_version = "v99.99.99"
     command = f"version delete {nonexistent_version} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code != 0
     assert isinstance(result.exception, BucketVersionNotFoundError)
@@ -169,13 +169,14 @@ def test_get_version_info(user_config_path, CONSTANTS):
     default_bucket = CONSTANTS["DEFAULT_BUCKET"]
     files_in_bucket = CONSTANTS["BUCKET_CONTENTS"][default_bucket]
 
-    result = runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
+    command = f"version add {VERSION_1_NAME} --config {user_config_path}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     command = f"version info {VERSION_1_NAME} --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
-
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
+
     assert f"{VERSION_1_NAME}" in result.stdout
     assert f"{default_bucket}" in result.stdout
 
@@ -185,7 +186,7 @@ def test_get_version_info(user_config_path, CONSTANTS):
 
 def test_get_version_info_for_version_that_does_not_exist(user_config_path, CONSTANTS):
     command = f"version info does_not_exist --config {user_config_path}"
-    result = runner.invoke(app, shlex.split(command))
+    result = runner.invoke(app, command)
 
     assert result.exit_code != 0
     assert isinstance(result.exception, BucketVersionNotFoundError)
@@ -205,23 +206,25 @@ def test_get_version_updates_hashes_on_new_upload(user_config_path, CONSTANTS, f
     test_file_path = (fixtures_dir / test_file_name).resolve()
     upload_cmd = f"files upload {test_file_path} --config {user_config_path}"
 
-    result = runner.invoke(app, shlex.split(f"version add {VERSION_3_NAME} --config {user_config_path}"))
+    result = runner.invoke(app, f"version add {VERSION_3_NAME} --config {user_config_path}")
     assert result.exit_code == 0
 
-    result = runner.invoke(app, shlex.split(upload_cmd))
+    result = runner.invoke(app, upload_cmd)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, shlex.split(f"version add {VERSION_1_NAME} --config {user_config_path}"))
+    result = runner.invoke(app, f"version add {VERSION_1_NAME} --config {user_config_path}")
     assert result.exit_code == 0
 
-    result = runner.invoke(app, shlex.split(upload_cmd))
+    result = runner.invoke(app, upload_cmd)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, shlex.split(f"version add {VERSION_2_NAME} --config {user_config_path}"))
+    result = runner.invoke(app, f"version add {VERSION_2_NAME} --config {user_config_path}")
     assert result.exit_code == 0
 
-    info_result_1 = runner.invoke(app, shlex.split(f"version info {VERSION_1_NAME} --config {user_config_path}"))
-    info_result_2 = runner.invoke(app, shlex.split(f"version info {VERSION_2_NAME} --config {user_config_path}"))
+    info_result_1 = runner.invoke(app, f"version info {VERSION_1_NAME} --config {user_config_path}")
+    assert info_result_1.exit_code == 0
+    info_result_2 = runner.invoke(app, f"version info {VERSION_2_NAME} --config {user_config_path}")
+    assert info_result_2.exit_code == 0
 
     hash_v1, hash_v2 = "", ""
     for line in info_result_1.stdout.splitlines():

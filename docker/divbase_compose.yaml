@@ -41,8 +41,8 @@ services:
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DIVBASE_ACCESS_KEY=minioadmin
-      - DIVBASE_SECRET_KEY=badpassword
+      - DIVBASE_S3_ACCESS_KEY=minioadmin
+      - DIVBASE_S3_SECRET_KEY=badpassword
     volumes: &worker-volumes
       - ../src:/app/src
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
