@@ -12,8 +12,6 @@ from divbase_tools.tasks import app, bcftools_pipe_task, sample_metadata_query_t
 FLOWER_URL_TESTING_STACK = (
     "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
 )
-flower_user = os.environ.get("FLOWER_USER")
-flower_password = os.environ.get("FLOWER_PASSWORD")
 
 
 @pytest.mark.integration
@@ -170,7 +168,12 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
 
     ## Step 4
     wait_for_celery_task_completion(task_id=task_id, max_wait=30)
-    flower_url = f"{FLOWER_URL_TESTING_STACK}/api/tasks"
+
+    flower_user = os.environ.get("FLOWER_USER")
+    flower_password = os.environ.get("FLOWER_PASSWORD")
+    flower_base_url = os.environ.get("FLOWER_BASE_URL")
+
+    flower_url = f"{flower_base_url}/api/tasks"
     auth = (flower_user, flower_password)
 
     try:

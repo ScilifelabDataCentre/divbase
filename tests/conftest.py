@@ -21,6 +21,9 @@ def set_celery_env_vars():
     """
     os.environ["CELERY_BROKER_URL"] = "pyamqp://guest@localhost:5673//"
     os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6380/0"
+    os.environ["FLOWER_USER"] = "floweradmin"
+    os.environ["FLOWER_PASSWORD"] = "badpassword"
+    os.environ["FLOWER_BASE_URL"] = "http://localhost:5556"
 
 
 @pytest.fixture(autouse=True, scope="session")
