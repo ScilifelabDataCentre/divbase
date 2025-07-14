@@ -27,9 +27,9 @@ def load_cli_env_vars() -> None:
     Env to use controlled by `DIVBASE_ENV` environment variable (can pass in front of any cli command).
     If not set, will default to taking settings from '.env' (for production user).
 
-    A note on "test" enviroment. Env variables set in the conftest.py as a fixture.
-    The e2e cli tests use the "app" directly and therefore bypass this function.
-    https://typer.tiangolo.com/tutorial/testing/
+    A note on the lack of a "test" enviroment. Env variables set in the conftest.py as a fixture.
+    The e2e cli tests use the "app" directly (https://typer.tiangolo.com/tutorial/testing/) as recommended.
+    They therefore bypass this function as expected.
     """
     ALLOWED_ENVS = ["local", "scilifelab2dev", "scilifelab2prod"]
     env_name = os.getenv("DIVBASE_ENV")
