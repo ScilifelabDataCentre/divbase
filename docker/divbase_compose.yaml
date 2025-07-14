@@ -23,28 +23,36 @@ services:
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
-  worker:
-    build:
+  worker-quick:
+    build: &worker-build
       context: .. 
       dockerfile: docker/worker.dockerfile
-    healthcheck:
+    healthcheck: &worker-healthcheck
       test: ["CMD", "celery", "inspect", "ping"]
       interval: 10s
       timeout: 10s
       retries: 3
       start_period: 10s
-    depends_on:
+    depends_on: &worker-depends
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
+    environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_ACCESS_KEY=minioadmin
       - DIVBASE_SECRET_KEY=badpassword
-    volumes:
+    volumes: &worker-volumes
       - ../src:/app/src
+    command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
+  worker-long:
+    build: *worker-build
+    healthcheck: *worker-healthcheck
+    depends_on: *worker-depends
+    environment: *worker-env
+    volumes: *worker-volumes
+    command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
   flower:
     build:
       context: ..

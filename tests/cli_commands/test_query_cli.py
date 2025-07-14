@@ -82,7 +82,6 @@ def test_bcftools_pipe_query(CONSTANTS):
     assert "Job submitted" in result.stdout
 
     task_id = result.stdout.strip().split()[-1]
-
     wait_for_task_complete(task_id)
 
     command = f"files list --bucket-name {bucket}"
