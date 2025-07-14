@@ -8,6 +8,8 @@ from celery import Celery
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 
+logger = logging.getLogger(__name__)
+
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
@@ -22,7 +24,36 @@ app.conf.update(
     result_serializer="json",
 )
 
-logger = logging.getLogger(__name__)
+
+def dynamic_router(name, args, kwargs, options, task=None, **kw):
+    """
+    Function to dynamically route tasks based on their name and arguments.
+    The input arguments of the function are taken from the Celery docs.
+
+    Advanced logic can be implemented here to route tasks to different queues
+    based on the task names or arguments.
+
+    For now, just use a simple routing based on substrings in the task name.
+
+    To use static routing instead, use the following the call instead of the dynamic_router function:
+        app.conf.task_routes = {
+        "tasks.simulate_quick_task": {"queue": "quick"},
+        "tasks.simulate_long_task": {"queue": "long"},
+        "tasks.bcftools_pipe": {"queue": "long"},
+        }
+    """
+    if "quick" in name:
+        return {"queue": "quick"}
+    if "long" in name:
+        return {"queue": "long"}
+    if name == "tasks.sample_metadata_query":
+        return {"queue": "quick"}
+    if name == "tasks.bcftools_query":
+        return {"queue": "long"}
+    return {"queue": "celery"}
+
+
+app.conf.task_routes = (dynamic_router,)
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])

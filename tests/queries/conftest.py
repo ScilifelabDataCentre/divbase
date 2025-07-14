@@ -148,3 +148,44 @@ def wait_for_celery_task_completion():
         return async_result.get()
 
     return wait_for_task_completion
+
+
+@pytest.fixture
+def concurrency_of_default_queue():
+    """
+    Returns a dict of {worker: concurrency} for all workers connected to the 'celery' queue.
+    """
+    app_stats = current_app.control.inspect().stats()
+    max_concurrency_per_worker = {}
+    for worker, stats in app_stats.items():
+        max_concurrency_per_worker[worker] = stats.get("pool", {}).get("max-concurrency")
+
+    queue_info = current_app.control.inspect().active_queues()
+    default_queue_concurrency = {}
+    for worker, queues in queue_info.items():
+        for queue in queues:
+            if queue["name"] == "celery":
+                default_queue_concurrency[worker] = max_concurrency_per_worker[worker]
+    return default_queue_concurrency
+
+
+@pytest.fixture
+def sample_metadata_query_kwargs_fixture():
+    """Standard kwargs for testing sample_metadata_query_task."""
+    return {
+        "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
+        "metadata_tsv_name": "sample_metadata.tsv",
+        "bucket_name": "query-bucket",
+    }
+
+
+@pytest.fixture
+def bcftools_pipe_kwargs_fixture():
+    """Standard kwargs for testing bcftools_pipe_task"""
+    return {
+        "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
+        "metadata_tsv_name": "sample_metadata.tsv",
+        "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+        "bucket_name": "query-bucket",
+        "user_name": "Default User",
+    }

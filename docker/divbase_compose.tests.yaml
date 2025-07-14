@@ -9,7 +9,10 @@ services:
     volumes: !reset [] # reset to avoid conflicts with the redis settings in the main compose file
     tmpfs:
       - /data/
-  worker:
+  worker-quick:
+    volumes:
+      - ../tests/fixtures:/app/tests/fixtures
+  worker-long:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
   flower:

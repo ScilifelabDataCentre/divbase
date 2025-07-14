@@ -115,9 +115,7 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = (
-        "divbase-job-system-worker-1"  # for synchronous tasks, use this container name to find the container ID
-    )
+    CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
 
     def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
         """
@@ -313,6 +311,7 @@ class BcftoolsQueryManager:
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
+        # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
         output_file = "merged.vcf.gz"
 
@@ -320,7 +319,8 @@ class BcftoolsQueryManager:
             merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
             self.run_bcftools(command=merge_command)
             logger.info(f"Merged all temporary files into '{output_file}'.")
-
+        if len(output_temp_files) == 1:
+            os.rename(output_temp_files[0], output_file)
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
