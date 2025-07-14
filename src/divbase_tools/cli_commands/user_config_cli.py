@@ -114,7 +114,7 @@ def set_default_dload_dir_command(
     download_dir: str = typer.Argument(
         ...,
         help="""Set the default directory to download files to. 
-        By default files are donwloaded to the current working directory.
+        By default files are downloaded to the current working directory.
         You can specify an absolute path. 
         You can use '.' to refer to the directory you run the command from.""",
     ),
@@ -144,9 +144,9 @@ def show_user_config(
     table.add_column("Is default", style="yellow")
 
     if not config.default_download_dir:
-        dload_dir_info = "Not specified, meaning the working directory of whereever you run the download command from."
+        dload_dir_info = "Not specified, meaning the working directory of wherever you run the download command from."
     elif config.default_download_dir == ".":
-        dload_dir_info = "Working directory of whereever you run the download command from."
+        dload_dir_info = "Working directory of wherever you run the download command from."
     else:
         dload_dir_info = config.default_download_dir
 

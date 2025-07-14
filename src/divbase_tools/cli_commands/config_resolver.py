@@ -17,16 +17,14 @@ def resolve_bucket(bucket_name: str | None, config_path: Path) -> BucketConfig:
     Helper function to resolve the bucket to use for a CLI command.
     Falls back to the default bucket set in the user config if not explicitly provided.
 
-    Once the bucket is resovled a BucketConfig object is returned,
+    Once the bucket is resolved a BucketConfig object is returned,
     which contains name and URLs (S3+API) for the bucket.
     """
+    config = load_user_config(config_path)
     if not bucket_name:
-        config = load_user_config(config_path)
         bucket_name = config.default_bucket
     if not bucket_name:
         raise BucketNameNotSpecifiedError(config_path=config_path)
-
-    config = load_user_config(config_path)
     return config.bucket_info(bucket_name)
 
 
