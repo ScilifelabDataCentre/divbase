@@ -43,15 +43,19 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_S3_ACCESS_KEY=minioadmin
       - DIVBASE_S3_SECRET_KEY=badpassword
-    volumes: &worker-volumes
-      - ../src:/app/src
+    develop: &watch-celery-src
+      watch:
+        - action: rebuild
+          path: ../src
+        - action: rebuild
+          path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
   worker-long:
     build: *worker-build
     healthcheck: *worker-healthcheck
     depends_on: *worker-depends
     environment: *worker-env
-    volumes: *worker-volumes
+    develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
   flower:
     build:
@@ -80,6 +84,7 @@ services:
       ]
     volumes:
       - flower-data:/data
+    develop: *watch-celery-src
   minio:
     image: bitnami/minio:2025.5.24
     ports:
@@ -106,17 +111,11 @@ services:
     ports:
       - "8000:8000"
     command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
-    develop:
-      # Create a `watch` configuration to update the app
-      # https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts
+    develop: # fastapi doesn't require as much reloading as Celery, so diff watch settings
       watch:
-        # Sync the working directory with the `/app` directory in the container
         - action: sync
           path: ../src
           target: /app/src
-          ignore:
-            - .venv/
-        # Rebuild the image if dependencies change by checking uv.lock
         - action: rebuild
           path: ../uv.lock
     healthcheck:
