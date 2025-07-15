@@ -10,7 +10,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-COPY . /app
+# watch requires that the container's USER can write to the target path so it can update files. 
+COPY --chown=app:app . /app
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
