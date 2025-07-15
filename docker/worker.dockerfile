@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM ghcr.io/astral-sh/uv:python3.13-alpine
 
 WORKDIR /app
 
@@ -20,7 +20,6 @@ RUN apk update && \
     openssl-dev \
     perl-dev
 
-
 RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
     | tar -C /tmp -xjf- \
     && cd /tmp/bcftools-${BCFTOOLS_VERSION} \
@@ -28,12 +27,19 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
     && make install \
     && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
-# copy readme to avoid pip complaining about missing files
-COPY pyproject.toml README.md ./
 
-RUN pip install --upgrade pip 
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-COPY src/ ./src/
-RUN pip install -e .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
+
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 ENTRYPOINT ["celery", "-A", "divbase_tools.tasks", "worker", "--loglevel=info"]
