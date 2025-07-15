@@ -111,7 +111,7 @@ services:
     ports:
       - 8000:8000
     command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
-    develop: # fastapi doesn't require as much reloading as Celery, so diff watch settings
+    develop: # fastapi doesn't require reloading on each src change, so diff watch settings
       watch:
         - action: sync
           path: ../src
