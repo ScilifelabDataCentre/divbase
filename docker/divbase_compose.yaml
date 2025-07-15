@@ -62,7 +62,7 @@ services:
       context: ..
       dockerfile: docker/flower.dockerfile
     healthcheck:
-      test: ["CMD", "curl", "-f", "-u", "floweradmin:badpassword", "http://localhost:5555/"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:5555/', auth=('floweradmin', 'badpassword')).raise_for_status()"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -109,7 +109,7 @@ services:
       context: ..
       dockerfile: docker/fastapi.dockerfile
     ports:
-      - "8000:8000"
+      - 8000:8000
     command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
     develop: # fastapi doesn't require as much reloading as Celery, so diff watch settings
       watch:
@@ -119,12 +119,12 @@ services:
         - action: rebuild
           path: ../uv.lock
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
       interval: 5s
       timeout: 5s
       retries: 5
     environment:
-    - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
+    - FLOWER_HOST=http://flower:5555 
     - FLOWER_USER=floweradmin
     - FLOWER_PASSWORD=badpassword
     - DIVBASE_USER=divbase_user_set_in_compose_file

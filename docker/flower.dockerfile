@@ -1,8 +1,5 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
-# Install curl for healthcheck
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1
