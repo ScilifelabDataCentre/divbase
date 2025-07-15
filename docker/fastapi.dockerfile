@@ -1,17 +1,22 @@
-FROM python:3.12-alpine
+# Adapted from https://github.com/astral-sh/uv-docker-example
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-# copy readme to avoid pip complaining about missing files
-COPY pyproject.toml README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
 
-RUN pip install --upgrade pip 
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
 
-COPY src/ ./src/
-RUN pip install -e .
+ENV PATH="/app/.venv/bin:$PATH"
 
-# host needs to be set to 0.0.0.0 to be accessible from outside the container
-CMD ["uvicorn", "divbase_tools.divbase_api:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src/divbase_tools"]
+ENTRYPOINT []
+
+CMD ["fastapi", "dev", "--host", "0.0.0.0"]
