@@ -96,7 +96,7 @@ For the CLI commands we have the following environments:
 To specify the environment to use you can prepend each command (or set in your shell) the envrioment you want to use:
 
 ```bash
-DIVBASE_ENV=local divbase-cli files list --bucket-name a-local-bucket
+DIVBASE_ENV=local divbase-cli files list --project a-local-project
 ```
 
 **Note:** You do not need to create `.env` files for the `local` (e.g. `.env.local`) or `test`(e.g. `.env.test` ) environments as these settings are not secret. They will be automatically provided when running.
@@ -112,7 +112,7 @@ DIVBASE_S3_SECRET_KEY=your_secret_key_here
 Once created you can run cli commands by passing the environment as shown below.
 
 ```bash
-DIVBASE_ENV=scilifelab2dev divbase-cli files list --bucket-name a-bucket-in-the-cloud
+DIVBASE_ENV=scilifelab2dev divbase-cli files list --project a-project-in-the-cloud
 ```
 
 **Note:** Default behaviour if `DIVBASE_ENV` is not set is to get enviroment varialbes from `.env`. This would be used by actual users of the service who will not have to deal with having multiple environments like us.

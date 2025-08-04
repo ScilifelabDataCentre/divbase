@@ -2,8 +2,8 @@
 Tests for the user configuration CLI commands.
 
 Tests start from 1 of 3 types of user config files:
-- fresh_config: A newly created config file with no buckets.
-- user_config_path: A config file with some pre-existing buckets and a default bucket set.
+- fresh_config: A newly created user config file with no projects.
+- user_config_path: A config file with some pre-existing projects and a default project set.
 - No config file: To test the "config create" command...
 """
 
@@ -34,136 +34,136 @@ def test_cant_create_config_if_exists(tmp_config_path):
     assert isinstance(result2.exception, FileExistsError)
 
 
-def test_add_bucket_command(fresh_config):
-    bucket_name = "test_bucket"
-    command = f"config add-bucket test_bucket --config {fresh_config}"
+def test_add_project_command(fresh_config):
+    project_name = "test_project"
+    command = f"config add-project {project_name} --config {fresh_config}"
     result = runner.invoke(app, command)
-
     assert result.exit_code == 0
+
     config_contents = load_user_config(fresh_config)
-    assert bucket_name in config_contents.all_bucket_names
+    assert project_name in config_contents.all_project_names
 
 
-def test_add_bucket_as_default_command(fresh_config):
-    bucket_name = "test_bucket"
+def test_add_project_as_default_command(fresh_config):
+    project_name = "test_project"
 
-    command = f"config add-bucket {bucket_name} --default --config {fresh_config}"
+    command = f"config add-project {project_name} --default --config {fresh_config}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     config = load_user_config(fresh_config)
-    assert bucket_name in config.all_bucket_names
-    assert config.default_bucket == bucket_name
+    assert project_name in config.all_project_names
+    assert config.default_project == project_name
 
 
-def test_add_bucket_and_specify_urls(fresh_config):
-    bucket_name = "test_bucket"
+def test_add_project_and_specify_urls(fresh_config):
+    project_name = "test_project"
     divbase_url = "https://divbasewebsite.com"
     s3_url = "http://s3.divbasewebsite.com"
 
-    command = f"config add-bucket {bucket_name} --divbase-url {divbase_url} --s3-url {s3_url} --config {fresh_config}"
+    command = f"config add-project {project_name} --divbase-url {divbase_url} --s3-url {s3_url} --config {fresh_config}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     config_contents = load_user_config(fresh_config)
-    bucket = config_contents.bucket_info(name=bucket_name)
+    project = config_contents.project_info(name=project_name)
 
-    assert bucket is not None
-    assert bucket.name == bucket_name
-    assert bucket.divbase_url == divbase_url
-    assert bucket.s3_url == s3_url
+    assert project is not None
+    assert project.name == project_name
+    assert project.divbase_url == divbase_url
+    assert project.s3_url == s3_url
 
 
-def test_add_bucket_that_already_exists(fresh_config):
+def test_add_project_that_already_exists(fresh_config):
     """
     Should warn user and not be duplicated in the config.
-    The new version of bucket should not be added.
+    The newer project settings should be in the config file (i.e. overwrite the old ones).
     """
-    bucket_name = "test_bucket"
+    project_name = "test_project"
     initial_divbase_url = "https://divbasewebsite.se"
     new_divbase_url = "https://newdivbasewebsite.se"
 
-    initial_command = f"config add-bucket {bucket_name} --divbase-url {initial_divbase_url} --config {fresh_config}"
+    initial_command = f"config add-project {project_name} --divbase-url {initial_divbase_url} --config {fresh_config}"
     result = runner.invoke(app, initial_command)
     assert result.exit_code == 0
 
     user_config = load_user_config(fresh_config)
-    bucket_info = user_config.bucket_info(name=bucket_name)
-    assert bucket_info.divbase_url == initial_divbase_url
-    assert bucket_info.name in user_config.all_bucket_names
+    project_info = user_config.project_info(name=project_name)
+    assert project_info.divbase_url == initial_divbase_url
+    assert project_info.name in user_config.all_project_names
 
-    new_command = f"config add-bucket {bucket_name} --divbase-url {new_divbase_url} --config {fresh_config}"
+    new_command = f"config add-project {project_name} --divbase-url {new_divbase_url} --config {fresh_config}"
 
-    with pytest.warns(UserWarning, match=f"The bucket: '{bucket_name}' already existed"):
+    with pytest.warns(UserWarning, match=f"The project: '{project_name}' already existed"):
         result = runner.invoke(app, new_command)
     assert result.exit_code == 0
 
     user_config = load_user_config(fresh_config)
-    bucket_info = user_config.bucket_info(name=bucket_name)
-    assert bucket_info.divbase_url == new_divbase_url
-    assert bucket_info.name in user_config.all_bucket_names
+    project_info = user_config.project_info(name=project_name)
+    assert project_info.divbase_url == new_divbase_url
+    assert project_info.name in user_config.all_project_names
 
 
-def test_set_default_bucket_command(user_config_path):
+def test_set_default_project_command(user_config_path):
     user_config = load_user_config(user_config_path)
-    assert user_config.default_bucket != "bucket2"
+    assert user_config.default_project != "project2"
 
-    command = f"config set-default bucket2 --config {user_config_path}"
+    command = f"config set-default project2 --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     user_config = load_user_config(user_config_path)
-    assert user_config.default_bucket == "bucket2"
+    assert user_config.default_project == "project2"
 
 
-def test_set_default_a_bucket_that_does_not_exist(user_config_path):
-    """Test setting a default bucket that does not exist in the config."""
-    command = f"config set-default made-up-bucket --config {user_config_path}"
+def test_set_default_project_for_a_project_that_does_not_exist(user_config_path):
+    """Test setting a default project that does not exist in the config."""
+    command = f"config set-default made-up-project --config {user_config_path}"
     result = runner.invoke(app, command)
     assert isinstance(result.exception, ValueError)
 
 
-def test_show_default_bucket_command(user_config_path, CONSTANTS):
+def test_show_default_project_command(user_config_path, CONSTANTS):
     command = f"config show-default --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    assert CONSTANTS["DEFAULT_BUCKET"] in result.output
+    assert CONSTANTS["DEFAULT_PROJECT"] in result.output
 
 
 def test_show_default_with_no_default_set_command(fresh_config):
     command = f"config show-default --config {fresh_config}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    assert "No default bucket" in result.output
+    assert "No default project" in result.output
 
 
-def test_remove_bucket_command(user_config_path, CONSTANTS):
-    for bucket_name in CONSTANTS["BUCKET_CONTENTS"]:
-        command = f"config remove-bucket {bucket_name} --config {user_config_path}"
+def test_remove_project_command(user_config_path, CONSTANTS):
+    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
+        command = f"config remove-project {project_name} --config {user_config_path}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
 
         user_config = load_user_config(user_config_path)
-        assert bucket_name not in user_config.all_bucket_names
+        assert project_name not in user_config.all_project_names
 
 
-def test_remove_bucket_that_does_not_exist(user_config_path):
-    bucket_name = "does-not-exist"
-    command = f"config remove-bucket {bucket_name} --config {user_config_path}"
+def test_remove_project_that_does_not_exist(user_config_path):
+    project_name = "does-not-exist"
+    command = f"config remove-project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert f"The bucket '{bucket_name}' was not found in your config file" in result.output
+    assert f"The project '{project_name}' was not found in your config file" in result.output
 
 
-def test_remove_default_bucket_command(user_config_path, CONSTANTS):
-    command = f"config remove-bucket {CONSTANTS['DEFAULT_BUCKET']} --config {user_config_path}"
+def test_remove_default_project_command(user_config_path, CONSTANTS):
+    command = f"config remove-project {CONSTANTS['DEFAULT_PROJECT']} --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     user_config = load_user_config(user_config_path)
-    assert CONSTANTS["DEFAULT_BUCKET"] not in user_config.all_bucket_names
-    assert user_config.default_bucket is None
+    assert CONSTANTS["DEFAULT_PROJECT"] not in user_config.all_project_names
+    assert user_config.default_project is None
 
 
 def test_set_default_dload_dir_command(user_config_path):
@@ -182,13 +182,13 @@ def test_show_user_config_command(user_config_path, CONSTANTS):
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    for bucket_name in CONSTANTS["BUCKET_CONTENTS"]:
-        assert bucket_name in result.output
+    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
+        assert project_name in result.output
 
 
-def test_show_user_config_with_no_buckets_command(fresh_config):
+def test_show_user_config_with_no_projects_command(fresh_config):
     command = f"config show --config {fresh_config}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert "No buckets" in result.output
+    assert "No projects" in result.output

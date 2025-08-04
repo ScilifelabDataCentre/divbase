@@ -30,14 +30,14 @@ def clean_versions(user_config_path, CONSTANTS):
     Remove the versioning file and create a new one before each test.
     Used in all tests in this module.
     """
-    for bucket_name in CONSTANTS["BUCKET_CONTENTS"]:
+    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
         s3_client = boto3.client(
             "s3",
             endpoint_url=CONSTANTS["MINIO_URL"],
             aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
             aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
         )
-        s3_client.delete_object(Bucket=bucket_name, Key=VERSION_FILE_NAME)
+        s3_client.delete_object(Bucket=project_name, Key=VERSION_FILE_NAME)
 
     command = f"version create --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -54,13 +54,13 @@ def test_create_version_file_fails_if_already_exists(user_config_path):
     assert isinstance(result.exception, BucketVersioningFileAlreadyExistsError)
 
 
-def test_create_version_for_non_default_bucket(user_config_path, CONSTANTS):
-    bucket_name = CONSTANTS["NON_DEFAULT_BUCKET"]
-    command = f"version create --bucket-name {bucket_name} --config {user_config_path}"
+def test_create_version_for_non_default_project(user_config_path, CONSTANTS):
+    project_name = CONSTANTS["NON_DEFAULT_PROJECT"]
+    command = f"version create --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert f"Bucket versioning file created in bucket: '{bucket_name}'" in result.stdout
+    assert f"Bucket versioning file created for project: '{project_name}'" in result.stdout
 
 
 def test_add_version(user_config_path):
@@ -111,18 +111,18 @@ def test_attempt_add_version_that_already_exists_fails(user_config_path):
     assert isinstance(result.exception, BucketVersionAlreadyExistsError)
 
 
-def test_add_version_works_with_clean_bucket(user_config_path, CONSTANTS):
+def test_add_version_works_with_clean_project(user_config_path, CONSTANTS):
     """
-    Using the clean bucket which has no files at all (not even the bucket metadata one)
+    Using the clean project which has no files at all in the bucket (not even the bucket metadata file)
     So validating you don't need to run `version create` first.
     """
-    clean_bucket = CONSTANTS["CLEANED_BUCKET"]
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
 
-    command = f"version add {VERSION_1_NAME} --bucket-name {clean_bucket} --config {user_config_path} "
+    command = f"version add {VERSION_1_NAME} --project {clean_project} --config {user_config_path} "
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"version list --bucket-name {clean_bucket} --config {user_config_path}"
+    command = f"version list --project {clean_project} --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert VERSION_1_NAME in result.stdout
@@ -166,8 +166,8 @@ def test_delete_nonexistent_version(user_config_path):
 
 
 def test_get_version_info(user_config_path, CONSTANTS):
-    default_bucket = CONSTANTS["DEFAULT_BUCKET"]
-    files_in_bucket = CONSTANTS["BUCKET_CONTENTS"][default_bucket]
+    default_project = CONSTANTS["DEFAULT_PROJECT"]
+    files_in_project = CONSTANTS["PROJECT_CONTENTS"][default_project]
 
     command = f"version add {VERSION_1_NAME} --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -178,9 +178,9 @@ def test_get_version_info(user_config_path, CONSTANTS):
     assert result.exit_code == 0
 
     assert f"{VERSION_1_NAME}" in result.stdout
-    assert f"{default_bucket}" in result.stdout
+    assert f"{default_project}" in result.stdout
 
-    for file in files_in_bucket:
+    for file in files_in_project:
         assert f"- '{file}' :" in result.stdout
 
 
@@ -236,6 +236,6 @@ def test_get_version_updates_hashes_on_new_upload(user_config_path, CONSTANTS, f
             hash_v2 = line.split(f"- '{test_file_name}' : ")[1].strip()
             break
 
-    assert hash_v1 != "", "Hash for bucket version 1 not found"
-    assert hash_v2 != "", "Hash for bucket version 2 not found"
+    assert hash_v1 != "", "Hash for version 1 not found"
+    assert hash_v2 != "", "Hash for version 2 not found"
     assert hash_v1 != hash_v2, "Hashes for the same file in different versions should be different"
