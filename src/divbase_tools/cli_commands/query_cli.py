@@ -8,7 +8,7 @@ If sample metadata query:
 
 If bcftools query:
     a task id is returned which can be used to check the status of the job.
-    After task completed, a merged VCF file will be added to the bucket which can be downloaded by the user.
+    After task completed, a merged VCF file will be added to the project's storage bucket which can be downloaded by the user.
 
 
 TODO:
@@ -23,9 +23,9 @@ import httpx
 import typer
 from rich import print
 
-from divbase_tools.cli_commands.config_resolver import resolve_bucket, resolve_divbase_api_url
+from divbase_tools.cli_commands.config_resolver import resolve_divbase_api_url, resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
+from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_tools.queries import SidecarQueryResult
 from divbase_tools.task_history import TaskHistoryManager
 
@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_METADATA_TSV = "sample_metadata.tsv"
 
-METADATA_TSV_ARGUMENT = typer.Option(DEFAULT_METADATA_TSV, help="Name of the sample metadata TSV file in the bucket.")
+METADATA_TSV_ARGUMENT = typer.Option(
+    DEFAULT_METADATA_TSV, help="Name of the sample metadata TSV file in the project's storage bucket."
+)
 
 BCFTOOLS_ARGUMENT = typer.Option(
     ...,
@@ -54,7 +56,8 @@ TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to fi
 
 
 query_app = typer.Typer(
-    help="Run queries on the VCF files stored in the bucket. Queries are run on the DivBase API", no_args_is_help=True
+    help="Run queries on the VCF files stored in the project's storage bucket. Queries are run on the DivBase API",
+    no_args_is_help=True,
 )
 
 
@@ -69,21 +72,21 @@ def sample_metadata_query(
         help="Print sample_ID and Filename results from the query.",
     ),
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
-    bucket_name: str = BUCKET_NAME_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
-    Query the tsv sidecar metadata file for the VCF files stored in the bucket.
+    Query the tsv sidecar metadata file for the VCF files in the project's storage bucket.
     Returns the sample IDs and filenames that match the query.
 
     TODO: it perhaps be useful to set the default download_dir in the config so that we can
     look for files there? For now this code just uses file.parent as the download directory.
     TODO: handle when the name of the sample column is something other than Sample_ID
     """
-    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "bucket_name": bucket_config.name}
-    response = httpx.post(f"{bucket_config.divbase_url}/query/sample-metadata/", params=params)
+    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
+    response = httpx.post(f"{project_config.divbase_url}/query/sample-metadata/", params=params)
     response.raise_for_status()
 
     results = SidecarQueryResult(**response.json())
@@ -103,11 +106,11 @@ def pipe_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
-    bucket_name: str | None = BUCKET_NAME_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
-    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the bucket on success.
+    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project's storage bucket on success.
 
     TODO Error handling for subprocess calls.
     TODO: handle case empty results are returned from tsv_query()
@@ -117,19 +120,19 @@ def pipe_query(
     TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
     """
-    bucket_config = resolve_bucket(bucket_name=bucket_name, config_path=config_file)
+    project_config = resolve_project(project_name=project, config_path=config_file)
 
     params = {
         "tsv_filter": tsv_filter,
         "command": command,
         "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": bucket_config.name,
+        "project": project_config.name,
     }
-    response = httpx.post(f"{bucket_config.divbase_url}/query/bcftools-pipe/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/query/bcftools-pipe/", params=params)
     response.raise_for_status()
 
     task_id = response.json()
-    print(f"Job submitted succsefully with task id: {task_id}")
+    print(f"Job submitted successfully with task id: {task_id}")
 
 
 @query_app.command("task-status")
@@ -137,7 +140,7 @@ def check_status(
     task_id: str | None = typer.Argument(None, help="Optional task id to check the status of a specific query job."),
     divbase_url: str | None = typer.Option(
         None,
-        help="Optional DivBase URL to use for the query. If not provided the default bucket's from your config file will be used.",
+        help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
     ),
     config_file: Path = CONFIG_FILE_OPTION,
 ):

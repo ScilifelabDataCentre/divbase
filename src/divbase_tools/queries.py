@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from divbase_tools.cli_commands.config_resolver import resolve_bucket
+from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -477,7 +477,7 @@ class SidecarQueryManager:
 
 # TODO - can this be removed?
 def fetch_query_files_from_bucket(
-    bucket_name: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
+    project: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
 ) -> None:
     """
     Helper function to fetch files needed for queries from the bucket if they do not exist locally.
@@ -485,9 +485,9 @@ def fetch_query_files_from_bucket(
     if not download_dir:
         download_dir = Path.cwd()
 
-    bucket_config = resolve_bucket(bucket_name, config_path)
+    project_config = resolve_project(project_name=project, config_path=config_path)
     download_files_command(
-        bucket_config=bucket_config,
+        project_config=project_config,
         all_files=files,
         download_dir=download_dir,
         bucket_version=bucket_version,
