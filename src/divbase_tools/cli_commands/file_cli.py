@@ -1,5 +1,5 @@
 """
-Command line interface for managing files in a DivBase bucket/project.
+Command line interface for managing files in a DivBase project's storage bucket.
 
 TODO - support for specifying versions of files when downloading files?
 TODO - some duplication of logic here, but awkward as not exactly same logic for different ops.
@@ -12,38 +12,36 @@ import typer
 from rich import print
 from typing_extensions import Annotated
 
+from divbase_tools.cli_commands.config_resolver import resolve_download_dir, resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.cli_commands.version_cli import BUCKET_NAME_OPTION
+from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_tools.services import (
     delete_objects_command,
     download_files_command,
     list_files_command,
     upload_files_command,
 )
-from divbase_tools.utils import resolve_bucket_name
 
-file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the bucket.")
+file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's storage bucket.")
 
 
 @file_app.command("list")
 def list_files(
-    bucket_name: str = BUCKET_NAME_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    list all files in the bucket.
+    list all files in the project's storage bucket.
 
     To see files at a user specified bucket version (controlled by the 'divbase-cli version' subcommand),
     you can instead use the 'divbase version info [VERSION_NAME]' command.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
-    files = list_files_command(
-        bucket_name=bucket_name,
-    )
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    files = list_files_command(project_config=project_config)
     if not files:
-        print("No files found in the bucket.")
+        print("No files found in the project's storage bucket.")
     else:
-        print(f"Files in bucket '{bucket_name}':")
+        print(f"Files in bucket '{project_config.bucket_name}':")
         for file in files:
             print(f"- '{file}'")
 
@@ -52,20 +50,26 @@ def list_files(
 def download_files(
     files: List[str] = typer.Argument(None, help="Space seperated list of files/objects to download from the bucket."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    download_dir: Path = typer.Option(
-        default=Path("."),
-        help="Directory to download the files to.",
+    download_dir: str = typer.Option(
+        None,
+        help="""Directory to download the files to. 
+            If not provided, defaults to what you specified in your user config. 
+            If also not specified in your user config, downloads to the current directory.
+            You can also specify "." to download to the current directory.""",
     ),
-    bucket_version: str = typer.Option(default=None, help="Version of the bucket at which to download the files."),
-    bucket_name: str = BUCKET_NAME_OPTION,
+    bucket_version: str = typer.Option(
+        default=None, help="Version of the project's storage bucket at which to download the files."
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Download files from the bucket. This can be done by either:
+    Download files from the project's storage bucket. This can be done by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to download the files to.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -84,18 +88,21 @@ def download_files(
         raise typer.Exit(1)
 
     downloaded_files = download_files_command(
-        bucket_name=bucket_name,
+        project_config=project_config,
         all_files=list(all_files),
-        download_dir=download_dir,
+        download_dir=download_dir_path,
         bucket_version=bucket_version,
     )
-    missing_files = all_files - set(downloaded_files)
+
+    downloaded_file_names = [file.name for file in downloaded_files]
+    missing_files = all_files - set(downloaded_file_names)
+
     if missing_files:
         print("WARNING: The following files were not downloaded:")
         for file in missing_files:
             print(f"- {file}")
     else:
-        print(f"The following files were downloaded to {download_dir.resolve()}:")
+        print(f"The following files were downloaded to {download_dir_path.resolve()}:")
         for file in downloaded_files:
             print(f"- '{file}'")
 
@@ -111,16 +118,16 @@ def upload_files(
             "--safe-mode", help="Check if any of the files you're about to upload already exist and if so don't upload"
         ),
     ] = False,
-    bucket_name: str = BUCKET_NAME_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Upload files to the bucket/DivBase project by either:
+    Upload files to your project's storage bucket by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to upload
         3. providing a text file with or a file list.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    project_config = resolve_project(project_name=project, config_path=config_file)
 
     if bool(files) + bool(upload_dir) + bool(file_list) > 1:
         print("Please specify only one of --files, --upload_dir, or --file-list.")
@@ -143,7 +150,7 @@ def upload_files(
         raise typer.Exit(1)
 
     uploaded_files = upload_files_command(
-        bucket_name=bucket_name,
+        project_config=project_config,
         all_files=list(all_files),
         safe_mode=safe_mode,
     )
@@ -159,23 +166,23 @@ def upload_files(
 @file_app.command("remove")
 def remove_files(
     files: List[str] | None = typer.Argument(
-        None, help="Space seperated list of files/objects in the bucket to delete."
+        None, help="Space seperated list of files/objects in the project's storage bucket to delete."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="If set, will not actually delete the files, just print what would be deleted."
     ),
-    bucket_name: str = BUCKET_NAME_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Remove files from the bucket/DivBase project by either:
+    Remove files from the project's storage bucket by either:
         1. providing a list of files paths directly in the command line
         2. providing a text file with or a file list.
 
     'dry_run' mode will not actually delete the files, just print what would be deleted.
     """
-    bucket_name = resolve_bucket_name(bucket_name=bucket_name, config_path=config_file)
+    project_config = resolve_project(project_name=project, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -197,7 +204,7 @@ def remove_files(
         return
 
     deleted_files = delete_objects_command(
-        bucket_name=bucket_name,
+        project_config=project_config,
         all_files=list(all_files),
     )
 

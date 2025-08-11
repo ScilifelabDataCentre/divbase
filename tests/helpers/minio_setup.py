@@ -6,17 +6,22 @@ from pathlib import Path
 
 import boto3
 
-MINIO_URL = "http://localhost:9002"  # from overide in docker compose tests.yml file
+MINIO_URL = "http://localhost:9002"
 MINIO_FAKE_ACCESS_KEY = "minioadmin"
 MINIO_FAKE_SECRET_KEY = "badpassword"
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
-BUCKETS = {
-    "bucket1": ["file1.txt", "file2.txt"],
-    "bucket2": ["file1.txt"],
-    "cleaned-bucket": [],  # this bucket is always cleaned before a test
-    "empty-bucket": [],
+PROJECTS = {
+    "project1": ["file1.txt", "file2.txt"],
+    "project2": ["file1.txt"],
+    "query-project": [
+        "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+        "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+        "sample_metadata.tsv",
+    ],
+    "cleaned-project": [],  # this project's bucket is always cleaned before a test
+    "empty-project": [],
 }
 
 
@@ -29,13 +34,13 @@ def setup_minio_data() -> None:
         aws_secret_access_key=MINIO_FAKE_SECRET_KEY,
     )
 
-    for bucket in BUCKETS:
-        s3_client.create_bucket(Bucket=bucket)
+    for bucket_name in PROJECTS:
+        s3_client.create_bucket(Bucket=bucket_name)
         s3_client.put_bucket_versioning(
-            Bucket=bucket,
+            Bucket=bucket_name,
             VersioningConfiguration={"Status": "Enabled"},
         )
 
-    for bucket, files in BUCKETS.items():
+    for bucket_name, files in PROJECTS.items():
         for file in files:
-            s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket=bucket, Key=file)
+            s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket=bucket_name, Key=file)

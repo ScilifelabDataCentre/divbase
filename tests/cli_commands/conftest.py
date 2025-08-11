@@ -1,26 +1,23 @@
 """
-Setup for pytest fixtures for CLI commands.
+Setup for pytest fixtures for e2e testing of the CLI commands.
 
-Pytest fixtures set up (and tear down) a MinIO server on localhost with test buckets and files.
+Pytest fixtures set up (and tear down) a test environment with the full DivBase stack running locally,
 
 The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
 """
 
-import shlex
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
-from divbase_tools.s3_client import S3FileManager
 from tests.helpers.minio_setup import (
-    BUCKETS,
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
     MINIO_URL,
+    PROJECTS,
 )
 
 runner = CliRunner()
@@ -32,28 +29,14 @@ def CONSTANTS():
         "BAD_ACCESS_KEY": MINIO_FAKE_ACCESS_KEY,
         "BAD_SECRET_KEY": MINIO_FAKE_SECRET_KEY,
         "MINIO_URL": MINIO_URL,
-        "DEFAULT_BUCKET": "bucket1",
-        "NON_DEFAULT_BUCKET": "bucket2",
-        "CLEANED_BUCKET": "cleaned-bucket",
-        "EMPTY_BUCKET": "empty-bucket",
-        "BUCKET_CONTENTS": BUCKETS,
+        "DEFAULT_PROJECT": "project1",
+        "NON_DEFAULT_PROJECT": "project2",
+        "QUERY_PROJECT": "query-project",
+        "CLEANED_PROJECT": "cleaned-project",
+        "EMPTY_PROJECT": "empty-project",
+        "PROJECT_CONTENTS": PROJECTS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
     }
-
-
-@pytest.fixture(autouse=True)
-def patch_s3_file_manager(CONSTANTS):
-    """Fixture to patch create_s3_file_manager to use the test Minio server."""
-
-    def mock_create_s3_file_manager():
-        return S3FileManager(
-            url=MINIO_URL,
-            access_key=CONSTANTS["BAD_ACCESS_KEY"],
-            secret_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-
-    with patch("divbase_tools.services.create_s3_file_manager", side_effect=mock_create_s3_file_manager) as mock:
-        yield mock
 
 
 @pytest.fixture
@@ -71,7 +54,7 @@ def fresh_config(tmp_path):
     """
     fresh_config_path = tmp_path / ".divbase_config.yaml"
     create_command = f"config create --config-file {fresh_config_path}"
-    result = runner.invoke(app, shlex.split(create_command))
+    result = runner.invoke(app, create_command)
 
     assert result.exit_code == 0
     assert tmp_path.exists(), "Config file was not created"
@@ -83,18 +66,21 @@ def fresh_config(tmp_path):
 def user_config_path(tmp_path, CONSTANTS):
     """
     Fixture to provide a path to an "existing" user configuration file with
-    some existing buckets and a default bucket set.
+    some existing projects and a default project set.
     """
     existing_config_path = tmp_path / ".divbase_config.yaml"
     create_command = f"config create --config-file {existing_config_path}"
-    result = runner.invoke(app, shlex.split(create_command))
+    result = runner.invoke(app, create_command)
     assert result.exit_code == 0
 
-    for bucket in CONSTANTS["BUCKET_CONTENTS"]:
-        add_command = f"config add-bucket {bucket} --config {existing_config_path}"
-        result = runner.invoke(app, shlex.split(add_command))
+    for project in CONSTANTS["PROJECT_CONTENTS"]:
+        add_command = f"config add-project {project} --divbase-url http://localhost:8001 --s3-url {MINIO_URL} --config {existing_config_path}"
+        result = runner.invoke(app, add_command)
         assert result.exit_code == 0
-    runner.invoke(app, shlex.split(f"config set-default {CONSTANTS['DEFAULT_BUCKET']} --config {existing_config_path}"))
+
+    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']} --config {existing_config_path}"
+    result = runner.invoke(app, set_default_command)
+    assert result.exit_code == 0
 
     return existing_config_path
 

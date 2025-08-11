@@ -8,26 +8,26 @@ from pathlib import Path
 
 import typer
 from rich import print
+from rich.console import Console
+from rich.table import Table
 
 from divbase_tools.user_config import (
-    DEFAULT_CONFIG_PATH,
-    add_bucket_to_config,
     create_user_config,
-    get_default_bucket,
     load_user_config,
-    remove_bucket_from_config,
-    set_default_bucket,
 )
 
-config_app = typer.Typer(help="Manage your user configuration file for the DivBase CLI.", no_args_is_help=True)
+DIVBASE_API_URL = "http://localhost:8000"
+DIVBASE_S3_URL = "http://localhost:9000"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
 
-# Needed by almost all commands, so we define it here.
 CONFIG_FILE_OPTION = typer.Option(
     DEFAULT_CONFIG_PATH,
     "--config",
     "-c",
     help="Path to your user configuration file. By default it is stored at ~/.config/.divbase_tools.yaml.",
 )
+
+config_app = typer.Typer(help="Manage your user configuration file for the DivBase CLI.", no_args_is_help=True)
 
 
 @config_app.command("create")
@@ -39,63 +39,125 @@ def create_user_config_command(
     print(f"User configuration file created at {config_file.resolve()}.")
 
 
-@config_app.command("add-bucket")
-def add_bucket_to_config_command(
-    bucket_name: str = typer.Argument(..., help="Name of the storage bucket to add to the user configuration file."),
+@config_app.command("add-project")
+def add_project_command(
+    name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
+    divbase_url: str = typer.Option(DIVBASE_API_URL, help="DivBase API URL associated with this project."),
+    s3_url: str = typer.Option(DIVBASE_S3_URL, help="S3 object store URL associated with this project."),
     make_default: bool = typer.Option(
         False,
         "--default",
         "-d",
-        help="Set the bucket as the default bucket in the user configuration file.",
+        help="Set this project as the default project in the user configuration file.",
     ),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Add a storage bucket to the user configuration file."""
-    add_bucket_to_config(bucket_name=bucket_name, config_path=config_file, is_default=make_default)
-    print(f"Bucket: '{bucket_name}' added to your config file located at {config_file.resolve()}.")
+    """Add a new project to the user configuration file."""
+    config = load_user_config(config_file)
+    project = config.add_project(
+        name=name,
+        divbase_url=divbase_url,
+        s3_url=s3_url,
+        is_default=make_default,
+    )
+
+    print(f"Project: '{project.name}' added to your config file located at {config_file.resolve()}.")
+    print(f"DivBase URL: {project.divbase_url} and S3 URL: {project.s3_url} were set for this project.")
+
+    if make_default:
+        print(f"Project '{project.name}' is now set as your default project")
+    else:
+        print(f"To make '{project.name}' your default project you can run: 'divbase config set-default {project.name}'")
 
 
-@config_app.command("remove-bucket")
-def remove_bucket_command(
-    bucket_name: str = typer.Argument(
-        ..., help="Name of the storage bucket to remove from the user configuration file."
-    ),
+@config_app.command("remove-project")
+def remove_project_command(
+    name: str = typer.Argument(..., help="Name of the project to remove from the user configuration file."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Remove a storage bucket from the user configuration file."""
-    remove_bucket_from_config(bucket_name, config_path=config_file)
-    print(f"Bucket '{bucket_name}' removed from your config file located at {config_file.resolve()}.")
+    """Remove a project from the user configuration file."""
+    config = load_user_config(config_file)
+    removed_project = config.remove_project(name)
+
+    if not removed_project:
+        print(f"The project '{name}' was not found in your config file located at {config_file.resolve()}.")
+    else:
+        print(f"The project '{removed_project}' was removed from your config.")
 
 
 @config_app.command("set-default")
-def set_default_bucket_command(
-    bucket_name: str = typer.Argument(..., help="Name of the storage bucket to add to the user configuration file."),
+def set_default_project_command(
+    name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Set the default bucket to use."""
-    set_default_bucket(bucket_name=bucket_name, config_path=config_file)
-    print(f"Default bucket is now set to '{bucket_name}'.")
+    """Set the default project to use."""
+    config = load_user_config(config_file)
+    default_project_name = config.set_default_project(name=name)
+    print(f"Default project is now set to '{default_project_name}'.")
 
 
 @config_app.command("show-default")
-def show_default_bucket_command(
+def show_default_project_command(
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
-    """Show the currently set default bucket."""
-    default = get_default_bucket(config_path=config_file)
+    """Show the currently set default project."""
+    config = load_user_config(config_file)
 
-    if default is None:
-        print("No default bucket is set in the user configuration file.")
-        return
-    print(f"Default bucket is: '{default}'.")
+    if config.default_project:
+        print(f"Default project is: '{config.default_project}'.")
+    else:
+        print("No default project is set in the user configuration file.")
+
+
+@config_app.command("set-dload-dir")
+def set_default_dload_dir_command(
+    download_dir: str = typer.Argument(
+        ...,
+        help="""Set the default directory to download files to. 
+        By default files are downloaded to the current working directory.
+        You can specify an absolute path. 
+        You can use '.' to refer to the directory you run the command from.""",
+    ),
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """Set the default download dir"""
+    config = load_user_config(config_file)
+    dload_dir = config.set_default_download_dir(download_dir=download_dir)
+    if dload_dir == ".":
+        print("The default download directory will be whereever you run the command from.")
+    else:
+        print(f"The default download directory is now set to: {dload_dir}.")
 
 
 @config_app.command("show")
 def show_user_config(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Show the contents of your current config file."""
+    """Pretty print the contents of your current config file."""
     config = load_user_config(config_file)
-    print(f"Current user configuration from {config_file}:")
-    for key, value in config.items():
-        print(f"{key}: {value}")
+    console = Console()
+
+    table = Table(title=f"Your DivBase user configuration file's contents located at: '{config_file}'")
+    table.add_column("Bucket Name", style="cyan")
+    table.add_column("DivBase URL", style="green")
+    table.add_column("S3 URL", style="green")
+    table.add_column("Is default", style="yellow")
+
+    if not config.default_download_dir:
+        dload_dir_info = "Not specified, meaning the working directory of wherever you run the download command from."
+    elif config.default_download_dir == ".":
+        dload_dir_info = "Working directory of wherever you run the download command from."
+    else:
+        dload_dir_info = config.default_download_dir
+
+    console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+
+    if not config.projects:
+        console.print("[bold]No projects defined in your user config file.[/bold]")
+        console.print("You can add a project using the command: 'divbase config add-project <project_name>'")
+        return
+
+    for project in config.projects:
+        is_default = "Yes" if project.name == config.default_project else ""
+        table.add_row(project.name, project.divbase_url, project.s3_url, is_default)
+    console.print(table)

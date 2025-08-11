@@ -1,12 +1,18 @@
+"""
+TODO - consider split metadata query and bcftools query into two separate modules.
+"""
+
 import contextlib
 import logging
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
 
+from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -17,14 +23,61 @@ from divbase_tools.exceptions import (
     SidecarNoDataLoadedError,
 )
 from divbase_tools.services import download_files_command
-from divbase_tools.utils import resolve_bucket_name
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SidecarQueryResult:
+    """
+    Hold the results of a query run on a sidecar metadata TSV file.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    unique_sample_ids: List[str]
+    unique_filenames: List[str]
+    query_message: str
+
+
+def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> SidecarQueryResult:
+    """Run a query on a sidecar metadata TSV file."""
+    sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
+
+    query_result = sidecar_manager.query_result
+    query_message = sidecar_manager.query_message
+
+    unique_filenames = sidecar_manager.get_unique_values("Filename")
+    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
+
+    sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
+    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
+
+    # TODO - we should handle the case where no samples match the query.
+
+    return SidecarQueryResult(
+        sample_and_filename_subset=serialized_samples,
+        unique_sample_ids=unique_sample_ids,
+        unique_filenames=unique_filenames,
+        query_message=query_message,
+    )
+
+
+@dataclass
+class BCFToolsInput:
+    """
+    Contains the inputs required to run a bcftools query.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    sampleIDs: List[str]
+    filenames: List[str]
 
 
 class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
+
+    # TODO - support different file paths for input files.
 
     Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
     The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container
@@ -62,9 +115,7 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = (
-        "divbase-job-system-worker-1"  # for synchronous tasks, use this container name to find the container ID
-    )
+    CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
 
     def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
         """
@@ -260,6 +311,7 @@ class BcftoolsQueryManager:
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
+        # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
         output_file = "merged.vcf.gz"
 
@@ -267,7 +319,8 @@ class BcftoolsQueryManager:
             merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
             self.run_bcftools(command=merge_command)
             logger.info(f"Merged all temporary files into '{output_file}'.")
-
+        if len(output_temp_files) == 1:
+            os.rename(output_temp_files[0], output_file)
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
@@ -312,6 +365,8 @@ class SidecarQueryManager:
     The class provides methods to load the TSV file into a pandas DataFrame, run queries against the data,
     and retrieve unique values from specific columns.
 
+    TODO - consider seperation of concerns: this class currently handles both loading the TSV file and running queries on it.
+    TODO - some of the __init__ params are perhaps better as properties?
     """
 
     def __init__(self, file: Path):
@@ -319,7 +374,7 @@ class SidecarQueryManager:
         self.filter_string = None
         self.df = None
         self.query_result = None
-        self.query_message = ""
+        self.query_message: str = ""
         self.load_file()
 
     def load_file(self) -> "SidecarQueryManager":
@@ -332,7 +387,7 @@ class SidecarQueryManager:
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
         except Exception as e:
-            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file", error_details=e) from e
+            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
@@ -420,8 +475,9 @@ class SidecarQueryManager:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
 
 
+# TODO - can this be removed?
 def fetch_query_files_from_bucket(
-    bucket_name: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
+    project: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
 ) -> None:
     """
     Helper function to fetch files needed for queries from the bucket if they do not exist locally.
@@ -429,9 +485,9 @@ def fetch_query_files_from_bucket(
     if not download_dir:
         download_dir = Path.cwd()
 
-    bucket_name = resolve_bucket_name(bucket_name, config_path)
+    project_config = resolve_project(project_name=project, config_path=config_path)
     download_files_command(
-        bucket_name=bucket_name,
+        project_config=project_config,
         all_files=files,
         download_dir=download_dir,
         bucket_version=bucket_version,

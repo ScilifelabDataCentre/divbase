@@ -7,13 +7,8 @@ from pathlib import Path
 
 import boto3
 import botocore
-from dotenv import load_dotenv
 
 from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
-
-MINIO_URL = "https://api.divbase-testground.scilifelab-2-dev.sys.kth.se"
-DIVBASE_ACCESS_KEY_NAME = "DIVBASE_ACCESS_KEY"
-DIVBASE_SECRET_KEY_NAME = "DIVBASE_SECRET_KEY"
 
 
 class S3FileManager:
@@ -36,7 +31,7 @@ class S3FileManager:
                 files.append(obj["Key"])
         return files
 
-    def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[str]:
+    def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[Path]:
         """
         Download objects/files from the S3 bucket to a local directory.
 
@@ -46,7 +41,8 @@ class S3FileManager:
 
         for key, version_id in objects.items():
             dest = download_dir / Path(key).name
-            downloaded_files.append(self._download_single_file(key, dest, bucket_name, version_id))
+            self._download_single_file(key, dest, bucket_name, version_id)
+            downloaded_files.append(dest)
 
         return downloaded_files
 
@@ -148,17 +144,20 @@ class S3FileManager:
         return key
 
 
-def create_s3_file_manager(url: str = MINIO_URL) -> S3FileManager:
+def create_s3_file_manager(
+    url: str,
+    s3_env_access_key_name: str = "DIVBASE_S3_ACCESS_KEY",
+    s3_env_secret_key_name: str = "DIVBASE_S3_SECRET_KEY",
+) -> S3FileManager:
     """
-    Creates an S3FileManager instance using users environment variables credentials
+    Creates an S3FileManager instance using credentials from environment variables
     """
-    load_dotenv()
-    access_key = os.getenv(DIVBASE_ACCESS_KEY_NAME)
-    secret_key = os.getenv(DIVBASE_SECRET_KEY_NAME)
+    access_key = os.getenv(s3_env_access_key_name)
+    secret_key = os.getenv(s3_env_secret_key_name)
 
     if not access_key or not secret_key:
         raise DivBaseCredentialsNotFoundError(
-            access_key_name=DIVBASE_ACCESS_KEY_NAME, secret_key_name=DIVBASE_SECRET_KEY_NAME
+            access_key_name=s3_env_access_key_name, secret_key_name=s3_env_secret_key_name
         )
 
     return S3FileManager(

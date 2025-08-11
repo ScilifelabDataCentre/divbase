@@ -4,7 +4,6 @@ import logging
 import os
 
 import requests
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
@@ -98,6 +97,7 @@ class TaskHistoryManager:
         Extract submitter from task kwargs.
         """
         kwargs = task.get("kwargs", "{}")
+        # TODO, look into literal_eval.
         kwargs_dict = ast.literal_eval(kwargs)
         return kwargs_dict.get("submitter", "Unknown")
 
@@ -125,7 +125,6 @@ def get_task_history(task_id: str = None, display_limit: int = 10) -> list:
 
     Returns a list of tasks.
     """
-    load_dotenv()
     flower_user = os.environ.get("FLOWER_USER")
     flower_password = os.environ.get("FLOWER_PASSWORD")
     divbase_user = os.environ.get("DIVBASE_USER")

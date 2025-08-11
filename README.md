@@ -51,7 +51,7 @@ You can use either [uv](https://github.com/astral-sh/uv) or something like `venv
 uv sync
 ```
 
-This will create a virtual environment at the root of the repo and install all dependacies and the package (with all code in the src folder installed in "editable" mode).
+This will create a virtual environment at the root of the repo and install all dependencies and the package (with all code in the src folder installed in "editable" mode).
 
 #### Using pip and venv
 
@@ -79,25 +79,53 @@ We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on ever
 pre-commit install
 ```
 
-### 3. Running tests
+### 3. CLI Enviroment variables
 
-We currently have e2e tests for the CLI tool which are written using `pytest` and can be run as follows:
+The DivBase project has 2 groups of environment variables:
+
+1. Those needed by the user for running CLI commands and
+2. Those needed by the server to interact with itself.
+
+For the CLI commands we have the following environments:
+
+1. local - for local development
+2. test - used by pytest
+3. scilifelab2dev - to interact with instance of scilifelab2dev cluster.
+4. scilifelab2prod (not available yet)
+
+To specify the environment to use you can prepend each command (or set in your shell) the envrioment you want to use:
+
+```bash
+DIVBASE_ENV=local divbase-cli files list --project a-local-project
+```
+
+**Note:** You do not need to create `.env` files for the `local` (e.g. `.env.local`) or `test`(e.g. `.env.test` ) environments as these settings are not secret. They will be automatically provided when running.
+
+To use the `scilifelab2dev` environment you'll need to create the following file `.env.scilifelab2dev` which should never be committed to source control.
+
+```bash
+# .env.scilifelab2dev
+DIVBASE_S3_ACCESS_KEY=your_access_key_here
+DIVBASE_S3_SECRET_KEY=your_secret_key_here
+```
+
+Once created you can run cli commands by passing the environment as shown below.
+
+```bash
+DIVBASE_ENV=scilifelab2dev divbase-cli files list --project a-project-in-the-cloud
+```
+
+**Note:** Default behaviour if `DIVBASE_ENV` is not set is to get enviroment varialbes from `.env`. This would be used by actual users of the service who will not have to deal with having multiple environments like us.
+
+### 4. Running tests
+
+We use docker-compose to setup a testing environment. The testing stack contains a MinIO instance which is populated with some default buckets and data and provided to each test.
 
 ```bash
 pytest # you may want to append the -s flag to print standard output.
 ```
 
-For the tests inside:
-
-- `test_file_cli.py`
-- `test_version_cli.py`
-
-We use docker-compose to create a local MinIO instance.
-The MinIO instance is populated with some default buckets and data and provided to each test.
-
-**The tests will be slower the first time you run them as the docker image will need to be downloaded, otherwise setup takes ~3 seconds.**
-
-**The MinIO instance is shared between tests (aka `@pytest.fixture(scope="session")` ). This is important to think about when you add new tests.**
+**The tests will be slower the first time you run them as the docker images will need to be downloaded and built.**
 
 ## Queries
 
