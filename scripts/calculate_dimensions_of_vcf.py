@@ -1,5 +1,11 @@
 """
 Helper script that calculates the number of samples and variants in a VCF file and appends the results to a log.
+Works with compressed and uncompressed VCF files.
+
+Usage:
+    python scripts/calculate_dimensions_of_vcf.py --vcf <path_to_vcf> [--output <path_to_output.tsv>]
+
+    (--output defaults to vcf_dimensions.tsv if not specified)
 """
 
 import argparse
@@ -22,7 +28,30 @@ def parse_arguments():
         default=Path("vcf_dimensions.tsv"),
         help="Path to results file with the number of samples and variants (default: vcf_dimensions.tsv)",
     )
+    parser.add_argument(
+        "--skip-log",
+        action="store_true",
+        help="If set, do not write results to the log file. Overridden when --force is also set.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="If set, always calculate and log dimensions, even if the file is already in the log. Overwrites the log entry if it exists. This option ignores --skip-log.",
+    )
     return parser.parse_args()
+
+
+def filename_in_log(filename: str, log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    with open(log_path, "r") as f:
+        for line in f:
+            if line.strip().startswith(filename + "\t"):
+                print(f"Previous entry found in log ({log_path}):")
+                print("filename\tsample_count\tvariant_count")
+                print(f"{line.strip()}\n")
+                return True
+    return False
 
 
 def wrapper_calculate_dimensions(vcf_path: Path) -> None:
@@ -62,45 +91,74 @@ def extract_samples_from_opened_vcf(file: TextIO) -> list[str]:
     }
 
 
-def write_results_to_log(dimensions: dict, vcf_path: Path, output_path: Path = None) -> None:
+def write_results_to_log(dimensions: dict, vcf_path: Path, output_path: Path = None, overwrite: bool = False) -> None:
     """
-    Function to write the results to a log file. Checks if the entry already exists.
+    Write the results to a log file. If overwrite is True, replace any existing entry for this file; this is done by
+    going through all existing lines in the log file and carrying all non-matching lines over to a new list; finally,
+    the overwritten/updated line is appended to the log.
     """
     header = "filename\tsample_count\tvariant_count\n"
     line = f"{vcf_path.name}\t{dimensions['sample_count']}\t{dimensions['variants']}\n"
 
-    already_logged = False
+    lines = []
+    found = False
+
     if output_path.exists():
         with open(output_path, "r") as f:
-            for existing_line in f:
-                if existing_line.strip() == line.strip():
-                    already_logged = True
-                    break
+            lines = f.readlines()
+        if overwrite:
+            new_lines = []
+            for l in lines:
+                if not l.strip().startswith(vcf_path.name + "\t"):
+                    new_lines.append(l)
+                else:
+                    found = True
+            lines = new_lines
 
-    if not already_logged:
-        if not output_path.exists():
-            with open(output_path, "w") as f:
-                f.write(header)
-        with open(output_path, "a") as f:
-            f.write(line)
-            print(f"Wrote results to log at: {output_path}.")
+    if not output_path.exists():
+        lines = [header]
+
+    lines.append(line)
+
+    with open(output_path, "w") as f:
+        f.writelines(lines)
+
+    if found:
+        print(f"Overwrote previous entry for {vcf_path.name} in log at: {output_path}.")
     else:
-        print(f"Entry already exists in log at: {output_path}. Skipping write to log.")
+        print(f"Wrote VCF dimension results to log at: {output_path}.")
 
 
 def main():
     args = parse_arguments()
     vcf_path = Path(args.vcf)
+    output_path = args.output
+
+    skip_log = args.skip_log and not args.force
+
+    if not args.force and filename_in_log(vcf_path.name, output_path):
+        print(f"The file {vcf_path.name} is already present in {output_path}. Skipping calculation.")
+        print("(run script with --force to rerun calculation and overwrite existing log entry)")
+        return
 
     if vcf_path.name.endswith(".vcf") or vcf_path.name.endswith(".vcf.gz"):
         dimensions = wrapper_calculate_dimensions(vcf_path=vcf_path)
     else:
         print("Invalid file extension. Please provide a .vcf or .vcf.gz file.")
+        return
 
     print(f"Number of samples: {dimensions['sample_count']}")
     print(f"Number of variants: {dimensions['variants']}")
 
-    write_results_to_log(dimensions=dimensions, vcf_path=vcf_path, output_path=args.output)
+    if not skip_log:
+        write_results_to_log(
+            dimensions=dimensions,
+            vcf_path=vcf_path,
+            output_path=output_path,
+            overwrite=args.force,
+        )
+    else:
+        print("Skipping writing results to log file, since --skip-log was provided.")
 
 
 if __name__ == "__main__":
