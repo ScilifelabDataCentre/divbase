@@ -27,7 +27,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def get_sample_IDs_from_vcf_file(vcf_path: Path) -> None:
+def wrapper_get_sample_IDs_from_vcf_file(vcf_path: Path) -> None:
     """
     Function that reads compressed or uncompressed VCF files and passes it onwards to the function that generates the mock sample metadata.
     The code redundancy is intentional to comply with the ruff linter when using context managers for both compressed and uncompressed files.
@@ -47,20 +47,12 @@ def extract_samples_from_opened_vcf(file: TextIO) -> list[str]:
     Function that extracts sample IDs from the VCF file header.
     Returns a list of sample IDs.
     """
-    variant_count = 0
-    sample_count = 0
-
     for line in file:
         if line.startswith("#CHROM"):
             header = line.strip().split("\t")
             sample_IDs = header[9:]
-            sample_count = len(sample_IDs)
-        if not line.startswith("#"):
-            variant_count += 1
-
-    print(f"Number of samples: {sample_count}")
-    print(f"Number of variants: {variant_count}")
-    return sample_IDs
+            return sample_IDs
+    return []
 
 
 def generate_mock_sample_metadata(all_samples: dict[tuple], output_file: Path) -> None:
@@ -99,7 +91,7 @@ def main():
     all_samples = []
     for vcf_path in vcf_paths:
         if vcf_path.name.endswith(".vcf") or vcf_path.name.endswith(".vcf.gz"):
-            sample_IDs = get_sample_IDs_from_vcf_file(vcf_path=vcf_path)
+            sample_IDs = wrapper_get_sample_IDs_from_vcf_file(vcf_path=vcf_path)
             all_samples.extend((sample, vcf_path.name) for sample in sample_IDs)
         else:
             print("Invalid file extension. Please provide a .vcf or .vcf.gz file.")
