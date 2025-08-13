@@ -114,7 +114,7 @@ def bcftools_pipe_task(
     )
 
     try:
-        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs)
+        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
     except Exception as e:
         logger.error(f"Error in bcftools task: {str(e)}")
         return {"status": "error", "error": str(e), "task_id": task_id}
