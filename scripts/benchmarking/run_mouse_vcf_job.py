@@ -1,5 +1,6 @@
 """
-A script that downloads a large public VCF file and submits a divbase bcftools-query job.
+A script that runs commands with divbase CLI and auxiliary scripts to perform the work-flow required to add a new VCF file to divbase (+ mock sample metadata)
+and to run a bcftools query on the files. It downloads a large public VCF file and submits a divbase bcftools-query job.
 The query (=celery task) is expected to take about 10 minutes to complete, depending on the machine.
 
 In addition to the query, the pre-processing will take a few minutes too
@@ -10,69 +11,19 @@ In all, this little work-flow should be representative of all the steps needed t
 Divbase at the time of the commit.
 
 Usage:
-    python scripts/run_mouse_vcf_job.py
+
+    Ensure that divbase docker compose stack is running, e.g. with
+    docker compose -f docker/divbase_compose.yaml up --build -d
+    then:
+
+    python scripts/benchmarking/run_mouse_vcf_job.py
 """
 
-import contextlib
 import os
 import shlex
 import subprocess
-from pathlib import Path
 
-import boto3
-import yaml
-from local_dev_setup import LOCAL_ENV, MINIO_FAKE_ACCESS_KEY, MINIO_FAKE_SECRET_KEY, MINIO_URL
-
-
-def ensure_project_exists(project_name: str):
-    """Create a Minio bucket and DivBase project config entry if they do not already exist."""
-
-    print(f"\nChecking if there is a bucket named {project_name} in the local MinIO container...")
-
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=MINIO_URL,
-        aws_access_key_id=MINIO_FAKE_ACCESS_KEY,
-        aws_secret_access_key=MINIO_FAKE_SECRET_KEY,
-    )
-
-    existing_buckets = [b["Name"] for b in s3_client.list_buckets().get("Buckets", [])]
-    if project_name in existing_buckets:
-        print(f"Bucket '{project_name}' already exists.")
-    else:
-        print(f"Bucket '{project_name}' does not exist. Creating it...")
-        with contextlib.suppress(s3_client.exceptions.BucketAlreadyOwnedByYou):
-            s3_client.create_bucket(Bucket=project_name)
-        print(f"Bucket '{project_name}' created.")
-
-    s3_client.put_bucket_versioning(
-        Bucket=project_name,
-        VersioningConfiguration={"Status": "Enabled"},
-    )
-
-
-def ensure_project_in_config(project_name: str) -> None:
-    """Ensure that the project is listed in the DivBase config."""
-
-    config_path = Path.home() / ".config" / ".divbase_tools.yaml"
-
-    print(f"\nChecking if {project_name} exists in config...")
-
-    if project_in_config(project_name, config_path):
-        print(f"Project '{project_name}' already exists in config.")
-    else:
-        print(f"Project '{project_name}' does not exist in config. Adding it...")
-        command = shlex.split(f"divbase-cli config add-project {project_name}")
-        subprocess.run(command, check=True, env=LOCAL_ENV)
-
-
-def project_in_config(project_name: str, config_path: Path) -> bool:
-    if not config_path.exists():
-        return False
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-    projects = config.get("projects", [])
-    return any(p.get("name") == project_name for p in projects)
+from _benchmarking_shared_utils import LOCAL_ENV, ensure_project_exists, ensure_project_in_config
 
 
 def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metadata: str, url: str) -> None:
@@ -127,7 +78,7 @@ def main():
     ensure_required_files_in_bucket(project_name=project_name, filename=filename, mock_metadata=mock_metadata, url=url)
 
     print("\nSubmitting query job to task queue...")
-    cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project benchmarking"
+    cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project {project_name}"
     subprocess.run(shlex.split(cmd_query), check=True, env=LOCAL_ENV)
 
     print("\nThe query has been submitted. Check the task status or the flower logs for updates.")

@@ -27,3 +27,4 @@ bcftools_divbase_job_config.json
 
 # benchmarking files
 vcf_dimensions.tsv
+mock*.tsv
