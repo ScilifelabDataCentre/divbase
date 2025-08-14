@@ -15,6 +15,7 @@ Usage:
     python scripts/benchmarking/factorial_design_submit_jobs.py
 """
 
+import argparse
 import itertools
 import json
 import os
@@ -30,6 +31,25 @@ from _benchmarking_shared_utils import (
     ensure_project_in_config,
 )
 from scipy.stats import qmc
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Prepare and submit bcftools query jobs according to factorial design."
+    )
+    parser.add_argument(
+        "--output-json",
+        type=str,
+        default=Path("task_records.json"),
+        required=False,
+        help="Path to the output JSON file with task records (task ID and other metadata).",
+    )
+
+    parser.add_argument(
+        "--latin-hypercube", action="store_true", help="Use Latin hypercube design instead of full factorial."
+    )
+
+    return parser.parse_args()
 
 
 def generate_full_factorial_design(factor1_levels: np.ndarray, factor2_levels: np.ndarray) -> list[tuple]:
@@ -128,6 +148,7 @@ def generate_mock_vcfs(design: list[tuple], random_seed: int) -> list[str]:
 
 def submit_jobs_to_queue(output_files: list[str], project_name: str, n_replicates: int = 1) -> None:
     task_records = []
+    print("Submitting jobs to queue...")
     for replicate in range(n_replicates):
         for filename in output_files:
             metadata_filename = filename.replace("mock_vcf_file", "mock_metadata_file").replace(".vcf.gz", ".tsv")
@@ -164,19 +185,25 @@ def submit_jobs_to_queue(output_files: list[str], project_name: str, n_replicate
 
 
 def main():
-    n_samples = 30  # only used for  latin hypercube experiments, the number of samples should be at least the same as the number of levels in each factor
+    args = parse_arguments()
+    output_file = args.output_json
+
     factor1_levels = np.linspace(10, 1000, num=10)
-    factor2_levels = np.logspace(np.log10(10), np.log10(1_000_000), num=10)
+    factor2_levels = np.logspace(np.log10(10), np.log10(1_000_000), num=20)
     random_seed: int = 12345
+    n_samples = 30  # only used for  latin hypercube experiments, the number of samples should be at least the same as the number of levels in each factor
     n_replicates = 3
     project_name = "factorial-design"
 
-    design = generate_full_factorial_design(factor1_levels, factor2_levels)
-
-    # TODO allow running latin hyoercube instead with argparse
-    # design = generate_latin_hypercube_design(
-    #     n_samples=n_samples, factor1_levels=factor1_levels, factor2_levels=factor2_levels, random_seed=random_seed
-    # )
+    if args.latin_hypercube:
+        design = generate_latin_hypercube_design(
+            n_samples=n_samples,
+            factor1_levels=factor1_levels,
+            factor2_levels=factor2_levels,
+            random_seed=random_seed,
+        )
+    else:
+        design = generate_full_factorial_design(factor1_levels, factor2_levels)
 
     output_files = generate_mock_vcfs(design, random_seed)
 
@@ -191,10 +218,9 @@ def main():
 
     task_records = submit_jobs_to_queue(output_files, project_name, n_replicates)
 
-    with open("task_records.json", "w") as f:
+    print(f"Writing task records to file at: {output_file}")
+    with open(output_file, "w") as f:
         json.dump(task_records, f, indent=2)
-
-    # TODO add an option to specify the name of the task_records file
 
     print("The tasks have been submitted to the job queue. Wait until all tasks are finished, and then run:")
     print("python scripts/benchmarking/factorial_design_analyze_results.py")

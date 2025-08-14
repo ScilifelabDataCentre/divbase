@@ -36,7 +36,7 @@ def parse_arguments():
         type=str,
         default=Path("task_records.json"),
         required=False,
-        help="Path to the JSON file with task records.",
+        help="Path to the JSON file with task records. If the task record already contains runtime results, it skips checking the flower logs and goes directly to the data analysis.",
     )
     parser.add_argument(
         "--output-json",
@@ -59,7 +59,10 @@ def fetch_flower_tasks():
 
 
 def get_runtime_of_succeeded_tasks(task_records: list[dict], output_path: Path) -> list[dict]:
-    """Use the Flower API to get the runtime of the task IDs in the input JSON file. Only obtains the runtimes of the tasks that completed successfully."""
+    """
+    Use the Flower API to get the runtime of the task IDs in the input JSON file.
+    Only obtains the runtimes of the tasks that completed successfully.
+    Adds the results to the input file and writes it to disk."""
     # TODO write somewhere that this assumes that all tasks have finished and that they have been sucessful. maybe print a message about which records in the json that are missing runtims in the flower logs
     flower_log = fetch_flower_tasks()
 
@@ -150,7 +153,7 @@ def plot_main_effects(df: pd.DataFrame, query_str: str):
         Patch(facecolor="b", alpha=0.2, label="Std. dev."),
     ]
     ax1 = plt.gca()
-    sns.lineplot(x="number_of_samples", y="runtime", data=df, marker="o", ci="sd", ax=ax1)
+    sns.lineplot(x="number_of_samples", y="runtime", data=df, marker="o", errorbar="sd", ax=ax1)
     ax1.set_title(f"Main Effect: Number of Samples\n{query_str}", fontsize=10)
     ax1.set_xlabel("Number of Samples")
     ax1.set_ylabel("Mean Runtime (s)")
@@ -159,7 +162,7 @@ def plot_main_effects(df: pd.DataFrame, query_str: str):
 
     plt.figure()
     ax2 = plt.gca()
-    sns.lineplot(x="number_of_variants", y="runtime", data=df, marker="o", ci="sd", ax=ax2)
+    sns.lineplot(x="number_of_variants", y="runtime", data=df, marker="o", errorbar="sd", ax=ax2)
     ax2.set_title(f"Main Effect: Number of Variants\n{query_str}", fontsize=10)
     ax2.set_xlabel("Number of Variants")
     ax2.set_ylabel("Mean Runtime (s)")
@@ -176,7 +179,7 @@ def plot_interaction_effects(df: pd.DataFrame, query_str: str):
     plt.figure()
     ax = plt.gca()
 
-    sns.lineplot(x="samples_bin", y="runtime", hue="variants_bin", data=df, marker="o", ci="sd")
+    sns.lineplot(x="samples_bin", y="runtime", hue="variants_bin", data=df, marker="o", errorbar="sd")
     ax.set_title(f"Interaction Effect: Samples x Variants\n{query_str}", fontsize=10)
     ax.set_xlabel("Number of Samples (coded -1, 1)")
     ax.set_ylabel("Mean Runtime (s)")
@@ -186,18 +189,6 @@ def plot_interaction_effects(df: pd.DataFrame, query_str: str):
     ]
     handles, _ = ax.get_legend_handles_labels()
     ax.legend(handles=handles + legend_elements, loc="best", title="Variants Bin (coded -1, 1)")
-
-
-def run_anova(df: pd.DataFrame):
-    """Fit a linear model with main effects and interaction and then calculate an ANOVA table."""
-    model = ols.ols(
-        "runtime ~ number_of_samples + number_of_variants + number_of_samples:number_of_variants", data=df
-    ).fit()
-    print(model.summary())
-
-    anova_table = sm.stats.anova_lm(model, typ=2)
-    print("\nANOVA Table:")
-    print(anova_table)
 
 
 def z_score_normalization(df: pd.DataFrame) -> pd.DataFrame:
@@ -216,6 +207,18 @@ def z_score_normalization(df: pd.DataFrame) -> pd.DataFrame:
         "number_of_variants"
     ].std()
     return df
+
+
+def run_anova(df: pd.DataFrame):
+    """Fit a linear model with main effects and interaction and then calculate an ANOVA table."""
+    model = ols.ols(
+        "runtime ~ number_of_samples + number_of_variants + number_of_samples:number_of_variants", data=df
+    ).fit()
+    print(model.summary())
+
+    anova_table = sm.stats.anova_lm(model, typ=2)
+    print("\nANOVA Table:")
+    print(anova_table)
 
 
 def format_query_for_plot_title(df: pd.DataFrame) -> str:
@@ -246,14 +249,26 @@ def main():
     with open(task_records_path) as f:
         task_records = json.load(f)
 
-    updated_task_records = get_runtime_of_succeeded_tasks(task_records, output_path)
+    all_records_have_runtime = all(
+        (
+            "runtime" in record
+            and record["runtime"] is not None
+            and "elapsed_time" in record
+            and record["elapsed_time"] is not None
+        )
+        for record in task_records
+    )
 
+    if all_records_have_runtime:
+        updated_task_records = task_records
+        print("All records already have runtime and elapsed_time. Skipping Flower fetch and file write.")
+    else:
+        updated_task_records = get_runtime_of_succeeded_tasks(task_records, output_path)
     df = pd.DataFrame(updated_task_records)
     df = df[df["runtime"].notnull()]
 
     query_str = format_query_for_plot_title(df)
 
-    print(query_str)
     plot_3D_response_surface(df, query_str)
 
     plot_main_effects(df, query_str)
