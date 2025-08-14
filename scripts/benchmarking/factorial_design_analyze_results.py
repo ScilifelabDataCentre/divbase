@@ -178,6 +178,24 @@ def run_anova(df: pd.DataFrame):
     print(anova_table)
 
 
+def z_score_normalization(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    If the scales of the factors differ dramatically, it can affect regression and ANOVA analysis.
+    For example: the number of samples range between 10-1000 and the number of variants between
+    10-10000000. Z-score normalization can be used to adress this. The method transforms the dataset
+    using the mean and standard deviation for each data point.
+
+    See e.g.
+    https://www.geeksforgeeks.org/data-analysis/z-score-normalization-definition-and-examples/
+    """
+    df = df.copy()
+    df["number_of_samples"] = (df["number_of_samples"] - df["number_of_samples"].mean()) / df["number_of_samples"].std()
+    df["number_of_variants"] = (df["number_of_variants"] - df["number_of_variants"].mean()) / df[
+        "number_of_variants"
+    ].std()
+    return df
+
+
 def main():
     args = parse_arguments()
     task_records_path = Path(args.input_json)
@@ -191,13 +209,15 @@ def main():
     df = pd.DataFrame(updated_task_records)
     df = df[df["runtime"].notnull()]
 
-    run_anova(df)
-
     plot_3D_response_surface(df)
 
     plot_main_effects(df)
 
     plot_interaction_effects(df)
+
+    df_z_score_normalized = z_score_normalization(df)
+
+    run_anova(df_z_score_normalized)
 
     plt.show()
 
