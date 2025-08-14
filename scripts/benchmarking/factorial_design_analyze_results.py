@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -21,6 +22,8 @@ import seaborn as sns
 import statsmodels.api as sm
 import statsmodels.formula.api as ols
 from _benchmarking_shared_utils import FLOWER_PASSWORD, FLOWER_USER
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from scipy.interpolate import griddata
 
 
@@ -42,6 +45,7 @@ def parse_arguments():
         required=False,
         help="Path to the output JSON file with runtime information.",
     )
+
     return parser.parse_args()
 
 
@@ -82,7 +86,7 @@ def get_runtime_of_succeeded_tasks(task_records: list[dict], output_path: Path) 
     return task_records  # strictly not needed since list and dicts are mutable, but is useful for clarity
 
 
-def plot_3D_response_surface(df: pd.DataFrame) -> None:
+def plot_3D_response_surface(df: pd.DataFrame, query_str: str) -> None:
     """Plot the 3D response surface of the factorial design using mean runtime and show std as error bars."""
 
     grouped = df.groupby(["number_of_samples", "number_of_variants"], as_index=False).agg(
@@ -116,6 +120,9 @@ def plot_3D_response_surface(df: pd.DataFrame) -> None:
         color="r",
         label=f"Mean runtime (n_replicates={n_replicates_str})",
     )
+    ax.set_title("3D Response Surface")
+    if query_str:
+        ax.set_title(f"3D Response Surface\n{query_str}", fontsize=10)
 
     # Plot error bars (std) in z-direction
     for _, row in grouped.iterrows():
@@ -135,35 +142,50 @@ def plot_3D_response_surface(df: pd.DataFrame) -> None:
     # TODO add legend that describes the query and the heatmap
 
 
-def plot_main_effects(df: pd.DataFrame):
+def plot_main_effects(df: pd.DataFrame, query_str: str):
     """Plot the main effects of each factor on runtime."""
     plt.figure()
-    sns.lineplot(x="number_of_samples", y="runtime", data=df, marker="o")
-    plt.title("Main Effect: Number of Samples")
-    plt.xlabel("Number of Samples")
-    plt.ylabel("Mean Runtime (s)")
+    legend_elements = [
+        Line2D([0], [0], color="b", marker="o", label="Mean runtime"),
+        Patch(facecolor="b", alpha=0.2, label="Std. dev."),
+    ]
+    ax1 = plt.gca()
+    sns.lineplot(x="number_of_samples", y="runtime", data=df, marker="o", ci="sd", ax=ax1)
+    ax1.set_title(f"Main Effect: Number of Samples\n{query_str}", fontsize=10)
+    ax1.set_xlabel("Number of Samples")
+    ax1.set_ylabel("Mean Runtime (s)")
+
+    ax1.legend(handles=legend_elements, loc="best")
 
     plt.figure()
-    sns.lineplot(x="number_of_variants", y="runtime", data=df, marker="o")
-    plt.title("Main Effect: Number of Variants")
-    plt.xlabel("Number of Variants")
-    plt.ylabel("Mean Runtime (s)")
+    ax2 = plt.gca()
+    sns.lineplot(x="number_of_variants", y="runtime", data=df, marker="o", ci="sd", ax=ax2)
+    ax2.set_title(f"Main Effect: Number of Variants\n{query_str}", fontsize=10)
+    ax2.set_xlabel("Number of Variants")
+    ax2.set_ylabel("Mean Runtime (s)")
+    ax2.legend(handles=legend_elements, loc="best")
 
-    # TODO add legend that describes the query and the standard deviation
 
-
-def plot_interaction_effects(df: pd.DataFrame):
+def plot_interaction_effects(df: pd.DataFrame, query_str: str):
     """Classic interaction plot: one line per binned level of number_of_variants."""
 
     df = df.copy()
-    df["variants_bin"] = pd.qcut(df["number_of_variants"], q=3, duplicates="drop")  # q= number of bins
+    df["samples_bin"] = pd.qcut(df["number_of_samples"], q=2, labels=[-1, 1])
+    df["variants_bin"] = pd.qcut(df["number_of_variants"], q=2, labels=[-1, 1])
 
     plt.figure()
-    sns.lineplot(x="number_of_samples", y="runtime", hue="variants_bin", data=df, marker="o")
-    plt.title("Interaction Effect: Samples x Variants")
-    plt.xlabel("Number of Samples")
-    plt.ylabel("Mean Runtime (s)")
-    plt.legend(title="Variants Bin")
+    ax = plt.gca()
+
+    sns.lineplot(x="samples_bin", y="runtime", hue="variants_bin", data=df, marker="o", ci="sd")
+    ax.set_title(f"Interaction Effect: Samples x Variants\n{query_str}", fontsize=10)
+    ax.set_xlabel("Number of Samples (coded -1, 1)")
+    ax.set_ylabel("Mean Runtime (s)")
+
+    legend_elements = [
+        Patch(facecolor="b", alpha=0.2, label="Std. dev. (shaded area)"),
+    ]
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles=handles + legend_elements, loc="best", title="Variants Bin (coded -1, 1)")
 
 
 def run_anova(df: pd.DataFrame):
@@ -196,6 +218,26 @@ def z_score_normalization(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def format_query_for_plot_title(df: pd.DataFrame) -> str:
+    """
+    Get the query string from the dataframe. Drop the --metadata-tsv-name and --project arguments
+    so that the it can better fit as a plot title. Insert newlines before --command,
+    and remove empty spaces after newlines.
+    """
+
+    query_str = df["cmd_query"].iloc[0] if "cmd_query" in df.columns else ""
+
+    query_str = re.sub(r"--metadata-tsv-name\s+\S+", "", query_str)
+    query_str = re.sub(r"--project\s+\S+", "", query_str)
+    query_str = re.sub(r"\s+", " ", query_str).strip()
+
+    query_str = re.sub(r"(--command)", r"\n\1", query_str)
+    query_str = re.sub(r"[ ]{2,}", " ", query_str)
+    query_str = re.sub(r"\n\s*", "\n", query_str).strip()
+
+    return query_str
+
+
 def main():
     args = parse_arguments()
     task_records_path = Path(args.input_json)
@@ -209,11 +251,14 @@ def main():
     df = pd.DataFrame(updated_task_records)
     df = df[df["runtime"].notnull()]
 
-    plot_3D_response_surface(df)
+    query_str = format_query_for_plot_title(df)
 
-    plot_main_effects(df)
+    print(query_str)
+    plot_3D_response_surface(df, query_str)
 
-    plot_interaction_effects(df)
+    plot_main_effects(df, query_str)
+
+    plot_interaction_effects(df, query_str)
 
     df_z_score_normalized = z_score_normalization(df)
 
