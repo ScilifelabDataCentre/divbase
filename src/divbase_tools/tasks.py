@@ -120,6 +120,9 @@ def bcftools_pipe_task(
         return {"status": "error", "error": str(e), "task_id": task_id}
 
     upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    delete_job_files_from_worker(
+        vcf_paths=metadata_result.unique_filenames, metadata_path=metadata_path, output_file=output_file
+    )
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
@@ -154,3 +157,25 @@ def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
     )
+
+
+def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path, output_file: Path) -> None:
+    """
+    After uploading results to bucket, delete job files from the worker.
+    """
+    for vcf_path in vcf_paths:
+        try:
+            os.remove(vcf_path)
+            logger.info(f"deleted {vcf_path}")
+        except Exception as e:
+            logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
+    try:
+        os.remove(metadata_path)
+        logger.info(f"deleted {metadata_path}")
+    except Exception as e:
+        logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
+    try:
+        os.remove(output_file)
+        logger.info(f"deleted {output_file}")
+    except Exception as e:
+        logger.warning(f"Could not delete output file from worker {output_file}: {e}")
