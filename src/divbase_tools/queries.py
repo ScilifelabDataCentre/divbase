@@ -383,6 +383,7 @@ class SidecarQueryManager:
         Also removes any leading '#' characters from the column names
 
         If a sample exists in multiple files, it can be entered in the form: 'file1.vcf.gz,file2.vcf.gz' and all files will be extracted using pandas explode.
+        Strip empty filenames if there e.g. are typos with trailing commas
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
         try:
@@ -395,6 +396,7 @@ class SidecarQueryManager:
             self.df["Filename"] = self.df["Filename"].astype(str)
             self.df = self.df.assign(Filename=self.df["Filename"].str.split(",")).explode("Filename")
             self.df["Filename"] = self.df["Filename"].str.strip()
+            self.df = self.df[self.df["Filename"] != ""]
         except Exception as e:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
