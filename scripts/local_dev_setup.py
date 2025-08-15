@@ -37,6 +37,21 @@ PROJECTS = {
         "sample_metadata.tsv",
     ],
     "local-project-2": ["sample_metadata.tsv"],
+    "local-project-3": [
+        "HOM_20ind_17SNPs.1.vcf.gz",
+        "HOM_20ind_17SNPs.13.vcf.gz",
+        "HOM_20ind_17SNPs.18.vcf.gz",
+        "HOM_20ind_17SNPs.20.vcf.gz",
+        "HOM_20ind_17SNPs.21.vcf.gz",
+        "HOM_20ind_17SNPs.22.vcf.gz",
+        "HOM_20ind_17SNPs.24.vcf.gz",
+        "HOM_20ind_17SNPs.4.vcf.gz",
+        "HOM_20ind_17SNPs.5.vcf.gz",
+        "HOM_20ind_17SNPs.6.vcf.gz",
+        "HOM_20ind_17SNPs.7.vcf.gz",
+        "HOM_20ind_17SNPs.8.vcf.gz",
+        "sample_metadata_HOM_chr_split_version.tsv",
+    ],
 }
 
 MINIO_URL = "http://localhost:9000"

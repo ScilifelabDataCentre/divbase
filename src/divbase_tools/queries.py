@@ -381,11 +381,20 @@ class SidecarQueryManager:
         """
         Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names
+
+        If a sample exists in multiple files, it can be entered in the form: 'file1.vcf.gz,file2.vcf.gz' and all files will be extracted using pandas explode.
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
         try:
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
+            if "Sample_ID" not in self.df.columns:
+                raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
+            if "Filename" not in self.df.columns:
+                raise SidecarColumnNotFoundError("The 'Filename' column is required in the metadata file.")
+            self.df["Filename"] = self.df["Filename"].astype(str)
+            self.df = self.df.assign(Filename=self.df["Filename"].str.split(",")).explode("Filename")
+            self.df["Filename"] = self.df["Filename"].str.strip()
         except Exception as e:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
