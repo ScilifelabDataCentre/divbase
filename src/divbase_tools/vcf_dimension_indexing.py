@@ -9,10 +9,8 @@ import botocore
 import typer
 import yaml
 
-from divbase_tools.cli_commands.config_resolver import resolve_project
-from divbase_tools.divbase_cli import load_cli_env_vars
 from divbase_tools.exceptions import ObjectDoesNotExistError
-from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
+from divbase_tools.s3_client import S3FileManager
 
 DIMENSIONS_FILE_NAME = ".vcf_dimensions.yaml"
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
@@ -85,6 +83,13 @@ class VCFDimensionIndexManager:
 
         self._upload_bucket_dimensions_file(version_data=yaml_data)
         print(f"Added new entry for {vcf_filename} to .vcf_dimensions.yaml.")
+
+    def get_indexed_filenames(self) -> list[str]:
+        """
+        Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
+        """
+        yaml_data = self._get_bucket_dimensions_file()
+        return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:
         """
@@ -169,23 +174,3 @@ class VCFDimensionIndexManager:
         with open(local_yaml_path, "w") as output_file:
             yaml.safe_dump(yaml_data, output_file, sort_keys=False)
         print(f".vcf_dimensions.yaml downloaded to {local_yaml_path}")
-
-
-if __name__ == "__main__":
-    load_cli_env_vars()
-    config_file = DEFAULT_CONFIG_PATH
-    project = "local-project-1"
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    s3_file_manager = create_s3_file_manager(project_config.s3_url)
-
-    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-
-    manager.add_dimension_entry(vcf_filename="combined.HaV41986000_BW_1.vcf.gz")
-
-    manager.add_dimension_entry(vcf_filename="HOM_20ind_17SNPs_first_10_samples.vcf.gz")
-
-    manager.download_yaml_to_repo_root()
-
-
-# TODO if there are VCF files in the bucket, check if there is a .vcf_dimensions.yaml
-# TODO this could be a good place to validate the the file actually is a VCF file?

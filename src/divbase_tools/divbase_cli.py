@@ -13,6 +13,7 @@ from pathlib import Path
 import dotenv
 import typer
 
+from divbase_tools.cli_commands.dimensions_cli import dimensions_app
 from divbase_tools.cli_commands.file_cli import file_app
 from divbase_tools.cli_commands.query_cli import query_app
 from divbase_tools.cli_commands.user_config_cli import config_app
@@ -73,6 +74,7 @@ app.add_typer(version_app, name="version")
 app.add_typer(file_app, name="files")
 app.add_typer(config_app, name="config")
 app.add_typer(query_app, name="query")
+app.add_typer(dimensions_app, name="dimensions")
 
 
 def main():
