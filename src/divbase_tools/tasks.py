@@ -7,6 +7,7 @@ from celery import Celery
 
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
+from divbase_tools.vcf_dimension_indexing import VCFDimensionIndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,37 @@ def bcftools_pipe_task(
 
     upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
+
+
+@app.task(name="tasks.update_vcf_dimensions_task")
+def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"):
+    task_id = update_vcf_dimensions_task.request.id
+    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
+    all_files = s3_file_manager.list_files(bucket_name=bucket_name)
+    vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
+    print(vcf_files)
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+
+    already_indexed_vcfs = manager.get_indexed_filenames()
+
+    non_indexed_vcfs = [file for file in vcf_files if file not in already_indexed_vcfs]
+
+    _ = download_vcf_files(
+        files_to_download=non_indexed_vcfs,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+    )
+
+    for file in non_indexed_vcfs:
+        try:
+            manager.add_dimension_entry(vcf_filename=file)
+        except Exception as e:
+            logger.error(f"Error in dimensions indexing task: {str(e)}")
+            return {"status": "error", "error": str(e), "task_id": task_id}
+    return {"status": "completed", "submitter": user_name}
+    # TODO return some meaningful status message. it should perhaps say which files that were indexed?
+    # TODO delete downloaded files upon fininshing, can use delete_job_files_from_worker() from vcf_benchmarking branch
 
 
 def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
