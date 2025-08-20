@@ -263,4 +263,5 @@ def read_vcf_dimensions_file(bucket_name: str, s3_file_manager: S3FileManager) -
     except Exception as exc:
         raise FileNotFoundError(f".vcf_dimensions.yaml not found in bucket '{bucket_name}'.") from exc
     # TODO add a hint to the error telling how dimension indexing can be done.
+    # TODO use the get_dimensions_info instance method of the VCFDimensionIndexManager class instead of reading file diretly? don't want to download the file though
     return yaml.safe_load(content)

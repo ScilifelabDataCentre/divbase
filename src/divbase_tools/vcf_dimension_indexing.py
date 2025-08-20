@@ -10,7 +10,8 @@ import typer
 import yaml
 
 from divbase_tools.exceptions import ObjectDoesNotExistError
-from divbase_tools.s3_client import S3FileManager
+from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
+from divbase_tools.user_config import ProjectConfig
 
 DIMENSIONS_FILE_NAME = ".vcf_dimensions.yaml"
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
@@ -75,7 +76,7 @@ class VCFDimensionIndexManager:
         new_entry = {
             "filename": vcf_filename,
             "timestamp": timestamp,
-            "version": "TODO: THE BUCKET VERSION CHECKSUM SHOULD BE HERE. THEN, ONE RECORD PER VERSION OF EACH FILE",
+            # "version": "TODO: THE BUCKET VERSION CHECKSUM SHOULD BE HERE. THEN, ONE RECORD PER VERSION OF EACH FILE",
             "dimensions": vcf_dims,
         }
         dimensions.append(new_entry)
@@ -165,6 +166,7 @@ class VCFDimensionIndexManager:
         """
         Download the .vcf_dimensions.yaml file from the bucket and write it to the repo root.
         """
+        # TODO - this method is mostly for dev. consider skipping it. divbase cli download file would achieve the same thing
         yaml_data = self._get_bucket_dimensions_file()
         if not yaml_data:
             print(f"No .vcf_dimensions.yaml found in bucket: {self.bucket_name}.")
@@ -174,3 +176,26 @@ class VCFDimensionIndexManager:
         with open(local_yaml_path, "w") as output_file:
             yaml.safe_dump(yaml_data, output_file, sort_keys=False)
         print(f".vcf_dimensions.yaml downloaded to {local_yaml_path}")
+
+    def get_dimensions_info(self) -> dict:
+        """
+        Returns the contents of the .vcf_dimensions.yaml file as a dictionary.
+        """
+        if not self.dimensions_info:
+            logger.info("No VCF dimensions index has been created for this bucket as of yet.")
+            return {}
+        return self.dimensions_info
+
+
+def create_bucket_manager(project_config: ProjectConfig) -> VCFDimensionIndexManager:
+    """
+    Helper function to create a BucketVersionManager instance.
+    Used by the version and file subcommands of the CLI
+    """
+    s3_file_manager = create_s3_file_manager(project_config.s3_url)
+    return VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
+
+
+def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
+    manager = create_bucket_manager(project_config=project_config)
+    return manager.get_dimensions_info()

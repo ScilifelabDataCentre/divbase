@@ -2,9 +2,11 @@ from pathlib import Path
 
 import httpx
 import typer
+import yaml
 
 from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_tools.vcf_dimension_indexing import show_dimensions_command
 
 PROJECT_NAME_OPTION = typer.Option(
     None,
@@ -38,4 +40,71 @@ def update_dimensions_index(
     print(f"Job submitted successfully with task id: {task_id}")
 
 
-# TODO add command to list all scaffolds available in bucket
+@dimensions_app.command("show")
+def show_dimensions_index(
+    filename: str = typer.Option(
+        None,
+        "--filename",
+        help="If set, will show only the entry for this VCF filename.",
+    ),
+    unique_scaffolds: bool = (
+        typer.Option(
+            False,
+            "--unique-scaffolds",
+            help="If set, will show all unique scaffold names found across all the VCF files in the project.",
+        )
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+) -> None:
+    """
+    Show the dimensions index file for a project.
+    When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
+    """
+
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    dimensions_info = show_dimensions_command(project_config=project_config)
+
+    if not dimensions_info or "dimensions" not in dimensions_info or not dimensions_info["dimensions"]:
+        print(
+            f"No dimensions file found or found to be empty, for project: {project_config.name}."
+            "Run 'divbase-cli dimensions update' to create one from the VCF files in the project"
+        )
+        return
+
+    if filename:
+        record = None
+        for entry in dimensions_info.get("dimensions", []):
+            if entry.get("filename") == filename:
+                record = entry
+                break
+        if record:
+            print(yaml.safe_dump(record, sort_keys=False))
+        else:
+            print(
+                f"No entry found for filename: {filename}. Please check that the filename is correct and that it is a VCF file (extension: .vcf or .vcf.gz)."
+                "\nHint: use 'divbase-cli files list' to view all files in the project."
+            )
+        return
+
+    if unique_scaffolds:
+        unique_scaffold_names = set()
+        for entry in dimensions_info.get("dimensions", []):
+            unique_scaffold_names.update(entry.get("dimensions", {}).get("scaffolds", []))
+
+        numeric_scaffold_names = []
+        non_numeric_scaffold_names = []
+        for scaffold in unique_scaffold_names:
+            if scaffold.isdigit():
+                numeric_scaffold_names.append(int(scaffold))
+            else:
+                non_numeric_scaffold_names.append(scaffold)
+
+        unique_scaffold_names_sorted = [str(n) for n in sorted(numeric_scaffold_names)] + sorted(
+            non_numeric_scaffold_names
+        )
+
+        print(f"Unique scaffold names found across all the VCF files in the project:\n{unique_scaffold_names_sorted}")
+        return
+
+    print(yaml.safe_dump(dimensions_info, sort_keys=False))
