@@ -1,12 +1,10 @@
 import datetime
 import gzip
 import logging
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import botocore
-import typer
 import yaml
 
 from divbase_tools.exceptions import ObjectDoesNotExistError
@@ -14,25 +12,8 @@ from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.user_config import ProjectConfig
 
 DIMENSIONS_FILE_NAME = ".vcf_dimensions.yaml"
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
 
-CONFIG_FILE_OPTION = typer.Option(
-    DEFAULT_CONFIG_PATH,
-    "--config",
-    "-c",
-    help="Path to your user configuration file. By default it is stored at ~/.config/.divbase_tools.yaml.",
-)
-
-PROJECT_NAME_OPTION = typer.Option(
-    None,
-    help="Name of the DivBase project, if not provided uses the default in your DivBase config file",
-    show_default=False,
-)
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-os.environ["DIVBASE_ENV"] = "local"  ## to ensure connection to local for now
 
 
 @dataclass
@@ -62,6 +43,7 @@ class VCFDimensionIndexManager:
         Append a new dimension entry to .vcf_dimensions.yaml if not already present for that VCF file.
         Calls submethods to calculate dimensions and upload the updated YAML file to bucket.
         """
+        # TODO maybe this should be named update_dimension_entry instead to reflect the CLI command name?
         yaml_data = self.dimensions_info
         dimensions = yaml_data.get("dimensions", [])
 
@@ -161,21 +143,6 @@ class VCFDimensionIndexManager:
             logging.info(f"New version updated in the bucket: {self.bucket_name}.")
         except botocore.exceptions.ClientError as e:
             logging.error(f"Failed to upload bucket version file: {e}")
-
-    def download_yaml_to_repo_root(self) -> None:
-        """
-        Download the .vcf_dimensions.yaml file from the bucket and write it to the repo root.
-        """
-        # TODO - this method is mostly for dev. consider skipping it. divbase cli download file would achieve the same thing
-        yaml_data = self._get_bucket_dimensions_file()
-        if not yaml_data:
-            print(f"No .vcf_dimensions.yaml found in bucket: {self.bucket_name}.")
-            return
-        repo_root = Path(__file__).parent.parent.parent
-        local_yaml_path = repo_root / ".vcf_dimensions.yaml"
-        with open(local_yaml_path, "w") as output_file:
-            yaml.safe_dump(yaml_data, output_file, sort_keys=False)
-        print(f".vcf_dimensions.yaml downloaded to {local_yaml_path}")
 
     def get_dimensions_info(self) -> dict:
         """
