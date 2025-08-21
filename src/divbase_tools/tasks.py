@@ -165,15 +165,21 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
         s3_file_manager=s3_file_manager,
     )
 
+    files_indexed_by_this_job = []
     for file in non_indexed_vcfs:
         try:
             manager.update_dimension_entry(vcf_filename=file)
+            files_indexed_by_this_job.append(file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
-    return {"status": "completed", "submitter": user_name}
-    # TODO return some meaningful status message. it should perhaps say which files that were indexed?
-    # TODO delete downloaded files upon fininshing
+    return {
+        "status": "completed",
+        "submitter": user_name,
+        "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
+    }
+
+    # TODO delete downloaded files from worker upon fininshing
 
 
 def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
