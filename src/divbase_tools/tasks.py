@@ -176,13 +176,12 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
+    delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
     return {
         "status": "completed",
         "submitter": user_name,
         "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
     }
-
-    # TODO delete downloaded files from worker upon fininshing
 
 
 def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
@@ -281,7 +280,7 @@ def read_vcf_dimensions_file(bucket_name: str, s3_file_manager: S3FileManager) -
     return yaml.safe_load(content)
 
 
-def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path, output_file: Path) -> None:
+def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = None, output_file: Path = None) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
     """
@@ -291,13 +290,15 @@ def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path, out
             logger.info(f"deleted {vcf_path}")
         except Exception as e:
             logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
-    try:
-        os.remove(metadata_path)
-        logger.info(f"deleted {metadata_path}")
-    except Exception as e:
-        logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
-    try:
-        os.remove(output_file)
-        logger.info(f"deleted {output_file}")
-    except Exception as e:
-        logger.warning(f"Could not delete output file from worker {output_file}: {e}")
+    if metadata_path is not None:
+        try:
+            os.remove(metadata_path)
+            logger.info(f"deleted {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
+    if output_file is not None:
+        try:
+            os.remove(output_file)
+            logger.info(f"deleted {output_file}")
+        except Exception as e:
+            logger.warning(f"Could not delete output file from worker {output_file}: {e}")
