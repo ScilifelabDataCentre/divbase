@@ -15,6 +15,7 @@ import yaml
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
+from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileEmptyError
 from divbase_tools.s3_client import create_s3_file_manager
 from divbase_tools.tasks import update_vcf_dimensions_task
 from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME, VCFDimensionIndexManager
@@ -125,3 +126,32 @@ def test_show_vcf_dimensions_task(run_update_dimensions, user_config_path):
         entry = yaml.safe_load(cli_result.stdout)
         scaffolds = entry.get("dimensions", {}).get("scaffolds", [])
         assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
+
+
+def test_get_dimensions_info_raises_empty_error(CONSTANTS):
+    """
+    Test that asserts that VCFDimensionsFileEmptyError is raised when the dimensions file is empty.
+    The clean_dimensions fixture is run before this test, thus there is should be no .vcf_dimensions.yaml file present.
+    """
+    test_minio_url = CONSTANTS["MINIO_URL"]
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    s3_file_manager = create_s3_file_manager(url=test_minio_url)
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+
+    with pytest.raises(VCFDimensionsFileEmptyError):
+        manager.get_dimensions_info()
+
+
+def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
+    """
+    Test that runs the update_vcf_dimensions_task with a bucket that has no VCF files.
+    It should raise an error that there are no VCF files to process.
+    """
+    test_minio_url = CONSTANTS["MINIO_URL"]
+    bucket_name = "empty-project"
+
+    with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
+        with pytest.raises(NoVCFFilesFoundError):
+            update_vcf_dimensions_task(bucket_name=bucket_name)

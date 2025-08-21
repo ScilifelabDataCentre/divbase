@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 from celery import Celery
 
+from divbase_tools.exceptions import NoVCFFilesFoundError
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.vcf_dimension_indexing import VCFDimensionIndexManager
@@ -147,9 +148,13 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
-    print(vcf_files)
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
+    if not vcf_files:
+        raise NoVCFFilesFoundError(
+            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. Please upload at least one VCF file and run this command again."
+        )
+
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     already_indexed_vcfs = manager.get_indexed_filenames()
 
     non_indexed_vcfs = [file for file in vcf_files if file not in already_indexed_vcfs]
@@ -162,7 +167,7 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     for file in non_indexed_vcfs:
         try:
-            manager.add_dimension_entry(vcf_filename=file)
+            manager.update_dimension_entry(vcf_filename=file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}

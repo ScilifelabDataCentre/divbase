@@ -7,7 +7,7 @@ from pathlib import Path
 import botocore
 import yaml
 
-from divbase_tools.exceptions import ObjectDoesNotExistError
+from divbase_tools.exceptions import ObjectDoesNotExistError, VCFDimensionsFileEmptyError
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.user_config import ProjectConfig
 
@@ -30,20 +30,18 @@ class VCFDimensionIndexManager:
         """
         self.dimensions_info = self._get_bucket_dimensions_file()
 
-        if self.dimensions_info:
-            logger.info(f"VCF_dimensions index file found inside Bucket: {self.bucket_name}.")
-        else:
+        if not self.dimensions_info:
             logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
             yaml_data = {"dimensions": []}
             self._upload_bucket_dimensions_file(version_data=yaml_data)
             self.dimensions_info = yaml_data
 
-    def add_dimension_entry(self, vcf_filename: str) -> None:
+    def update_dimension_entry(self, vcf_filename: str) -> None:
         """
         Append a new dimension entry to .vcf_dimensions.yaml if not already present for that VCF file.
         Calls submethods to calculate dimensions and upload the updated YAML file to bucket.
         """
-        # TODO maybe this should be named update_dimension_entry instead to reflect the CLI command name?
+
         yaml_data = self.dimensions_info
         dimensions = yaml_data.get("dimensions", [])
 
@@ -115,15 +113,16 @@ class VCFDimensionIndexManager:
 
     def _get_bucket_dimensions_file(self) -> dict:
         """
-        If bucket version files exists, download version metadata file from the S3 bucket.
-        If doesn't exist, return empty dict.
+        Download VCF dimension metadata file from the S3 bucket.
+        Since the file is created in __post_init__, it will exist by the time this method is called.
+        But if the upload did not work for whatever reason, there still needs to be error handling for missing file.
         """
         try:
             content = self.s3_file_manager.download_s3_file_to_str(
                 key=DIMENSIONS_FILE_NAME, bucket_name=self.bucket_name
             )
         except ObjectDoesNotExistError:
-            logger.info(f"No bucket versioning file found in the bucket: {self.bucket_name}.")
+            logger.info(f"No dimensions file found in the project: {self.bucket_name}.")
             return {}
         if not content:
             return {}
@@ -148,9 +147,8 @@ class VCFDimensionIndexManager:
         """
         Returns the contents of the .vcf_dimensions.yaml file as a dictionary.
         """
-        if not self.dimensions_info:
-            logger.info("No VCF dimensions index has been created for this bucket as of yet.")
-            return {}
+        if not self.dimensions_info or not self.dimensions_info.get("dimensions"):
+            raise VCFDimensionsFileEmptyError(self.bucket_name)
         return self.dimensions_info
 
 

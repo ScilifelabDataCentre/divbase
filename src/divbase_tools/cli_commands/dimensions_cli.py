@@ -6,6 +6,7 @@ import yaml
 
 from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_tools.exceptions import VCFDimensionsFileEmptyError
 from divbase_tools.vcf_dimension_indexing import show_dimensions_command
 
 PROJECT_NAME_OPTION = typer.Option(
@@ -63,13 +64,10 @@ def show_dimensions_index(
     """
 
     project_config = resolve_project(project_name=project, config_path=config_file)
-    dimensions_info = show_dimensions_command(project_config=project_config)
-
-    if not dimensions_info or "dimensions" not in dimensions_info or not dimensions_info["dimensions"]:
-        print(
-            f"No dimensions file found or found to be empty, for project: {project_config.name}."
-            "Run 'divbase-cli dimensions update' to create one from the VCF files in the project"
-        )
+    try:
+        dimensions_info = show_dimensions_command(project_config=project_config)
+    except VCFDimensionsFileEmptyError as e:
+        print(e)
         return
 
     if filename:
