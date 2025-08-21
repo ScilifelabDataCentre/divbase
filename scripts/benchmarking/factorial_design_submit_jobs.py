@@ -121,10 +121,28 @@ def ensure_required_files_in_bucket(project_name: str, vcf_filenames: list) -> N
     # TODO use batch upload to the bucket!
 
 
+def ensure_docker_image(image_name: str, dockerfile_path: str = "Dockerfile"):
+    """Check if a Docker image exists locally, and build it if not."""
+    try:
+        subprocess.run(
+            ["docker", "image", "inspect", image_name],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"Docker image '{image_name}' already exists.")
+    except subprocess.CalledProcessError:
+        print(f"Docker image '{image_name}' not found. Building...")
+        subprocess.run(
+            ["docker", "build", "-t", image_name, "-f", dockerfile_path, "."],
+            check=True,
+        )
+        print(f"Docker image '{image_name}' built successfully.")
+
+
 def generate_mock_vcfs(design: list[tuple], random_seed: int) -> list[str]:
     """Generate mock VCF files based on the factorial design and random seed. Uses fake-vcf to do so, which is installed in a separate docker image"""
 
-    # TODO check if docker image exists, otherwise build it.
     # TODO keep docker image spun up until all files are generated
     # TODO first check if file in bucket, then run docker command to generate it
 
@@ -181,8 +199,6 @@ def submit_jobs_to_queue(output_files: list[str], project_name: str, n_replicate
             )
     return task_records
 
-    # TODO should be able to send single or nested bcftools view query
-
 
 def main():
     args = parse_arguments()
@@ -191,9 +207,12 @@ def main():
     factor1_levels = np.linspace(10, 1000, num=10)
     factor2_levels = np.logspace(np.log10(10), np.log10(1_000_000), num=20)
     random_seed: int = 12345
-    n_samples = 30  # only used for  latin hypercube experiments, the number of samples should be at least the same as the number of levels in each factor
+    n_samples = 100  # only used for  latin hypercube experiments, it is reccomended that the number of samples should be at least the same as the number of levels in each factor
     n_replicates = 3
     project_name = "factorial-design"
+
+    dockerfile_path = (Path(__file__).parent.parent.parent / "docker" / "benchmarking.dockerfile").resolve()
+    ensure_docker_image(image_name="benchmarking", dockerfile_path=dockerfile_path)
 
     if args.latin_hypercube:
         design = generate_latin_hypercube_design(
