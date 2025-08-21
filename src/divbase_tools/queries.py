@@ -3,6 +3,7 @@ TODO - consider split metadata query and bcftools query into two separate module
 """
 
 import contextlib
+import datetime
 import logging
 import os
 import subprocess
@@ -117,7 +118,7 @@ class BcftoolsQueryManager:
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict) -> str:
+    def execute_pipe(self, command: str, bcftools_inputs: dict, task_id: str = None) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
@@ -133,8 +134,10 @@ class BcftoolsQueryManager:
             except BcftoolsEnvironmentError:
                 raise
 
-        commands_config_structure = self.build_commands_config(command, bcftools_inputs)
-        output_file = self.process_bcftools_commands(commands_config_structure)
+        identifier = task_id if task_id else datetime.datetime.now().timestamp()
+
+        commands_config_structure = self.build_commands_config(command, bcftools_inputs, identifier)
+        output_file = self.process_bcftools_commands(commands_config_structure, identifier)
         return output_file
 
     @contextlib.contextmanager
@@ -148,7 +151,9 @@ class BcftoolsQueryManager:
                 logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
                 self.cleanup_temp_files(self.temp_files)
 
-    def build_commands_config(self, command: str, bcftools_inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def build_commands_config(
+        self, command: str, bcftools_inputs: Dict[str, Any], identifier: str = None
+    ) -> List[Dict[str, Any]]:
         """
         Method that builds a configuration structure for the bcftools commands based on the provided command string and inputs.
         The command string is expected to be a semicolon-separated list of bcftools commands.
@@ -180,7 +185,7 @@ class BcftoolsQueryManager:
                 )
 
             output_temp_files = [
-                f"temp_subset_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)
+                f"temp_subset_{identifier}_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)
             ]
 
             command_details = {
@@ -200,7 +205,7 @@ class BcftoolsQueryManager:
 
         return commands_config_structure
 
-    def process_bcftools_commands(self, commands_config: List[Dict[str, Any]]) -> str:
+    def process_bcftools_commands(self, commands_config: List[Dict[str, Any]], identifier: str) -> str:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
         the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
@@ -218,7 +223,7 @@ class BcftoolsQueryManager:
                 temp_file_manager.temp_files.extend(output_temp_files)
                 final_output_temp_files = output_temp_files
 
-            output_file = self.merge_bcftools_temp_files(final_output_temp_files)
+            output_file = self.merge_bcftools_temp_files(final_output_temp_files, identifier)
 
             logger.info("bcftools processing completed successfully")
 
@@ -306,14 +311,14 @@ class BcftoolsQueryManager:
             index_command = f"index -f {file}"
             self.run_bcftools(command=index_command)
 
-    def merge_bcftools_temp_files(self, output_temp_files: List[str]) -> str:
+    def merge_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
         # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
-        output_file = "merged.vcf.gz"
+        output_file = f"merged_{identifier}.vcf.gz"
 
         if len(output_temp_files) > 1:
             merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
