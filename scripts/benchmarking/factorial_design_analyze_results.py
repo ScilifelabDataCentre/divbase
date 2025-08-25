@@ -5,7 +5,11 @@ Instead of polling for task completion, this script is intended to be run after 
 This script takes the task IDs from the json file and fetches their runtime information from the Flower API. The factors (samples, variants) and response (runtime) are then visualised and an
 ANOVA table is calculated.
 
+NOTE! The factorial design scripts require dependencies that have been put in the optional-dependencies part of pyproject.toml since they can take long to install.
+Run 'uv pip install .[benchmarking]' OR 'pip install .[benchmarking]' first, as described in the usage info below:
+
 Usage:
+    uv pip install .[benchmarking]
     python scripts/benchmarking/factorial_design_analyze_results.py
 """
 
