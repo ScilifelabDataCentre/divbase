@@ -33,7 +33,7 @@ class VCFDimensionIndexManager:
         if not self.dimensions_info:
             logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
             yaml_data = {"dimensions": []}
-            self._upload_bucket_dimensions_file(version_data=yaml_data)
+            self._upload_bucket_dimensions_file(dimensions_data=yaml_data)
             self.dimensions_info = yaml_data
 
     def add_dimension_entry(self, vcf_filename: str) -> None:
@@ -62,7 +62,6 @@ class VCFDimensionIndexManager:
         dimensions.append(new_entry)
         yaml_data["dimensions"] = dimensions
 
-        self._upload_bucket_dimensions_file(version_data=yaml_data)
         print(f"Added new entry for {vcf_filename} to .vcf_dimensions.yaml.")
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
@@ -75,7 +74,8 @@ class VCFDimensionIndexManager:
 
         dimensions = [entry for entry in dimensions if entry.get("filename") != vcf_filename]
         yaml_data["dimensions"] = dimensions
-        self._upload_bucket_dimensions_file(version_data=yaml_data)
+
+        print(f"Removed entry for {vcf_filename} from .vcf_dimensions.yaml.")
 
     def get_indexed_filenames(self) -> list[str]:
         """
@@ -141,19 +141,19 @@ class VCFDimensionIndexManager:
 
         return yaml.safe_load(content)
 
-    def _upload_bucket_dimensions_file(self, version_data: dict) -> None:
+    def _upload_bucket_dimensions_file(self, dimensions_data: dict) -> None:
         """
         Upload a new version of the .vcf_dimensions.yaml file to the S3 bucket.
         Works for both creating and updating the file.
         """
-        text_content = yaml.safe_dump(version_data, sort_keys=False)
+        text_content = yaml.safe_dump(dimensions_data, sort_keys=False)
         try:
             self.s3_file_manager.upload_str_as_s3_object(
                 key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
             )
             logging.info(f"New version updated in the bucket: {self.bucket_name}.")
         except botocore.exceptions.ClientError as e:
-            logging.error(f"Failed to upload bucket version file: {e}")
+            logging.error(f"Failed to upload bucket dimensions file: {e}")
 
     def get_dimensions_info(self) -> dict:
         """

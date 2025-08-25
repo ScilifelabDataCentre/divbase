@@ -146,6 +146,12 @@ def bcftools_pipe_task(
 
 @app.task(name="tasks.update_vcf_dimensions_task")
 def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"):
+    """
+    Update the VCF dimensions file for the specified bucket. Ensures that the index only covers files in the bucket at the time of task execution.
+
+    Re: vcfs_deleted_from_bucket_since_last_indexing: since both lists it is dependent on are already calculated,
+    set difference is a faster operation than a new list comp.
+    """
     task_id = update_vcf_dimensions_task.request.id
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
@@ -177,15 +183,14 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
 
-    vcfs_deleted_from_bucket_since_last_indexing = list(
-        set(already_indexed_vcfs) - set(vcf_files)
-    )  # since both lists are already calculated, set difference is a faster operation than a new list comp
+    vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
 
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             manager.remove_dimension_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+    manager._upload_bucket_dimensions_file(version_data=manager.dimensions_info)
 
     return {
         "status": "completed",
