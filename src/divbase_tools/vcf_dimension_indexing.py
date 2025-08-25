@@ -36,7 +36,7 @@ class VCFDimensionIndexManager:
             self._upload_bucket_dimensions_file(version_data=yaml_data)
             self.dimensions_info = yaml_data
 
-    def update_dimension_entry(self, vcf_filename: str) -> None:
+    def add_dimension_entry(self, vcf_filename: str) -> None:
         """
         Append a new dimension entry to .vcf_dimensions.yaml if not already present for that VCF file.
         Calls submethods to calculate dimensions and upload the updated YAML file to bucket.
@@ -64,6 +64,18 @@ class VCFDimensionIndexManager:
 
         self._upload_bucket_dimensions_file(version_data=yaml_data)
         print(f"Added new entry for {vcf_filename} to .vcf_dimensions.yaml.")
+
+    def remove_dimension_entry(self, vcf_filename: str) -> None:
+        """
+        Remove a dimension entry from .vcf_dimensions.yaml if present for that VCF file.
+        Calls submethods to upload the updated YAML file to bucket.
+        """
+        yaml_data = self.dimensions_info
+        dimensions = yaml_data.get("dimensions", [])
+
+        dimensions = [entry for entry in dimensions if entry.get("filename") != vcf_filename]
+        yaml_data["dimensions"] = dimensions
+        self._upload_bucket_dimensions_file(version_data=yaml_data)
 
     def get_indexed_filenames(self) -> list[str]:
         """

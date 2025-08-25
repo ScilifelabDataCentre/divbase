@@ -171,12 +171,22 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     files_indexed_by_this_job = []
     for file in non_indexed_vcfs:
         try:
-            manager.update_dimension_entry(vcf_filename=file)
+            manager.add_dimension_entry(vcf_filename=file)
             files_indexed_by_this_job.append(file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
+
+    vcfs_deleted_from_bucket_since_last_indexing = list(
+        set(already_indexed_vcfs) - set(vcf_files)
+    )  # since both lists are already calculated, set difference is a faster operation than a new list comp
+
+    if vcfs_deleted_from_bucket_since_last_indexing:
+        for file in vcfs_deleted_from_bucket_since_last_indexing:
+            manager.remove_dimension_entry(vcf_filename=file)
+
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+
     return {
         "status": "completed",
         "submitter": user_name,

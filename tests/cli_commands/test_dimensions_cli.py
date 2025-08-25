@@ -155,3 +155,27 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
             update_vcf_dimensions_task(bucket_name=bucket_name)
+
+
+def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
+    """
+    Test that mocks removing a VCF file from the bucket, and updates the dimension entry based on the removal.
+    """
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=CONSTANTS["MINIO_URL"],
+        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+    )
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
+
+    with patch.object(s3_client, "delete_object", return_value=None) as mock_delete:
+        s3_client.delete_object(Bucket=bucket_name, Key=vcf_file)
+        mock_delete.assert_called_once_with(Bucket=bucket_name, Key=vcf_file)
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    manager.remove_dimension_entry(vcf_file)
+    filenames = [entry["filename"] for entry in manager.dimensions_info.get("dimensions", [])]
+    assert vcf_file not in filenames
