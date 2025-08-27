@@ -46,3 +46,6 @@ provisioning:
     enabled: true # cannot update/re-run if a completed job already exists
     seconds: 300
   # buckets, policies etc.. are all defined in seperate values files, see config dir. 
+
+image:
+  repository: "bitnamilegacy/minio"
