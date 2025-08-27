@@ -110,7 +110,7 @@ class BcftoolsQueryManager:
     - Outer loop: iterates over the input bcftools commands in the pipe, and passes each command to `run_current_command()`.
     - Inner loop: iterates over the input files for each command , and runs the command on each file using `run_bcftools()`.
     The results of the inner loop are temporary files that are passed to the next command in the outer loop.
-    At the end of the outer loop, the temporary files are merged into a single output file using `merge_bcftools_temp_files()`.
+    At the end of the outer loop, the temporary files are merged into a single output file using `merge_or_concat_bcftools_temp_files()`.
     The temporary files are cleaned up after the processing is done using `cleanup_temp_files()`.
     The class also provides a context manager for temporary file management to ensure that temporary files are cleaned
     up even if the processing fails or exits unexpectedly.
@@ -225,7 +225,7 @@ class BcftoolsQueryManager:
                 temp_file_manager.temp_files.extend(output_temp_files)
                 final_output_temp_files = output_temp_files
 
-            output_file = self.merge_bcftools_temp_files(final_output_temp_files, identifier)
+            output_file = self.merge_or_concat_bcftools_temp_files(final_output_temp_files, identifier)
 
             logger.info("bcftools processing completed successfully")
 
@@ -313,7 +313,7 @@ class BcftoolsQueryManager:
             index_command = f"index -f {file}"
             self.run_bcftools(command=index_command)
 
-    def merge_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
+    def merge_or_concat_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
         """

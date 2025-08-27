@@ -138,9 +138,7 @@ def bcftools_pipe_task(
         return {"status": "error", "error": str(e), "task_id": task_id}
 
     upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    delete_job_files_from_worker(
-        vcf_paths=metadata_result.unique_filenames, metadata_path=metadata_path, output_file=output_file
-    )
+    delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
@@ -256,7 +254,7 @@ def check_for_unnecessary_files_for_region_query(
     matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
     for match in matches:
         scaffolds.extend([region.strip() for region in match.split(",") if region.strip()])
-
+    # TODO if there are no matches, return files to download
     for file in files_to_download:
         record = None
         for rec in dimensions_index.get("dimensions", []):
