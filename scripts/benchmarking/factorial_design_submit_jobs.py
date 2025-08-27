@@ -11,7 +11,11 @@ Latin hypercube is random, but if the same number of samples AND same random see
 Since tasks can take long to complete for larger VCF files, this script does not poll for task completion. Instead it writes the task IDs to a json file.
 The json file can later be read by the companion script 'factorial_design_analyze_results.py', which fetches runtimes from the completed tasks and analyses the results.
 
+NOTE! The factorial design scripts require dependencies that have been put in the optional-dependencies part of pyproject.toml since they can take long to install.
+Run 'uv pip install .[benchmarking]' OR 'pip install .[benchmarking]' first, as described in the usage info below:
+
 Usage:
+    uv pip install .[benchmarking]
     python scripts/benchmarking/factorial_design_submit_jobs.py
 """
 

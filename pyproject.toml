@@ -19,10 +19,15 @@ dependencies = [
     "flower>=2.0.0",
     "httpx>=0.28.1",
     "pre-commit>=3.7.0",
+
+]
+
+[project.optional-dependencies]
+benchmarking = [
     "scipy>=1.16.0",
     "matplotlib>=3.10",
     "seaborn>=0.13",
-    "statsmodels>=0.14.4"
+    "statsmodels>=0.14.4",
 ]
 
 [build-system]
