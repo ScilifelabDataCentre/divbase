@@ -190,7 +190,7 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             manager.remove_dimension_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
-    manager._upload_bucket_dimensions_file(version_data=manager.dimensions_info)
+    manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
 
     return {
         "status": "completed",
