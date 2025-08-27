@@ -2,8 +2,10 @@
 TODO - consider split metadata query and bcftools query into two separate modules.
 """
 
+import collections
 import contextlib
 import datetime
+import gzip
 import logging
 import os
 import subprocess
@@ -319,11 +321,20 @@ class BcftoolsQueryManager:
         # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
         output_file = f"merged_{identifier}.vcf.gz"
+        logger.info("Trying to determine if sample names overlap between temp files...")
+        non_overlapping_sample_names = self._get_all_sample_names_from_temp_files(output_temp_files)
 
         if len(output_temp_files) > 1:
-            merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
+            if non_overlapping_sample_names:
+                logger.info("Sample names do not overlap between temp files, will contintue with 'bcftools merge'")
+                merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
+                verb = "Merged"
+            if not non_overlapping_sample_names:
+                logger.info("Sample names do not overlap between temp files, will contintue with 'bcftools concat'")
+                merge_command = f"concat -Oz -o {output_file} {' '.join(output_temp_files)}"
+                verb = "Concatenated"
             self.run_bcftools(command=merge_command)
-            logger.info(f"Merged all temporary files into '{output_file}'.")
+            logger.info(f"{verb} all temporary files into '{output_file}'.")
         if len(output_temp_files) == 1:
             os.rename(output_temp_files[0], output_file)
         return output_file
@@ -360,6 +371,27 @@ class BcftoolsQueryManager:
         except subprocess.SubprocessError as e:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
+
+    def _get_all_sample_names_from_temp_files(self, output_temp_files: List[str]) -> bool:
+        """
+        Helper method that is used to determine if there are any sample names that recur across the temp files.
+        If they do, bcftools concat is needed instead of bcftools merge.
+        """
+        sample_names_per_VCF = {}
+        all_sample_names = []
+        for vcf_file in output_temp_files:
+            with gzip.open(vcf_file, "rt") as file:
+                for line in file:
+                    if line.startswith("#CHROM"):
+                        header = line.strip().split("\t")
+                        sample_names_per_VCF[vcf_file] = header[9:]
+                        all_sample_names.extend(header[9:])
+                        break
+
+        sample_counts = collections.Counter(all_sample_names)
+        non_overlapping_sample_names = all(count == 1 for count in sample_counts.values())
+
+        return non_overlapping_sample_names
 
 
 class SidecarQueryManager:
