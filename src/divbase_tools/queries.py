@@ -2,7 +2,6 @@
 TODO - consider split metadata query and bcftools query into two separate modules.
 """
 
-import collections
 import contextlib
 import datetime
 import gzip
@@ -322,15 +321,21 @@ class BcftoolsQueryManager:
 
         output_file = f"merged_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
-        non_overlapping_sample_names = self._get_all_sample_names_from_temp_files(output_temp_files)
+
+        sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)
+        sample_set_to_files = self._group_vcfs_by_sample_set(sample_names_per_VCF)
+        non_overlapping_sample_names = self._check_non_overlapping_sample_names(sample_set_to_files)
+
+        logger.info(sample_set_to_files)
+        logger.info(non_overlapping_sample_names)
 
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
-                logger.info("Sample names do not overlap between temp files, will contintue with 'bcftools merge'")
+                logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
                 verb = "Merged"
-            if not non_overlapping_sample_names:
-                logger.info("Sample names do not overlap between temp files, will contintue with 'bcftools concat'")
+            else:
+                logger.info("Sample names overlap between temp files, will continue with 'bcftools concat'")
                 merge_command = f"concat -Oz -o {output_file} {' '.join(output_temp_files)}"
                 verb = "Concatenated"
             self.run_bcftools(command=merge_command)
@@ -372,26 +377,41 @@ class BcftoolsQueryManager:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
 
-    def _get_all_sample_names_from_temp_files(self, output_temp_files: List[str]) -> bool:
+    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> bool:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
         If they do, bcftools concat is needed instead of bcftools merge.
         """
         sample_names_per_VCF = {}
-        all_sample_names = []
         for vcf_file in output_temp_files:
             with gzip.open(vcf_file, "rt") as file:
                 for line in file:
                     if line.startswith("#CHROM"):
                         header = line.strip().split("\t")
                         sample_names_per_VCF[vcf_file] = header[9:]
-                        all_sample_names.extend(header[9:])
                         break
 
-        sample_counts = collections.Counter(all_sample_names)
-        non_overlapping_sample_names = all(count == 1 for count in sample_counts.values())
+        return sample_names_per_VCF
 
-        return non_overlapping_sample_names
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[frozenset, list[str]]:
+        """
+        Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
+        (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
+        Here, frozenset is used to create an immutable set of sample names for each VCF file.
+        sample_set_to_files then stores all files that contain the same sample set.
+        """
+        sample_set_to_files = {}
+        for vcf_file, sample_list in sample_names_per_VCF.items():
+            sample_set = frozenset(sample_list)
+            sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
+        return sample_set_to_files
+
+    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[frozenset, list[str]]) -> bool:
+        """
+        Helper method that looks at a mapping of sample set to VCF files and checks for non-overlapping sample names.
+        Simply put, if any sample set in the input dict has more than one file, samples overlap between files
+        """
+        return not any(len(files) > 1 for files in sample_set_to_files.values())
 
 
 class SidecarQueryManager:
