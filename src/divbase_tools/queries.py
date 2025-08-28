@@ -315,9 +315,14 @@ class BcftoolsQueryManager:
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
+
+
+        # for all sets that have len(files) > 1, perform concat, save the temp filename to a new list
+        # for all sets that have len(files) == 1, save the temp filename to a new list
+        # for all the temp filenames in the new list, perform merge
+
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
-        # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
         output_file = f"merged_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
@@ -326,21 +331,35 @@ class BcftoolsQueryManager:
         sample_set_to_files = self._group_vcfs_by_sample_set(sample_names_per_VCF)
         non_overlapping_sample_names = self._check_non_overlapping_sample_names(sample_set_to_files)
 
-        logger.info(sample_set_to_files)
-        logger.info(non_overlapping_sample_names)
-
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
-                verb = "Merged"
+                self.run_bcftools(command=merge_command)
+                logger.info(f"Merged all temporary files into '{output_file}'.")
             else:
-                logger.info("Sample names overlap between temp files, will continue with 'bcftools concat'")
-                merge_command = f"concat -Oz -o {output_file} {' '.join(output_temp_files)}"
-                verb = "Concatenated"
-            self.run_bcftools(command=merge_command)
-            logger.info(f"{verb} all temporary files into '{output_file}'.")
-        if len(output_temp_files) == 1:
+                logger.info(
+                    "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible."
+                )
+                temp_concat_files = []
+                for sample_set, files in sample_set_to_files.items():
+                    if len(files) > 1:
+                        concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
+                        concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
+                        self.run_bcftools(command=concat_command)
+                        temp_concat_files.append(concat_temp)
+                        self.temp_files.append(concat_temp)
+                        self.ensure_csi_index(concat_temp)
+                    elif len(files) == 1:
+                        temp_concat_files.append(files[0])
+                if len(temp_concat_files) > 1:
+                    merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(temp_concat_files)}"
+                    self.run_bcftools(command=merge_command)
+                    logger.info(f"Merged all files (including concatenated files) into '{output_file}'.")
+                elif len(temp_concat_files) == 1:
+                    os.rename(temp_concat_files[0], output_file)
+                    logger.info(f"Only one file remained after concatenation, renamed this file to '{output_file}'.")
+        elif len(output_temp_files) == 1:
             os.rename(output_temp_files[0], output_file)
         return output_file
 

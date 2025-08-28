@@ -52,6 +52,13 @@ PROJECTS = {
         "HOM_20ind_17SNPs.8.vcf.gz",
         "sample_metadata_HOM_chr_split_version.tsv",
     ],
+    "local-project-4": [
+        "HOM_20ind_17SNPs.1.vcf.gz",
+        "HOM_20ind_17SNPs.4.vcf.gz",
+        "HOM_20ind_17SNPs.21.vcf.gz",
+        "HOM_20ind_17SNPs_changed_sample_names.vcf.gz",
+        "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+    ],
 }
 
 MINIO_URL = "http://localhost:9000"
