@@ -324,6 +324,7 @@ class BcftoolsQueryManager:
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
+        unsorted_output_file = f"merged_unsorted_{identifier}.vcf.gz"
         output_file = f"merged_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
 
@@ -334,9 +335,9 @@ class BcftoolsQueryManager:
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
-                merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
+                merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 self.run_bcftools(command=merge_command)
-                logger.info(f"Merged all temporary files into '{output_file}'.")
+                logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
             else:
                 logger.info(
                     "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible."
@@ -353,14 +354,21 @@ class BcftoolsQueryManager:
                     elif len(files) == 1:
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
-                    merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(temp_concat_files)}"
+                    merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
                     self.run_bcftools(command=merge_command)
-                    logger.info(f"Merged all files (including concatenated files) into '{output_file}'.")
+                    logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                 elif len(temp_concat_files) == 1:
-                    os.rename(temp_concat_files[0], output_file)
-                    logger.info(f"Only one file remained after concatenation, renamed this file to '{output_file}'.")
+                    os.rename(temp_concat_files[0], unsorted_output_file)
+                    logger.info(
+                        f"Only one file remained after concatenation, renamed this file to '{unsorted_output_file}'."
+                    )
         elif len(output_temp_files) == 1:
-            os.rename(output_temp_files[0], output_file)
+            os.rename(output_temp_files[0], unsorted_output_file)
+
+        sort_command = f"sort -Oz -o {output_file} {unsorted_output_file}"
+        self.run_bcftools(command=sort_command)
+        self.temp_files.append(unsorted_output_file)
+
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
