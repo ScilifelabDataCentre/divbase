@@ -481,6 +481,9 @@ class SidecarQueryManager:
             self.df = self.df.assign(Filename=self.df["Filename"].str.split(",")).explode("Filename")
             self.df["Filename"] = self.df["Filename"].str.strip()
             self.df = self.df[self.df["Filename"] != ""]
+
+            self._purge_duplicate_filenames_per_sample()
+
         except Exception as e:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
@@ -568,6 +571,21 @@ class SidecarQueryManager:
             return self.query_result[column].unique().tolist()
         else:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
+
+    def _purge_duplicate_filenames_per_sample(self):
+        """
+        Helper method that sanitizes input for the case when the user has mistakenly assigned the same VCF
+        file twice to the same sample in the sidecar metadata file.
+        Removes duplicate (Sample_ID, Filename) pairs and ensures only one filename remains per sample.
+        Keeps the first filename for each Sample_ID.
+        """
+
+        duplicates = self.df.duplicated(subset=["Sample_ID", "Filename"])
+        if duplicates.any():
+            dup_rows = self.df[duplicates]
+            logger.warning(f"Duplicate (Sample_ID, Filename) pairs found in metadata TSV:\n{dup_rows}")
+        self.df = self.df.drop_duplicates(subset=["Sample_ID", "Filename"], keep="first")
+        return self
 
 
 # TODO - can this be removed?

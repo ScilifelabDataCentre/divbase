@@ -37,7 +37,7 @@ def test_run_query_invalid_filter_raises_custom_exception(create_sidecar_manager
     when an invalid filter format is provided."""
 
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp_valid_tsv:
-        tmp_valid_tsv.write("col1\tcol2\nA\t1\nB\t2\n")
+        tmp_valid_tsv.write("Sample_ID\tFilename\ncol1\tcol2\nA\t1\nB\t2\n")
         tmp_path = Path(tmp_valid_tsv.name)
 
     manager = create_sidecar_manager(tmp_path)
@@ -213,3 +213,24 @@ def test_tsv_query_strip_hash_headers(tsv_with_hash_headers, create_sidecar_mana
 
     assert len(query_result) == 1, "Should strip # from headers and match correctly"
     assert list(query_result.columns) == ["Sample_ID", "Population", "Filename"], "Should strip # from headers"
+
+
+def test_sidecar_manager_duplicate_filenames_per_sample(tmp_path):
+    """
+    Test that SidecarQueryManager handles duplicate filenames for a sample by removing duplicates.
+    """
+
+    tsv_content = (
+        "Sample_ID\tPopulation\tFilename\n"
+        "S1\tPop1\tHOM_20ind_17SNPs_last_10_samples.vcf.gz,HOM_20ind_17SNPs_last_10_samples.vcf.gz\n"
+        "S2\tPop2\tother_file.vcf.gz\n"
+    )
+    tsv_file = tmp_path / "sidecar_duplicates.tsv"
+    tsv_file.write_text(tsv_content)
+    manager = SidecarQueryManager(file=tsv_file)
+    s1_filenames = manager.df[manager.df["Sample_ID"] == "S1"]["Filename"].tolist()
+    assert s1_filenames == ["HOM_20ind_17SNPs_last_10_samples.vcf.gz"], "Duplicate filenames should be removed for S1"
+    s2_filenames = manager.df[manager.df["Sample_ID"] == "S2"]["Filename"].tolist()
+    assert s2_filenames == ["other_file.vcf.gz"], (
+        "S2 does not contain duplicates and should retain its original filename"
+    )

@@ -127,7 +127,7 @@ def copy_fixtures_to_mock_download_from_bucket():
 @pytest.fixture
 def valid_tsv_path():
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp:
-        tmp.write("col1\tcol2\nA\t1\nB\t2\nA\t3\n")
+        tmp.write("Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
         tmp_path = Path(tmp.name)
     yield tmp_path
     tmp_path.unlink()
