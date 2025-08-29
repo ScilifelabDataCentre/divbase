@@ -117,6 +117,10 @@ def bcftools_pipe_task(
     else:
         sample_and_filename_subset = metadata_result.sample_and_filename_subset
 
+    check_if_samples_can_be_combined_with_bcftools(
+        files_to_download=files_to_download, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
+
     _ = download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
@@ -315,3 +319,32 @@ def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = No
             logger.info(f"deleted {output_file}")
         except Exception as e:
             logger.warning(f"Could not delete output file from worker {output_file}: {e}")
+
+
+def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_name: str, s3_file_manager: S3FileManager):
+    try:
+        dimensions_index = read_vcf_dimensions_file(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    except FileNotFoundError:
+        return
+    # TODO add better error handling
+
+    file_to_samples = {}
+    for file in files_to_download:
+        entry = next((rec for rec in dimensions_index.get("dimensions", []) if rec.get("filename") == file), None)
+        if not entry or "dimensions" not in entry or "sample_names" not in entry["dimensions"]:
+            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+        file_to_samples[file] = entry["dimensions"]["sample_names"]
+
+    manager = BcftoolsQueryManager()
+    grouped = manager._group_vcfs_by_sample_set(file_to_samples)
+    non_overlapping = manager._check_non_overlapping_sample_names(grouped)
+
+    if non_overlapping:
+        logger.info(
+            "The sample sets in the VCF files are non-overlapping, meaning that they can be combined by the pipeline."
+        )
+        return
+    elif not non_overlapping:
+        logger.warning(
+            "The sample sets in the VCF files are overlapping, meaning that some more analysis is needed to learn if they will be compatible with the pipeline."
+        )
