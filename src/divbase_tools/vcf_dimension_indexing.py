@@ -121,6 +121,7 @@ class VCFDimensionIndexManager:
             "variants": variant_count,
             "sample_count": sample_count,
             "scaffolds": sorted(list(scaffold_names)),
+            "sample_names": sample_IDs,
         }
 
     def _get_bucket_dimensions_file(self) -> dict:
