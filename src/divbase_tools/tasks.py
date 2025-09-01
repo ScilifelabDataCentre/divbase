@@ -256,10 +256,16 @@ def check_for_unnecessary_files_for_region_query(
 
     scaffolds = []
     files_to_download_updated = []
+
     matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
+    if not matches:
+        return files_to_download
     for match in matches:
-        scaffolds.extend([region.strip() for region in match.split(",") if region.strip()])
-    # TODO if there are no matches, return files to download
+        regions = [region.strip() for region in match.split(",") if region.strip()]
+        for region in regions:
+            scaffold_name = region.split(":")[0]
+            scaffolds.append(scaffold_name)
+
     for file in files_to_download:
         record = None
         for rec in dimensions_index.get("dimensions", []):
@@ -271,9 +277,9 @@ def check_for_unnecessary_files_for_region_query(
             continue
 
         record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
-        for scaffold in scaffolds:
-            if scaffold in record_scaffolds:
-                print(f"Scaffold '{scaffold}' is present in file '{file}'.")
+        for scaffold_name in scaffolds:
+            if scaffold_name in record_scaffolds:
+                print(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 
