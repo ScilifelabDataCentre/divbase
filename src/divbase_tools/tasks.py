@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import os
 import re
+from itertools import combinations
 from pathlib import Path
 
 import yaml
@@ -325,6 +326,7 @@ def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_nam
     try:
         dimensions_index = read_vcf_dimensions_file(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     except FileNotFoundError:
+        logger.warning(f"VCF dimensions file not found in bucket '{bucket_name}'.")
         return
     # TODO add better error handling
 
@@ -336,15 +338,64 @@ def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_nam
         file_to_samples[file] = entry["dimensions"]["sample_names"]
 
     manager = BcftoolsQueryManager()
-    grouped = manager._group_vcfs_by_sample_set(file_to_samples)
-    non_overlapping = manager._check_non_overlapping_sample_names(grouped)
+    sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
+    logger.info(f"Sample sets found in the VCF files: {sample_sets}")
 
-    if non_overlapping:
-        logger.info(
-            "The sample sets in the VCF files are non-overlapping, meaning that they can be combined by the pipeline."
-        )
+    sample_set_overlap_results = calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
+    logger.info(f"Sample sets overlap type: {sample_set_overlap_results}")
+
+    if (
+        sample_set_overlap_results["identical elements, different order"]
+        or sample_set_overlap_results["partly overlapping"]
+    ):
+        msg_lines = []
+        if sample_set_overlap_results["identical elements, different order"]:
+            msg_lines.append(
+                "Sample sets with identical elements but different order:\n"
+                + "\n".join(
+                    [
+                        f"{pair[0]} vs {pair[1]}"
+                        for pair in sample_set_overlap_results["identical elements, different order"]
+                    ]
+                )
+            )
+        if sample_set_overlap_results["partly overlapping"]:
+            msg_lines.append(
+                "Sample sets that are partly overlapping:\n"
+                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results["partly overlapping"]])
+            )
+        full_msg = "\n\n".join(msg_lines)
+        logger.error(full_msg)
+        raise ValueError(full_msg)
+    else:
+        logger.info("No unsupported sample sets found. Proceeding with bcftools pipeline.")
         return
-    elif not non_overlapping:
-        logger.warning(
-            "The sample sets in the VCF files are overlapping, meaning that some more analysis is needed to learn if they will be compatible with the pipeline."
-        )
+
+
+def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+    """
+    Analyze all pairwise overlap types between sample sets.
+    Catches the case where two sets have the same elements but different order.
+
+    Since dicts cannot have duplicate keys, there cannot be any completely overlapping sets in the input dict. Thus the else:continue condition should never occur.
+
+    tuples are used in the input to maintain order within the sample sets, but tuples do not support '&' intersection operations. Thus they need to be converted with set()
+
+    """
+    keys = ["identical elements, different order", "partly overlapping", "non-overlapping"]
+    sample_set_overlap_results = {key: [] for key in keys}
+    sample_sets = list(sample_sets_dict.keys())
+    logger.info(f"Sample sets for overlap analysis: {sample_sets}")
+    for set1, set2 in combinations(sample_sets, 2):
+        set1_set = set(set1)
+        set2_set = set(set2)
+        if set1_set == set2_set and set1 != set2:
+            overlap = "identical elements, different order"
+        elif set1_set & set2_set:
+            overlap = "partly overlapping"
+        elif set1_set.isdisjoint(set2_set):
+            overlap = "non-overlapping"
+        else:
+            continue
+        sample_set_overlap_results[overlap].append((set1, set2))
+    return sample_set_overlap_results

@@ -420,7 +420,7 @@ class BcftoolsQueryManager:
 
         return sample_names_per_VCF
 
-    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[frozenset, list[str]]:
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple, list[str]]:
         """
         Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
         (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
@@ -429,7 +429,7 @@ class BcftoolsQueryManager:
         """
         sample_set_to_files = {}
         for vcf_file, sample_list in sample_names_per_VCF.items():
-            sample_set = frozenset(sample_list)
+            sample_set = tuple(sample_list)
             sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
         return sample_set_to_files
 
