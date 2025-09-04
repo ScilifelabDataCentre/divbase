@@ -5,10 +5,9 @@ import re
 from itertools import combinations
 from pathlib import Path
 
-import yaml
 from celery import Celery
 
-from divbase_tools.exceptions import NoVCFFilesFoundError
+from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileEmptyError
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.vcf_dimension_indexing import VCFDimensionIndexManager
@@ -249,10 +248,14 @@ def check_for_unnecessary_files_for_region_query(
     """
 
     try:
-        dimensions_index = read_vcf_dimensions_file(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    except FileNotFoundError:
+        manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        dimensions_index = manager._get_bucket_dimensions_file()
+    except VCFDimensionsFileEmptyError:
+        logger.warning(
+            "Since no VCF dimensions file was found, all current VCF files will be transferred to the worker without filtering away those that do not contain the required regions."
+        )
         return files_to_download
-        # TODO for now, this makes it so that if the dimensions file is not present, the job continues by skipping the check of unnecessary files. There should at least be a message that tells this to the user
+        # TODO consider if this should run the dimensions update task instead of skipping the function by just returning files_to_download
 
     scaffolds = []
     files_to_download_updated = []
@@ -285,23 +288,14 @@ def check_for_unnecessary_files_for_region_query(
 
     if files_to_download_updated == []:
         raise ValueError(
-            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files."
+            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. \n"
+            "Please try another -r query with scaffolds/chromosomes that are present in the VCF files."
+            "To see a list of all unique scaffolds that are present across the VCF files in the project:"
+            "'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
         )
         # TODO this stops jobs from executing. Which might not be intuitive. Such subsests would be able to run in bftools but the result would be an merged VCF with no variants (header only). Should this be a warning instead that will be returned in the worker results?
 
     return files_to_download_updated
-
-    # TODO when there is a command implemented that reads the .vcf_dimensions.yaml file and list all scaffolds in the project, add that command as a help to this error message.
-
-
-def read_vcf_dimensions_file(bucket_name: str, s3_file_manager: S3FileManager) -> dict:
-    try:
-        content = s3_file_manager.download_s3_file_to_str(key=".vcf_dimensions.yaml", bucket_name=bucket_name)
-    except Exception as exc:
-        raise FileNotFoundError(f".vcf_dimensions.yaml not found in bucket '{bucket_name}'.") from exc
-    # TODO add a hint to the error telling how dimension indexing can be done.
-    # TODO use the get_dimensions_info instance method of the VCFDimensionIndexManager class instead of reading file diretly? don't want to download the file though
-    return yaml.safe_load(content)
 
 
 def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = None, output_file: Path = None) -> None:
@@ -330,11 +324,11 @@ def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = No
 
 def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_name: str, s3_file_manager: S3FileManager):
     try:
-        dimensions_index = read_vcf_dimensions_file(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    except FileNotFoundError:
-        logger.warning(f"VCF dimensions file not found in bucket '{bucket_name}'.")
+        manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        dimensions_index = manager._get_bucket_dimensions_file()
+    except VCFDimensionsFileEmptyError as e:
+        logger.error(e)
         return
-    # TODO add better error handling
 
     file_to_samples = {}
     for file in files_to_download:

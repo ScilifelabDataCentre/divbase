@@ -26,11 +26,13 @@ class VCFDimensionIndexManager:
 
     def __post_init__(self):
         """
-        Creates an empty .vcf_dimensions.yaml file in the bucket upon object init.
+        Creates an empty .vcf_dimensions.yaml file in the bucket upon object init if it does not exist.
+        Buckets that do not contain a .vcf_dimensions.yaml file will have one created automatically by
+        catching the exception from the method that retrieves the dimensions file.
         """
-        self.dimensions_info = self._get_bucket_dimensions_file()
-
-        if not self.dimensions_info:
+        try:
+            self.dimensions_info = self._get_bucket_dimensions_file()
+        except VCFDimensionsFileEmptyError:
             logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
             yaml_data = {"dimensions": []}
             self._upload_bucket_dimensions_file(dimensions_data=yaml_data)
@@ -135,10 +137,9 @@ class VCFDimensionIndexManager:
                 key=DIMENSIONS_FILE_NAME, bucket_name=self.bucket_name
             )
         except ObjectDoesNotExistError:
-            logger.info(f"No dimensions file found in the project: {self.bucket_name}.")
-            return {}
+            raise VCFDimensionsFileEmptyError(self.bucket_name) from None
         if not content:
-            return {}
+            raise VCFDimensionsFileEmptyError(self.bucket_name)
 
         return yaml.safe_load(content)
 

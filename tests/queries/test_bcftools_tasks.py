@@ -285,9 +285,9 @@ def test_calculate_pairwise_overlap_types_for_sample_sets(
         ),
     ],
 )
-@patch("divbase_tools.tasks.read_vcf_dimensions_file")
+@patch("divbase_tools.vcf_dimension_indexing.VCFDimensionIndexManager._get_bucket_dimensions_file")
 def test_check_if_samples_can_be_combined_with_bcftools_param(
-    mock_read_vcf_dimensions_file,
+    mock_get_dimensions_file,
     files_to_download,
     dimensions_index,
     should_raise_error,
@@ -299,7 +299,7 @@ def test_check_if_samples_can_be_combined_with_bcftools_param(
     continue the pipeline or raise an error.
     """
 
-    mock_read_vcf_dimensions_file.return_value = dimensions_index
+    mock_get_dimensions_file.return_value = dimensions_index
 
     s3_file_manager = MagicMock()
 
