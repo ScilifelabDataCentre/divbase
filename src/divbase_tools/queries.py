@@ -336,6 +336,7 @@ class BcftoolsQueryManager:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
                 self.run_bcftools(command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
             else:
