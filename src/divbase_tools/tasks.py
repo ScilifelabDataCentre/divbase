@@ -116,6 +116,7 @@ def bcftools_pipe_task(
         ]
     else:
         sample_and_filename_subset = metadata_result.sample_and_filename_subset
+        files_to_download = metadata_result.unique_filenames
 
     check_if_samples_can_be_combined_with_bcftools(
         files_to_download=files_to_download, bucket_name=bucket_name, s3_file_manager=s3_file_manager
@@ -276,13 +277,13 @@ def check_for_unnecessary_files_for_region_query(
                 record = rec
                 break
         if not record:
-            print(f"File '{file}' is not indexed in the VCF dimensions file.")
+            logger.warning(f"File '{file}' is not indexed in the VCF dimensions file.")
             continue
 
         record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
         for scaffold_name in scaffolds:
             if scaffold_name in record_scaffolds:
-                print(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
+                logger.warning(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 
@@ -335,6 +336,7 @@ def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_nam
         entry = next((rec for rec in dimensions_index.get("dimensions", []) if rec.get("filename") == file), None)
         if not entry or "dimensions" not in entry or "sample_names" not in entry["dimensions"]:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+        # TODO should this error also suggest to run "dimensions update"
         file_to_samples[file] = entry["dimensions"]["sample_names"]
 
     manager = BcftoolsQueryManager()

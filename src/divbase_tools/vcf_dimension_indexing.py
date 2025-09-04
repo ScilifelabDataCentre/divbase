@@ -32,6 +32,9 @@ class VCFDimensionIndexManager:
         """
         try:
             self.dimensions_info = self._get_bucket_dimensions_file()
+            # Treat dimensions: [] as empty
+            if not self.dimensions_info.get("dimensions"):
+                raise VCFDimensionsFileEmptyError(self.bucket_name)
         except VCFDimensionsFileEmptyError:
             logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
             yaml_data = {"dimensions": []}
@@ -140,8 +143,10 @@ class VCFDimensionIndexManager:
             raise VCFDimensionsFileEmptyError(self.bucket_name) from None
         if not content:
             raise VCFDimensionsFileEmptyError(self.bucket_name)
-
-        return yaml.safe_load(content)
+        data = yaml.safe_load(content)
+        if not data or not data.get("dimensions"):
+            raise VCFDimensionsFileEmptyError(self.bucket_name)
+        return data
 
     def _upload_bucket_dimensions_file(self, dimensions_data: dict) -> None:
         """
