@@ -106,6 +106,9 @@ def run_update_dimensions(CONSTANTS):
 
     If run with test_minio_url, bucket_name = run_update_dimensions(), it uses the default bucket split-scaffold-project.
     It can also be run for other bucket names with: test_minio_url, bucket_name = run_update_dimensions("another-bucket-name")
+
+    Since this fixture is not run in a celery worker, patch the delete_job_files_from_worker function just pass and do nothing.
+    This ensures that no files are deleted and that no logging messages about deletion are printed.
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
     default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -114,17 +117,21 @@ def run_update_dimensions(CONSTANTS):
         with (
             patch("divbase_tools.vcf_dimension_indexing.logger.info") as mock_info,
             patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager,
+            patch("divbase_tools.tasks.delete_job_files_from_worker") as mock_delete_job_files,
         ):
 
             def append_test_fixture_info_to_log(msg, *args, **kwargs):
                 if "No VCF dimensions file found in the bucket:" in msg:
-                    msg = "LOG CALL BY TEST FIXTURE (run_update_dimensions) " + msg
+                    msg = "LOG CALL BY TEST FIXTURE (run_update_dimensions): " + msg
                 return mock_info.original(msg, *args, **kwargs)
+
+            def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
+                pass
 
             mock_info.original = logger.info
             mock_info.side_effect = append_test_fixture_info_to_log
-
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
+            mock_delete_job_files.side_effect = patched_delete_job_files_from_worker
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
             assert result["status"] == "completed"
 

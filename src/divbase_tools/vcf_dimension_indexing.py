@@ -47,7 +47,7 @@ class VCFDimensionIndexManager:
         dimensions = yaml_data.get("dimensions", [])
 
         if any(entry.get("filename") == vcf_filename for entry in dimensions):
-            print(f"Filename '{vcf_filename}' is already present in .vcf_dimensions.yaml.")
+            logger.info(f"Filename '{vcf_filename}' is already present in .vcf_dimensions.yaml.")
             return
 
         vcf_path = Path(vcf_filename)
@@ -65,7 +65,7 @@ class VCFDimensionIndexManager:
 
         self.dimensions_info = yaml_data
 
-        print(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
+        logger.info(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
         """
@@ -78,7 +78,7 @@ class VCFDimensionIndexManager:
         dimensions = [entry for entry in dimensions if entry.get("filename") != vcf_filename]
         yaml_data["dimensions"] = dimensions
 
-        print(f"Removed entry for {vcf_filename} from .vcf_dimensions.yaml.")
+        logger.info(f"Removed entry for {vcf_filename} from .vcf_dimensions.yaml.")
 
     def get_indexed_filenames(self) -> list[str]:
         """
@@ -94,7 +94,7 @@ class VCFDimensionIndexManager:
         Two different entry points to self._extract_dimensions_from_opened_vcf() in
         order to comply with Ruff linting of context managers.
         """
-        print(f"Reading: {vcf_path} ...")
+        logger.debug(f"Reading: {vcf_path} ...")
         try:
             with gzip.open(vcf_path, "rt") as file:
                 return self._extract_dimensions_from_opened_vcf(file)
@@ -161,7 +161,7 @@ class VCFDimensionIndexManager:
             self.s3_file_manager.upload_str_as_s3_object(
                 key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
             )
-            logging.info(f"New version updated in the bucket: {self.bucket_name}.")
+            logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
         except botocore.exceptions.ClientError as e:
             logging.error(f"Failed to upload bucket dimensions file: {e}")
 

@@ -227,6 +227,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             True,
             [
                 "Starting bcftools_pipe_task",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
             ],
             [],
@@ -376,7 +377,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             bucket_name=bucket_name,
         )
 
-    def patched_delete_job_files_from_worker(vcf_paths, metadata_path=None, output_file=None):
+    def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
         """
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """

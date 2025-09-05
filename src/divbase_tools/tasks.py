@@ -284,7 +284,7 @@ def check_for_unnecessary_files_for_region_query(
         record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
         for scaffold_name in scaffolds:
             if scaffold_name in record_scaffolds:
-                logger.warning(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
+                logger.info(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 
@@ -300,7 +300,9 @@ def check_for_unnecessary_files_for_region_query(
     return files_to_download_updated
 
 
-def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = None, output_file: Path = None) -> None:
+def delete_job_files_from_worker(
+    vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
+) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
     """
@@ -342,10 +344,10 @@ def check_if_samples_can_be_combined_with_bcftools(
 
     manager = BcftoolsQueryManager()
     sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
-    logger.info(f"Sample sets found in the VCF files: {sample_sets}")
+    logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
 
     sample_set_overlap_results = calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
-    logger.info(f"Sample sets overlap type: {sample_set_overlap_results}")
+    logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
 
     if (
         sample_set_overlap_results["identical elements, different order"]
@@ -388,7 +390,7 @@ def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tupl
     keys = ["identical elements, different order", "partly overlapping", "non-overlapping"]
     sample_set_overlap_results = {key: [] for key in keys}
     sample_sets = list(sample_sets_dict.keys())
-    logger.info(f"Sample sets for overlap analysis: {sample_sets}")
+    logger.debug(f"Sample sets for overlap analysis: {sample_sets}")
     for set1, set2 in combinations(sample_sets, 2):
         set1_set = set(set1)
         set2_set = set(set2)
