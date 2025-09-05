@@ -209,6 +209,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             False,
             [
                 "Starting bcftools_pipe_task",
+                "No VCF dimensions file found in the bucket: split-scaffold-project.",
                 "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering.",
             ],
             ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],

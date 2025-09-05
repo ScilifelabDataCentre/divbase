@@ -93,6 +93,7 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    vcf_dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
     metadata_path = download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
@@ -105,10 +106,9 @@ def bcftools_pipe_task(
 
     if "view -r" in command:
         files_to_download = check_for_unnecessary_files_for_region_query(
-            bucket_name=bucket_name,
-            s3_file_manager=s3_file_manager,
             command=command,
             files_to_download=metadata_result.unique_filenames,
+            vcf_dimensions_manager=vcf_dimensions_manager,
         )
 
         sample_and_filename_subset = [
@@ -119,7 +119,8 @@ def bcftools_pipe_task(
         files_to_download = metadata_result.unique_filenames
 
     check_if_samples_can_be_combined_with_bcftools(
-        files_to_download=files_to_download, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        files_to_download=files_to_download,
+        vcf_dimensions_manager=vcf_dimensions_manager,
     )
 
     _ = download_vcf_files(
@@ -236,7 +237,9 @@ def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3
 
 
 def check_for_unnecessary_files_for_region_query(
-    bucket_name: str, s3_file_manager: S3FileManager, command: str, files_to_download: list[str]
+    command: str,
+    files_to_download: list[str],
+    vcf_dimensions_manager: VCFDimensionIndexManager,
 ) -> dict:
     """
     If the 'view -r' query is present, read the .vcf_dimensions.yaml file and check if the specified scaffolds are available in the VCF files.
@@ -248,8 +251,8 @@ def check_for_unnecessary_files_for_region_query(
     TODO ensure that the errors raised here are raised before submitting the task to celery.
     """
 
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    dimensions_index = manager._get_bucket_dimensions_file()
+    manager = vcf_dimensions_manager
+    dimensions_index = manager.dimensions_info
     if not dimensions_index.get("dimensions"):
         logger.warning(
             "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering."
@@ -304,26 +307,28 @@ def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = No
     for vcf_path in vcf_paths:
         try:
             os.remove(vcf_path)
-            logger.info(f"deleted {vcf_path}")
+            logger.info(f"Deleted {vcf_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
     if metadata_path is not None:
         try:
             os.remove(metadata_path)
-            logger.info(f"deleted {metadata_path}")
+            logger.info(f"Deleted {metadata_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
     if output_file is not None:
         try:
             os.remove(output_file)
-            logger.info(f"deleted {output_file}")
+            logger.info(f"Deleted {output_file} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete output file from worker {output_file}: {e}")
 
 
-def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_name: str, s3_file_manager: S3FileManager):
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    dimensions_index = manager._get_bucket_dimensions_file()
+def check_if_samples_can_be_combined_with_bcftools(
+    files_to_download,
+    vcf_dimensions_manager: VCFDimensionIndexManager,
+) -> None:
+    dimensions_index = vcf_dimensions_manager.dimensions_info
     if not dimensions_index.get("dimensions"):
         raise ValueError("VCF dimensions file is missing or empty. Cannot check if samples can be combined.")
 

@@ -84,7 +84,7 @@ class VCFDimensionIndexManager:
         """
         Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
         """
-        yaml_data = self._get_bucket_dimensions_file()
+        yaml_data = self.dimensions_info
         return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:

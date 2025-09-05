@@ -7,6 +7,7 @@ The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
 """
 
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,6 +25,8 @@ from tests.helpers.minio_setup import (
 )
 
 runner = CliRunner()
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -108,7 +111,19 @@ def run_update_dimensions(CONSTANTS):
     default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
     def _run(bucket_name=default_bucket_name):
-        with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        with (
+            patch("divbase_tools.vcf_dimension_indexing.logger.info") as mock_info,
+            patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager,
+        ):
+
+            def append_test_fixture_info_to_log(msg, *args, **kwargs):
+                if "No VCF dimensions file found in the bucket:" in msg:
+                    msg = "LOG CALL BY TEST FIXTURE (run_update_dimensions) " + msg
+                return mock_info.original(msg, *args, **kwargs)
+
+            mock_info.original = logger.info
+            mock_info.side_effect = append_test_fixture_info_to_log
+
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
             assert result["status"] == "completed"
