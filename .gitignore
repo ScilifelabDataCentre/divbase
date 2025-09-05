@@ -21,6 +21,8 @@ __pycache__/
 *.vcf.gz
 *.vcf.gz.csi
 !tests/fixtures/*.vcf.gz
+tests/fixtures/temp*
+tests/fixtures/merged*
 
 # query job config files
 bcftools_divbase_job_config.json

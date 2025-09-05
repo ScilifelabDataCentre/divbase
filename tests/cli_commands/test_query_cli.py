@@ -175,9 +175,9 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "params,expect_success,expected_logs,expected_error_msgs",
+    "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be sucessful, should lead to concat
+        # Case: expected to be fail, vcf dimensions file is empty
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -187,16 +187,61 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "user_name": "test-user",
             },
             True,
+            False,
             [
                 "Starting bcftools_pipe_task",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
             ],
             [],
         ),
+        # case: expected to be sucessful, should lead to concat
+        (
+            {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+            ],
+            [],
+        ),
+        # case
+        (
+            {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 31,34,36,321,324",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            False,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+            ],
+            [
+                "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files.To see a list of all unique scaffolds that are present across the VCF files in the project:'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>"
+            ],
+        ),
     ],
 )
 def test_bcftools_pipe_cli_integration_with_eager_mode(
-    tmp_path, CONSTANTS, caplog, params, expect_success, expected_logs, expected_error_msgs
+    tmp_path,
+    CONSTANTS,
+    caplog,
+    params,
+    expect_success,
+    ensure_dimensions_file,
+    expected_logs,
+    expected_error_msgs,
+    run_update_dimensions,
+    delete_dimensions_file_from_a_bucket,
 ):
     """
     This is a special integration test that allows for running bcftools-pipe queries
@@ -333,6 +378,11 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             kwargs["endpoint_url"] = MINIO_URL
         return original_boto3_client(service_name, **kwargs)
 
+    if ensure_dimensions_file:
+        run_update_dimensions(bucket_name=params["bucket_name"])
+    else:
+        delete_dimensions_file_from_a_bucket(params["bucket_name"])
+
     try:
         current_app.conf.update(
             task_always_eager=True,
@@ -357,7 +407,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
                 with pytest.raises(ValueError) as excinfo:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
-                    assert msg in str(excinfo.value)
+                    assert msg.replace("\n", "") in str(excinfo.value).replace("\n", "")
             else:
                 result = bcftools_pipe_task(**params)
                 assert result is not None

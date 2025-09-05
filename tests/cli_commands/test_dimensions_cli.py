@@ -42,35 +42,15 @@ def clean_dimensions(user_config_path, CONSTANTS):
     yield
 
 
-@pytest.fixture
-def run_update_dimensions(CONSTANTS):
-    """
-    Factory fixture that directly calls the update_vcf_dimensions_task task to create and update dimensions for the split-scaffold-project.
-    Patches the S3 URL to use the test MinIO url. Run directly to not have to poll for celery task completion.
-
-    If run with test_minio_url, bucket_name = run_update_dimensions(), it uses the default bucket split-scaffold-project.
-    It can also be run for other bucket names with: test_minio_url, bucket_name = run_update_dimensions("another-bucket-name")
-    """
-    test_minio_url = CONSTANTS["MINIO_URL"]
-
-    def _run(bucket_name=CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]):
-        with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
-            mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
-            result = update_vcf_dimensions_task(bucket_name=bucket_name)
-            assert result["status"] == "completed"
-        return test_minio_url, bucket_name
-
-    return _run
-
-
-def test_update_vcf_dimensions_task_directly(run_update_dimensions):
+def test_update_vcf_dimensions_task_directly(CONSTANTS, run_update_dimensions):
     """
     Test that first runs the run_update_dimensions fixture to create a .vcf_dimensions.yaml file in the bucket.
-    Then it create a new VCFDimensionIndexManager instance to read the .vcf_dimensions.yaml file
+    Then it creates a new VCFDimensionIndexManager instance to read the .vcf_dimensions.yaml file
     with manager.get_dimensions_info() and assert that all VCF files in bucket have been indexed for their dimensions.
     """
-
-    test_minio_url, bucket_name = run_update_dimensions()
+    test_minio_url = CONSTANTS["MINIO_URL"]
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    run_update_dimensions(bucket_name=bucket_name)
 
     s3_file_manager = create_s3_file_manager(url=test_minio_url)
     manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
@@ -82,12 +62,14 @@ def test_update_vcf_dimensions_task_directly(run_update_dimensions):
         assert vcf_file in indexed_files
 
 
-def test_show_vcf_dimensions_task(run_update_dimensions, user_config_path):
+def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_path):
     """
     Test that first runs the run_update_dimensions fixture to create a .vcf_dimensions.yaml file in the bucket.
     Then it runs the CLI command to show the VCF dimensions and asserts that the output is as expected.
     """
-    _, bucket_name = run_update_dimensions()
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    run_update_dimensions(bucket_name=bucket_name)
 
     # Basic version of command
     command = f"dimensions show --project {bucket_name} --config {user_config_path}"

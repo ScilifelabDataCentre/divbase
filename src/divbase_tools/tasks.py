@@ -251,6 +251,11 @@ def check_for_unnecessary_files_for_region_query(
     try:
         manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         dimensions_index = manager._get_bucket_dimensions_file()
+        if not dimensions_index.get("dimensions"):
+            logger.warning(
+                "VCF dimensions file exists but is empty. All current VCF files will be transferred to the worker without filtering."
+            )
+            return files_to_download
     except VCFDimensionsFileEmptyError:
         logger.warning(
             "Since no VCF dimensions file was found, all current VCF files will be transferred to the worker without filtering away those that do not contain the required regions."

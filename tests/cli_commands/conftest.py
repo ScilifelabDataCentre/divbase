@@ -8,11 +8,16 @@ it is autoused, so it does not need to be specified in each test.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
+import boto3
 import pytest
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
+from divbase_tools.s3_client import create_s3_file_manager
+from divbase_tools.tasks import update_vcf_dimensions_task
+from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from tests.helpers.minio_setup import (
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
@@ -90,3 +95,47 @@ def user_config_path(tmp_path, CONSTANTS):
 def fixtures_dir():
     """Path to the fixtures directory."""
     return Path(__file__).parent.parent / "fixtures"
+
+
+@pytest.fixture
+def run_update_dimensions(CONSTANTS):
+    """
+    Factory fixture that directly calls the update_vcf_dimensions_task task to create and update dimensions for the split-scaffold-project.
+    Patches the S3 URL in the task to use the test MinIO url. Run directly to not have to poll for celery task completion.
+
+    If run with test_minio_url, bucket_name = run_update_dimensions(), it uses the default bucket split-scaffold-project.
+    It can also be run for other bucket names with: test_minio_url, bucket_name = run_update_dimensions("another-bucket-name")
+    """
+    test_minio_url = CONSTANTS["MINIO_URL"]
+    default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    def _run(bucket_name=default_bucket_name):
+        with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+            mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
+            result = update_vcf_dimensions_task(bucket_name=bucket_name)
+            assert result["status"] == "completed"
+
+    return _run
+
+
+@pytest.fixture(autouse=True)
+def delete_dimensions_file_from_a_bucket(CONSTANTS):
+    """
+    Remove the dimensions file from a specified bucket.
+    """
+
+    default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    def _run(bucket_name=default_bucket_name):
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=CONSTANTS["MINIO_URL"],
+            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+        )
+        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=DIMENSIONS_FILE_NAME)
+        files = [content["Key"] for content in response.get("Contents", [])]
+        if DIMENSIONS_FILE_NAME in files:
+            s3_client.delete_object(Bucket=bucket_name, Key=DIMENSIONS_FILE_NAME)
+
+    return _run
