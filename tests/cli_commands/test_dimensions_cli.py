@@ -15,7 +15,7 @@ import yaml
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileEmptyError
+from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
 from divbase_tools.s3_client import create_s3_file_manager
 from divbase_tools.tasks import update_vcf_dimensions_task
 from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME, VCFDimensionIndexManager
@@ -110,10 +110,26 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
         assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
 
 
-def test_get_dimensions_info_raises_empty_error(CONSTANTS):
+def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, user_config_path, caplog):
     """
-    Test that asserts that VCFDimensionsFileEmptyError is raised when the dimensions file is empty.
-    The clean_dimensions fixture is run before this test, thus there is should be no .vcf_dimensions.yaml file present.
+    Test runs CLI command to show the VCF dimensions handles the case when the dimensions file is missing.
+    """
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    command = f"dimensions show --project {bucket_name} --config {user_config_path}"
+    with caplog.at_level("ERROR"):
+        cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0
+
+    expected_message = str(VCFDimensionsFileMissingOrEmptyError(bucket_name=bucket_name))
+    assert expected_message in caplog.text
+
+
+def test_get_dimensions_info_returns_empty(CONSTANTS):
+    """
+    Test that asserts that get_dimensions_info returns {"dimensions": []} when the dimensions file is missing or empty.
+    The clean_dimensions fixture is run before this test, thus there should be no .vcf_dimensions.yaml file present.
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -121,8 +137,8 @@ def test_get_dimensions_info_raises_empty_error(CONSTANTS):
     s3_file_manager = create_s3_file_manager(url=test_minio_url)
     manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
-    with pytest.raises(VCFDimensionsFileEmptyError):
-        manager.get_dimensions_info()
+    result = manager.get_dimensions_info()
+    assert result == {"dimensions": []}
 
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):

@@ -196,7 +196,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be fail, vcf dimensions file is empty
+        # Case: expected to be fail, vcf dimensions file is empty, view -r cannot be checked against scaffolds
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -209,6 +209,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             False,
             [
                 "Starting bcftools_pipe_task",
+                "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering.",
             ],
             ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],
         ),
@@ -229,7 +230,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             ],
             [],
         ),
-        # case
+        # case: expected to fail since there are no scaffolds in the vcf files that match the -r query
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",

@@ -7,7 +7,7 @@ from pathlib import Path
 import botocore
 import yaml
 
-from divbase_tools.exceptions import ObjectDoesNotExistError, VCFDimensionsFileEmptyError
+from divbase_tools.exceptions import ObjectDoesNotExistError
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.user_config import ProjectConfig
 
@@ -26,14 +26,9 @@ class VCFDimensionIndexManager:
 
     def __post_init__(self):
         """
-        Creates an empty .vcf_dimensions.yaml file in the bucket upon object init if it does not exist.
-        Buckets that do not contain a .vcf_dimensions.yaml file will have one created automatically by
-        catching the exception from the method that retrieves the dimensions file.
+        Loads the .vcf_dimensions.yaml file from the bucket if it exists.
         """
-        try:
-            self.dimensions_info = self._get_bucket_dimensions_file()
-        except VCFDimensionsFileEmptyError:
-            self.dimensions_info = None
+        self.dimensions_info = self._get_bucket_dimensions_file()
 
     def add_dimension_entry(self, vcf_filename: str) -> None:
         """
@@ -46,10 +41,8 @@ class VCFDimensionIndexManager:
         the version history of the dimensions file will not be cluttered with many versions that differ only by one entry.
         """
 
-        if self.dimensions_info is None:
-            yaml_data = {"dimensions": []}
-        else:
-            yaml_data = self.dimensions_info
+        yaml_data = self.dimensions_info or {"dimensions": []}
+        dimensions = yaml_data.get("dimensions", [])
 
         dimensions = yaml_data.get("dimensions", [])
 
@@ -91,11 +84,8 @@ class VCFDimensionIndexManager:
         """
         Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
         """
-        try:
-            yaml_data = self._get_bucket_dimensions_file()
-            return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
-        except VCFDimensionsFileEmptyError:
-            return []
+        yaml_data = self._get_bucket_dimensions_file()
+        return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:
         """

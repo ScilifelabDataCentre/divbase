@@ -297,15 +297,14 @@ class SidecarColumnNotFoundError(Exception):
     pass
 
 
-class VCFDimensionsFileEmptyError(Exception):
+class VCFDimensionsFileMissingOrEmptyError(Exception):
     """Raised when the .vcf_dimensions.yaml file is missing or exists but contains no indexed VCFs."""
 
     def __init__(self, bucket_name: str):
         error_message = (
-            f"The VCF dimensions file in project {bucket_name} is missing or empty.\n"
+            f"The VCF dimensions file in project {bucket_name} is missing or empty. "
             "Please ensure that there are VCF files in the project and run:\n"
             "'divbase-cli dimensions update --project <project_name>'\n"
-            "to populate the VCF dimensions file."
         )
         super().__init__(error_message)
         self.bucket_name = bucket_name
