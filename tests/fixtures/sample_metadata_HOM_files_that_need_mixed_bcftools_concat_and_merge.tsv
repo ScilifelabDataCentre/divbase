@@ -39,3 +39,7 @@
 18_TEST	5b	SPT1	H7	Southern Portugal	2016	Southern	F	-8.915	37.26	HOM_20ind_17SNPs_changed_sample_names.vcf.gz
 19_TEST	7	NAF	J21	North Africa	2016	Saharo-Mauritanian	F	-17.49667	20.486	HOM_20ind_17SNPs_changed_sample_names.vcf.gz
 20_TEST	4	NOS2	P25	Southern North Sea	2017	North Sea	F	2.85	54.07	HOM_20ind_17SNPs_changed_sample_names.vcf.gz
+21_TEST	5b	SPT1	H7	Iceland	2016	North Sea	F	-8.915	37.26	HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz
+22_TEST	5b	SPT1	H7	Iceland	2016	North Sea	F	-8.915	37.26	HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz
+23_TEST	5b	SPT1	H7	Iceland	2016	North Sea	F	-8.915	37.26	HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz
+24_TEST	5b	SPT1	H7	Iceland	2016	North Sea	F	-8.915	37.26	HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz,HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz

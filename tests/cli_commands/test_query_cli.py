@@ -334,6 +334,38 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             ],
             [],
         ),
+        # case: expected to be sucessful, should lead to two different sample sets being concatenated, then merged with a third file
+        (
+            {
+                "tsv_filter": "Area:Northern Spanish shelf,Iceland",
+                "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+                "bucket_name": "mixed-concat-merge-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '8'. It is present in file 'HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '13'. It is present in file 'HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '18'. It is present in file 'HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Merged all files (including concatenated files) into 'merged_unsorted_",
+                "bcftools processing completed successfully",
+                "Cleaning up 17 temporary files",
+            ],
+            [],
+        ),
     ],
 )
 def test_bcftools_pipe_cli_integration_with_eager_mode(

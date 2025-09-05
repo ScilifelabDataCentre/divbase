@@ -345,7 +345,9 @@ class BcftoolsQueryManager:
                 )
                 temp_concat_files = []
                 for sample_set, files in sample_set_to_files.items():
+                    logger.debug(f"Processing sample set with {len(files)} files ({files}) and samples: {sample_set}")
                     if len(files) > 1:
+                        logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
                         concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
                         self.run_bcftools(command=concat_command)
@@ -353,6 +355,9 @@ class BcftoolsQueryManager:
                         self.temp_files.append(concat_temp)
                         self.ensure_csi_index(concat_temp)
                     elif len(files) == 1:
+                        logger.debug(
+                            "Sample set only occurs in a single file, will use this file as is for merging in a downstream step."
+                        )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
