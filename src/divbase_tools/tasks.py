@@ -7,7 +7,7 @@ from pathlib import Path
 
 from celery import Celery
 
-from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileEmptyError
+from divbase_tools.exceptions import NoVCFFilesFoundError
 from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.vcf_dimension_indexing import VCFDimensionIndexManager
@@ -248,20 +248,13 @@ def check_for_unnecessary_files_for_region_query(
     TODO ensure that the errors raised here are raised before submitting the task to celery.
     """
 
-    try:
-        manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-        dimensions_index = manager._get_bucket_dimensions_file()
-        if not dimensions_index.get("dimensions"):
-            logger.warning(
-                "VCF dimensions file exists but is empty. All current VCF files will be transferred to the worker without filtering."
-            )
-            return files_to_download
-    except VCFDimensionsFileEmptyError:
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    dimensions_index = manager._get_bucket_dimensions_file()
+    if not dimensions_index.get("dimensions"):
         logger.warning(
-            "Since no VCF dimensions file was found, all current VCF files will be transferred to the worker without filtering away those that do not contain the required regions."
+            "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering."
         )
         return files_to_download
-        # TODO consider if this should run the dimensions update task instead of skipping the function by just returning files_to_download
 
     scaffolds = []
     files_to_download_updated = []
@@ -329,12 +322,10 @@ def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = No
 
 
 def check_if_samples_can_be_combined_with_bcftools(files_to_download, bucket_name: str, s3_file_manager: S3FileManager):
-    try:
-        manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-        dimensions_index = manager._get_bucket_dimensions_file()
-    except VCFDimensionsFileEmptyError as e:
-        logger.error(e)
-        return
+    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    dimensions_index = manager._get_bucket_dimensions_file()
+    if not dimensions_index.get("dimensions"):
+        raise ValueError("VCF dimensions file is missing or empty. Cannot check if samples can be combined.")
 
     file_to_samples = {}
     for file in files_to_download:

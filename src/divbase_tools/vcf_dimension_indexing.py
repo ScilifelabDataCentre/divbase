@@ -33,18 +33,24 @@ class VCFDimensionIndexManager:
         try:
             self.dimensions_info = self._get_bucket_dimensions_file()
         except VCFDimensionsFileEmptyError:
-            logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
-            yaml_data = {"dimensions": []}
-            self._upload_bucket_dimensions_file(dimensions_data=yaml_data)
-            self.dimensions_info = yaml_data
+            self.dimensions_info = None
 
     def add_dimension_entry(self, vcf_filename: str) -> None:
         """
         Append a new dimension entry to .vcf_dimensions.yaml if not already present for that VCF file.
         Calls submethods to calculate dimensions and upload the updated YAML file to bucket.
+
+        NOTE! This method does not upload the updated dimensions file to the bucket. The caller must do that
+        by calling self._upload_bucket_dimensions_file(self.dimensions_info) after calling this method.
+        This way, the caller can add multiple entries and then upload the file only once at the end. Thus,
+        the version history of the dimensions file will not be cluttered with many versions that differ only by one entry.
         """
 
-        yaml_data = self.dimensions_info
+        if self.dimensions_info is None:
+            yaml_data = {"dimensions": []}
+        else:
+            yaml_data = self.dimensions_info
+
         dimensions = yaml_data.get("dimensions", [])
 
         if any(entry.get("filename") == vcf_filename for entry in dimensions):
@@ -64,7 +70,9 @@ class VCFDimensionIndexManager:
         dimensions.append(new_entry)
         yaml_data["dimensions"] = dimensions
 
-        print(f"Added new entry for {vcf_filename} to .vcf_dimensions.yaml.")
+        self.dimensions_info = yaml_data
+
+        print(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
         """
@@ -83,8 +91,11 @@ class VCFDimensionIndexManager:
         """
         Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
         """
-        yaml_data = self._get_bucket_dimensions_file()
-        return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
+        try:
+            yaml_data = self._get_bucket_dimensions_file()
+            return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
+        except VCFDimensionsFileEmptyError:
+            return []
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:
         """
@@ -137,12 +148,17 @@ class VCFDimensionIndexManager:
                 key=DIMENSIONS_FILE_NAME, bucket_name=self.bucket_name
             )
         except ObjectDoesNotExistError:
-            raise VCFDimensionsFileEmptyError(self.bucket_name) from None
+            logger.info(f"No VCF dimensions file found in the bucket: {self.bucket_name}.")
+            return {"dimensions": []}
         if not content:
-            raise VCFDimensionsFileEmptyError(self.bucket_name)
+            return {"dimensions": []}
+
         data = yaml.safe_load(content)
-        if not data or "dimensions" not in data:
-            raise VCFDimensionsFileEmptyError(self.bucket_name)
+        if not isinstance(data, dict) or "dimensions" not in data:
+            logger.warning(
+                f"Malformed VCF dimensions file in bucket: {self.bucket_name}. Returning empty dimensions list."
+            )
+            return {"dimensions": []}
         return data
 
     def _upload_bucket_dimensions_file(self, dimensions_data: dict) -> None:
@@ -163,8 +179,9 @@ class VCFDimensionIndexManager:
         """
         Returns the contents of the .vcf_dimensions.yaml file as a dictionary.
         """
-        if not self.dimensions_info or "dimensions" not in self.dimensions_info:
-            raise VCFDimensionsFileEmptyError(self.bucket_name)
+        if self.dimensions_info is None or "dimensions" not in self.dimensions_info:
+            logger.info("No VCF dimensions have been created for this bucket as of yet.")
+            return {"dimensions": []}
         return self.dimensions_info
 
 

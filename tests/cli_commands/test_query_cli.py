@@ -23,9 +23,28 @@ from divbase_tools.divbase_cli import app
 from divbase_tools.exceptions import ProjectNotInConfigError
 from divbase_tools.queries import BcftoolsQueryManager
 from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def clean_dimensions(user_config_path, CONSTANTS):
+    """
+    Remove the dimensions file and create a new one before each test.
+    Used in all tests in this module.
+    """
+    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=CONSTANTS["MINIO_URL"],
+            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+        )
+        s3_client.delete_object(Bucket=project_name, Key=DIMENSIONS_FILE_NAME)
+
+    yield
 
 
 def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
@@ -186,13 +205,12 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "bucket_name": "split-scaffold-project",
                 "user_name": "test-user",
             },
-            True,
+            False,
             False,
             [
                 "Starting bcftools_pipe_task",
-                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
             ],
-            [],
+            ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],
         ),
         # case: expected to be sucessful, should lead to concat
         (
@@ -241,23 +259,21 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     expected_logs,
     expected_error_msgs,
     run_update_dimensions,
-    delete_dimensions_file_from_a_bucket,
 ):
     """
-    This is a special integration test that allows for running bcftools-pipe queries
-    directly in eager mode in a way that allows for catching the logs that otherwise
-    would be printed inside the workers. For comparison, running a CLIrunner test will only
-    give the "task submitted" log back.
+    This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
+    in a way that allows for catching the logs that otherwise would be printed inside the workers. For
+    comparison, running a CLIrunner test will only give the "task submitted" log back.
 
-    For this to work, a substantial amount of patching is needed. In short, since the task is
-    run eagerly and directly, bcftools will need to be run with docker exec instead of subprocess
-    (see BcftoolsQueryManager.run_bcftools). This is complicated by the fact that in the e2e process,
-    files are transferred from the bucket to the worker. For the testing compose stack, the test buckets
-    are built from ./tests/fixtures, so the workaround here is to patch out the transfer and have bcftools
-    read all files directly from ./tests/fixtures. This works since the compose stack mounts ./tests/fixtures.
-    However, for this test, the python code typically needs to look at ./tests/fixtures, but the docker exec
-    needs to look at the mount in the container at /app/tests/fixtures. A lot of patching back and forth
-    to ensure that every function looks in the right dir (locally or container) is thus needed.
+    For this to work, a substantial amount of patching is needed. In short, since the task is run eagerly
+    and directly, bcftools will need to be run with docker exec instead of subprocess (see BcftoolsQueryManager.run_bcftools).
+    This is complicated by the fact that in the e2e process, files are transferred from the bucket to the
+    worker. For the testing compose stack, the test buckets are built from ./tests/fixtures, so the workaround
+    here is to patch out the transfer and have bcftools read all files directly from ./tests/fixtures. This
+    works since the compose stack mounts ./tests/fixtures. However, for this test, the python code typically
+    needs to look at ./tests/fixtures, but the docker exec needs to look at the mount in the container at
+    /app/tests/fixtures. A lot of patching back and forth to ensure that every function looks in the right
+    dir (locally or container) is thus needed.
 
     The benefit of all this patching is that now it is possible to parameterize the test for expected (worker) log outcomes!
 
@@ -380,8 +396,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
     if ensure_dimensions_file:
         run_update_dimensions(bucket_name=params["bucket_name"])
-    else:
-        delete_dimensions_file_from_a_bucket(params["bucket_name"])
 
     try:
         current_app.conf.update(
