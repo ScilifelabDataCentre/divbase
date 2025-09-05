@@ -196,7 +196,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be fail, vcf dimensions file is empty, view -r cannot be checked against scaffolds
+        # Case: expected to be fail, vcf dimensions file is empty so the check for combining samples fails
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -229,6 +229,10 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Starting bcftools_pipe_task",
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Only one file remained after concatenation, renamed this file to",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+                "Cleaning up 12 temporary files",
             ],
             [],
         ),
@@ -249,6 +253,86 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             [
                 "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files.To see a list of all unique scaffolds that are present across the VCF files in the project:'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>"
             ],
+        ),
+        # case: expected to be sucessful, code should handle no tsv-filter in query
+        (
+            {
+                "tsv_filter": "",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Empty filter provided - returning ALL records. This may be a large result set.",
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs.6.vcf.gz'",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs.24.vcf.gz'",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Only one file remained after concatenation, renamed this file to",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+            ],
+            [],
+        ),
+        # case: expected to be sucessful, should lead to merge
+        (
+            {
+                "tsv_filter": "Area:Northern Portugal",
+                "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+                "metadata_tsv_name": "sample_metadata.tsv",
+                "bucket_name": "query-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_first_10_samples.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names do not overlap between temp files, will continue with 'bcftools merge'",
+                "Merged all temporary files into 'merged_unsorted_",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+                "Cleaning up 5 temporary files",
+            ],
+            [],
+        ),
+        # case: expected to be sucessful, should lead one file being subset and renamed rather than bcftools merge/concat
+        (
+            {
+                "tsv_filter": "Area:Northern Spanish shelf",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+                "bucket_name": "mixed-concat-merge-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Merged all files (including concatenated files) into 'merged_unsorted_",
+                "bcftools processing completed successfully",
+                "Cleaning up 10 temporary files",
+            ],
+            [],
         ),
     ],
 )
@@ -339,9 +423,9 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     def patched_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier):
         """
         Patches a method that needs quite a bit of patching of submethods, hence nested patches...
+        It ensures that all paths are correctly set to either ./tests/fixtures or /app/tests/fixtures depending
+        on if python code or docker exec code needs to access the files.
         """
-        output_temp_files = [ensure_fixture_path(f) for f in output_temp_files]
-
         original_rename = os.rename
         original_get_all_sample_names_from_vcf_files = self._get_all_sample_names_from_vcf_files
         original_group_vcfs_by_sample_set = self._group_vcfs_by_sample_set

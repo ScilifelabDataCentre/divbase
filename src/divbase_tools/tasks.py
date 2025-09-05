@@ -248,7 +248,6 @@ def check_for_unnecessary_files_for_region_query(
 
     NOTE! There is a risk that users mistype...
 
-    TODO ensure that the errors raised here are raised before submitting the task to celery.
     """
 
     manager = vcf_dimensions_manager
@@ -284,7 +283,7 @@ def check_for_unnecessary_files_for_region_query(
         record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
         for scaffold_name in scaffolds:
             if scaffold_name in record_scaffolds:
-                logger.info(f"Scaffold '{scaffold_name}' is present in file '{file}'.")
+                logger.info(f"'view -r' query requires scaffold '{scaffold_name}'. It is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 

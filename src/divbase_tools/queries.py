@@ -364,12 +364,15 @@ class BcftoolsQueryManager:
                         f"Only one file remained after concatenation, renamed this file to '{unsorted_output_file}'."
                     )
         elif len(output_temp_files) == 1:
+            logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {unsorted_output_file}"
         self.run_bcftools(command=sort_command)
         self.temp_files.append(unsorted_output_file)
-
+        logger.info(
+            f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
+        )
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
