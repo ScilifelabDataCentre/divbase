@@ -46,26 +46,35 @@ class VCFDimensionIndexManager:
 
         dimensions = yaml_data.get("dimensions", [])
 
-        if any(entry.get("filename") == vcf_filename for entry in dimensions):
-            logger.info(f"Filename '{vcf_filename}' is already present in .vcf_dimensions.yaml.")
-            return
-
         vcf_path = Path(vcf_filename)
         vcf_dims = self._wrapper_calculate_dimensions(vcf_path)
-
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        new_entry = {
-            "filename": vcf_filename,
-            "timestamp": timestamp,
-            # "version": "TODO: THE BUCKET VERSION CHECKSUM SHOULD BE HERE. THEN, ONE RECORD PER VERSION OF EACH FILE",
-            "dimensions": vcf_dims,
-        }
-        dimensions.append(new_entry)
+        latest_versions_of_bucket_files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
+        file_version_ID = latest_versions_of_bucket_files.get(vcf_filename, "null")
+
+        existing_entry = next((entry for entry in dimensions if entry.get("filename") == vcf_filename), None)
+
+        if existing_entry and existing_entry.get("file_version_ID_in_bucket") == file_version_ID:
+            logger.info(f"Filename '{vcf_filename}' with current version is already present in .vcf_dimensions.yaml.")
+            return
+
+        if existing_entry:
+            existing_entry["timestamp_from_dimensions_indexing"] = timestamp
+            existing_entry["file_version_ID_in_bucket"] = file_version_ID
+            existing_entry["dimensions"] = vcf_dims
+            logger.info(f"Updated entry for {vcf_filename} in vcf_dimensions index.")
+        else:
+            new_entry = {
+                "filename": vcf_filename,
+                "timestamp_from_dimensions_indexing": timestamp,
+                "file_version_ID_in_bucket": file_version_ID,
+                "dimensions": vcf_dims,
+            }
+            dimensions.append(new_entry)
+            logger.info(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
+
         yaml_data["dimensions"] = dimensions
-
         self.dimensions_info = yaml_data
-
-        logger.info(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
         """
@@ -85,7 +94,12 @@ class VCFDimensionIndexManager:
         Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
         """
         yaml_data = self.dimensions_info
-        return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
+
+        return {
+            entry.get("filename"): entry.get("file_version_ID_in_bucket")
+            for entry in yaml_data.get("dimensions", [])
+            if "filename" in entry
+        }
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:
         """

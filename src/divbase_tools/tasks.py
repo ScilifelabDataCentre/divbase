@@ -169,8 +169,13 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     already_indexed_vcfs = manager.get_indexed_filenames()
+    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
-    non_indexed_vcfs = [file for file in vcf_files if file not in already_indexed_vcfs]
+    non_indexed_vcfs = [
+        file
+        for file in vcf_files
+        if (file not in already_indexed_vcfs or already_indexed_vcfs[file] != latest_versions_of_bucket_files.get(file))
+    ]
 
     _ = download_vcf_files(
         files_to_download=non_indexed_vcfs,
