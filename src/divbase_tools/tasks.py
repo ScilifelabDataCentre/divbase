@@ -95,6 +95,8 @@ def bcftools_pipe_task(
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
     vcf_dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
+    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+
     metadata_path = download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
@@ -102,6 +104,10 @@ def bcftools_pipe_task(
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
+    )
+
+    check_that_file_versions_match_dimensions_index(
+        vcf_dimensions_manager, latest_versions_of_bucket_files, metadata_result
     )
 
     if "view -r" in command:
@@ -145,6 +151,7 @@ def bcftools_pipe_task(
 
     upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
@@ -408,3 +415,21 @@ def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tupl
             continue
         sample_set_overlap_results[overlap].append((set1, set2))
     return sample_set_overlap_results
+
+
+def check_that_file_versions_match_dimensions_index(
+    vcf_dimensions_manager: VCFDimensionIndexManager,
+    latest_versions_of_bucket_files: dict[str, str],
+    metadata_result: dict,
+) -> None:
+    """
+    Ensure that the VCF dimensions index is up to date with the latest versions of the VCF files.
+    """
+    already_indexed_vcfs = vcf_dimensions_manager.get_indexed_filenames()
+    for file in metadata_result.unique_filenames:
+        file_version_ID = latest_versions_of_bucket_files.get(file, "null")
+        if file not in already_indexed_vcfs or already_indexed_vcfs[file] != file_version_ID:
+            logger.info(f"Updated VCF dimensions for file: {file}")
+            raise ValueError(
+                "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+            )
