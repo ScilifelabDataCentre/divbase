@@ -1,4 +1,4 @@
-# divBase
+# DivBase
 
 **DivBase's goal is to be a service which is comprised of:**
 
@@ -11,7 +11,7 @@
 ## Table of Contents
 
 1. [Folders overview](#folders-overview)
-2. [Minio Deployment on Dev cluster](#minio-deployment-on-dev-cluster)
+2. [Deployment of DivBase](#deployment-of-divbase)
 3. [divbase CLI](#divbase-cli)
 4. [Developer Setup](#developer-setup)
 5. [Queries](#queries)
@@ -20,13 +20,12 @@
 
 - *docker:* bcftools docker image.
 - *docs:* Documentation
-- *kustomize:* Deploy the MinIO instance for the DivBase prototype using Kustomize + Helm.
 - *src:* Source code for divbase's CLI and webAPI.
 - *tests*: Tests (with Pytest).
 
-## Minio Deployment on Dev cluster
+## Deployment of DivBase
 
-Deployment for testing/development purposes. The deployment and how it was set up is covered in more detail at [docs/bitnami-minio-setup.md](docs/bitnami-minio-setup.md).
+DivBase's deployment with k8s is managed in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase)
 
 ## divBase CLI
 
