@@ -32,7 +32,14 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
     }
 
     for key, expected_value in expected_values.items():
-        assert cmd_config[key] == expected_value, f"Expected {key} to be {expected_value}, but got {cmd_config[key]}"
+        if key == "output_temp_files":
+            assert len(cmd_config[key]) == len(expected_value)
+            for filename in cmd_config[key]:
+                assert filename.startswith("temp_subset_") and filename.endswith(".vcf.gz")
+        else:
+            assert cmd_config[key] == expected_value, (
+                f"Expected {key} to be {expected_value}, but got {cmd_config[key]}"
+            )
 
     assert len(cmd_config["output_temp_files"]) == len(example_sidecar_metadata_inputs_outputs["filenames"])
 
@@ -72,17 +79,24 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
     for i, cmd_config in enumerate(result):
         expected = expected_configs[i]
 
-        for key in ["command", "counter", "input_files", "sample_subset"]:
+        for key in ["command", "counter", "sample_subset"]:
             assert cmd_config[key] == expected[key], (
                 f"Command {i + 1}: Expected {key} to be {expected[key]}, but got {cmd_config[key]}"
             )
 
-        assert cmd_config["output_temp_files"] == expected["output_temp_files"], (
-            f"Command {i + 1}: Expected output_temp_files to be {expected['output_temp_files']}, "
-            f"but got {cmd_config['output_temp_files']}"
-        )
-
-        assert len(cmd_config["output_temp_files"]) == expected["output_files_count"]
+        for file_key in ["input_files", "output_temp_files"]:
+            assert len(cmd_config[file_key]) == len(expected[file_key]), (
+                f"Command {i + 1}: Expected {file_key} length to be {len(expected[file_key])}, but got {len(cmd_config[file_key])}"
+            )
+            for filename, expected_filename in zip(cmd_config[file_key], expected[file_key], strict=False):
+                if i == 0 and file_key == "input_files":
+                    assert filename == expected_filename, (
+                        f"Command {i + 1}: {file_key} file {filename} does not match expected {expected_filename}"
+                    )
+                else:
+                    assert filename.startswith("temp_subset_") and filename.endswith(".vcf.gz"), (
+                        f"Command {i + 1}: {file_key} file {filename} does not match expected pattern"
+                    )
 
 
 @pytest.mark.unit

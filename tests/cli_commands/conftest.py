@@ -32,6 +32,7 @@ def CONSTANTS():
         "DEFAULT_PROJECT": "project1",
         "NON_DEFAULT_PROJECT": "project2",
         "QUERY_PROJECT": "query-project",
+        "SPLIT_SCAFFOLD_PROJECT": "split-scaffold-project",
         "CLEANED_PROJECT": "cleaned-project",
         "EMPTY_PROJECT": "empty-project",
         "PROJECT_CONTENTS": PROJECTS,

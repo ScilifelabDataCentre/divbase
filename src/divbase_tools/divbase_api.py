@@ -10,7 +10,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from divbase_tools.task_history import get_task_history
-from divbase_tools.tasks import bcftools_pipe_task, sample_metadata_query_task
+from divbase_tools.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 
@@ -76,6 +76,21 @@ def create_bcftools_jobs(
     }
 
     results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
+    return results.id
+
+
+@app.post("/dimensions/update/")
+def update_vcf_dimensions_for_a_project(project: str, user_name: str = "Default User"):
+    """
+    Update the VCF dimensions files for the specified project
+    """
+    bucket_name = project
+    task_kwargs = {
+        "bucket_name": bucket_name,
+        "user_name": user_name,
+    }
+
+    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
     return results.id
 
 

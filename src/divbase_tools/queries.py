@@ -4,6 +4,7 @@ TODO - consider split metadata query and bcftools query into two separate module
 
 import contextlib
 import datetime
+import gzip
 import logging
 import os
 import subprocess
@@ -108,7 +109,7 @@ class BcftoolsQueryManager:
     - Outer loop: iterates over the input bcftools commands in the pipe, and passes each command to `run_current_command()`.
     - Inner loop: iterates over the input files for each command , and runs the command on each file using `run_bcftools()`.
     The results of the inner loop are temporary files that are passed to the next command in the outer loop.
-    At the end of the outer loop, the temporary files are merged into a single output file using `merge_bcftools_temp_files()`.
+    At the end of the outer loop, the temporary files are merged into a single output file using `merge_or_concat_bcftools_temp_files()`.
     The temporary files are cleaned up after the processing is done using `cleanup_temp_files()`.
     The class also provides a context manager for temporary file management to ensure that temporary files are cleaned
     up even if the processing fails or exits unexpectedly.
@@ -223,7 +224,7 @@ class BcftoolsQueryManager:
                 temp_file_manager.temp_files.extend(output_temp_files)
                 final_output_temp_files = output_temp_files
 
-            output_file = self.merge_bcftools_temp_files(final_output_temp_files, identifier)
+            output_file = self.merge_or_concat_bcftools_temp_files(final_output_temp_files, identifier)
 
             logger.info("bcftools processing completed successfully")
 
@@ -311,21 +312,63 @@ class BcftoolsQueryManager:
             index_command = f"index -f {file}"
             self.run_bcftools(command=index_command)
 
-    def merge_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
+    def merge_or_concat_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
+
+
+        # for all sets that have len(files) > 1, perform concat, save the temp filename to a new list
+        # for all sets that have len(files) == 1, save the temp filename to a new list
+        # for all the temp filenames in the new list, perform merge
+
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
-        # TODO consider renaming the method since for the case of a single input VCF, there is no merging, just renaming.
 
+        unsorted_output_file = f"merged_unsorted_{identifier}.vcf.gz"
         output_file = f"merged_{identifier}.vcf.gz"
+        logger.info("Trying to determine if sample names overlap between temp files...")
+
+        sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)
+        sample_set_to_files = self._group_vcfs_by_sample_set(sample_names_per_VCF)
+        non_overlapping_sample_names = self._check_non_overlapping_sample_names(sample_set_to_files)
 
         if len(output_temp_files) > 1:
-            merge_command = f"merge --force-samples -Oz -o {output_file} {' '.join(output_temp_files)}"
-            self.run_bcftools(command=merge_command)
-            logger.info(f"Merged all temporary files into '{output_file}'.")
-        if len(output_temp_files) == 1:
-            os.rename(output_temp_files[0], output_file)
+            if non_overlapping_sample_names:
+                logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
+                merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                self.run_bcftools(command=merge_command)
+                logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
+            else:
+                logger.info(
+                    "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible."
+                )
+                temp_concat_files = []
+                for sample_set, files in sample_set_to_files.items():
+                    if len(files) > 1:
+                        concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
+                        concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
+                        self.run_bcftools(command=concat_command)
+                        temp_concat_files.append(concat_temp)
+                        self.temp_files.append(concat_temp)
+                        self.ensure_csi_index(concat_temp)
+                    elif len(files) == 1:
+                        temp_concat_files.append(files[0])
+                if len(temp_concat_files) > 1:
+                    merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
+                    self.run_bcftools(command=merge_command)
+                    logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
+                elif len(temp_concat_files) == 1:
+                    os.rename(temp_concat_files[0], unsorted_output_file)
+                    logger.info(
+                        f"Only one file remained after concatenation, renamed this file to '{unsorted_output_file}'."
+                    )
+        elif len(output_temp_files) == 1:
+            os.rename(output_temp_files[0], unsorted_output_file)
+
+        sort_command = f"sort -Oz -o {output_file} {unsorted_output_file}"
+        self.run_bcftools(command=sort_command)
+        self.temp_files.append(unsorted_output_file)
+
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
@@ -361,6 +404,42 @@ class BcftoolsQueryManager:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
 
+    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> bool:
+        """
+        Helper method that is used to determine if there are any sample names that recur across the temp files.
+        If they do, bcftools concat is needed instead of bcftools merge.
+        """
+        sample_names_per_VCF = {}
+        for vcf_file in output_temp_files:
+            with gzip.open(vcf_file, "rt") as file:
+                for line in file:
+                    if line.startswith("#CHROM"):
+                        header = line.strip().split("\t")
+                        sample_names_per_VCF[vcf_file] = header[9:]
+                        break
+
+        return sample_names_per_VCF
+
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[frozenset, list[str]]:
+        """
+        Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
+        (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
+        Here, frozenset is used to create an immutable set of sample names for each VCF file.
+        sample_set_to_files then stores all files that contain the same sample set.
+        """
+        sample_set_to_files = {}
+        for vcf_file, sample_list in sample_names_per_VCF.items():
+            sample_set = frozenset(sample_list)
+            sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
+        return sample_set_to_files
+
+    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[frozenset, list[str]]) -> bool:
+        """
+        Helper method that looks at a mapping of sample set to VCF files and checks for non-overlapping sample names.
+        Simply put, if any sample set in the input dict has more than one file, samples overlap between files
+        """
+        return not any(len(files) > 1 for files in sample_set_to_files.values())
+
 
 class SidecarQueryManager:
     """
@@ -386,11 +465,25 @@ class SidecarQueryManager:
         """
         Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names
+
+        If a sample exists in multiple files, it can be entered in the form: 'file1.vcf.gz,file2.vcf.gz' and all files will be extracted using pandas explode.
+        Strip empty filenames if there e.g. are typos with trailing commas
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
         try:
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
+            if "Sample_ID" not in self.df.columns:
+                raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
+            if "Filename" not in self.df.columns:
+                raise SidecarColumnNotFoundError("The 'Filename' column is required in the metadata file.")
+            self.df["Filename"] = self.df["Filename"].astype(str)
+            self.df = self.df.assign(Filename=self.df["Filename"].str.split(",")).explode("Filename")
+            self.df["Filename"] = self.df["Filename"].str.strip()
+            self.df = self.df[self.df["Filename"] != ""]
+
+            self._purge_duplicate_filenames_per_sample()
+
         except Exception as e:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
@@ -478,6 +571,21 @@ class SidecarQueryManager:
             return self.query_result[column].unique().tolist()
         else:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
+
+    def _purge_duplicate_filenames_per_sample(self):
+        """
+        Helper method that sanitizes input for the case when the user has mistakenly assigned the same VCF
+        file twice to the same sample in the sidecar metadata file.
+        Removes duplicate (Sample_ID, Filename) pairs and ensures only one filename remains per sample.
+        Keeps the first filename for each Sample_ID.
+        """
+
+        duplicates = self.df.duplicated(subset=["Sample_ID", "Filename"])
+        if duplicates.any():
+            dup_rows = self.df[duplicates]
+            logger.warning(f"Duplicate (Sample_ID, Filename) pairs found in metadata TSV:\n{dup_rows}")
+        self.df = self.df.drop_duplicates(subset=["Sample_ID", "Filename"], keep="first")
+        return self
 
 
 # TODO - can this be removed?
