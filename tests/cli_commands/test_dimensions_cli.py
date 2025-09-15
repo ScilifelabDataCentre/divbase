@@ -118,12 +118,11 @@ def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, user_config_path,
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
     command = f"dimensions show --project {bucket_name} --config {user_config_path}"
-    with caplog.at_level("ERROR"):
-        cli_result = runner.invoke(app, command)
-    assert cli_result.exit_code == 0
 
-    expected_message = str(VCFDimensionsFileMissingOrEmptyError(bucket_name=bucket_name))
-    assert expected_message in caplog.text
+    result = runner.invoke(app, command)
+    assert result.exit_code != 0
+    assert isinstance(result.exception, VCFDimensionsFileMissingOrEmptyError)
+    assert bucket_name in str(result.exception)
 
 
 def test_get_dimensions_info_returns_empty(CONSTANTS):

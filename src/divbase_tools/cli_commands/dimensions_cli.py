@@ -65,9 +65,7 @@ def show_dimensions_index(
     project_config = resolve_project(project_name=project, config_path=config_file)
     dimensions_info = show_dimensions_command(project_config=project_config)
     if not dimensions_info.get("dimensions"):
-        error = VCFDimensionsFileMissingOrEmptyError(bucket_name=project)
-        logger.error(error)
-        return
+        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.bucket_name)
 
     if filename:
         record = None
