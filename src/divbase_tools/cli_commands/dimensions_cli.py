@@ -7,12 +7,11 @@ import yaml
 
 from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_tools.exceptions import VCFDimensionsFileMissingOrEmptyError
 from divbase_tools.vcf_dimension_indexing import show_dimensions_command
 
 logger = logging.getLogger(__name__)
-
-from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
 
 
 dimensions_app = typer.Typer(
