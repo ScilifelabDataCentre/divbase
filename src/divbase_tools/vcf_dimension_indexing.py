@@ -175,15 +175,10 @@ class VCFDimensionIndexManager:
         return self.dimensions_info
 
 
-def create_bucket_manager(project_config: ProjectConfig) -> VCFDimensionIndexManager:
+def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
     """
-    Helper function to create a BucketVersionManager instance.
-    Used by the version and file subcommands of the CLI
+    Helper function used by the dimensions CLI command to show the dimensions index for a project.
     """
     s3_file_manager = create_s3_file_manager(project_config.s3_url)
-    return VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-
-
-def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
-    manager = create_bucket_manager(project_config=project_config)
+    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
     return manager.get_dimensions_info()
