@@ -294,8 +294,6 @@ def check_for_unnecessary_files_for_region_query(
             "To see a list of all unique scaffolds that are present across the VCF files in the project:"
             "'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
         )
-        # TODO this stops jobs from executing. Which might not be intuitive. Such subsests would be able to run in bftools but the result would be an merged VCF with no variants (header only). Should this be a warning instead that will be returned in the worker results?
-
     return files_to_download_updated
 
 

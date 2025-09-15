@@ -76,10 +76,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
-    try:
-        yaml.safe_load(cli_result.stdout)
-    except Exception as e:
-        raise AssertionError(f"CLI output is not valid YAML: {e}\nOutput:\n{cli_result.stdout}") from e
+    yaml.safe_load(cli_result.stdout)
 
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     for vcf_file in vcf_files:
