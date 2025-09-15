@@ -68,7 +68,7 @@ You can now run the cli tool and webAPI/server with the following commands.
 
 ```bash
 divbase-cli
-divbase-api
+divbase-api # NOTE: We typically do not run the API like this, instead we use docker compose, keep reading below to see how.
 ```
 
 ### 2. Install pre-commit hooks
@@ -117,7 +117,17 @@ DIVBASE_ENV=scilifelab2dev divbase-cli files list --project a-project-in-the-clo
 
 **Note:** Default behaviour if `DIVBASE_ENV` is not set is to get enviroment varialbes from `.env`. This would be used by actual users of the service who will not have to deal with having multiple environments like us.
 
-### 4. Running tests
+### 4. Run DivBase backend locally using Docker compose watch
+
+```bash
+docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/divbase_compose.yaml watch
+```
+
+This will deploy the API, job system and MinIO (S3) instance locally. Using `compose watch` means changes in the `/src` folder will automatically be sycned to the container and if needed trigger a restart or rebuild of them.
+
+Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/docs> to test out some of API commands directly.
+
+### 5. Running tests
 
 We use docker-compose to setup a testing environment. The testing stack contains a MinIO instance which is populated with some default buckets and data and provided to each test.
 
