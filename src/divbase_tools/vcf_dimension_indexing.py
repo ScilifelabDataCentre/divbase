@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import botocore
 import yaml
 
 from divbase_tools.exceptions import ObjectDoesNotExistError
@@ -157,13 +156,10 @@ class VCFDimensionIndexManager:
         Works for both creating and updating the file.
         """
         text_content = yaml.safe_dump(dimensions_data, sort_keys=False)
-        try:
-            self.s3_file_manager.upload_str_as_s3_object(
-                key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
-            )
-            logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
-        except botocore.exceptions.ClientError as e:
-            logging.error(f"Failed to upload bucket dimensions file: {e}")
+        self.s3_file_manager.upload_str_as_s3_object(
+            key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
+        )
+        logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
 
     def get_dimensions_info(self) -> dict:
         """

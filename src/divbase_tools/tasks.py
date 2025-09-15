@@ -194,7 +194,16 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             manager.remove_dimension_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
-    manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+
+    try:
+        manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+    except Exception as e:
+        logger.error(f"Failed to upload bucket dimensions file: {e}")
+        return {
+            "status": "error",
+            "error": f"Failed to upload bucket dimensions file: {e}",
+            "task_id": task_id,
+        }
 
     return {
         "status": "completed",

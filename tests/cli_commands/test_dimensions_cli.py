@@ -173,3 +173,23 @@ def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
     manager.remove_dimension_entry(vcf_file)
     filenames = [entry["filename"] for entry in manager.dimensions_info.get("dimensions", [])]
     assert vcf_file not in filenames
+
+
+def test_update_vcf_dimensions_task_upload_failed(CONSTANTS):
+    """
+    Test that mocks that update_vcf_dimensions_task fails to upload the dimensions file to bucket.
+    """
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        # Ensure test compose stack is used when running the task
+        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
+
+        with patch(
+            "divbase_tools.s3_client.S3FileManager.upload_str_as_s3_object",
+            side_effect=Exception("Simulated upload failure"),
+        ):
+            result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+            assert result["status"] == "error"
+            assert "Failed to upload bucket dimensions file" in result["error"]
