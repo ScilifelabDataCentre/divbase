@@ -2,9 +2,9 @@ import dataclasses
 import logging
 import os
 import re
+from itertools import combinations
 from pathlib import Path
 
-import yaml
 from celery import Celery
 
 from divbase_tools.exceptions import NoVCFFilesFoundError
@@ -93,6 +93,7 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    vcf_dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
 
     metadata_path = download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
@@ -105,10 +106,9 @@ def bcftools_pipe_task(
 
     if "view -r" in command:
         files_to_download = check_for_unnecessary_files_for_region_query(
-            bucket_name=bucket_name,
-            s3_file_manager=s3_file_manager,
             command=command,
             files_to_download=metadata_result.unique_filenames,
+            vcf_dimensions_manager=vcf_dimensions_manager,
         )
 
         sample_and_filename_subset = [
@@ -116,6 +116,12 @@ def bcftools_pipe_task(
         ]
     else:
         sample_and_filename_subset = metadata_result.sample_and_filename_subset
+        files_to_download = metadata_result.unique_filenames
+
+    check_if_samples_can_be_combined_with_bcftools(
+        files_to_download=files_to_download,
+        vcf_dimensions_manager=vcf_dimensions_manager,
+    )
 
     _ = download_vcf_files(
         files_to_download=files_to_download,
@@ -188,7 +194,16 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             manager.remove_dimension_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
-    manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+
+    try:
+        manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+    except Exception as e:
+        logger.error(f"Failed to upload bucket dimensions file: {e}")
+        return {
+            "status": "error",
+            "error": f"Failed to upload bucket dimensions file: {e}",
+            "task_id": task_id,
+        }
 
     return {
         "status": "completed",
@@ -231,7 +246,9 @@ def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3
 
 
 def check_for_unnecessary_files_for_region_query(
-    bucket_name: str, s3_file_manager: S3FileManager, command: str, files_to_download: list[str]
+    command: str,
+    files_to_download: list[str],
+    vcf_dimensions_manager: VCFDimensionIndexManager,
 ) -> dict:
     """
     If the 'view -r' query is present, read the .vcf_dimensions.yaml file and check if the specified scaffolds are available in the VCF files.
@@ -240,21 +257,28 @@ def check_for_unnecessary_files_for_region_query(
 
     NOTE! There is a risk that users mistype...
 
-    TODO ensure that the errors raised here are raised before submitting the task to celery.
     """
 
-    try:
-        dimensions_index = read_vcf_dimensions_file(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    except FileNotFoundError:
+    manager = vcf_dimensions_manager
+    dimensions_index = manager.dimensions_info
+    if not dimensions_index.get("dimensions"):
+        logger.warning(
+            "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering."
+        )
         return files_to_download
-        # TODO for now, this makes it so that if the dimensions file is not present, the job continues by skipping the check of unnecessary files. There should at least be a message that tells this to the user
 
     scaffolds = []
     files_to_download_updated = []
+
     matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
+    if not matches:
+        return files_to_download
     for match in matches:
-        scaffolds.extend([region.strip() for region in match.split(",") if region.strip()])
-    # TODO if there are no matches, return files to download
+        regions = [region.strip() for region in match.split(",") if region.strip()]
+        for region in regions:
+            scaffold_name = region.split(":")[0]
+            scaffolds.append(scaffold_name)
+
     for file in files_to_download:
         record = None
         for rec in dimensions_index.get("dimensions", []):
@@ -262,56 +286,127 @@ def check_for_unnecessary_files_for_region_query(
                 record = rec
                 break
         if not record:
-            print(f"File '{file}' is not indexed in the VCF dimensions file.")
+            logger.warning(f"File '{file}' is not indexed in the VCF dimensions file.")
             continue
 
         record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
-        for scaffold in scaffolds:
-            if scaffold in record_scaffolds:
-                print(f"Scaffold '{scaffold}' is present in file '{file}'.")
+        for scaffold_name in scaffolds:
+            if scaffold_name in record_scaffolds:
+                logger.info(f"'view -r' query requires scaffold '{scaffold_name}'. It is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 
     if files_to_download_updated == []:
         raise ValueError(
-            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files."
+            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. \n"
+            "Please try another -r query with scaffolds/chromosomes that are present in the VCF files."
+            "To see a list of all unique scaffolds that are present across the VCF files in the project:"
+            "'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
         )
-        # TODO this stops jobs from executing. Which might not be intuitive. Such subsests would be able to run in bftools but the result would be an merged VCF with no variants (header only). Should this be a warning instead that will be returned in the worker results?
-
     return files_to_download_updated
 
-    # TODO when there is a command implemented that reads the .vcf_dimensions.yaml file and list all scaffolds in the project, add that command as a help to this error message.
 
-
-def read_vcf_dimensions_file(bucket_name: str, s3_file_manager: S3FileManager) -> dict:
-    try:
-        content = s3_file_manager.download_s3_file_to_str(key=".vcf_dimensions.yaml", bucket_name=bucket_name)
-    except Exception as exc:
-        raise FileNotFoundError(f".vcf_dimensions.yaml not found in bucket '{bucket_name}'.") from exc
-    # TODO add a hint to the error telling how dimension indexing can be done.
-    # TODO use the get_dimensions_info instance method of the VCFDimensionIndexManager class instead of reading file diretly? don't want to download the file though
-    return yaml.safe_load(content)
-
-
-def delete_job_files_from_worker(vcf_paths: list[Path], metadata_path: Path = None, output_file: Path = None) -> None:
+def delete_job_files_from_worker(
+    vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
+) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
     """
     for vcf_path in vcf_paths:
         try:
             os.remove(vcf_path)
-            logger.info(f"deleted {vcf_path}")
+            logger.info(f"Deleted {vcf_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
     if metadata_path is not None:
         try:
             os.remove(metadata_path)
-            logger.info(f"deleted {metadata_path}")
+            logger.info(f"Deleted {metadata_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
     if output_file is not None:
         try:
             os.remove(output_file)
-            logger.info(f"deleted {output_file}")
+            logger.info(f"Deleted {output_file} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete output file from worker {output_file}: {e}")
+
+
+def check_if_samples_can_be_combined_with_bcftools(
+    files_to_download,
+    vcf_dimensions_manager: VCFDimensionIndexManager,
+) -> None:
+    dimensions_index = vcf_dimensions_manager.dimensions_info
+    if not dimensions_index.get("dimensions"):
+        raise ValueError("VCF dimensions file is missing or empty. Cannot check if samples can be combined.")
+
+    file_to_samples = {}
+    for file in files_to_download:
+        entry = next((rec for rec in dimensions_index.get("dimensions", []) if rec.get("filename") == file), None)
+        if not entry or "dimensions" not in entry or "sample_names" not in entry["dimensions"]:
+            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+        # TODO should this error also suggest to run "dimensions update"
+        file_to_samples[file] = entry["dimensions"]["sample_names"]
+
+    manager = BcftoolsQueryManager()
+    sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
+    logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
+
+    sample_set_overlap_results = calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
+    logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
+
+    if (
+        sample_set_overlap_results["identical elements, different order"]
+        or sample_set_overlap_results["partly overlapping"]
+    ):
+        msg_lines = []
+        if sample_set_overlap_results["identical elements, different order"]:
+            msg_lines.append(
+                "Sample sets with identical elements but different order:\n"
+                + "\n".join(
+                    [
+                        f"{pair[0]} vs {pair[1]}"
+                        for pair in sample_set_overlap_results["identical elements, different order"]
+                    ]
+                )
+            )
+        if sample_set_overlap_results["partly overlapping"]:
+            msg_lines.append(
+                "Sample sets that are partly overlapping:\n"
+                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results["partly overlapping"]])
+            )
+        full_msg = "\n\n".join(msg_lines)
+        logger.error(full_msg)
+        raise ValueError(full_msg)
+    else:
+        logger.info("No unsupported sample sets found. Proceeding with bcftools pipeline.")
+        return
+
+
+def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+    """
+    Analyze all pairwise overlap types between sample sets.
+    Catches the case where two sets have the same elements but different order.
+
+    Since dicts cannot have duplicate keys, there cannot be any completely overlapping sets in the input dict. Thus the else:continue condition should never occur.
+
+    tuples are used in the input to maintain order within the sample sets, but tuples do not support '&' intersection operations. Thus they need to be converted with set()
+
+    """
+    keys = ["identical elements, different order", "partly overlapping", "non-overlapping"]
+    sample_set_overlap_results = {key: [] for key in keys}
+    sample_sets = list(sample_sets_dict.keys())
+    logger.debug(f"Sample sets for overlap analysis: {sample_sets}")
+    for set1, set2 in combinations(sample_sets, 2):
+        set1_set = set(set1)
+        set2_set = set(set2)
+        if set1_set == set2_set and set1 != set2:
+            overlap = "identical elements, different order"
+        elif set1_set & set2_set:
+            overlap = "partly overlapping"
+        elif set1_set.isdisjoint(set2_set):
+            overlap = "non-overlapping"
+        else:
+            continue
+        sample_set_overlap_results[overlap].append((set1, set2))
+    return sample_set_overlap_results

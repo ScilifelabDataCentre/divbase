@@ -336,6 +336,7 @@ class BcftoolsQueryManager:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
                 self.run_bcftools(command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
             else:
@@ -344,7 +345,9 @@ class BcftoolsQueryManager:
                 )
                 temp_concat_files = []
                 for sample_set, files in sample_set_to_files.items():
+                    logger.debug(f"Processing sample set with {len(files)} files ({files}) and samples: {sample_set}")
                     if len(files) > 1:
+                        logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
                         concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
                         self.run_bcftools(command=concat_command)
@@ -352,6 +355,9 @@ class BcftoolsQueryManager:
                         self.temp_files.append(concat_temp)
                         self.ensure_csi_index(concat_temp)
                     elif len(files) == 1:
+                        logger.debug(
+                            "Sample set only occurs in a single file, will use this file as is for merging in a downstream step."
+                        )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
@@ -363,12 +369,15 @@ class BcftoolsQueryManager:
                         f"Only one file remained after concatenation, renamed this file to '{unsorted_output_file}'."
                     )
         elif len(output_temp_files) == 1:
+            logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {unsorted_output_file}"
         self.run_bcftools(command=sort_command)
         self.temp_files.append(unsorted_output_file)
-
+        logger.info(
+            f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
+        )
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
@@ -404,7 +413,7 @@ class BcftoolsQueryManager:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
 
-    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> bool:
+    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> dict[str, list[str]]:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
         If they do, bcftools concat is needed instead of bcftools merge.
@@ -420,7 +429,7 @@ class BcftoolsQueryManager:
 
         return sample_names_per_VCF
 
-    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[frozenset, list[str]]:
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple, list[str]]:
         """
         Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
         (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
@@ -429,7 +438,7 @@ class BcftoolsQueryManager:
         """
         sample_set_to_files = {}
         for vcf_file, sample_list in sample_names_per_VCF.items():
-            sample_set = frozenset(sample_list)
+            sample_set = tuple(sample_list)
             sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
         return sample_set_to_files
 

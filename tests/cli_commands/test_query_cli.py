@@ -6,16 +6,45 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for the tests.
 """
 
+import logging
+import os
+import subprocess
 import time
+from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import patch
 
 import boto3
 import pytest
+from celery import current_app
 from typer.testing import CliRunner
 
 from divbase_tools.divbase_cli import app
 from divbase_tools.exceptions import ProjectNotInConfigError
+from divbase_tools.queries import BcftoolsQueryManager
+from divbase_tools.tasks import bcftools_pipe_task
+from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
+from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def clean_dimensions(user_config_path, CONSTANTS):
+    """
+    Remove the dimensions file and create a new one before each test.
+    Used in all tests in this module.
+    """
+    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=CONSTANTS["MINIO_URL"],
+            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+        )
+        s3_client.delete_object(Bucket=project_name, Key=DIMENSIONS_FILE_NAME)
+
+    yield
 
 
 def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
@@ -161,3 +190,365 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     assert result.exit_code == 0
     assert task_id in result.stdout
     assert other_task_id not in result.stdout
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
+    [
+        # Case: expected to be fail, vcf dimensions file is empty so the check for combining samples fails
+        (
+            {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            False,
+            False,
+            [
+                "Starting bcftools_pipe_task",
+                "No VCF dimensions file found in the bucket: split-scaffold-project.",
+                "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering.",
+            ],
+            ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],
+        ),
+        # case: expected to be sucessful, should lead to concat
+        (
+            {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Only one file remained after concatenation, renamed this file to",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+                "Cleaning up 12 temporary files",
+            ],
+            [],
+        ),
+        # case: expected to fail since there are no scaffolds in the vcf files that match the -r query
+        (
+            {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 31,34,36,321,324",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            False,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+            ],
+            [
+                "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files.To see a list of all unique scaffolds that are present across the VCF files in the project:'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>"
+            ],
+        ),
+        # case: expected to be sucessful, code should handle no tsv-filter in query
+        (
+            {
+                "tsv_filter": "",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": "split-scaffold-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Empty filter provided - returning ALL records. This may be a large result set.",
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs.6.vcf.gz'",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs.24.vcf.gz'",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Only one file remained after concatenation, renamed this file to",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+            ],
+            [],
+        ),
+        # case: expected to be sucessful, should lead to merge
+        (
+            {
+                "tsv_filter": "Area:Northern Portugal",
+                "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+                "metadata_tsv_name": "sample_metadata.tsv",
+                "bucket_name": "query-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_first_10_samples.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names do not overlap between temp files, will continue with 'bcftools merge'",
+                "Merged all temporary files into 'merged_unsorted_",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "bcftools processing completed successfully",
+                "Cleaning up 5 temporary files",
+            ],
+            [],
+        ),
+        # case: expected to be sucessful, should lead one file being subset and renamed rather than bcftools merge/concat
+        (
+            {
+                "tsv_filter": "Area:Northern Spanish shelf",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+                "bucket_name": "mixed-concat-merge-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Merged all files (including concatenated files) into 'merged_unsorted_",
+                "bcftools processing completed successfully",
+                "Cleaning up 10 temporary files",
+            ],
+            [],
+        ),
+        # case: expected to be sucessful, should lead to two different sample sets being concatenated, then merged with a third file
+        (
+            {
+                "tsv_filter": "Area:Northern Spanish shelf,Iceland",
+                "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+                "bucket_name": "mixed-concat-merge-project",
+                "user_name": "test-user",
+            },
+            True,
+            True,
+            [
+                "Starting bcftools_pipe_task",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
+                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '8'. It is present in file 'HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '13'. It is present in file 'HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz'.",
+                "'view -r' query requires scaffold '18'. It is present in file 'HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz'.",
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
+                "Merged all files (including concatenated files) into 'merged_unsorted_",
+                "bcftools processing completed successfully",
+                "Cleaning up 17 temporary files",
+            ],
+            [],
+        ),
+    ],
+)
+def test_bcftools_pipe_cli_integration_with_eager_mode(
+    tmp_path,
+    CONSTANTS,
+    caplog,
+    params,
+    expect_success,
+    ensure_dimensions_file,
+    expected_logs,
+    expected_error_msgs,
+    run_update_dimensions,
+):
+    """
+    This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
+    in a way that allows for catching the logs that otherwise would be printed inside the workers. For
+    comparison, running a CLIrunner test will only give the "task submitted" log back.
+
+    For this to work, a substantial amount of patching is needed. In short, since the task is run eagerly
+    and directly, bcftools will need to be run with docker exec instead of subprocess (see BcftoolsQueryManager.run_bcftools).
+    This is complicated by the fact that in the e2e process, files are transferred from the bucket to the
+    worker. For the testing compose stack, the test buckets are built from ./tests/fixtures, so the workaround
+    here is to patch out the transfer and have bcftools read all files directly from ./tests/fixtures. This
+    works since the compose stack mounts ./tests/fixtures. However, for this test, the python code typically
+    needs to look at ./tests/fixtures, but the docker exec needs to look at the mount in the container at
+    /app/tests/fixtures. A lot of patching back and forth to ensure that every function looks in the right
+    dir (locally or container) is thus needed.
+
+    The benefit of all this patching is that now it is possible to parameterize the test for expected (worker) log outcomes!
+
+    """
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    caplog.set_level(logging.INFO)
+
+    original_task_always_eager = current_app.conf.task_always_eager
+    original_task_eager_propagates = current_app.conf.task_eager_propagates
+    original_merge_or_concat_bcftools_temp_files = BcftoolsQueryManager.merge_or_concat_bcftools_temp_files
+    original_boto3_client = boto3.client
+
+    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
+        if filename.startswith(fixture_dir):
+            return filename
+        return f"{fixture_dir}/{filename}"
+
+    def strip_fixture_dir(filename):
+        fixture_dir = "tests/fixtures/"
+        if filename.startswith(fixture_dir):
+            return filename[len(fixture_dir) :]
+        return filename
+
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+        """
+        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
+        """
+        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
+
+    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+        """
+        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
+        """
+        return [ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures") for file_name in files_to_download]
+
+    def patched_run_bcftools(self, command: str) -> None:
+        """
+        Patches the working dir used when running bcftools commands inside the Docker container.
+        """
+        container_id = self.get_container_id(self.CONTAINER_NAME)
+        logger = logging.getLogger("divbase_tools.queries")
+        logger.debug(f"Executing command in container with ID: {container_id}")
+        docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
+        subprocess.run(docker_cmd, check=True)
+
+    @contextmanager
+    def patched_temp_file_management(self):
+        """Context manager to handle temporary file cleanup, ensuring all temp files are in ./tests/fixtures."""
+        self.temp_files = []
+        try:
+            yield self
+        finally:
+            if self.temp_files:
+                logger = logging.getLogger("divbase_tools.queries")
+                logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
+                temp_files_with_path = [ensure_fixture_path(f) for f in self.temp_files]
+                self.cleanup_temp_files(temp_files_with_path)
+
+    def patched_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier):
+        """
+        Patches a method that needs quite a bit of patching of submethods, hence nested patches...
+        It ensures that all paths are correctly set to either ./tests/fixtures or /app/tests/fixtures depending
+        on if python code or docker exec code needs to access the files.
+        """
+        original_rename = os.rename
+        original_get_all_sample_names_from_vcf_files = self._get_all_sample_names_from_vcf_files
+        original_group_vcfs_by_sample_set = self._group_vcfs_by_sample_set
+
+        def patched_rename(src, dst):
+            src = ensure_fixture_path(src)
+            dst = ensure_fixture_path(dst)
+            return original_rename(src, dst)
+
+        def patched_get_all_sample_names_from_vcf_files(output_temp_files):
+            output_temp_files = [ensure_fixture_path(f) for f in output_temp_files]
+            return original_get_all_sample_names_from_vcf_files(output_temp_files)
+
+        def patched_group_vcfs_by_sample_set(sample_names_per_VCF):
+            stripped = {strip_fixture_dir(k): v for k, v in sample_names_per_VCF.items()}
+            return original_group_vcfs_by_sample_set(stripped)
+
+        with (
+            patch("os.rename", new=patched_rename),
+            patch.object(self, "_get_all_sample_names_from_vcf_files", new=patched_get_all_sample_names_from_vcf_files),
+            patch.object(self, "_group_vcfs_by_sample_set", new=patched_group_vcfs_by_sample_set),
+        ):
+            return original_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier)
+
+    def patched_upload_results_file(output_file, bucket_name, s3_file_manager):
+        """
+        Use the bucket_name from the test parameterization for uploading the results file
+        """
+        output_file = Path(ensure_fixture_path(str(output_file)))
+
+        return s3_file_manager.upload_files(
+            to_upload={output_file.name: output_file},
+            bucket_name=bucket_name,
+        )
+
+    def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
+        """
+        Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
+        """
+
+        logger = logging.getLogger("divbase_tools.tasks")
+
+        if output_file is not None:
+            output_file = ensure_fixture_path(str(output_file))
+            try:
+                os.remove(output_file)
+                logger.info(f"deleted {output_file}")
+            except Exception as e:
+                logger.warning(f"Could not delete output file from worker {output_file}: {e}")
+
+    def patched_boto3_client(service_name, **kwargs):
+        if service_name == "s3":
+            kwargs["endpoint_url"] = MINIO_URL
+        return original_boto3_client(service_name, **kwargs)
+
+    if ensure_dimensions_file:
+        run_update_dimensions(bucket_name=params["bucket_name"])
+
+    try:
+        current_app.conf.update(
+            task_always_eager=True,
+            task_eager_propagates=True,
+        )
+
+        with (
+            patch("boto3.client", side_effect=patched_boto3_client),
+            patch("divbase_tools.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+            patch("divbase_tools.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
+            patch("divbase_tools.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
+            patch("divbase_tools.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
+            patch("divbase_tools.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
+            patch(
+                "divbase_tools.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
+                new=patched_merge_or_concat_bcftools_temp_files,
+            ),
+            patch("divbase_tools.tasks.upload_results_file", new=patched_upload_results_file),
+            patch("divbase_tools.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
+        ):
+            if not expect_success:
+                with pytest.raises(ValueError) as excinfo:
+                    bcftools_pipe_task(**params)
+                for msg in expected_error_msgs:
+                    assert msg.replace("\n", "") in str(excinfo.value).replace("\n", "")
+            else:
+                result = bcftools_pipe_task(**params)
+                assert result is not None
+
+            for log_msg in expected_logs:
+                assert log_msg in caplog.text
+
+            print(f"Captured logs:\n{caplog.text}")
+    finally:
+        current_app.conf.task_always_eager = original_task_always_eager
+        current_app.conf.task_eager_propagates = original_task_eager_propagates

@@ -37,6 +37,16 @@ PROJECTS = {
     ],
     "cleaned-project": [],  # this project's bucket is always cleaned before a test
     "empty-project": [],
+    "mixed-concat-merge-project": [
+        "HOM_20ind_17SNPs.1.vcf.gz",
+        "HOM_20ind_17SNPs.4.vcf.gz",
+        "HOM_20ind_17SNPs.21.vcf.gz",
+        "HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz",
+        "HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz",
+        "HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz",
+        "HOM_20ind_17SNPs_changed_sample_names.vcf.gz",
+        "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
+    ],
 }
 
 

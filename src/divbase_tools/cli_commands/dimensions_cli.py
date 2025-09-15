@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import httpx
@@ -6,14 +7,11 @@ import yaml
 
 from divbase_tools.cli_commands.config_resolver import resolve_project
 from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.exceptions import VCFDimensionsFileEmptyError
+from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_tools.exceptions import VCFDimensionsFileMissingOrEmptyError
 from divbase_tools.vcf_dimension_indexing import show_dimensions_command
 
-PROJECT_NAME_OPTION = typer.Option(
-    None,
-    help="Name of the DivBase project, if not provided uses the default in your DivBase config file",
-    show_default=False,
-)
+logger = logging.getLogger(__name__)
 
 
 dimensions_app = typer.Typer(
@@ -64,11 +62,9 @@ def show_dimensions_index(
     """
 
     project_config = resolve_project(project_name=project, config_path=config_file)
-    try:
-        dimensions_info = show_dimensions_command(project_config=project_config)
-    except VCFDimensionsFileEmptyError as e:
-        print(e)
-        return
+    dimensions_info = show_dimensions_command(project_config=project_config)
+    if not dimensions_info.get("dimensions"):
+        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.bucket_name)
 
     if filename:
         record = None

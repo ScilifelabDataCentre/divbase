@@ -4,10 +4,9 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import botocore
 import yaml
 
-from divbase_tools.exceptions import ObjectDoesNotExistError, VCFDimensionsFileEmptyError
+from divbase_tools.exceptions import ObjectDoesNotExistError
 from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
 from divbase_tools.user_config import ProjectConfig
 
@@ -26,27 +25,28 @@ class VCFDimensionIndexManager:
 
     def __post_init__(self):
         """
-        Creates an empty .vcf_dimensions.yaml file in the bucket upon object init.
+        Loads the .vcf_dimensions.yaml file from the bucket if it exists.
         """
         self.dimensions_info = self._get_bucket_dimensions_file()
-
-        if not self.dimensions_info:
-            logger.info(f"Creating a new VCF_dimensions index file in bucket: {self.bucket_name}.")
-            yaml_data = {"dimensions": []}
-            self._upload_bucket_dimensions_file(dimensions_data=yaml_data)
-            self.dimensions_info = yaml_data
 
     def add_dimension_entry(self, vcf_filename: str) -> None:
         """
         Append a new dimension entry to .vcf_dimensions.yaml if not already present for that VCF file.
         Calls submethods to calculate dimensions and upload the updated YAML file to bucket.
+
+        NOTE! This method does not upload the updated dimensions file to the bucket. The caller must do that
+        by calling self._upload_bucket_dimensions_file(self.dimensions_info) after calling this method.
+        This way, the caller can add multiple entries and then upload the file only once at the end. Thus,
+        the version history of the dimensions file will not be cluttered with many versions that differ only by one entry.
         """
 
-        yaml_data = self.dimensions_info
+        yaml_data = self.dimensions_info or {"dimensions": []}
+        dimensions = yaml_data.get("dimensions", [])
+
         dimensions = yaml_data.get("dimensions", [])
 
         if any(entry.get("filename") == vcf_filename for entry in dimensions):
-            print(f"Filename '{vcf_filename}' is already present in .vcf_dimensions.yaml.")
+            logger.info(f"Filename '{vcf_filename}' is already present in .vcf_dimensions.yaml.")
             return
 
         vcf_path = Path(vcf_filename)
@@ -62,7 +62,9 @@ class VCFDimensionIndexManager:
         dimensions.append(new_entry)
         yaml_data["dimensions"] = dimensions
 
-        print(f"Added new entry for {vcf_filename} to .vcf_dimensions.yaml.")
+        self.dimensions_info = yaml_data
+
+        logger.info(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
         """
@@ -75,13 +77,13 @@ class VCFDimensionIndexManager:
         dimensions = [entry for entry in dimensions if entry.get("filename") != vcf_filename]
         yaml_data["dimensions"] = dimensions
 
-        print(f"Removed entry for {vcf_filename} from .vcf_dimensions.yaml.")
+        logger.info(f"Removed entry for {vcf_filename} from .vcf_dimensions.yaml.")
 
     def get_indexed_filenames(self) -> list[str]:
         """
         Returns a list of all filenames already indexed in .vcf_dimensions.yaml for this bucket.
         """
-        yaml_data = self._get_bucket_dimensions_file()
+        yaml_data = self.dimensions_info
         return [entry.get("filename") for entry in yaml_data.get("dimensions", []) if "filename" in entry]
 
     def _wrapper_calculate_dimensions(self, vcf_path: Path) -> dict:
@@ -91,7 +93,7 @@ class VCFDimensionIndexManager:
         Two different entry points to self._extract_dimensions_from_opened_vcf() in
         order to comply with Ruff linting of context managers.
         """
-        print(f"Reading: {vcf_path} ...")
+        logger.debug(f"Reading: {vcf_path} ...")
         try:
             with gzip.open(vcf_path, "rt") as file:
                 return self._extract_dimensions_from_opened_vcf(file)
@@ -121,6 +123,7 @@ class VCFDimensionIndexManager:
             "variants": variant_count,
             "sample_count": sample_count,
             "scaffolds": sorted(list(scaffold_names)),
+            "sample_names": sample_IDs,
         }
 
     def _get_bucket_dimensions_file(self) -> dict:
@@ -134,12 +137,18 @@ class VCFDimensionIndexManager:
                 key=DIMENSIONS_FILE_NAME, bucket_name=self.bucket_name
             )
         except ObjectDoesNotExistError:
-            logger.info(f"No dimensions file found in the project: {self.bucket_name}.")
-            return {}
+            logger.info(f"No VCF dimensions file found in the bucket: {self.bucket_name}.")
+            return {"dimensions": []}
         if not content:
-            return {}
+            return {"dimensions": []}
 
-        return yaml.safe_load(content)
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict) or "dimensions" not in data:
+            logger.warning(
+                f"Malformed VCF dimensions file in bucket: {self.bucket_name}. Returning empty dimensions list."
+            )
+            return {"dimensions": []}
+        return data
 
     def _upload_bucket_dimensions_file(self, dimensions_data: dict) -> None:
         """
@@ -147,32 +156,25 @@ class VCFDimensionIndexManager:
         Works for both creating and updating the file.
         """
         text_content = yaml.safe_dump(dimensions_data, sort_keys=False)
-        try:
-            self.s3_file_manager.upload_str_as_s3_object(
-                key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
-            )
-            logging.info(f"New version updated in the bucket: {self.bucket_name}.")
-        except botocore.exceptions.ClientError as e:
-            logging.error(f"Failed to upload bucket dimensions file: {e}")
+        self.s3_file_manager.upload_str_as_s3_object(
+            key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
+        )
+        logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
 
     def get_dimensions_info(self) -> dict:
         """
         Returns the contents of the .vcf_dimensions.yaml file as a dictionary.
         """
-        if not self.dimensions_info or not self.dimensions_info.get("dimensions"):
-            raise VCFDimensionsFileEmptyError(self.bucket_name)
+        if self.dimensions_info is None or "dimensions" not in self.dimensions_info:
+            logger.info("No VCF dimensions have been created for this bucket as of yet.")
+            return {"dimensions": []}
         return self.dimensions_info
 
 
-def create_bucket_manager(project_config: ProjectConfig) -> VCFDimensionIndexManager:
+def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
     """
-    Helper function to create a BucketVersionManager instance.
-    Used by the version and file subcommands of the CLI
+    Helper function used by the dimensions CLI command to show the dimensions index for a project.
     """
     s3_file_manager = create_s3_file_manager(project_config.s3_url)
-    return VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-
-
-def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
-    manager = create_bucket_manager(project_config=project_config)
+    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
     return manager.get_dimensions_info()
