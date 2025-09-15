@@ -43,15 +43,20 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_S3_ACCESS_KEY=minioadmin
       - DIVBASE_S3_SECRET_KEY=badpassword
-    volumes: &worker-volumes
-      - ../src:/app/src
+    develop: &watch-celery-src
+      watch:
+        - action: sync+restart
+          path: ../src
+          target: /app/src
+        - action: rebuild
+          path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
   worker-long:
     build: *worker-build
     healthcheck: *worker-healthcheck
     depends_on: *worker-depends
     environment: *worker-env
-    volumes: *worker-volumes
+    develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
   flower:
     build:
@@ -64,20 +69,13 @@ services:
       retries: 5
     ports:
       - 5555:5555
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    depends_on: *worker-depends
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - FLOWER_BASIC_AUTH=floweradmin:badpassword
-    command: [
-      "flower", 
-      "--persistent=True",
-      "--db=/data/flower.db",
-      ]
+    develop: *watch-celery-src
+    command: ["flower", "--persistent=True", "--db=/data/flower.db"]
     volumes:
       - flower-data:/data
   minio:
