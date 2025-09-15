@@ -8,7 +8,6 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-import botocore
 import yaml
 
 from divbase_tools.exceptions import (
@@ -151,10 +150,7 @@ class BucketVersionManager:
         Works for both creating and updating the file.
         """
         text_content = yaml.safe_dump(version_data, sort_keys=False)
-        try:
-            self.s3_file_manager.upload_str_as_s3_object(
-                key=VERSION_FILE_NAME, content=text_content, bucket_name=self.bucket_name
-            )
-            logging.info(f"New version updated in the bucket: {self.bucket_name}.")
-        except botocore.exceptions.ClientError as e:
-            logging.error(f"Failed to upload bucket version file: {e}")
+        self.s3_file_manager.upload_str_as_s3_object(
+            key=VERSION_FILE_NAME, content=text_content, bucket_name=self.bucket_name
+        )
+        logging.info(f"New version updated in the bucket: {self.bucket_name}.")

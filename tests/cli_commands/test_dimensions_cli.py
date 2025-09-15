@@ -76,10 +76,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
-    try:
-        yaml.safe_load(cli_result.stdout)
-    except Exception as e:
-        raise AssertionError(f"CLI output is not valid YAML: {e}\nOutput:\n{cli_result.stdout}") from e
+    yaml.safe_load(cli_result.stdout)
 
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     for vcf_file in vcf_files:
@@ -118,12 +115,11 @@ def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, user_config_path,
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
     command = f"dimensions show --project {bucket_name} --config {user_config_path}"
-    with caplog.at_level("ERROR"):
-        cli_result = runner.invoke(app, command)
-    assert cli_result.exit_code == 0
 
-    expected_message = str(VCFDimensionsFileMissingOrEmptyError(bucket_name=bucket_name))
-    assert expected_message in caplog.text
+    result = runner.invoke(app, command)
+    assert result.exit_code != 0
+    assert isinstance(result.exception, VCFDimensionsFileMissingOrEmptyError)
+    assert bucket_name in str(result.exception)
 
 
 def test_get_dimensions_info_returns_empty(CONSTANTS):
@@ -177,3 +173,23 @@ def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
     manager.remove_dimension_entry(vcf_file)
     filenames = [entry["filename"] for entry in manager.dimensions_info.get("dimensions", [])]
     assert vcf_file not in filenames
+
+
+def test_update_vcf_dimensions_task_upload_failed(CONSTANTS):
+    """
+    Test that mocks that update_vcf_dimensions_task fails to upload the dimensions file to bucket.
+    """
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        # Ensure test compose stack is used when running the task
+        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
+
+        with patch(
+            "divbase_tools.s3_client.S3FileManager.upload_str_as_s3_object",
+            side_effect=Exception("Simulated upload failure"),
+        ):
+            result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+            assert result["status"] == "error"
+            assert "Failed to upload bucket dimensions file" in result["error"]

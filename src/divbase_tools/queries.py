@@ -413,7 +413,7 @@ class BcftoolsQueryManager:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
 
-    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> bool:
+    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> dict[str, list[str]]:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
         If they do, bcftools concat is needed instead of bcftools merge.

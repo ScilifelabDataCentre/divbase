@@ -194,7 +194,16 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             manager.remove_dimension_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
-    manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+
+    try:
+        manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
+    except Exception as e:
+        logger.error(f"Failed to upload bucket dimensions file: {e}")
+        return {
+            "status": "error",
+            "error": f"Failed to upload bucket dimensions file: {e}",
+            "task_id": task_id,
+        }
 
     return {
         "status": "completed",
@@ -294,8 +303,6 @@ def check_for_unnecessary_files_for_region_query(
             "To see a list of all unique scaffolds that are present across the VCF files in the project:"
             "'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
         )
-        # TODO this stops jobs from executing. Which might not be intuitive. Such subsests would be able to run in bftools but the result would be an merged VCF with no variants (header only). Should this be a warning instead that will be returned in the worker results?
-
     return files_to_download_updated
 
 

@@ -1,7 +1,3 @@
-# helm charts
-kustomize/base/charts
-kustomize/overlays/**/charts
-
 # repo secrets 
 .env 
 .env*

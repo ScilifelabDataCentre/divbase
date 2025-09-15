@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import botocore
 import yaml
 
 from divbase_tools.exceptions import ObjectDoesNotExistError
@@ -157,13 +156,10 @@ class VCFDimensionIndexManager:
         Works for both creating and updating the file.
         """
         text_content = yaml.safe_dump(dimensions_data, sort_keys=False)
-        try:
-            self.s3_file_manager.upload_str_as_s3_object(
-                key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
-            )
-            logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
-        except botocore.exceptions.ClientError as e:
-            logging.error(f"Failed to upload bucket dimensions file: {e}")
+        self.s3_file_manager.upload_str_as_s3_object(
+            key=DIMENSIONS_FILE_NAME, content=text_content, bucket_name=self.bucket_name
+        )
+        logging.info(f"New dimensions file uploaded to the bucket: {self.bucket_name}.")
 
     def get_dimensions_info(self) -> dict:
         """
@@ -175,15 +171,10 @@ class VCFDimensionIndexManager:
         return self.dimensions_info
 
 
-def create_bucket_manager(project_config: ProjectConfig) -> VCFDimensionIndexManager:
+def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
     """
-    Helper function to create a BucketVersionManager instance.
-    Used by the version and file subcommands of the CLI
+    Helper function used by the dimensions CLI command to show the dimensions index for a project.
     """
     s3_file_manager = create_s3_file_manager(project_config.s3_url)
-    return VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-
-
-def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
-    manager = create_bucket_manager(project_config=project_config)
+    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
     return manager.get_dimensions_info()
