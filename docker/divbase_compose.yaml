@@ -105,6 +105,14 @@ services:
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
+    develop: # rebuild only on changes to deps. 
+      watch:
+        - action: sync
+          path: ../src
+          target: /app/src
+        - action: rebuild
+          path: ../uv.lock
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s

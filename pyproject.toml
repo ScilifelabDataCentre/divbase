@@ -10,7 +10,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "typer>=0.15.4",
     "pandas>=2.2.3",
-    "fastapi>=0.115.12",
+    "fastapi[standard]>=0.115.12",
     "uvicorn>=0.34.3",
     "pytest>=8.4.0",
     "celery>=5.5.3",
@@ -19,7 +19,6 @@ dependencies = [
     "flower>=2.0.0",
     "httpx>=0.28.1",
     "pre-commit>=3.7.0",
-
 ]
 
 [project.optional-dependencies]

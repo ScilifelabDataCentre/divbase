@@ -14,4 +14,4 @@ COPY src/ ./src/
 RUN pip install -e .
 
 # host needs to be set to 0.0.0.0 to be accessible from outside the container
-CMD ["uvicorn", "divbase_tools.divbase_api:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src/divbase_tools"]
+CMD ["fastapi", "run", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
