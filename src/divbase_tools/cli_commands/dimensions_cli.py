@@ -12,11 +12,7 @@ from divbase_tools.vcf_dimension_indexing import show_dimensions_command
 
 logger = logging.getLogger(__name__)
 
-PROJECT_NAME_OPTION = typer.Option(
-    None,
-    help="Name of the DivBase project, if not provided uses the default in your DivBase config file",
-    show_default=False,
-)
+from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
 
 
 dimensions_app = typer.Typer(
