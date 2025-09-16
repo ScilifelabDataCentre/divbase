@@ -7,10 +7,10 @@ TODO: user_name would later be determined by the authentication system.
 from pathlib import Path
 
 import uvicorn
-from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 from fastapi import FastAPI
 
 from divbase_api.get_task_history import get_task_history
+from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 

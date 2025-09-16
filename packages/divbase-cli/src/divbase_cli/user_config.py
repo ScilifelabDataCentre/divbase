@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
 from divbase_lib.exceptions import ProjectNotInConfigError
 
 

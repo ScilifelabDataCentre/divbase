@@ -6,6 +6,7 @@ from itertools import combinations
 from pathlib import Path
 
 from celery import Celery
+
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager

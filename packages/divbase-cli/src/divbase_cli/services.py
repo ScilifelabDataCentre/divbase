@@ -4,12 +4,11 @@ CLI commands for managing S3 bucket versions.
 
 from pathlib import Path
 
+from divbase_cli.bucket_versioning import BucketVersionManager
+from divbase_cli.user_config import ProjectConfig
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
-
-from divbase_cli.bucket_versioning import BucketVersionManager
-from divbase_cli.user_config import ProjectConfig
 
 
 def create_bucket_manager(project_config: ProjectConfig) -> BucketVersionManager:

@@ -4,12 +4,12 @@ from pathlib import Path
 import httpx
 import typer
 import yaml
-from divbase_lib.exceptions import VCFDimensionsFileMissingOrEmptyError
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.services import show_dimensions_command
+from divbase_lib.exceptions import VCFDimensionsFileMissingOrEmptyError
 
 logger = logging.getLogger(__name__)
 
