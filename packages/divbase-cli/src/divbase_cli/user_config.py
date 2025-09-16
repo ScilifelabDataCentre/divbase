@@ -1,7 +1,7 @@
 """
-Handles the user's configuration file for the divbase_tools package.
+Handles the user's configuration file for the divbase-cli package.
 User configuration is stored in a local file.
-By default the config will be stored at: "~/.config/.divbase_tools.yaml"
+By default the config will be stored at: "~/.config/.divbase_tools.yaml" # TODO - change name?
 
 Not to be confused with the bucket versioning files, which is stored in the project's bucket
 and versions the state of all files in the bucket at given timestamps.

@@ -1,5 +1,5 @@
 """
-Custom exceptions for the divbase_tools package.
+Custom exceptions for DivBase packages.
 
 These are raised by lover-level functions/methods which understand the context of the error.
 
