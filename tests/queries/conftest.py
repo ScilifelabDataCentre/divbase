@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from celery import current_app
 
-from divbase_tools.queries import BcftoolsQueryManager, SidecarQueryManager
+from divbase_lib.queries import BcftoolsQueryManager, SidecarQueryManager
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def demo_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
 def copy_fixtures_to_mock_download_from_bucket():
     """
     Fixture to simulate downloading files from a bucket by copying them from the fixtures directory.
-    Designed to mock divbase_tools.services.download_files_command.
+    Designed to mock divbase_cli.services.download_files_command.
     It needs the same inputs as the download_files_command function that it is mocking, but it does not use them.
     Pytest fixtures cannot take parameters, and thus the actual function is defined and returned from inside the fixture.
     """

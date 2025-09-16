@@ -14,9 +14,9 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from divbase_tools.divbase_cli import app
-from divbase_tools.s3_client import create_s3_file_manager
-from divbase_tools.tasks import update_vcf_dimensions_task
+from divbase_cli.divbase_cli import app
+from divbase_lib.s3_client import create_s3_file_manager
+from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.minio_setup import (
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
@@ -115,9 +115,9 @@ def run_update_dimensions(CONSTANTS):
 
     def _run(bucket_name=default_bucket_name):
         with (
-            patch("divbase_tools.vcf_dimension_indexing.logger.info") as mock_info,
-            patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager,
-            patch("divbase_tools.tasks.delete_job_files_from_worker") as mock_delete_job_files,
+            patch("divbase_lib.vcf_dimension_indexing.logger.info") as mock_info,
+            patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager,
+            patch("divbase_worker.tasks.delete_job_files_from_worker") as mock_delete_job_files,
         ):
 
             def append_test_fixture_info_to_log(msg, *args, **kwargs):

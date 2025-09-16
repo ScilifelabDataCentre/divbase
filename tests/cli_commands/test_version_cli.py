@@ -9,9 +9,9 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
-from divbase_tools.bucket_versioning import VERSION_FILE_NAME
-from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import (
+from divbase_cli.bucket_versioning import VERSION_FILE_NAME
+from divbase_cli.divbase_cli import app
+from divbase_lib.exceptions import (
     BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,

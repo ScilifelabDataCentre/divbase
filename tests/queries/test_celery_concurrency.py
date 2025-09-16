@@ -1,13 +1,13 @@
 import os
 from time import sleep
 
+import httpx
 import pytest
-import requests
 from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_tools.tasks import app, bcftools_pipe_task, sample_metadata_query_task
+from divbase_worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
 
 FLOWER_URL_TESTING_STACK = (
     "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
@@ -176,11 +176,11 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
     auth = (flower_user, flower_password)
 
     try:
-        response = requests.get(flower_url, auth=auth, timeout=3)
-    except requests.exceptions.RequestException as e:
+        response = httpx.get(flower_url, auth=auth, timeout=3.0)
+    except httpx.RequestError as e:
         pytest.fail(f"Could not connect to Flower API: {e}")
 
-    if response.ok:
+    if response.is_success:
         worker = response.json().get(task_id, {}).get("worker")
         assert worker in current_queue_to_workers_assignment.get(expected_queue), (
             f"Expected task {task_id} to be executed by a worker in the {expected_queue} queue, but got {worker}"

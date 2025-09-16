@@ -10,8 +10,8 @@ Tests start from 1 of 3 types of user config files:
 import pytest
 from typer.testing import CliRunner
 
-from divbase_tools.divbase_cli import app
-from divbase_tools.user_config import load_user_config
+from divbase_cli.divbase_cli import app
+from divbase_cli.user_config import load_user_config
 
 runner = CliRunner()
 
