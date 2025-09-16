@@ -12,10 +12,10 @@ import typer
 from rich import print
 from typing_extensions import Annotated
 
-from divbase_tools.cli_commands.config_resolver import resolve_download_dir, resolve_project
-from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
-from divbase_tools.services import (
+from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.config_resolver import resolve_download_dir, resolve_project
+from divbase_cli.services import (
     delete_objects_command,
     download_files_command,
     list_files_command,

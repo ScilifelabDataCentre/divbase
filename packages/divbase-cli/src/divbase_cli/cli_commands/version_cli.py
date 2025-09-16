@@ -3,9 +3,9 @@ from pathlib import Path
 import typer
 from rich import print
 
-from divbase_tools.cli_commands.config_resolver import resolve_project
-from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.services import (
+from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_cli.config_resolver import resolve_project
+from divbase_cli.services import (
     add_version_command,
     create_version_object_command,
     delete_version_command,

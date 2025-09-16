@@ -8,7 +8,7 @@ from pathlib import Path
 import boto3
 import botocore
 
-from divbase_tools.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
+from divbase_lib.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
 
 
 class S3FileManager:

@@ -6,9 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from divbase_tools.exceptions import ObjectDoesNotExistError
-from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
-from divbase_tools.user_config import ProjectConfig
+from divbase_lib.exceptions import ObjectDoesNotExistError
+from divbase_lib.s3_client import S3FileManager
 
 DIMENSIONS_FILE_NAME = ".vcf_dimensions.yaml"
 
@@ -169,12 +168,3 @@ class VCFDimensionIndexManager:
             logger.info("No VCF dimensions have been created for this bucket as of yet.")
             return {"dimensions": []}
         return self.dimensions_info
-
-
-def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
-    """
-    Helper function used by the dimensions CLI command to show the dimensions index for a project.
-    """
-    s3_file_manager = create_s3_file_manager(project_config.s3_url)
-    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-    return manager.get_dimensions_info()

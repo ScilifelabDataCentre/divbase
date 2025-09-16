@@ -13,11 +13,11 @@ from pathlib import Path
 import dotenv
 import typer
 
-from divbase_tools.cli_commands.dimensions_cli import dimensions_app
-from divbase_tools.cli_commands.file_cli import file_app
-from divbase_tools.cli_commands.query_cli import query_app
-from divbase_tools.cli_commands.user_config_cli import config_app
-from divbase_tools.cli_commands.version_cli import version_app
+from divbase_cli.cli_commands.dimensions_cli import dimensions_app
+from divbase_cli.cli_commands.file_cli import file_app
+from divbase_cli.cli_commands.query_cli import query_app
+from divbase_cli.cli_commands.user_config_cli import config_app
+from divbase_cli.cli_commands.version_cli import version_app
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ app.add_typer(dimensions_app, name="dimensions")
 
 def main():
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
-    logger.info("Starting divbase_tools CLI application.")
+    logger.info("Starting divbase_cli CLI application.")
     load_cli_env_vars()
     app()
 

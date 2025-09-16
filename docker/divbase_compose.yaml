@@ -46,8 +46,11 @@ services:
     develop: &watch-celery-src
       watch:
         - action: sync+restart
-          path: ../src
-          target: /app/src
+          path: ../packages/divbase-worker/src
+          target:  /app/packages/divbase-worker/src
+        - action: sync+restart
+          path: ../packages/divbase-lib/src
+          target:  /app/packages/divbase-lib/src
         - action: rebuild
           path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
@@ -103,12 +106,18 @@ services:
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
-    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/src/divbase_tools/divbase_api.py"]
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/packages/divbase-api/src/divbase_api/divbase_api.py"]
     develop: # rebuild only on changes to deps. 
       watch:
         - action: sync
-          path: ../src
-          target: /app/src
+          path: ../packages/divbase-api/src
+          target: /app/packages/divbase-api/src
+        - action: sync
+          path: ../packages/divbase-worker/src
+          target: /app/packages/divbase-worker/src
+        - action: sync
+          path: ../packages/divbase-lib/src
+          target: /app/packages/divbase-lib/src
         - action: rebuild
           path: ../uv.lock
     healthcheck:

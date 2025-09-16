@@ -8,8 +8,9 @@ Based on provider user input and their config file.
 
 from pathlib import Path
 
-from divbase_tools.exceptions import ProjectNameNotSpecifiedError
-from divbase_tools.user_config import ProjectConfig, load_user_config
+from divbase_lib.exceptions import ProjectNameNotSpecifiedError
+
+from divbase_cli.user_config import ProjectConfig, load_user_config
 
 
 def resolve_project(project_name: str | None, config_path: Path) -> ProjectConfig:

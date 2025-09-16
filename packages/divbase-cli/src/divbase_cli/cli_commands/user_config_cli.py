@@ -11,7 +11,7 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
-from divbase_tools.user_config import (
+from divbase_cli.user_config import (
     create_user_config,
     load_user_config,
 )

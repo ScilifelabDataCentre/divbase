@@ -4,10 +4,12 @@ CLI commands for managing S3 bucket versions.
 
 from pathlib import Path
 
-from divbase_tools.bucket_versioning import BucketVersionManager
-from divbase_tools.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_tools.s3_client import create_s3_file_manager
-from divbase_tools.user_config import ProjectConfig
+from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
+from divbase_lib.s3_client import create_s3_file_manager
+from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
+
+from divbase_cli.bucket_versioning import BucketVersionManager
+from divbase_cli.user_config import ProjectConfig
 
 
 def create_bucket_manager(project_config: ProjectConfig) -> BucketVersionManager:
@@ -128,3 +130,12 @@ def delete_objects_command(project_config: ProjectConfig, all_files: list[str]) 
     """
     s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
     return s3_file_manager.delete_objects(objects=all_files, bucket_name=project_config.bucket_name)
+
+
+def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
+    """
+    Helper function used by the dimensions CLI command to show the dimensions index for a project.
+    """
+    s3_file_manager = create_s3_file_manager(project_config.s3_url)
+    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
+    return manager.get_dimensions_info()
