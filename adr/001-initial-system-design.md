@@ -12,10 +12,10 @@ DivBase will be a platform designed for the secure, medium-term management of VC
 
 ### Foreseen typical user journey in DivBase:
 
-- A research group studying a species uploads their many VCF files (GB) to the DivBase object store.
-- The most common setup will be, per research group: 1 studied species = 1 project = 1 bucket. New species = new bucket for that research group. 
-- The research group has a metadata file that contains metadata about these files (with emphasis on the biological samples described by each file). This file is uploaded to the bucket in addition to the VCFs.
-- For follow-up analysis, researchers want to extract subsets from many files in the store. By using the metadata file and a pre-existing executable (bcftools), they can operate on the files in the object store to create a single (and much much smaller) "results" file.
+- A research group studying a species uploads their many VCF files, each several gigabytes (GB) in size, to the DivBase object store.
+- The most common setup is: one species genome version = one project = one bucket. A new species genome version means a new bucket for that research group.
+- The research group has a metadata file that contains contextual and biological information about the samples included in the VCF files. This file is uploaded to the bucket along with the VCFs.
+- For follow-up analysis, researchers want to extract subsets of data from many files in the store. With the aid of the metadata file and the pre-existing executable tool [bcftools](https://samtools.github.io/bcftools/bcftools.html), they can operate on the files in the object store to produce a single, substantially smaller "results" file.
 - DivBase will have a webAPI that can take a query from the researcher, process the query (can take from seconds to hours) and save the output of the query (results file) to the object store. This results file can then be downloaded by the user. These queries should be treated like jobs and users should be able to find out the status of their jobs whenever. 
 - The above bullets are iterated over during the research study, until the day the project ends and the study is published. At this point, the data stored in DivBase should be uploaded to a domain-specific end-repository for data sharing. DivBase should preferably conform to the metadata standard of the key end-repository to facilitate the data publication.  
 
@@ -32,7 +32,7 @@ DivBase will be a platform designed for the secure, medium-term management of VC
 - WebAPI talks to some kind of job management system that queues, runs and reports on the status of the jobs. 
 - Software for prototype the query jobs. The query logic should be able to take the sample metadata file into account.
 - Handling of metadata files. This includes user submitted sample metadata, but also system-generated metadata such as tracking bucket versioning states and indexing VCF dimensions for faster queries. 
-- Frontend (not a priority), to manage projects/download API keys. 
+- Frontend to manage users, projects, and download API keys. 
 
 
 ## Decision
@@ -41,19 +41,19 @@ This initial system design is intended to cover all the architectural components
 
 ### Core Technology Stack
 
-- **Orchestration:** [Kubernetes](https://kubernetes.io/) for prod and deployed test instance. [Docker Compose](https://docs.docker.com/compose/) for local development (with an overlay for testing). 
+- **Orchestration:** [Kubernetes](https://kubernetes.io/) for production and deployed test instance. [Docker Compose](https://docs.docker.com/compose/) for local development (with an overlay for testing). 
 - **S3 object store:** In prod (and deployed test instance), this will be KTH NetApp. For local dev/tests, a MinIO image. 
-- **WebAPI**: [FastAPI](https://fastapi.tiangolo.com/) with Postgresql as db. There will be a small frontend using Jinja2 templating and HTMX if needed (see [adr/002-Basic-API-design.md](adr/002-Basic-API-design.md) for more details). 
+- **WebAPI**: [FastAPI](https://fastapi.tiangolo.com/) with Postgresql as database (db). There will be a small frontend using Jinja2 templating and HTMX if needed (see [adr/002-Basic-API-design.md](adr/002-Basic-API-design.md) for more details). 
 - **Job management system:** Consisting of [Celery](https://docs.celeryq.dev) worker(s); [RabbitMQ](https://www.rabbitmq.com/) queue/message broker; [Redis](https://redis.io/open-source/) results backend. Interaction with job management system using [Flower API](https://flower.readthedocs.io/en/latest/). 
 - **Jobs logic:** [Pandas](https://pandas.pydata.org/) for queries on sample metadata files (e.g. subsets and filters).  [bcftools](https://samtools.github.io/bcftools/howtos/index.html) for working on VCF files.
-- **Metadata files:** Initial prototype will be done with flat files such as TSV and YAML. An ACID-compliant database may be necessary later on. A more robust solution is probably needed to handle I/O concurrency resulting from  being a multi-user service with an asynchronous job system; most likely an ACID-compliant database will be needed.
+- **Metadata files:** Initial prototype will be done with flat files such as TSV and YAML. A more robust solution is possibly needed to handle I/O concurrency resulting from being a multi-user service with an asynchronous job system.
 - **Testing:** [pytest](https://docs.pytest.org/en/stable/). For frontend e2e tests, Playwright would likely be used.
-- **CLI tool (for users to interact with service)**: [Typer](https://typer.tiangolo.com/). Built as seperate uv/pip installable package. 
+- **CLI tool (for users to interact with service)**: [Typer](https://typer.tiangolo.com/). Built as separate uv/pip installable package. 
 
 <p align="center">
   <img src="imgs/001-initial-design.png" alt="Initial Design of DivBase" width="1200">
   <br>
-  <em>Fig. 2. DivBase architecture diagram. The user can use the CLI tool to interact with DivBase API. The webAPI is responsible for auth and communicating with the job management system. Pre-signed URLs used to enable users access to project data stored in S3. Note that Redis and bcftools are not explicitly shown in the image: the former is part of the task history monitoring, the latter is part of the Celery workers.</em>
+  <em>Fig. 2. DivBase architecture diagram. The user can use the CLI tool to interact with DivBase API. The webAPI is responsible for authentication/authorization and communicating with the job management system. Pre-signed URLs used to enable users access to project data stored in S3. Note that Redis and bcftools are not explicitly shown in the image: the former is part of the task history monitoring, the latter is part of the Celery workers.</em>
 </p>
 
 
@@ -81,20 +81,20 @@ This ADR (001) is for the initial design of a DivBase prototype. More architectu
 
 ### Why these choices
 
-The guiding principle in choosing the proposed tech stack was to keep the service as lightweight as possible while allowing us to demonstrate proof-of-concept for the basic functionalities of the service. We believe that the choices fulfill the technological needs discussed above that while also aligning to the DC paved-paths tech whenever possible. 
+The guiding principle in choosing the proposed tech stack was to keep the service as lightweight as possible while allowing us to demonstrate proof-of-concept for its basic functionalities. We believe these choices meet the technological needs discussed above while also aligning with DC paved-path technologies whenever possible. 
 
-For readers that are unfamiliar with working with VCF files, the importance of bcftools it might not be evident from the list of the core tech stack, but its role as the core query engine in DivBase cannot be understaded. Bcftools is an very popular tool with a established syntax. By writing wrapper logic for running bcftools commands, the team will save a substantial amount of work compared to writing a our own custom VCF query engine. The intention is to use bcftools syntax as much as possible for DivBase to benefit from the fact that most researchers working with genetic diversity data analysis are likely to have at least encountered bcftools, if not even being proficient users. 
+For readers that are unfamiliar with working with VCF files, the importance of bcftools might not be immediately apparent from the core tech stack. However, its role as the core query engine in DivBase cannot be understated. Bcftools is a very popular tool with an established syntax. By writing wrapper logic around bcftools commands, the team will save a substantial amount of work compared to developing a custom VCF query engine. The intention is to use bcftools syntax as much as possible for DivBase to benefit from the fact that most researchers working with genetic diversity data are likely to have at least encountered bcftools, if not already be proficient users. 
 
 
 ## Alternatives considered
 
 - **Using Django (or flask) instead of FastAPI:** see [002-API-design.md](002-API-design.md)
 
-- **Kueue or SLURM instead of Celery**. Both the devs and the pilot user group have long experience of using SLURM in HPC environmentents and imagine a user experience similar to that of SLURM (queue jobs, check status, position in queue, job logs stored for later inspection). While there are no paved-paths entry for job mangement systems at DC, Celery is already used at DC for Serve. As opposed to the listed alternatives, Celery is written in Python, which is the default language at DC. Should we for some reason change to Django as per the above point, it could be beneficial that Celery has out-of-the-box support for Django. 
+- **Kueue or SLURM instead of Celery**. Both the developers and the pilot user group have extensive experience using SLURM in HPC environment and envision a user experience similar to that of SLURM (queue jobs, check status, position in queue, job logs stored for later inspection). While there are no paved-path entries for job management systems at DC, Celery is already in use at DC for SciLifeLab Serve. Unlike the listed alternatives, Celery is written in Python, which is the preferred programming language at DC. If we were to switch to Django as mentioned above, it could be beneficial that Celery has out-of-the-box support for Django. 
 
-- **RabbitMQ also as job system results backend instead of Redis**. While RabbitMQ is primiarly designed to be a job system message broker, it is able to take on the role of job systems result backend as well. Doing so would result in one less component to maintain in the tech stack. However, Redis was chosen as a results backend for its performance, ability to store persistent logs, and its excellent integration with the Flower monitoring system.
+- **RabbitMQ also as a job system results backend instead of Redis**. While RabbitMQ is primarily designed to be a job system message broker, it is able to take on the role of job systems result backend as well. Doing so would result in one less component to maintain in the tech stack. However, Redis was chosen as a results backend for its performance, ability to store persistent logs, and its excellent integration with the Flower monitoring system.
 
-- **The proof-of-concept demo for DivBase use flat files for storing sample and system metadata**. The async, concurrent job system and the fact that multiple users might simultaneously work on the same files in the bucket might prove a challenge. Later on, we might need an ACID-compliant database such as PostgreSQL to more reliably store the metadata. However, this should be the topic of its own ADR.
+- **The proof-of-concept demo for DivBase uses flat files to store sample and system metadata**. The asynchronous, concurrent job system, combined with the possibility of multiple users working simultaneously on the same files in the bucket, may pose challenges.
 
 ## Consequences
 
@@ -110,7 +110,7 @@ Adopting the proposed tech stack for developing the inital prototype for Divbase
 
 ### Risks & Challenges
 
-- **Team learning curve** The team members have experience with some of the components in tech stack, but most of them are new to the team. Basic implementation does not seem to be an issue, but it would be valuable if other staff at DC or SciLifeLab that could help with advice on best practices and optimization at some point during the development. 
+- **Team learning curve** The team members have experience with some of the components in tech stack, but most of them are new to the team. Basic implementation does not seem to be an issue, but it would be valuable if other staff at DC or SciLifeLab could provide advice on best practices and optimization at some point during the development. 
 
 - **Creating a robust system that can handle concurrent operations**. The use of concurrent operations in a multi-user service means that files will need to be protected against data errors and corruption due to parallel I/O operations. This is not only a technical risk but also an information security risk. How will data integrity issues affect the system, the users, their collaborators, and the quality of the research project? This will need to specifically addressed during the development Jobs will likely need to keep track of file version ID from the S3 store to ensure that all operations happen on the file versions present in the bucket at the time of job start.
 
