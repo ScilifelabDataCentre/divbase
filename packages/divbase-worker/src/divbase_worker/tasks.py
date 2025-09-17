@@ -7,7 +7,7 @@ from pathlib import Path
 
 from celery import Celery
 
-from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
@@ -432,6 +432,9 @@ def check_that_file_versions_match_dimensions_index(
     """
     Ensure that the VCF dimensions index is up to date with the latest versions of the VCF files.
     """
+    if not vcf_dimensions_manager.dimensions_info or not vcf_dimensions_manager.dimensions_info.get("dimensions"):
+        raise VCFDimensionsFileMissingOrEmptyError(vcf_dimensions_manager.bucket_name)
+
     already_indexed_vcfs = vcf_dimensions_manager.get_indexed_filenames()
     for file in metadata_result.unique_filenames:
         file_version_ID = latest_versions_of_bucket_files.get(file, "null")
