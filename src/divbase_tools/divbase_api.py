@@ -19,7 +19,7 @@ app = FastAPI()
 
 @app.get("/")
 async def root():
-    return {"message": "DivBase API is running!"}
+    return {"message": "DivBase API is updated!"}
 
 
 @app.get("/health")
