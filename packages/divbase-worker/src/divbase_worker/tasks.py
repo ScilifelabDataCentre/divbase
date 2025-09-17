@@ -7,17 +7,17 @@ from pathlib import Path
 
 from celery import Celery
 
-from divbase_tools.exceptions import NoVCFFilesFoundError
-from divbase_tools.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
-from divbase_tools.s3_client import S3FileManager, create_s3_file_manager
-from divbase_tools.vcf_dimension_indexing import VCFDimensionIndexManager
+from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
+from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
+from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 logger = logging.getLogger(__name__)
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
-app = Celery("divbase_tools", broker=BROKER_URL, backend=RESULT_BACKEND)
+app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Redis-specific config
 app.conf.update(

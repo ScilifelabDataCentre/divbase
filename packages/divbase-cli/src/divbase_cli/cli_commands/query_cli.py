@@ -1,5 +1,5 @@
 """
-Query subcommand for the divbase_tools CLI.
+Query subcommand for the DivBase CLI.
 
 Submits queries (sample metadata and/or bcftools) to the DivBase API.
 
@@ -23,11 +23,11 @@ import httpx
 import typer
 from rich import print
 
-from divbase_tools.cli_commands.config_resolver import resolve_divbase_api_url, resolve_project
-from divbase_tools.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_tools.cli_commands.version_cli import PROJECT_NAME_OPTION
-from divbase_tools.queries import SidecarQueryResult
-from divbase_tools.task_history import TaskHistoryManager
+from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.config_resolver import resolve_divbase_api_url, resolve_project
+from divbase_cli.display_task_history import TaskHistoryManager
+from divbase_lib.queries import SidecarQueryResult
 
 logger = logging.getLogger(__name__)
 

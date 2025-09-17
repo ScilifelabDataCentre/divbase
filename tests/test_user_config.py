@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from divbase_tools.user_config import load_user_config
+from divbase_cli.user_config import load_user_config
 
 
 def test_show_user_config_fails_if_no_config_file(tmp_path: Path) -> None:

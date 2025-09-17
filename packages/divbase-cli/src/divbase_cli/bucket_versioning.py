@@ -10,13 +10,13 @@ from datetime import datetime, timezone
 
 import yaml
 
-from divbase_tools.exceptions import (
+from divbase_lib.exceptions import (
     BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,
     ObjectDoesNotExistError,
 )
-from divbase_tools.s3_client import S3FileManager
+from divbase_lib.s3_client import S3FileManager
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
 

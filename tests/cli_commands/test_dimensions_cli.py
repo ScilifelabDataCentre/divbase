@@ -14,11 +14,11 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
-from divbase_tools.s3_client import create_s3_file_manager
-from divbase_tools.tasks import update_vcf_dimensions_task
-from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME, VCFDimensionIndexManager
+from divbase_cli.divbase_cli import app
+from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
+from divbase_lib.s3_client import create_s3_file_manager
+from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME, VCFDimensionIndexManager
+from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.minio_setup import PROJECTS
 
 runner = CliRunner()
@@ -145,7 +145,7 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
     test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = "empty-project"
 
-    with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
             update_vcf_dimensions_task(bucket_name=bucket_name)
@@ -182,12 +182,12 @@ def test_update_vcf_dimensions_task_upload_failed(CONSTANTS):
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
-    with patch("divbase_tools.tasks.create_s3_file_manager") as mock_create_s3_manager:
+    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         # Ensure test compose stack is used when running the task
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
 
         with patch(
-            "divbase_tools.s3_client.S3FileManager.upload_str_as_s3_object",
+            "divbase_lib.s3_client.S3FileManager.upload_str_as_s3_object",
             side_effect=Exception("Simulated upload failure"),
         ):
             result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")

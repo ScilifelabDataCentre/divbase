@@ -9,8 +9,8 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from divbase_tools.task_history import get_task_history
-from divbase_tools.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
+from divbase_api.get_task_history import get_task_history
+from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 
 TSV_FILE = Path("./sample_metadata.tsv")
 
@@ -19,7 +19,7 @@ app = FastAPI()
 
 @app.get("/")
 async def root():
-    return {"message": "DivBase API is updated!"}
+    return {"message": "DivBase API is running"}
 
 
 @app.get("/health")
@@ -95,7 +95,7 @@ def update_vcf_dimensions_for_a_project(project: str, user_name: str = "Default 
 
 
 def main():
-    uvicorn.run("divbase_tools.divbase_api:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("divbase_api.divbase_api:app", host="127.0.0.1", port=8000, reload=True)
 
 
 if __name__ == "__main__":

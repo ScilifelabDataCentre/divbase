@@ -14,8 +14,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from divbase_tools.cli_commands.config_resolver import resolve_project
-from divbase_tools.exceptions import (
+from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
     BcftoolsPipeEmptyCommandError,
@@ -24,7 +23,6 @@ from divbase_tools.exceptions import (
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
 )
-from divbase_tools.services import download_files_command
 
 logger = logging.getLogger(__name__)
 
@@ -595,22 +593,3 @@ class SidecarQueryManager:
             logger.warning(f"Duplicate (Sample_ID, Filename) pairs found in metadata TSV:\n{dup_rows}")
         self.df = self.df.drop_duplicates(subset=["Sample_ID", "Filename"], keep="first")
         return self
-
-
-# TODO - can this be removed?
-def fetch_query_files_from_bucket(
-    project: str | None, config_path: Path, files: list[str], download_dir: Path = None, bucket_version=None
-) -> None:
-    """
-    Helper function to fetch files needed for queries from the bucket if they do not exist locally.
-    """
-    if not download_dir:
-        download_dir = Path.cwd()
-
-    project_config = resolve_project(project_name=project, config_path=config_path)
-    download_files_command(
-        project_config=project_config,
-        all_files=files,
-        download_dir=download_dir,
-        bucket_version=bucket_version,
-    )

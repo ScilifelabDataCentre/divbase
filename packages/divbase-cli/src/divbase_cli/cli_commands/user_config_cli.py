@@ -1,5 +1,5 @@
 """
-config subcommand for the divbase_tools CLI.
+config subcommand for the divbase-cli package.
 
 Controls the user config file stored at "~/.config/.divbase_tools.yaml" (unless specified otherwise).
 """
@@ -11,7 +11,7 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
-from divbase_tools.user_config import (
+from divbase_cli.user_config import (
     create_user_config,
     load_user_config,
 )
@@ -34,7 +34,7 @@ config_app = typer.Typer(help="Manage your user configuration file for the DivBa
 def create_user_config_command(
     config_file: Path = typer.Option(DEFAULT_CONFIG_PATH, help="Where to store your config file locally on your pc."),
 ):
-    """Create a user configuration file for the divbase_tools package."""
+    """Create a user configuration file for the divbase-cli tool."""
     create_user_config(config_path=config_file)
     print(f"User configuration file created at {config_file.resolve()}.")
 
