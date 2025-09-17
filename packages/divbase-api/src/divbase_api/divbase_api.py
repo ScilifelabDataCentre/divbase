@@ -4,17 +4,30 @@ The API server for DivBase.
 TODO: user_name would later be determined by the authentication system.
 """
 
-from pathlib import Path
+import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
 
+from divbase_api.db import create_all_tables, engine
 from divbase_api.get_task_history import get_task_history
 from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 
-TSV_FILE = Path("./sample_metadata.tsv")
+logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Creating all tables...")
+    await create_all_tables()
+    yield
+    # cleanup
+    logger.info("Shutting down, closing any DB connections")
+    await engine.dispose()
+
+
+app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
 
 @app.get("/")

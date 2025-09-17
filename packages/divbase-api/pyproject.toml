@@ -7,9 +7,10 @@ dependencies = [
     "fastapi[standard]>=0.115.12",
     "uvicorn>=0.34.3",
     "httpx>=0.28.1",
-    "sqlalchemy>=2.0.43",
+    "sqlalchemy[asyncio]>=2.0.43",
     "divbase-lib",
     "divbase-worker",
+    "asyncpg>=0.30.0",
 ]
 
 [build-system]
