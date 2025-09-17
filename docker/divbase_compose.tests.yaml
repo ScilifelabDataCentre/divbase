@@ -12,15 +12,18 @@ services:
   worker-quick:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
+    develop: !reset [] # no compose watch when running tests
   worker-long:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
+    develop: !reset []
   flower:
     ports: !override
       - 5556:5555
     volumes: !reset []
     tmpfs:
       - /data/
+    develop: !reset [] 
   minio:
     ports: !override
       - "9002:9000"
@@ -29,5 +32,6 @@ services:
     tmpfs:
       - /data/
   fastapi:
+    develop: !reset [] 
     ports: !override
       - 8001:8000

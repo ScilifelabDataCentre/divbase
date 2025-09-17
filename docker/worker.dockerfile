@@ -28,12 +28,16 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
     && make install \
     && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
-# copy readme to avoid pip complaining about missing files
-COPY pyproject.toml README.md ./
-
 RUN pip install --upgrade pip 
 
-COPY src/ ./src/
-RUN pip install -e .
+COPY README.md ./
 
-ENTRYPOINT ["celery", "-A", "divbase_tools.tasks", "worker", "--loglevel=info"]
+# Copy all package sources
+COPY packages/divbase-lib/ ./packages/divbase-lib/
+COPY packages/divbase-worker/ ./packages/divbase-worker/
+
+# Install packages in dependency order
+RUN pip install -e ./packages/divbase-lib/
+RUN pip install -e ./packages/divbase-worker/
+
+ENTRYPOINT ["celery", "-A", "divbase_worker.tasks", "worker", "--loglevel=info"]

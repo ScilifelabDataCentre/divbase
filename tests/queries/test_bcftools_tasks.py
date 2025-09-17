@@ -6,7 +6,7 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_tools.tasks import (
+from divbase_worker.tasks import (
     bcftools_pipe_task,
     calculate_pairwise_overlap_types_for_sample_sets,
     check_if_samples_can_be_combined_with_bcftools,
@@ -16,9 +16,9 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.mark.unit
-@patch("divbase_tools.tasks.BcftoolsQueryManager")
-@patch("divbase_tools.s3_client.S3FileManager.download_files")
-@patch("divbase_tools.s3_client.S3FileManager.upload_files")
+@patch("divbase_worker.tasks.BcftoolsQueryManager")
+@patch("divbase_lib.s3_client.S3FileManager.download_files")
+@patch("divbase_lib.s3_client.S3FileManager.upload_files")
 def test_bcftools_pipe_task_directly(
     mock_upload_files,
     mock_download_files,
@@ -63,10 +63,10 @@ def test_bcftools_pipe_task_directly(
 
 
 @pytest.mark.unit
-@patch("divbase_tools.tasks.BcftoolsQueryManager")
-@patch("divbase_tools.s3_client.S3FileManager.download_files")
-@patch("divbase_tools.queries.run_sidecar_metadata_query")
-@patch("divbase_tools.s3_client.S3FileManager.upload_files")
+@patch("divbase_worker.tasks.BcftoolsQueryManager")
+@patch("divbase_lib.s3_client.S3FileManager.download_files")
+@patch("divbase_lib.queries.run_sidecar_metadata_query")
+@patch("divbase_lib.s3_client.S3FileManager.upload_files")
 def test_bcftools_pipe_task_using_eager_mode(
     mock_upload_files,
     mock_sidecar_query,
@@ -285,7 +285,7 @@ def test_calculate_pairwise_overlap_types_for_sample_sets(
         ),
     ],
 )
-@patch("divbase_tools.vcf_dimension_indexing.VCFDimensionIndexManager._get_bucket_dimensions_file")
+@patch("divbase_lib.vcf_dimension_indexing.VCFDimensionIndexManager._get_bucket_dimensions_file")
 def test_check_if_samples_can_be_combined_with_bcftools_param(
     mock_get_dimensions_file,
     files_to_download,

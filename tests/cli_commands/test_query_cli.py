@@ -19,11 +19,11 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
-from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import ProjectNotInConfigError
-from divbase_tools.queries import BcftoolsQueryManager
-from divbase_tools.tasks import bcftools_pipe_task
-from divbase_tools.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
+from divbase_cli.divbase_cli import app
+from divbase_lib.exceptions import ProjectNotInConfigError
+from divbase_lib.queries import BcftoolsQueryManager
+from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
+from divbase_worker.tasks import bcftools_pipe_task
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -434,7 +434,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         Patches the working dir used when running bcftools commands inside the Docker container.
         """
         container_id = self.get_container_id(self.CONTAINER_NAME)
-        logger = logging.getLogger("divbase_tools.queries")
+        logger = logging.getLogger("divbase_lib.queries")
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
         subprocess.run(docker_cmd, check=True)
@@ -447,7 +447,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             yield self
         finally:
             if self.temp_files:
-                logger = logging.getLogger("divbase_tools.queries")
+                logger = logging.getLogger("divbase_lib.queries")
                 logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
                 temp_files_with_path = [ensure_fixture_path(f) for f in self.temp_files]
                 self.cleanup_temp_files(temp_files_with_path)
@@ -498,7 +498,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """
 
-        logger = logging.getLogger("divbase_tools.tasks")
+        logger = logging.getLogger("divbase_worker.tasks")
 
         if output_file is not None:
             output_file = ensure_fixture_path(str(output_file))
@@ -524,17 +524,17 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
         with (
             patch("boto3.client", side_effect=patched_boto3_client),
-            patch("divbase_tools.tasks.download_sample_metadata", new=patched_download_sample_metadata),
-            patch("divbase_tools.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
-            patch("divbase_tools.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_tools.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
-            patch("divbase_tools.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
+            patch("divbase_worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+            patch("divbase_lib.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
+            patch("divbase_worker.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
+            patch("divbase_lib.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
+            patch("divbase_lib.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
             patch(
-                "divbase_tools.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
+                "divbase_lib.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
-            patch("divbase_tools.tasks.upload_results_file", new=patched_upload_results_file),
-            patch("divbase_tools.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
+            patch("divbase_worker.tasks.upload_results_file", new=patched_upload_results_file),
+            patch("divbase_worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
         ):
             if not expect_success:
                 with pytest.raises(ValueError) as excinfo:

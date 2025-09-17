@@ -1,39 +1,20 @@
-[project]
-name = "divbase_tools"
-version = "0.1.0"
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "boto3>=1.38.15",
-    "minio==7.2.15",
-    "python-dotenv>=1.1.0",
-    "pyyaml>=6.0.2",
-    "typer>=0.15.4",
-    "pandas>=2.2.3",
-    "fastapi>=0.115.12",
-    "uvicorn>=0.34.3",
-    "pytest>=8.4.0",
-    "celery>=5.5.3",
-    "redis>=4.5.0",
-    "requests>=2.32.4",
-    "flower>=2.0.0",
-    "httpx>=0.28.1",
-    "pre-commit>=3.7.0",
-
+[tool.uv.workspace]
+members = [
+    "packages/divbase-cli",
+    "packages/divbase-lib",
+    "packages/divbase-worker",
+    "packages/divbase-api",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pre-commit>=3.7.0",
+]
 benchmarking = [
     "scipy>=1.16.0",
     "matplotlib>=3.10",
     "seaborn>=0.13",
     "statsmodels>=0.14.4",
+    "requests>=2.32.4",
 ]
-
-[build-system]
-requires = ["hatchling >= 1.26"]
-build-backend = "hatchling.build"
-
-[project.scripts]
-divbase-cli = "divbase_tools.divbase_cli:main"
-divbase-api = "divbase_tools.divbase_api:main"

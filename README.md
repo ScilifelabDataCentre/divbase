@@ -1,4 +1,4 @@
-# divBase
+# DivBase
 
 **DivBase's goal is to be a service which is comprised of:**
 
@@ -11,7 +11,7 @@
 ## Table of Contents
 
 1. [Folders overview](#folders-overview)
-2. [Minio Deployment on Dev cluster](#minio-deployment-on-dev-cluster)
+2. [Deployment of DivBase](#deployment-of-divbase)
 3. [divbase CLI](#divbase-cli)
 4. [Developer Setup](#developer-setup)
 5. [Queries](#queries)
@@ -20,13 +20,12 @@
 
 - *docker:* bcftools docker image.
 - *docs:* Documentation
-- *kustomize:* Deploy the MinIO instance for the DivBase prototype using Kustomize + Helm.
 - *src:* Source code for divbase's CLI and webAPI.
 - *tests*: Tests (with Pytest).
 
-## Minio Deployment on Dev cluster
+## Deployment of DivBase
 
-Deployment for testing/development purposes. The deployment and how it was set up is covered in more detail at [docs/bitnami-minio-setup.md](docs/bitnami-minio-setup.md).
+DivBase's deployment with k8s is managed in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase)
 
 ## divBase CLI
 
@@ -68,7 +67,7 @@ You can now run the cli tool and webAPI/server with the following commands.
 
 ```bash
 divbase-cli
-divbase-api
+divbase-api # NOTE: We typically do not run the API like this, instead we use docker compose, keep reading below to see how.
 ```
 
 ### 2. Install pre-commit hooks
@@ -117,7 +116,17 @@ DIVBASE_ENV=scilifelab2dev divbase-cli files list --project a-project-in-the-clo
 
 **Note:** Default behaviour if `DIVBASE_ENV` is not set is to get enviroment varialbes from `.env`. This would be used by actual users of the service who will not have to deal with having multiple environments like us.
 
-### 4. Running tests
+### 4. Run DivBase backend locally using Docker compose watch
+
+```bash
+docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/divbase_compose.yaml watch
+```
+
+This will deploy the API, job system and MinIO (S3) instance locally. Using `compose watch` means changes in the `/src` folder will automatically be sycned to the container and if needed trigger a restart or rebuild of them.
+
+Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/docs> to test out some of API commands directly.
+
+### 5. Running tests
 
 We use docker-compose to setup a testing environment. The testing stack contains a MinIO instance which is populated with some default buckets and data and provided to each test.
 

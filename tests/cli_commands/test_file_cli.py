@@ -10,8 +10,8 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
-from divbase_tools.divbase_cli import app
-from divbase_tools.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistError
+from divbase_cli.divbase_cli import app
+from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistError
 
 runner = CliRunner()
 
