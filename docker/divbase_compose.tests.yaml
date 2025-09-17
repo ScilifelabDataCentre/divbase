@@ -35,3 +35,9 @@ services:
     develop: !reset [] 
     ports: !override
       - 8001:8000
+  postgres:
+    ports: !override
+      - "5433:5432"
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data/pgdata
