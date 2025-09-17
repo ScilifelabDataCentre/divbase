@@ -93,7 +93,10 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
     vcf_dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    if not vcf_dimensions_manager.dimensions_info or not vcf_dimensions_manager.dimensions_info.get("dimensions"):
+        raise VCFDimensionsFileMissingOrEmptyError(vcf_dimensions_manager.bucket_name)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -432,8 +435,6 @@ def check_that_file_versions_match_dimensions_index(
     """
     Ensure that the VCF dimensions index is up to date with the latest versions of the VCF files.
     """
-    if not vcf_dimensions_manager.dimensions_info or not vcf_dimensions_manager.dimensions_info.get("dimensions"):
-        raise VCFDimensionsFileMissingOrEmptyError(vcf_dimensions_manager.bucket_name)
 
     already_indexed_vcfs = vcf_dimensions_manager.get_indexed_filenames()
     for file in metadata_result.unique_filenames:

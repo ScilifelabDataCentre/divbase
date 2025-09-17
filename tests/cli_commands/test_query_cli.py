@@ -22,8 +22,11 @@ from typer.testing import CliRunner
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
 from divbase_lib.queries import BcftoolsQueryManager
+from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
-from divbase_worker.tasks import bcftools_pipe_task
+from divbase_worker.tasks import (
+    bcftools_pipe_task,
+)
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -196,7 +199,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be fail, vcf dimensions file is empty so the check for combining samples fails
+        # Case: expected to be fail, vcf dimensions file is empty so the early check for the file in the task raises an error
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -210,9 +213,8 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             [
                 "Starting bcftools_pipe_task",
                 "No VCF dimensions file found in the bucket: split-scaffold-project.",
-                "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering.",
             ],
-            ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],
+            ["The VCF dimensions file in project split-scaffold-project is missing or empty."],
         ),
         # case: expected to be sucessful, should lead to concat
         (
@@ -537,10 +539,10 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             patch("divbase_worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
         ):
             if not expect_success:
-                with pytest.raises(ValueError) as excinfo:
+                with pytest.raises(ValueError) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
-                    assert msg.replace("\n", "") in str(excinfo.value).replace("\n", "")
+                    assert msg.replace("\n", "") in str(e.value).replace("\n", "")
             else:
                 result = bcftools_pipe_task(**params)
                 assert result is not None
@@ -552,3 +554,43 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     finally:
         current_app.conf.task_always_eager = original_task_always_eager
         current_app.conf.task_eager_propagates = original_task_eager_propagates
+
+
+def test_query_exits_when_vcf_file_version_is_outdated(
+    CONSTANTS,
+    user_config_path,
+    fixtures_dir,
+    run_update_dimensions,
+):
+    """
+    Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
+    because the dimensions file expects an older version of the VCF file.
+    """
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
+
+        run_update_dimensions(bucket_name=bucket_name)
+
+        test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
+
+        command = f"files upload {test_file} --config {user_config_path} --project {bucket_name}"
+        result = runner.invoke(app, command)
+
+        assert result.exit_code == 0
+        assert f"{str(test_file)}" in result.stdout
+
+        params = {
+            "tsv_filter": "Area:West of Ireland;Sex:F",
+            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+            "bucket_name": "split-scaffold-project",
+            "user_name": "test-user",
+        }
+        with pytest.raises(ValueError) as excinfo:
+            bcftools_pipe_task(**params)
+        assert (
+            "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+            in str(excinfo.value)
+        )
