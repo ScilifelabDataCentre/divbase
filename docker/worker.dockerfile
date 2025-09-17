@@ -30,8 +30,6 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
 
 RUN pip install --upgrade pip 
 
-# Copy workspace files, TODO - do I need outer pyproject.toml?
-COPY pyproject.toml ./
 COPY README.md ./
 
 # Copy all package sources

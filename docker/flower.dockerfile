@@ -8,8 +8,6 @@ RUN apk add --no-cache curl gcc g++ musl-dev
 
 RUN pip install --upgrade pip 
 
-# Copy workspace files, TODO - do I need outer pyproject.toml?
-COPY pyproject.toml ./
 COPY README.md ./
 
 # Copy all package sources
