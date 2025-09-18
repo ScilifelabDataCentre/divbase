@@ -75,7 +75,7 @@ class ProjectMembershipDB(BaseDBModel):
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="project_memberships")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="memberships")
 
-    __table_args__ = UniqueConstraint("user_id", "project_id", name="unique_user_project")
+    __table_args__ = (UniqueConstraint("user_id", "project_id", name="unique_user_project"),)
 
     def __repr__(self) -> str:
         return f"<ProjectMembershipDB id={self.id}, user_id={self.user_id}, project_id={self.project_id}, role={self.role}>"
