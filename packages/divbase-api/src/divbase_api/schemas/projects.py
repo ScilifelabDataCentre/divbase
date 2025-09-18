@@ -16,13 +16,14 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    storage_quota_bytes: int
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(None, min_length=3, max_length=100)
     description: str | None = Field(None, min_length=1, max_length=1000)
     bucket_name: str = Field(..., min_length=3, max_length=63)
+    storage_quota_bytes: int | None = None
 
 
 class ProjectResponse(ProjectBase):
