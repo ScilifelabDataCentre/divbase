@@ -17,6 +17,10 @@ STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_
 
 TESTING_STACK_NAME = "divbase-tests"
 
+FLOWER_URL_TESTING_STACK = "http://localhost:5556"
+FLOWER_FAKE_ACCESS_KEY = "floweradmin"
+FLOWER_FAKE_SECRET_KEY = "badpassword"
+
 
 def start_compose_stack() -> None:
     """Start job system docker stack using Docker compose, the call helper function to ensure that all services in stack are healthy."""

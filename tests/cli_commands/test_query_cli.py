@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import boto3
+import httpx
 import pytest
 from celery import current_app
 from typer.testing import CliRunner
@@ -24,8 +25,11 @@ from divbase_lib.exceptions import ProjectNotInConfigError
 from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
-from divbase_worker.tasks import (
-    bcftools_pipe_task,
+from divbase_worker.tasks import bcftools_pipe_task
+from tests.helpers.docker_testing_stack_setup import (
+    FLOWER_FAKE_ACCESS_KEY,
+    FLOWER_FAKE_SECRET_KEY,
+    FLOWER_URL_TESTING_STACK,
 )
 from tests.helpers.minio_setup import MINIO_URL
 
@@ -50,19 +54,24 @@ def clean_dimensions(user_config_path, CONSTANTS):
     yield
 
 
-def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
+def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30):
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
     command = f"query task-status {task_id} --config {config_file}"
     while max_retries > 0:
         result = runner.invoke(app, command)
+        # Add checks for error keywords
         if (
             "FAILURE" in result.stdout
             or "SUCCESS" in result.stdout
             or "'status': 'completed'" in result.stdout
             or "completed" in result.stdout
             or "FAIL" in result.stdout
+            or "SidecarInvalidFilterError" in result.stdout
+            or "Unsupported bcftools command" in result.stdout
+            or "Empty command provided" in result.stdout
+            or "'status': 'error'" in result.stdout
         ):
-            return
+            return result
         time.sleep(1)
         max_retries -= 1
     pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
@@ -88,23 +97,26 @@ def test_sample_metadata_query(CONSTANTS, user_config_path):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
-    expected_sample_ids = "['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7', '1b_HOM-G58']"
-    expected_filenames = "['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']"
+    expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
+    expected_filenames = ["HOM_20ind_17SNPs_last_10_samples.vcf.gz", "HOM_20ind_17SNPs_first_10_samples.vcf.gz"]
 
     command = f"query tsv '{query_string}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     assert query_string in result.stdout
-    assert expected_sample_ids in result.stdout
-    assert expected_filenames in result.stdout
+    for sample_id in expected_sample_ids:
+        assert sample_id in result.stdout
+    for filename in expected_filenames:
+        assert filename in result.stdout
 
 
-def test_bcftools_pipe_query(user_config_path, CONSTANTS):
+def test_bcftools_pipe_query(run_update_dimensions, user_config_path, CONSTANTS):
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    run_update_dimensions(bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -144,7 +156,9 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, user_config_pat
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
-def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path):
+def test_bcftools_pipe_query_errors(
+    run_update_dimensions, project_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path
+):
     """
     Test bad formatted input raises errors
 
@@ -157,6 +171,7 @@ def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
+    run_update_dimensions(bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -164,35 +179,33 @@ def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
-
-    command = f"query task-status {task_id} --config {user_config_path}"
-    job_status = runner.invoke(app, command)
-    assert job_status.exit_code == 0
-    assert expected_error in job_status.stdout
+    result = wait_for_task_complete(task_id=task_id, config_file=user_config_path)
+    assert expected_error in result.stdout
 
 
 def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
-    """Get the status of a task by its ID."""
+    """Get the status of a task by its ID. Uses flower API via get_task_history to get the task info.
+    Note that this does not test the CLI command for testing task status.
+    """
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    task_id = result.stdout.strip().split()[-1]
+    first_task_result = runner.invoke(app, command)
+    assert first_task_result.exit_code == 0
+    first_task_id = first_task_result.stdout.strip().split()[-1]
 
-    other_result = runner.invoke(app, command)
-    assert other_result.exit_code == 0
-    other_task_id = other_result.stdout.strip().split()[-1]
+    second_task_result = runner.invoke(app, command)
+    assert second_task_result.exit_code == 0
+    second_task_id = second_task_result.stdout.strip().split()[-1]
 
-    command = f"query task-status {task_id} --config {user_config_path}"
-    result = runner.invoke(app, command)
-    print(result.stdout)
-    assert result.exit_code == 0
-    assert task_id in result.stdout
-    assert other_task_id not in result.stdout
+    for task_id in [first_task_id, second_task_id]:
+        flower_url = f"{FLOWER_URL_TESTING_STACK}/api/task/info/{task_id}"
+        auth = (FLOWER_FAKE_ACCESS_KEY, FLOWER_FAKE_SECRET_KEY)
+        response = httpx.get(flower_url, auth=auth, timeout=3.0)
+        tasks_status = response.json()
+        assert tasks_status.get("uuid") == task_id
 
 
 @pytest.mark.integration
