@@ -26,11 +26,6 @@ from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from divbase_worker.tasks import bcftools_pipe_task
-from tests.helpers.docker_testing_stack_setup import (
-    FLOWER_FAKE_ACCESS_KEY,
-    FLOWER_FAKE_SECRET_KEY,
-    FLOWER_URL_TESTING_STACK,
-)
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -200,9 +195,13 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     assert second_task_result.exit_code == 0
     second_task_id = second_task_result.stdout.strip().split()[-1]
 
+    flower_user = os.environ["FLOWER_USER"]
+    flower_password = os.environ["FLOWER_PASSWORD"]
+    flower_base_url = os.environ["FLOWER_BASE_URL"]
+
     for task_id in [first_task_id, second_task_id]:
-        flower_url = f"{FLOWER_URL_TESTING_STACK}/api/task/info/{task_id}"
-        auth = (FLOWER_FAKE_ACCESS_KEY, FLOWER_FAKE_SECRET_KEY)
+        flower_url = f"{flower_base_url}/api/task/info/{task_id}"
+        auth = (flower_user, flower_password)
         response = httpx.get(flower_url, auth=auth, timeout=3.0)
         tasks_status = response.json()
         assert tasks_status.get("uuid") == task_id

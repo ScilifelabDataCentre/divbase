@@ -9,16 +9,13 @@ from kombu.connection import Connection
 
 from divbase_worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
 
-FLOWER_URL_TESTING_STACK = (
-    "http://localhost:5556"  # TODO: could override this as an env var in the testing compose file
-)
-
 
 @pytest.mark.integration
 def test_concurrency_of_worker_containers_connected_to_default_queue(
     wait_for_celery_task_completion,
     concurrency_of_default_queue,
     bcftools_pipe_kwargs_fixture,
+    run_update_dimensions,
 ):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
@@ -37,16 +34,15 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     NOTE! This test is potentially flaky since it is dependent on timings. If the completion time for the task is less than 0.01 (which does not seem to be the case during the local dev so far), this test will likely fail.
     """
 
-    try:
-        broker_url = app.conf.broker_url
-        with Connection(broker_url) as conn:
-            conn.ensure_connection(max_retries=1)
+    bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
+    run_update_dimensions(bucket_name=bucket_name)
 
-        if isinstance(app.backend, RedisBackend):
-            app.backend.client.ping()
+    broker_url = app.conf.broker_url
+    with Connection(broker_url) as conn:
+        conn.ensure_connection(max_retries=1)
 
-    except Exception as e:
-        pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
+    if isinstance(app.backend, RedisBackend):
+        app.backend.client.ping()
 
     total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
     task_count = total_default_queue_concurrency_on_host + 1
@@ -90,7 +86,9 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
         ),
     ],
 )
-def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fixture, expected_queue, request):
+def test_task_routing(
+    wait_for_celery_task_completion, tasks_to_test, kwargs_fixture, expected_queue, request, run_update_dimensions
+):
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
     A worker can be assigned to multiple queues, so the test should check that each task is routed to the correct queue (either via static or dynamic task routing).
@@ -119,17 +117,16 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
     Pytest does not allow fixtures to be used as parameters in parametrized tests. The workaround is call the fixture inside the test using request.getfixturevalue;
     request is a pytest built-in fixture that allows the value of a fixtures to be accessed by calling the fixture name.
     """
+    task_kwargs = request.getfixturevalue(kwargs_fixture)
+    bucket_name = task_kwargs["bucket_name"]
+    run_update_dimensions(bucket_name=bucket_name)
 
-    try:
-        broker_url = app.conf.broker_url
-        with Connection(broker_url) as conn:
-            conn.ensure_connection(max_retries=1)
+    broker_url = app.conf.broker_url
+    with Connection(broker_url) as conn:
+        conn.ensure_connection(max_retries=1)
 
-        if isinstance(app.backend, RedisBackend):
-            app.backend.client.ping()
-
-    except Exception as e:
-        pytest.skip(f"This test requires services not available: {str(e)}. Is Docker Compose running?")
+    if isinstance(app.backend, RedisBackend):
+        app.backend.client.ping()
 
     ## Step 1
     current_task_routes = current_app.conf.task_routes
@@ -161,7 +158,6 @@ def test_task_routing(wait_for_celery_task_completion, tasks_to_test, kwargs_fix
             current_queue_to_workers_assignment[qname].append(worker)
 
     ## Step 3
-    task_kwargs = request.getfixturevalue(kwargs_fixture)
     result = tasks_to_test.apply_async(kwargs=task_kwargs)
     task_id = result.id
 

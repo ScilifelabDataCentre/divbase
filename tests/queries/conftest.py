@@ -189,3 +189,12 @@ def bcftools_pipe_kwargs_fixture():
         "bucket_name": "query-project",
         "user_name": "Default User",
     }
+
+
+@pytest.fixture
+def mock_latest_versions_of_bucket_files():
+    return {
+        "file1.vcf.gz": "mock-uuid-1",
+        "file2.vcf.gz": "mock-uuid-2",
+        "sample_metadata.tsv": "mock-uuid-3",
+    }
