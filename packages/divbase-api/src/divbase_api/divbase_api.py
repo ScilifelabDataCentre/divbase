@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from divbase_api.db import create_all_tables, engine
 from divbase_api.get_task_history import get_task_history
+from divbase_api.routes.users import users_router
 from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
+app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 
+
+# TODO - move below routes into routes dir when ready.
 @app.get("/")
 async def root():
     return {"message": "DivBase API is running"}
