@@ -135,4 +135,12 @@ def run_update_dimensions(CONSTANTS):
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
             assert result["status"] == "completed"
 
+            # Workaround for garbage collection since patching in tmp_path across all layers turned out to be very complex...
+            files_indexed_by_this_job = result.get("VCF files that were added to dimensions file by this job", [])
+            for file_path in files_indexed_by_this_job:
+                file_path_obj = Path(file_path).resolve()
+                fixtures_dir = (Path(__file__).parent.parent / "fixtures").resolve()
+                if fixtures_dir not in file_path_obj.parents:
+                    file_path_obj.unlink()
+
     return _run

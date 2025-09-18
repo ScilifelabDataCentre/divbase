@@ -569,7 +569,12 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         current_app.conf.task_eager_propagates = original_task_eager_propagates
 
 
+@patch(
+    "divbase_worker.tasks.create_s3_file_manager",
+    side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
+)
 def test_query_exits_when_vcf_file_version_is_outdated(
+    mock_create_s3_manager,
     CONSTANTS,
     user_config_path,
     fixtures_dir,
@@ -580,12 +585,30 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     because the dimensions file expects an older version of the VCF file.
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    # this factory fixture needs to be run before the with patch below since otherwise the patfch will also affect the fixture
+    run_update_dimensions(bucket_name=bucket_name)
 
-    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
-        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
+    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
+        if filename.startswith(fixture_dir):
+            return filename
+        return f"{fixture_dir}/{filename}"
 
-        run_update_dimensions(bucket_name=bucket_name)
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+        """
+        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
+        """
+        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
 
+    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+        """
+        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
+        """
+        pass
+
+    with (
+        patch("divbase_worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+        patch("divbase_worker.tasks.download_vcf_files", new=patched_download_vcf_files),
+    ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 
         command = f"files upload {test_file} --config {user_config_path} --project {bucket_name}"

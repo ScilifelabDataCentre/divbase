@@ -13,6 +13,7 @@ __pycache__/
 
 # project specific files
 /sample_metadata.tsv
+sample_metadata_*.tsv
 *.vcf
 *.vcf.gz
 *.vcf.gz.csi
