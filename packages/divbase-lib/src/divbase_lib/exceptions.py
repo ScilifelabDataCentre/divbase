@@ -297,7 +297,7 @@ class SidecarColumnNotFoundError(Exception):
     pass
 
 
-class VCFDimensionsFileMissingOrEmptyError(Exception):
+class VCFDimensionsFileMissingOrEmptyError(ValueError):
     """Raised when the .vcf_dimensions.yaml file is missing or exists but contains no indexed VCFs."""
 
     def __init__(self, bucket_name: str):

@@ -9,41 +9,18 @@ it is autoused, so it does not need to be specified in each test.
 
 import logging
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.divbase_cli import app
-from divbase_lib.s3_client import create_s3_file_manager
-from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.minio_setup import (
-    MINIO_FAKE_ACCESS_KEY,
-    MINIO_FAKE_SECRET_KEY,
     MINIO_URL,
-    PROJECTS,
 )
 
 runner = CliRunner()
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="session")
-def CONSTANTS():
-    return {
-        "BAD_ACCESS_KEY": MINIO_FAKE_ACCESS_KEY,
-        "BAD_SECRET_KEY": MINIO_FAKE_SECRET_KEY,
-        "MINIO_URL": MINIO_URL,
-        "DEFAULT_PROJECT": "project1",
-        "NON_DEFAULT_PROJECT": "project2",
-        "QUERY_PROJECT": "query-project",
-        "SPLIT_SCAFFOLD_PROJECT": "split-scaffold-project",
-        "CLEANED_PROJECT": "cleaned-project",
-        "EMPTY_PROJECT": "empty-project",
-        "PROJECT_CONTENTS": PROJECTS,
-        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
-    }
 
 
 @pytest.fixture
@@ -96,43 +73,3 @@ def user_config_path(tmp_path, CONSTANTS):
 def fixtures_dir():
     """Path to the fixtures directory."""
     return Path(__file__).parent.parent / "fixtures"
-
-
-@pytest.fixture
-def run_update_dimensions(CONSTANTS):
-    """
-    Factory fixture that directly calls the update_vcf_dimensions_task task to create and update dimensions for the split-scaffold-project.
-    Patches the S3 URL in the task to use the test MinIO url. Run directly to not have to poll for celery task completion.
-
-    If run with test_minio_url, bucket_name = run_update_dimensions(), it uses the default bucket split-scaffold-project.
-    It can also be run for other bucket names with: test_minio_url, bucket_name = run_update_dimensions("another-bucket-name")
-
-    Since this fixture is not run in a celery worker, patch the delete_job_files_from_worker function just pass and do nothing.
-    This ensures that no files are deleted and that no logging messages about deletion are printed.
-    """
-    test_minio_url = CONSTANTS["MINIO_URL"]
-    default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-
-    def _run(bucket_name=default_bucket_name):
-        with (
-            patch("divbase_lib.vcf_dimension_indexing.logger.info") as mock_info,
-            patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager,
-            patch("divbase_worker.tasks.delete_job_files_from_worker") as mock_delete_job_files,
-        ):
-
-            def append_test_fixture_info_to_log(msg, *args, **kwargs):
-                if "No VCF dimensions file found in the bucket:" in msg:
-                    msg = "LOG CALL BY TEST FIXTURE (run_update_dimensions): " + msg
-                return mock_info.original(msg, *args, **kwargs)
-
-            def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
-                pass
-
-            mock_info.original = logger.info
-            mock_info.side_effect = append_test_fixture_info_to_log
-            mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
-            mock_delete_job_files.side_effect = patched_delete_job_files_from_worker
-            result = update_vcf_dimensions_task(bucket_name=bucket_name)
-            assert result["status"] == "completed"
-
-    return _run

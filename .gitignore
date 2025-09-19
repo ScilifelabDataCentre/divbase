@@ -13,6 +13,7 @@ __pycache__/
 
 # project specific files
 /sample_metadata.tsv
+sample_metadata_*.tsv
 *.vcf
 *.vcf.gz
 *.vcf.gz.csi
@@ -27,3 +28,6 @@ bcftools_divbase_job_config.json
 vcf_dimensions.tsv
 mock*.tsv
 task_records*.json
+
+#MacOS artifacts
+.DS_Store

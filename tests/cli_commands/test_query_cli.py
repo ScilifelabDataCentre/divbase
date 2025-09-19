@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import boto3
+import httpx
 import pytest
 from celery import current_app
 from typer.testing import CliRunner
@@ -22,6 +23,7 @@ from typer.testing import CliRunner
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
 from divbase_lib.queries import BcftoolsQueryManager
+from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from divbase_worker.tasks import bcftools_pipe_task
 from tests.helpers.minio_setup import MINIO_URL
@@ -47,19 +49,24 @@ def clean_dimensions(user_config_path, CONSTANTS):
     yield
 
 
-def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30) -> None:
+def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30):
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
     command = f"query task-status {task_id} --config {config_file}"
     while max_retries > 0:
         result = runner.invoke(app, command)
+        # Add checks for error keywords
         if (
             "FAILURE" in result.stdout
             or "SUCCESS" in result.stdout
             or "'status': 'completed'" in result.stdout
             or "completed" in result.stdout
             or "FAIL" in result.stdout
+            or "SidecarInvalidFilterError" in result.stdout
+            or "Unsupported bcftools command" in result.stdout
+            or "Empty command provided" in result.stdout
+            or "'status': 'error'" in result.stdout
         ):
-            return
+            return result
         time.sleep(1)
         max_retries -= 1
     pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
@@ -85,23 +92,26 @@ def test_sample_metadata_query(CONSTANTS, user_config_path):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
-    expected_sample_ids = "['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7', '1b_HOM-G58']"
-    expected_filenames = "['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']"
+    expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
+    expected_filenames = ["HOM_20ind_17SNPs_last_10_samples.vcf.gz", "HOM_20ind_17SNPs_first_10_samples.vcf.gz"]
 
     command = f"query tsv '{query_string}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     assert query_string in result.stdout
-    assert expected_sample_ids in result.stdout
-    assert expected_filenames in result.stdout
+    for sample_id in expected_sample_ids:
+        assert sample_id in result.stdout
+    for filename in expected_filenames:
+        assert filename in result.stdout
 
 
-def test_bcftools_pipe_query(user_config_path, CONSTANTS):
+def test_bcftools_pipe_query(run_update_dimensions, user_config_path, CONSTANTS):
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    run_update_dimensions(bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -141,7 +151,9 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, user_config_pat
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
-def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path):
+def test_bcftools_pipe_query_errors(
+    run_update_dimensions, project_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path
+):
     """
     Test bad formatted input raises errors
 
@@ -154,6 +166,7 @@ def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
+    run_update_dimensions(bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} --config {user_config_path}"
     result = runner.invoke(app, command)
@@ -161,42 +174,44 @@ def test_bcftools_pipe_query_errors(project_name, tsv_filter, command, expected_
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
-
-    command = f"query task-status {task_id} --config {user_config_path}"
-    job_status = runner.invoke(app, command)
-    assert job_status.exit_code == 0
-    assert expected_error in job_status.stdout
+    result = wait_for_task_complete(task_id=task_id, config_file=user_config_path)
+    assert expected_error in result.stdout
 
 
 def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
-    """Get the status of a task by its ID."""
+    """Get the status of a task by its ID. Uses flower API via get_task_history to get the task info.
+    Note that this does not test the CLI command for testing task status.
+    """
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    task_id = result.stdout.strip().split()[-1]
+    first_task_result = runner.invoke(app, command)
+    assert first_task_result.exit_code == 0
+    first_task_id = first_task_result.stdout.strip().split()[-1]
 
-    other_result = runner.invoke(app, command)
-    assert other_result.exit_code == 0
-    other_task_id = other_result.stdout.strip().split()[-1]
+    second_task_result = runner.invoke(app, command)
+    assert second_task_result.exit_code == 0
+    second_task_id = second_task_result.stdout.strip().split()[-1]
 
-    command = f"query task-status {task_id} --config {user_config_path}"
-    result = runner.invoke(app, command)
-    print(result.stdout)
-    assert result.exit_code == 0
-    assert task_id in result.stdout
-    assert other_task_id not in result.stdout
+    flower_user = os.environ["FLOWER_USER"]
+    flower_password = os.environ["FLOWER_PASSWORD"]
+    flower_base_url = os.environ["FLOWER_BASE_URL"]
+
+    for task_id in [first_task_id, second_task_id]:
+        flower_url = f"{flower_base_url}/api/task/info/{task_id}"
+        auth = (flower_user, flower_password)
+        response = httpx.get(flower_url, auth=auth, timeout=3.0)
+        tasks_status = response.json()
+        assert tasks_status.get("uuid") == task_id
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be fail, vcf dimensions file is empty so the check for combining samples fails
+        # Case: expected to be fail, vcf dimensions file is empty so the early check for the file in the task raises an error
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -210,9 +225,8 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             [
                 "Starting bcftools_pipe_task",
                 "No VCF dimensions file found in the bucket: split-scaffold-project.",
-                "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering.",
             ],
-            ["VCF dimensions file is missing or empty. Cannot check if samples can be combined."],
+            ["The VCF dimensions file in project split-scaffold-project is missing or empty."],
         ),
         # case: expected to be sucessful, should lead to concat
         (
@@ -537,10 +551,10 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             patch("divbase_worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
         ):
             if not expect_success:
-                with pytest.raises(ValueError) as excinfo:
+                with pytest.raises(ValueError) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
-                    assert msg.replace("\n", "") in str(excinfo.value).replace("\n", "")
+                    assert msg.replace("\n", "") in str(e.value).replace("\n", "")
             else:
                 result = bcftools_pipe_task(**params)
                 assert result is not None
@@ -552,3 +566,66 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     finally:
         current_app.conf.task_always_eager = original_task_always_eager
         current_app.conf.task_eager_propagates = original_task_eager_propagates
+
+
+@patch(
+    "divbase_worker.tasks.create_s3_file_manager",
+    side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
+)
+def test_query_exits_when_vcf_file_version_is_outdated(
+    mock_create_s3_manager,
+    CONSTANTS,
+    user_config_path,
+    fixtures_dir,
+    run_update_dimensions,
+):
+    """
+    Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
+    because the dimensions file expects an older version of the VCF file.
+    """
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    # this factory fixture needs to be run before the with patch below since otherwise the patfch will also affect the fixture
+    run_update_dimensions(bucket_name=bucket_name)
+
+    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
+        if filename.startswith(fixture_dir):
+            return filename
+        return f"{fixture_dir}/{filename}"
+
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+        """
+        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
+        """
+        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
+
+    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+        """
+        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
+        """
+        pass
+
+    with (
+        patch("divbase_worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+        patch("divbase_worker.tasks.download_vcf_files", new=patched_download_vcf_files),
+    ):
+        test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
+
+        command = f"files upload {test_file} --config {user_config_path} --project {bucket_name}"
+        result = runner.invoke(app, command)
+
+        assert result.exit_code == 0
+        assert f"{str(test_file)}" in result.stdout
+
+        params = {
+            "tsv_filter": "Area:West of Ireland;Sex:F",
+            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+            "bucket_name": "split-scaffold-project",
+            "user_name": "test-user",
+        }
+        with pytest.raises(ValueError) as excinfo:
+            bcftools_pipe_task(**params)
+        assert (
+            "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+            in str(excinfo.value)
+        )
