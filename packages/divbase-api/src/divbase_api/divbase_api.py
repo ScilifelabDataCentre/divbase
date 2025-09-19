@@ -10,10 +10,11 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from divbase_api.config import settings
 from divbase_api.db import create_all_tables, engine, health_check_db
+from divbase_api.deps import get_current_user
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
@@ -58,6 +59,12 @@ app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 @app.get("/")
 async def root():
     return {"message": "DivBase API is running"}
+
+
+@app.get("/logged_in")
+async def check_logged_in_route(current_user=Depends(get_current_user)):
+    """Test route to check if user is logged in and get their info."""
+    return {"message": f"You are logged in as {current_user.name} with email: {current_user.email}"}
 
 
 @app.get("/health")
