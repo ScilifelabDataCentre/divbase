@@ -10,12 +10,12 @@ from divbase_api.schemas.users import UserCreate
 from divbase_api.security import get_password_hash
 
 
-async def create_user(db: AsyncSession, user_data: UserCreate) -> UserDB:
+async def create_user(db: AsyncSession, user_data: UserCreate, is_admin: bool = False) -> UserDB:
     """Create a new user"""
     user_dict = user_data.model_dump(exclude={"password"})
     hashed_password = get_password_hash(user_data.password)
 
-    user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=False)
+    user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin)
     db.add(user)
     await db.commit()
     await db.refresh(user)
