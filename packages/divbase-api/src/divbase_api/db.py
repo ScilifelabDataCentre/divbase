@@ -2,8 +2,6 @@
 Handles connection between FastAPI and the postgresql db.
 
 # TODO:
-- Connection url should come from environment variables.
-- Echo bool should be configurable.
 - Add db health check
 - Add ability to create first admin user if none exist.
 - Read into async_sessionmaker params more e.g. pool_recycle.
@@ -13,13 +11,14 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from divbase_api.config import settings
 from divbase_api.models.base import Base
 
 # NOTE: The creation of the AsyncSessionLocal should only occur once, when the module is loaded.
 # AKA: Do not refactor to have these in functions.
 engine = create_async_engine(
-    url="postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db",
-    echo=False,
+    url=settings.database.url.get_secret_value(),
+    echo=settings.database.echo_db_output,
     pool_pre_ping=True,
 )
 AsyncSessionLocal = async_sessionmaker(
