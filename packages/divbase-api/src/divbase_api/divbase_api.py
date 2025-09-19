@@ -5,17 +5,21 @@ TODO: user_name would later be determined by the authentication system.
 """
 
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
 
+from divbase_api.config import settings
 from divbase_api.db import create_all_tables, engine, health_check_db
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.projects import projects_router
 from divbase_api.routes.users import users_router
 from divbase_worker.tasks import bcftools_pipe_task, sample_metadata_query_task, update_vcf_dimensions_task
+
+logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager that handles startup and shutdown of API server"""
     # startup
+    logger.info("Starting up DivBase API...")
+
     if not await health_check_db():
         raise ConnectionError("Could not connect to the database or db unhealthy. Exiting...")
     logger.info("Database connection healthy.")
