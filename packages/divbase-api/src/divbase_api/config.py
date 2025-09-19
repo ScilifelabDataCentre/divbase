@@ -18,7 +18,7 @@ from pydantic import SecretStr
 class DBSettings:
     """PostgreSQL database configuration settings."""
 
-    url: SecretStr = SecretStr(os.getenv("POSTGRES_URL", "NOT_SET"))
+    url: SecretStr = SecretStr(os.getenv("DATABASE_URL", "NOT_SET"))
     echo_db_output: bool = bool(os.getenv("DEBUG", "False") == "True")  # anything but "True" is considered False
 
 
@@ -43,16 +43,17 @@ class Settings:
         Validate all required settings are actually set.
         This means that later on in the codebase we don't have to check for any non set values, we can just assume they are set.
         """
-        required_fields = [self.flower.url, self.flower.user]
-        for setting in required_fields:
-            if setting == "NOT_SET":
-                raise ValueError(f"A required environment variable was not set: {setting}")
-
-        required_secret_fields = [self.database.url, self.flower.password]
-        for secret in required_secret_fields:
-            if secret.get_secret_value() == "NOT_SET":
-                # TODO - check if outputted error show the name of the missing variable or just *****
-                raise ValueError(f"A required secret environment variable was not set: {secret}")
+        required_fields = {
+            "FLOWER_URL": self.flower.url,
+            "FLOWER_USER": self.flower.user,
+            "DATABASE_URL": self.database.url,
+            "FLOWER_PASSWORD": self.flower.password,
+        }
+        for setting_name, setting in required_fields.items():
+            if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":
+                raise ValueError(f"A required secret environment variable was not set: {setting_name}")
+            if isinstance(setting, str) and setting == "NOT_SET":
+                raise ValueError(f"A required environment variable was not set: {setting_name}")
 
 
 # This instance can be imported and used throughout the application.
