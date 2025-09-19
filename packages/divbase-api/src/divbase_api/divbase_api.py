@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from divbase_api.config import settings
 from divbase_api.db import create_all_tables, engine, health_check_db
 from divbase_api.get_task_history import get_task_history
+from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
 from divbase_api.routes.projects import projects_router
 from divbase_api.routes.users import users_router
@@ -50,6 +51,7 @@ app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 
 # TODO - move below routes into routes dir when ready.
