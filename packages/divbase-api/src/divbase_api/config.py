@@ -15,6 +15,13 @@ from pydantic import SecretStr
 
 
 @dataclass
+class APISettings:
+    """API configuration settings."""
+
+    log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+
+@dataclass
 class DBSettings:
     """PostgreSQL database configuration settings."""
 
@@ -35,6 +42,7 @@ class FlowerSettings:
 class Settings:
     """Configuration settings for DivBase API."""
 
+    api: APISettings = field(default_factory=APISettings)
     database: DBSettings = field(default_factory=DBSettings)
     flower: FlowerSettings = field(default_factory=FlowerSettings)
 
