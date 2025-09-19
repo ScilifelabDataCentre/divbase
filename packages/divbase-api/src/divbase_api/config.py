@@ -39,12 +39,23 @@ class FlowerSettings:
 
 
 @dataclass
+class JWTSettings:
+    """JSON Web Token (JWT) configuration settings."""
+
+    secret_key: SecretStr = SecretStr(os.getenv("JWT_SECRET_KEY", "NOT_SET"))
+    algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    access_token_expires_mins: int = int(os.getenv("JWT_ACCESS_EXPIRES_MINS", 15))
+    refresh_token_expires_mins: int = int(os.getenv("JWT_REFRESH_EXPIRES_MINS", 60 * 24 * 7))  # 7 days
+
+
+@dataclass
 class Settings:
     """Configuration settings for DivBase API."""
 
     api: APISettings = field(default_factory=APISettings)
     database: DBSettings = field(default_factory=DBSettings)
     flower: FlowerSettings = field(default_factory=FlowerSettings)
+    jwt: JWTSettings = field(default_factory=JWTSettings)
 
     def __post_init__(self):
         """
@@ -52,10 +63,11 @@ class Settings:
         This means that later on in the codebase we don't have to check for any non set values, we can just assume they are set.
         """
         required_fields = {
+            "DATABASE_URL": self.database.url,
             "FLOWER_URL": self.flower.url,
             "FLOWER_USER": self.flower.user,
-            "DATABASE_URL": self.database.url,
             "FLOWER_PASSWORD": self.flower.password,
+            "JWT_SECRET_KEY": self.jwt.secret_key,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":
