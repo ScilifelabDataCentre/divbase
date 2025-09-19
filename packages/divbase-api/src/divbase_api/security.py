@@ -5,8 +5,14 @@ bcrypt recommended by FastAPI docs: https://fastapi.tiangolo.com/yo/tutorial/sec
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import jwt
 from passlib.context import CryptContext
 from pydantic import SecretStr
+
+from divbase_api.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -17,3 +23,27 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: SecretStr) -> str:
     return pwd_context.hash(password.get_secret_value())
+
+
+def create_access_token(subject: str | Any) -> str:
+    """
+    Create a new access token for a user.
+
+    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt.access_token_expires_mins)
+    to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    return encoded_jwt
+
+
+def create_refresh_token(subject: str | Any) -> str:
+    """
+    Create a new refresh token for a user.
+
+    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt.refresh_token_expires_mins)
+    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    return encoded_jwt
