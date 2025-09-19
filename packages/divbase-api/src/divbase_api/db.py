@@ -9,6 +9,7 @@ Handles connection between FastAPI and the postgresql db.
 
 from typing import AsyncGenerator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from divbase_api.config import settings
@@ -35,6 +36,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+
+async def health_check_db() -> bool:
+    """Check if the database connection is healthy."""
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 
 async def create_all_tables() -> None:
