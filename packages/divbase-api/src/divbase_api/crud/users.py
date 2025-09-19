@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate
+from divbase_api.security import get_password_hash
 
 
 async def create_user(db: AsyncSession, user_data: UserCreate) -> UserDB:
     """Create a new user"""
     user_dict = user_data.model_dump(exclude={"password"})
-    hashed_password = user_data.password.get_secret_value() + "_notreallyhashed"  # TODO: Replace with real hashing
+    hashed_password = get_password_hash(user_data.password)
 
     user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=False)
     db.add(user)
@@ -24,6 +25,13 @@ async def create_user(db: AsyncSession, user_data: UserCreate) -> UserDB:
 async def get_user_by_id(db: AsyncSession, id: int) -> UserDB | None:
     """Get user by ID."""
     return await db.get(entity=UserDB, ident=id)
+
+
+async def get_user_by_email(db: AsyncSession, email: str) -> UserDB | None:
+    """Get user by email."""
+    stmt = select(UserDB).where(UserDB.email == email)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 async def get_all_users(db: AsyncSession, limit: int = 1000) -> list[UserDB] | list[None]:
