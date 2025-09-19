@@ -47,3 +47,21 @@ def create_refresh_token(subject: str | Any) -> str:
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
     return encoded_jwt
+
+
+def verify_token(token: str, desired_token_type: str) -> int | None:
+    """
+    Verify and decode JWT token. If succesful return the user id, else None.
+
+    If verification fails we should pass not any error information/context back.
+    """
+    try:
+        payload = jwt.decode(
+            jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
+        )
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+    if payload.get("type") != desired_token_type:
+        return None
+    return int(payload.get("sub"))
