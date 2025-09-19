@@ -6,11 +6,12 @@ TODO: user_name would later be determined by the authentication system.
 
 import logging
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
 
-from divbase_api.db import create_all_tables, engine
+from divbase_api.db import create_all_tables, engine, health_check_db
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.projects import projects_router
 from divbase_api.routes.users import users_router
@@ -20,10 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Creating all tables...")
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan context manager that handles startup and shutdown of API server"""
+    # startup
+    if not await health_check_db():
+        raise ConnectionError("Could not connect to the database or db unhealthy. Exiting...")
+    logger.info("Database connection healthy.")
+
     await create_all_tables()
+    logger.info("Creating all db tables...")
+
     yield
+
     # cleanup
     logger.info("Shutting down, closing any DB connections")
     await engine.dispose()
