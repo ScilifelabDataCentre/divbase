@@ -34,8 +34,11 @@ async def get_user_by_email(db: AsyncSession, email: str) -> UserDB | None:
     return result.scalar_one_or_none()
 
 
-async def get_all_users(db: AsyncSession, limit: int = 1000) -> list[UserDB] | list[None]:
+async def get_all_users(db: AsyncSession, limit: int = 1000, admins_only: bool = False) -> list[UserDB] | list[None]:
     """Get all users."""
-    stmt = select(UserDB).limit(limit)
+    if admins_only:
+        stmt = select(UserDB).where(UserDB.is_admin).limit(limit)
+    else:
+        stmt = select(UserDB).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())

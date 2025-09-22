@@ -54,6 +54,8 @@ def verify_token(token: str, desired_token_type: str) -> int | None:
     Verify and decode JWT token. If succesful return the user id, else None.
 
     If verification fails we should pass not any error information/context back.
+
+    Expiration time is automatically verified in jwt.decode() -> raises jwt.ExpiredSignatureError
     """
     try:
         payload = jwt.decode(

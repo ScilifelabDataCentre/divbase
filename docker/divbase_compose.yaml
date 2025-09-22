@@ -134,6 +134,8 @@ services:
     - CELERY_RESULT_BACKEND=redis://redis:6379/0
     - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+    - FIRST_ADMIN_EMAIL=admin@divbase.com
+    - FIRST_ADMIN_PASSWORD=badpassword
     depends_on:
       rabbitmq:
         condition: service_healthy

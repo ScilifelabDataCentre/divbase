@@ -19,6 +19,8 @@ class APISettings:
     """API configuration settings."""
 
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
+    first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
 
 
 @dataclass
@@ -26,7 +28,7 @@ class DBSettings:
     """PostgreSQL database configuration settings."""
 
     url: SecretStr = SecretStr(os.getenv("DATABASE_URL", "NOT_SET"))
-    echo_db_output: bool = bool(os.getenv("DEBUG", "False") == "True")  # anything but "True" is considered False
+    echo_db_output: bool = bool(os.getenv("DB_ECHO", "False") == "True")  # anything but "True" is considered False
 
 
 @dataclass

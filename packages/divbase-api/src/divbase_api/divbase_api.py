@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import Depends, FastAPI
 
 from divbase_api.config import settings
-from divbase_api.db import create_all_tables, engine, health_check_db
+from divbase_api.db import create_all_tables, create_first_admin_user, engine, health_check_db
 from divbase_api.deps import get_current_user
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
@@ -36,9 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if not await health_check_db():
         raise ConnectionError("Could not connect to the database or db unhealthy. Exiting...")
     logger.info("Database connection healthy.")
-
     await create_all_tables()
-    logger.info("Creating all db tables...")
+    await create_first_admin_user()
+    logger.info("DivBase API startup events complete.")
 
     yield
 
