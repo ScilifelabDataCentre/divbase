@@ -17,3 +17,15 @@ class WebLoginResponse(BaseModel):
     """Response model for web login endpoint."""
 
     pass  # TODO
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request model for refresh token endpoint."""
+
+    refresh_token: str = Field(..., description="Bearer refresh token for obtaining a new access token")
+
+
+class RefreshTokenResponse(BaseModel):
+    """Response model for refresh token endpoint."""
+
+    access_token: str = Field(..., description="Bearer access token for authentication")

@@ -15,11 +15,15 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import authenticate_user
-from divbase_api.crud.users import create_user, get_user_by_email
+from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id
 from divbase_api.db import get_db
-from divbase_api.schemas.auth import CLILoginResponse
+from divbase_api.schemas.auth import (
+    CLILoginResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+)
 from divbase_api.schemas.users import UserCreate
-from divbase_api.security import create_access_token, create_refresh_token
+from divbase_api.security import create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,37 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
     )
 
 
+@auth_router.post("/refresh", response_model=RefreshTokenResponse, status_code=status.HTTP_200_OK)
+async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Refresh token endpoint.
+
+    Creates a new access token using the refresh token.
+    Unlike access token pathway, refresh token validates a user still exists and is still active.
+
+    TODO: Decided if refresh token should not also be refreshed here.
+    """
+
+    user_id = verify_token(token=refresh_token.refresh_token, desired_token_type="refresh")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token, please log in again",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(subject=user.id)
+    return RefreshTokenResponse(access_token=access_token)
+
+
 @auth_router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user_endpoint(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """
@@ -71,3 +106,9 @@ async def register_user_endpoint(user_data: UserCreate, db: AsyncSession = Depen
     await create_user(db, user_data, is_admin=False)
     logger.info(f"New user registered: {user_data.email}")
     return {"message": "Registration successful"}
+
+
+@auth_router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout_endpoint():
+    # TODO
+    pass
