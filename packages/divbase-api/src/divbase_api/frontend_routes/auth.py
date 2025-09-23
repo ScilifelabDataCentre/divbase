@@ -64,7 +64,7 @@ async def post_login(
         value=access_token,
         max_age=settings.jwt.access_token_expires_seconds,
         httponly=True,
-        secure=False,  # TODO, set to True in Prod.
+        secure=True,
         samesite="lax",
     )
 
@@ -73,7 +73,7 @@ async def post_login(
         value=refresh_token,
         max_age=settings.jwt.refresh_token_expires_seconds,
         httponly=True,
-        secure=False,  # TODO, set to True in Prod.
+        secure=True,
         samesite="lax",
     )
 

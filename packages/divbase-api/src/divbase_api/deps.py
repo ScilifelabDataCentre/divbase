@@ -31,16 +31,15 @@ async def get_current_user_from_cookie(
     """
     Get user from the JWT access token stored inside the httponly cookie.
     """
-    logger.info("Getting current user from cookie")
+    logger.debug("Getting current user from cookie")
     if not access_token and not refresh_token:
-        logger.warning("No access or refresh token found")
         return None
 
     if access_token:
-        logger.info("Getting current user from access token")
+        logger.debug("Getting current user from access token")
         user_id = verify_token(token=access_token, desired_token_type=TokenType.ACCESS)
         if user_id:
-            logger.info(f"Found user ID {user_id} from access token")
+            logger.debug(f"Found user ID {user_id} from access token")
             user = await get_user_by_id(db=db, id=user_id)
             if not user or not user.is_active:
                 return None
@@ -56,6 +55,8 @@ async def get_current_user_from_cookie(
         if not user or not user.is_active:
             return None
 
+    logger.debug(f"Found user ID {user_id} from refresh token, issuing new access token")
+
     if response:
         new_access_token = create_access_token(subject=user.id)
         response.set_cookie(
@@ -63,7 +64,7 @@ async def get_current_user_from_cookie(
             value=new_access_token,
             max_age=settings.jwt.access_token_expires_seconds,
             httponly=True,
-            secure=False,  # TODO, set to True in Prod.
+            secure=True,
             samesite="lax",
         )
     return user

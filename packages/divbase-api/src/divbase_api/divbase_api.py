@@ -22,6 +22,7 @@ from divbase_api.db import (
 from divbase_api.deps import get_current_user
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
+from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
@@ -67,6 +68,7 @@ app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_core_router, prefix="", tags=["frontend"])
 app.include_router(fr_auth_router, prefix="/auth", tags=["frontend", "auth"])
+app.include_router(fr_profile_router, prefix="/profile", tags=["frontend", "profile"])
 
 
 # TODO - move below routes into routes dir when ready.
