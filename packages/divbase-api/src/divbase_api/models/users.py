@@ -22,7 +22,7 @@ class UserDB(BaseDBModel):
 
     __tablename__ = "user"
 
-    name: Mapped[str] = mapped_column(String(100), index=True, unique=True)
+    name: Mapped[str] = mapped_column(String(100), index=True)
     email: Mapped[str] = mapped_column(String(50), index=True, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(128))  # supports up to SHA-512
 
