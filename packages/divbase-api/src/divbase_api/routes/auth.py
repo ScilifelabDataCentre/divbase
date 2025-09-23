@@ -15,14 +15,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import authenticate_user
-from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id
+from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.schemas.auth import (
     CLILoginResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
-from divbase_api.schemas.users import UserCreate
 from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
@@ -90,22 +89,6 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
 
     access_token = create_access_token(subject=user.id)
     return RefreshTokenResponse(access_token=access_token)
-
-
-@auth_router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register_user_endpoint(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """
-    Register a new user.
-
-    TODO - this route might later be removed and we will only have a frontend route for registration.
-    """
-    existing_user = await get_user_by_email(db, user_data.email)
-    if existing_user:  # Not recommended to specify why failed, just say failed.
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registration failed")
-
-    await create_user(db, user_data, is_admin=False)
-    logger.info(f"New user registered: {user_data.email}")
-    return {"message": "Registration successful"}
 
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)

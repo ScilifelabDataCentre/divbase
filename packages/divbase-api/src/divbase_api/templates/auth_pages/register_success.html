@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Registration Successful - DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="py-4">
+                <div class="card shadow-sm border-success">
+                    <div class="card-body p-4 text-center">
+                        <div class="mb-4">
+                            <i class="bi bi-check-circle-fill display-1 text-success"></i>
+                        </div>
+                        
+                        <h2 class="text-success mb-3">Registration Successful!</h2>
+                        
+                        <p class="lead mb-4">
+                            Welcome to DivBase, <strong>{{ user_name }}</strong>!
+                        </p>
+                        
+                        <div class="alert alert-success" role="alert">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Your account has been created with email: <strong>{{ user_email }}</strong>
+                        </div>
+                        
+                        <p class="text-muted mb-4">
+                            You can now sign in to your account
+                        </p>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                            <a href="/auth/login" class="btn btn-primary btn-lg">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In Now
+                            </a>
+                            <a href="/" class="btn btn-outline-secondary">
+                                <i class="bi bi-house me-2"></i>Go to home page
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
