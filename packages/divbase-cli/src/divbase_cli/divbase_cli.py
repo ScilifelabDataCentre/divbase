@@ -32,7 +32,7 @@ def load_cli_env_vars() -> None:
     The e2e cli tests use the "app" directly (https://typer.tiangolo.com/tutorial/testing/) as recommended.
     They therefore bypass this function as expected.
     """
-    ALLOWED_ENVS = ["local", "scilifelab2dev", "scilifelab2prod"]
+    ALLOWED_ENVS = ["local", "scilifelab2dev", "scilifelab2prod", "local-k3d"]
     env_name = os.getenv("DIVBASE_ENV")
     if not env_name:
         dotenv.load_dotenv(dotenv_path=Path(".env"), override=True)
