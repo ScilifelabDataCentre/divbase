@@ -23,7 +23,7 @@ from divbase_api.schemas.auth import (
     RefreshTokenResponse,
 )
 from divbase_api.schemas.users import UserCreate
-from divbase_api.security import create_access_token, create_refresh_token, verify_token
+from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
     TODO: Decided if refresh token should not also be refreshed here.
     """
 
-    user_id = verify_token(token=refresh_token.refresh_token, desired_token_type="refresh")
+    user_id = verify_token(token=refresh_token.refresh_token, desired_token_type=TokenType.REFRESH)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

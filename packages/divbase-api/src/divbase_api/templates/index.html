@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+
+{% block title %}DivBase Home page{% endblock %}
+
+
+{% block content %}
+
+<h1>DivBase Home page</h1>
+
+<p>Welcome to DivBase</p>
+
+{% if user %}
+    <p>Hello, {{ user.email }}!</p>
+    <p>You're logged in!</p>
+{% else %}
+    <p>You're not logged in.</p>
+{% endif %}
+
+
+{% endblock %}

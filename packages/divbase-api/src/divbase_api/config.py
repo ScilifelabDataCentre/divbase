@@ -46,8 +46,8 @@ class JWTSettings:
 
     secret_key: SecretStr = SecretStr(os.getenv("JWT_SECRET_KEY", "NOT_SET"))
     algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
-    access_token_expires_mins: int = int(os.getenv("JWT_ACCESS_EXPIRES_MINS", 15))
-    refresh_token_expires_mins: int = int(os.getenv("JWT_REFRESH_EXPIRES_MINS", 60 * 24 * 7))  # 7 days
+    access_token_expires_seconds: int = int(os.getenv("JWT_ACCESS_EXPIRES_SECONDS", 15 * 60))  # 15 mins
+    refresh_token_expires_seconds: int = int(os.getenv("JWT_REFRESH_EXPIRES_SECONDS", 60 * 60 * 24 * 7))  # 7 days
 
 
 @dataclass
