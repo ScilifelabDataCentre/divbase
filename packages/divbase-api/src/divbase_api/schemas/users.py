@@ -24,7 +24,11 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     name: str | None = Field(None, min_length=3, max_length=100)
     email: EmailStr | None = None
+
+
+class UserPasswordUpdate(BaseModel):
     password: SecretStr | None = Field(None, min_length=8, max_length=100)
+    confirm_password: SecretStr | None = Field(None, min_length=8, max_length=100)
 
 
 class UserResponse(UserBase):
