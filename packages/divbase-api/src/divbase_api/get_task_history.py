@@ -1,49 +1,34 @@
 import logging
-import os
+from typing import Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from divbase_api.config import settings
 
-FLOWER_URL = os.environ.get("FLOWER_HOST", "http://localhost:5555")
+logger = logging.getLogger(__name__)
 
 
 def get_task_history(task_id: str = None, display_limit: int = 10) -> list:
     """
     Get the task history from the Flower API.
 
+    TODO - consider split this into two functions - one for single task, one for list of tasks.
+    TODO - consider a more defined return type than list, e.g. dataclass called TaskItem with fields for id, state, timestamp.
+        This would then involve changes to the CLI code too, which currently parses this nested dict.
+
     Returns a list of tasks.
     """
-
-    flower_user = os.environ.get("FLOWER_USER")
-    flower_password = os.environ.get("FLOWER_PASSWORD")
-    divbase_user = os.environ.get("DIVBASE_USER")
-
-    # TODO - these should be considered required, not warnings.
-    if not flower_user:
-        logger.warning("FLOWER_USER not provided or set in environment")
-    if not flower_password:
-        logger.warning("FLOWER_PASSWORD not provided or set in environment")
-    if not divbase_user:
-        logger.warning("DIVBASE_USER not set in environment")
-
     if task_id:
-        request_url = f"{FLOWER_URL}/api/task/info/{task_id}"
+        request_url = f"{settings.flower.url}/api/task/info/{task_id}"
     else:
         # TODO - if multiple users, this will get tasks from all users and not give correct number of results back.
         api_limit = min(
             100, display_limit * 5
         )  # return more tasks than requested by the --limit arg to allow for downstream sorting
-        request_url = f"{FLOWER_URL}/api/tasks?limit={api_limit}"
+        request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
 
-    auth = (flower_user, flower_password)
-    with httpx.Client() as client:
-        response = client.get(request_url, auth=auth, timeout=3.0)
+    tasks = _make_flower_request(request_url)
 
-    if response.status_code != 200:
-        print(f"Failed to fetch tasks for task ID {task_id}. Status code: {response.status_code}")
-
-    tasks = response.json()
     task_items = []
     if task_id:
         task_items = [(task_id, tasks, parse_timestamp(tasks.get("started", 0)))]
@@ -60,3 +45,26 @@ def parse_timestamp(timestamp):
     if isinstance(timestamp, str) and timestamp.replace(".", "").isdigit():
         return float(timestamp)
     return timestamp
+
+
+def _make_flower_request(request_url: str) -> dict[str, Any]:
+    """
+    Make a request to the Flower API for info about tasks.
+
+    Returns the JSON response as a dictionary.
+    If multiple tasks returned, you get back a nested dict, where outer keys are task IDs.
+    """
+    with httpx.Client() as client:
+        response = client.get(
+            url=request_url,
+            timeout=3.0,
+            auth=(
+                settings.flower.user,
+                settings.flower.password.get_secret_value(),
+            ),
+        )
+
+    if response.status_code != 200:
+        raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")
+
+    return response.json()
