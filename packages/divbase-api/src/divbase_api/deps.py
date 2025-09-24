@@ -46,14 +46,16 @@ async def get_current_user_from_cookie(
             return user
 
     # now try refresh token, if this is valid, we give user a new access token
-    if refresh_token:
-        logger.info("Getting current user from refresh token")
-        user_id = verify_token(token=refresh_token, desired_token_type=TokenType.REFRESH)
-        if not user_id:
-            return None
-        user = await get_user_by_id(db=db, id=user_id)
-        if not user or not user.is_active:
-            return None
+    if not refresh_token:
+        return None
+
+    logger.info("Getting current user from refresh token")
+    user_id = verify_token(token=refresh_token, desired_token_type=TokenType.REFRESH)
+    if not user_id:
+        return None
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user or not user.is_active:
+        return None
 
     logger.debug(f"Found user ID {user_id} from refresh token, issuing new access token")
 
