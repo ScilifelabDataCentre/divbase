@@ -126,7 +126,7 @@ This will deploy the API, job system and MinIO (S3) instance locally. Using `com
 
 Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/api/v1/docs> to test out some of API commands directly.
 
-There is now a very simple DivBase frontend running on http://localhost:8000. Frontend is part of the FastAPI app deployment. All API routes are appended with /api/v1 to avoid collisions. Frontend returns HTML etc... directly to browser via Jinja2 templating.  
+There is now a very simple DivBase frontend running on <http://localhost:8000>. Frontend is part of the FastAPI app deployment. All API routes are appended with /api/v1 to avoid collisions. Frontend returns HTML etc... directly to browser via Jinja2 templating.
 
 ### 5. Running tests
 
