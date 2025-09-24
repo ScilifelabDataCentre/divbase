@@ -59,7 +59,7 @@ def create_refresh_token(subject: str | Any) -> str:
 
 def verify_token(token: str, desired_token_type: TokenType) -> int | None:
     """
-    Verify and decode JWT token. If succesful return the user id, else None.
+    Verify and decode JWT token. If successful return the user id, else None.
 
     If verification fails we should pass not any error information/context back.
 
