@@ -88,6 +88,21 @@ async def get_current_user_from_cookie(
     return user
 
 
+async def get_current_admin_user_from_cookie(
+    current_user: Annotated[UserDB, Depends(get_current_user_from_cookie)],
+) -> UserDB:
+    """
+    Verify current user has admin access.
+
+    Note: This function works by using a sub-dependency to get the current user,
+    so all the checks in the sub-dependancy function are ran when you use this dependency.
+    (see here: https://fastapi.tiangolo.com/yo/advanced/security/oauth2-scopes/#dependency-tree-and-scopes)
+    """
+    if not current_user.is_admin:
+        raise AuthorizationError("Admin access required")
+    return current_user
+
+
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: AsyncSession = Depends(get_db)) -> UserDB:
     """
     Get current user from JWT Access token
@@ -99,8 +114,8 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: As
         raise AuthenticationError("Authentication required")
 
     user = await get_user_by_id(db=db, id=user_id)
-    if not user.is_active:
-        raise AuthenticationError("Account is inactive")
+    if not user or not user.is_active:
+        raise AuthenticationError("Account does not exist or is inactive")
 
     return user
 

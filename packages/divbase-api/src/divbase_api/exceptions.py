@@ -1,0 +1,29 @@
+"""
+DivBase API custom exceptions.
+
+All exceptions in this module should inherit from DivBaseAPIException, so we can catch for that externally.
+"""
+
+from fastapi import status
+
+
+class DivBaseAPIException(Exception):
+    """Base exception for all DivBase errors."""
+
+    def __init__(self, message: str, status_code: int, headers: dict[str, str] | None = None):
+        self.message = message
+        self.status_code = status_code
+        self.headers = headers or {}
+        super().__init__(self.message)
+
+
+class AuthenticationError(DivBaseAPIException):
+    def __init__(self, message: str = "Authentication required"):
+        default_headers = {"WWW-Authenticate": "Bearer"}
+        super().__init__(message=message, status_code=status.HTTP_401_UNAUTHORIZED, headers=default_headers)
+
+
+class AuthorizationError(DivBaseAPIException):
+    def __init__(self, message: str = "Authorization required"):
+        default_headers = {"WWW-Authenticate": "Bearer"}
+        super().__init__(message=message, status_code=status.HTTP_403_FORBIDDEN, headers=default_headers)

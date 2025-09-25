@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 
 from divbase_api.config import settings
 from divbase_api.db import (
@@ -19,7 +19,8 @@ from divbase_api.db import (
     engine,
     health_check_db,
 )
-from divbase_api.deps import get_current_user
+from divbase_api.exception_handlers import register_exception_handlers
+from divbase_api.frontend_routes.admin import fr_admin_router
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
@@ -66,18 +67,16 @@ app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"]
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
-app.include_router(fr_core_router, prefix="", tags=["frontend"])
 app.include_router(fr_auth_router, prefix="/auth", tags=["frontend", "auth"])
+app.include_router(fr_admin_router, prefix="/admin", tags=["frontend", "admin"])
+app.include_router(fr_core_router, prefix="", tags=["frontend"])
 app.include_router(fr_profile_router, prefix="/profile", tags=["frontend", "profile"])
 
 
+register_exception_handlers(app)
+
+
 # TODO - move below routes into routes dir when ready.
-@app.get("/logged_in")
-async def check_logged_in_route(current_user=Depends(get_current_user)):
-    """Test route to check if user is logged in and get their info."""
-    return {"message": f"You are logged in as {current_user.name} with email: {current_user.email}"}
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
