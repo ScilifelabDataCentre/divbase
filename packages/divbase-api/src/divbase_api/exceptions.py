@@ -27,3 +27,13 @@ class AuthorizationError(DivBaseAPIException):
     def __init__(self, message: str = "Authorization required"):
         default_headers = {"WWW-Authenticate": "Bearer"}
         super().__init__(message=message, status_code=status.HTTP_403_FORBIDDEN, headers=default_headers)
+
+
+class UserRegistrationError(DivBaseAPIException):
+    def __init__(
+        self,
+        message: str,
+        user_message: str = "Registration failed. Please try again.",  # given to end user, generic
+    ):
+        self.user_message = user_message
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)

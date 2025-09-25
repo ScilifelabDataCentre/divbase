@@ -17,7 +17,8 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from divbase_api.exceptions import AuthenticationError, AuthorizationError
+from divbase_api.exceptions import AuthenticationError, AuthorizationError, UserRegistrationError
+from divbase_api.frontend_routes.core import templates
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,39 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
         return RedirectResponse(url="/auth/login", status_code=status.HTTP_302_FOUND)
 
 
+async def user_registration_error_handler(request: Request, exc: UserRegistrationError):
+    logger.error(f"User registration failed for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.user_message, "type": "user_registration_error"},
+        )
+
+    if request.url.path.startswith("/admin/"):
+        # Admin user creation page
+        return templates.TemplateResponse(
+            request=request,
+            name="admin_pages/create_user.html",
+            context={
+                "request": request,
+                "error": exc.user_message,
+            },
+            status_code=exc.status_code,
+        )
+
+    # Public registration page
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/register.html",
+        context={
+            "request": request,
+            "error": exc.user_message,
+        },
+        status_code=exc.status_code,
+    )
+
+
 def register_exception_handlers(app: FastAPI):
     """
     Register all exception handlers with FastAPI app.
@@ -60,3 +94,4 @@ def register_exception_handlers(app: FastAPI):
     """
     app.add_exception_handler(AuthenticationError, authentication_error_handler)  # type: ignore
     app.add_exception_handler(AuthorizationError, authorization_error_handler)  # type: ignore
+    app.add_exception_handler(UserRegistrationError, user_registration_error_handler)  # type: ignore
