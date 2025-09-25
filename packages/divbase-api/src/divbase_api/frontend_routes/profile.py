@@ -6,7 +6,7 @@ These routes will return Template Responses.
 TODO: Currently only handle GET requests.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,12 +23,9 @@ fr_profile_router = APIRouter()
 async def user_profile_endpoint(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB | None = Depends(get_current_user_from_cookie),
+    current_user: UserDB = Depends(get_current_user_from_cookie),
 ):
     """Render the user's profile page with their information."""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     return templates.TemplateResponse(
         request=request,
         name="profile_pages/index.html",
@@ -43,12 +40,9 @@ async def user_profile_endpoint(
 async def get_edit_user_profile_endpoint(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB | None = Depends(get_current_user_from_cookie),
+    current_user: UserDB = Depends(get_current_user_from_cookie),
 ):
     """Render the edit user's profile page."""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     return templates.TemplateResponse(
         request=request,
         name="profile_pages/edit_profile.html",

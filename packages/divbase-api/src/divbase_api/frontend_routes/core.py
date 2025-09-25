@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from divbase_api.deps import get_current_user_from_cookie
+from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserResponse
 
@@ -24,7 +24,7 @@ templates = Jinja2Templates(directory=templates_dir.resolve())
 
 
 @fr_core_router.get("/", response_class=HTMLResponse)
-async def get_home_page(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie)):
+async def get_home_page(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
     """Render the home page."""
     if not current_user:
         return templates.TemplateResponse(
