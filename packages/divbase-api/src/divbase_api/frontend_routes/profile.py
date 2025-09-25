@@ -8,9 +8,7 @@ TODO: Currently only handle GET requests.
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
@@ -22,7 +20,6 @@ fr_profile_router = APIRouter()
 @fr_profile_router.get("/", response_class=HTMLResponse)
 async def user_profile_endpoint(
     request: Request,
-    db: AsyncSession = Depends(get_db),
     current_user: UserDB = Depends(get_current_user_from_cookie),
 ):
     """Render the user's profile page with their information."""
@@ -31,7 +28,7 @@ async def user_profile_endpoint(
         name="profile_pages/index.html",
         context={
             "request": request,
-            "user": UserResponse.model_validate(current_user),
+            "current_user": UserResponse.model_validate(current_user),
         },
     )
 
@@ -39,7 +36,6 @@ async def user_profile_endpoint(
 @fr_profile_router.get("/edit", response_class=HTMLResponse)
 async def get_edit_user_profile_endpoint(
     request: Request,
-    db: AsyncSession = Depends(get_db),
     current_user: UserDB = Depends(get_current_user_from_cookie),
 ):
     """Render the edit user's profile page."""
@@ -48,6 +44,6 @@ async def get_edit_user_profile_endpoint(
         name="profile_pages/edit_profile.html",
         context={
             "request": request,
-            "user": UserResponse.model_validate(current_user),
+            "current_user": UserResponse.model_validate(current_user),
         },
     )

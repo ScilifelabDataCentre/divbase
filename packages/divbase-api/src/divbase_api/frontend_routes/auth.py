@@ -57,7 +57,7 @@ async def post_login(
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"user": UserResponse.model_validate(user)},
+        context={"current_user": UserResponse.model_validate(user)},
     )
 
     response.set_cookie(
@@ -88,7 +88,7 @@ async def post_logout(request: Request):
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"user": None},
+        context={"current_user": None},
     )
 
     response.delete_cookie(TokenType.ACCESS.value)
@@ -104,7 +104,7 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={"request": request, "user": UserResponse.model_validate(current_user)},
+            context={"request": request, "current_user": UserResponse.model_validate(current_user)},
         )
     return templates.TemplateResponse(request=request, name="auth_pages/register.html")
 

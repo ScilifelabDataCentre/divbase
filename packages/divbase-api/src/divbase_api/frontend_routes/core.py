@@ -30,10 +30,10 @@ async def get_home_page(request: Request, current_user: UserDB | None = Depends(
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={"request": request, "user": None},
+            context={"request": request, "current_user": None},
         )
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "user": UserResponse.model_validate(current_user)},
+        context={"request": request, "current_user": UserResponse.model_validate(current_user)},
     )

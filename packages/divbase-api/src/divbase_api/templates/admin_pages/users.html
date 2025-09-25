@@ -91,7 +91,7 @@
                                         </button>
                                     </li>
                                     {% endif %}
-                                    {% if user_item.id != user.id %}
+                                    {% if user_item.id != current_user.id %}
                                     <li>
                                         <button class="dropdown-item text-danger" 
                                                 onclick="confirmDelete('{{ user_item.id }}', '{{ user_item.name }}')">

@@ -14,7 +14,7 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/">Home</a>
                 </li>
-                {% if user %}
+                {% if current_user %}
                 <li class="nav-item">
                     <a class="nav-link" href="/projects">Projects</a>
                 </li>
@@ -22,16 +22,16 @@
             </ul>
             
             <ul class="navbar-nav">
-                {% if user %}
+                {% if current_user %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle me-1"></i>{{ user.email }}
+                            <i class="bi bi-person-circle me-1"></i>{{ current_user.email }}
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="/profile">
                                 <i class="bi bi-person me-2"></i>Profile
                             </a></li>
-                            {% if user.is_admin %}
+                            {% if current_user.is_admin %}
                             <li><a class="dropdown-item" href="/admin">
                                 <i class="bi bi-gear me-2"></i>Admin Panel
                             </a></li>

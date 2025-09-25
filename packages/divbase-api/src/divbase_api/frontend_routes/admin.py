@@ -28,7 +28,7 @@ fr_admin_router = APIRouter()
 @fr_admin_router.get("/", response_class=HTMLResponse)
 async def admin_index_endpoint(
     request: Request,
-    current_admin_user: UserDB = Depends(get_current_admin_user_from_cookie),
+    current_admin: UserDB = Depends(get_current_admin_user_from_cookie),
     db: AsyncSession = Depends(get_db),
 ):
     """Render the admin index page."""
@@ -38,7 +38,7 @@ async def admin_index_endpoint(
         name="admin_pages/index.html",
         context={
             "request": request,
-            "user": UserResponse.model_validate(current_admin_user),
+            "current_user": UserResponse.model_validate(current_admin),
             "stats": SystemStatsResponse.model_validate(stats),
         },
     )

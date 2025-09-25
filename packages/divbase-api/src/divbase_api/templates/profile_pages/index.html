@@ -25,16 +25,16 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label text-muted">Full Name</label>
-                            <p class="form-control-plaintext">{{ user.name }}</p>
+                            <p class="form-control-plaintext">{{ current_user.name }}</p>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label text-muted">Email Address</label>
-                            <p class="form-control-plaintext">{{ user.email }}</p>
+                            <p class="form-control-plaintext">{{ current_user.email }}</p>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label text-muted">Account Type</label>
                             <p class="form-control-plaintext">
-                                {% if user.is_admin %}
+                                {% if current_user.is_admin %}
                                     <span class="badge bg-primary">Administrator</span>
                                 {% else %}
                                     <span class="badge bg-secondary">User</span>
@@ -43,7 +43,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label text-muted">Member Since</label>
-                            <p class="form-control-plaintext">{{ user.created_at.strftime('%B %d, %Y') }}</p>
+                            <p class="form-control-plaintext">{{ current_user.created_at.strftime('%B %d, %Y') }}</p>
                         </div>
                     </div>
                 </div>
