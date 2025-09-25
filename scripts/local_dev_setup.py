@@ -183,6 +183,10 @@ if __name__ == "__main__":
     parser.add_argument("--k3d", action="store_true", help="Use k3d cluster settings")
     args = parser.parse_args()
 
+    MINIO_URL = "http://localhost:9000"
+    API_URL = "http://localhost:8000"
+    S3_URL = "http://localhost:9000"
+
     if args.k3d:
         PROJECTS = K3D_PROJECTS
         ## for when different ports are needed for k3d
@@ -192,9 +196,6 @@ if __name__ == "__main__":
         ENV = "local-k3d"
     else:
         PROJECTS = COMPOSE_PROJECTS
-        MINIO_URL = "http://localhost:9000"
-        API_URL = "http://localhost:8000"
-        S3_URL = "http://localhost:9000"
         ENV = "local"
 
     setup_minio_buckets(PROJECTS, MINIO_URL, "minioadmin", "badpassword")
