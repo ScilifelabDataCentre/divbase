@@ -1,5 +1,7 @@
 """
 A helper script to set up some buckets and add them to user config for DivBase local development.
+Can be used with both the local docker compose setup (docker/divbase_compose.yaml) and the
+local k3d setup (stored in a separate private repository).
 
 ### This script will:
 1. Create some buckets in Minio and populate them with test data from the fixtures directory.
@@ -7,7 +9,8 @@ A helper script to set up some buckets and add them to user config for DivBase l
 
 ### Requirements
 
-1. Have the local docker compose stack running and healthy:
+#### Docker compose:
+Have the local docker compose stack running and healthy:
 
 docker compose -f docker/divbase_compose.yaml up -d
 
@@ -17,9 +20,21 @@ docker compose -f docker/divbase_compose.yaml ps
 # You could consider this one liner to first clean (DELETE ALL VOLUMES) and start fresh:
 docker compose -f docker/divbase_compose.yaml down -v && docker compose -f docker/divbase_compose.yaml up --build -d
 
+#### k3d:
+Have the local k3d stack running and all pods ready as described in the private repository.
+
+# to check if all healthy;
+kubectl get pods
+
+# the add the --k3d flag to the command below.
+
 ### Usage:
 Once all containers are healthy, you can run this script with:
 uv run scripts/local_dev_setup.py # (or python scripts/local_dev_setup.py)
+
+Alternatively, add the --k3d flag if using the k3d setup, e.g.
+python scripts/local_dev_setup.py --k3d
+
 """
 
 import argparse
@@ -170,9 +185,10 @@ if __name__ == "__main__":
 
     if args.k3d:
         PROJECTS = K3D_PROJECTS
-        MINIO_URL = "http://localhost:30900"
-        API_URL = "http://localhost:30800"
-        S3_URL = "http://localhost:30900"
+        ## for when different ports are needed for k3d
+        # MINIO_URL = "http://localhost:30900"
+        # API_URL = "http://localhost:30800"
+        # S3_URL = "http://localhost:30900"
         ENV = "local-k3d"
     else:
         PROJECTS = COMPOSE_PROJECTS
