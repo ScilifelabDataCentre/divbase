@@ -21,6 +21,8 @@ from divbase_api.db import (
 )
 from divbase_api.exception_handlers import register_exception_handlers
 from divbase_api.frontend_routes.admin import fr_admin_router
+from divbase_api.frontend_routes.admin_projects import fr_admin_projects_router
+from divbase_api.frontend_routes.admin_users import fr_admin_users_router
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
@@ -69,6 +71,8 @@ app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_auth_router, prefix="/auth", tags=["frontend", "auth"])
 app.include_router(fr_admin_router, prefix="/admin", tags=["frontend", "admin"])
+app.include_router(fr_admin_projects_router, prefix="/admin/projects", tags=["frontend", "admin", "projects"])
+app.include_router(fr_admin_users_router, prefix="/admin/users", tags=["frontend", "admin", "users"])
 app.include_router(fr_core_router, prefix="", tags=["frontend"])
 app.include_router(fr_profile_router, prefix="/profile", tags=["frontend", "profile"])
 

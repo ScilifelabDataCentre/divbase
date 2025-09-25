@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Admin - DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-people me-2"></i>User Management</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/admin">Admin</a></li>
+                            <li class="breadcrumb-item active">Users</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="/admin/users/create" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>Create New User
+                    </a>
+                    <a href="/admin" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Users List -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">All Users ({{ users|length if users else 0 }})</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if users %}
+                    <div class="list-group list-group-flush">
+                        {% for user_item in users %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    {% if user_item.is_admin %}
+                                        <i class="bi bi-shield-check text-primary fs-4"></i>
+                                    {% else %}
+                                        <i class="bi bi-person-circle text-secondary fs-4"></i>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <h6 class="mb-1">
+                                        {{ user_item.name }}
+                                        {% if user_item.is_admin %}
+                                            <span class="badge bg-primary ms-2">Admin</span>
+                                        {% endif %}
+                                        {% if not user_item.is_active %}
+                                            <span class="badge bg-danger ms-2">Inactive</span>
+                                        {% endif %}
+                                    </h6>
+                                    <p class="mb-0 text-muted">
+                                        <i class="bi bi-envelope me-1"></i>{{ user_item.email }}
+                                    </p>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar me-1"></i>
+                                        Joined: {{ user_item.created_at.strftime('%B %d, %Y') if user_item.created_at else 'Unknown' }}
+                                    </small>
+                                </div>
+                            </div>
+                            
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary btn-sm" type="button" 
+                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" href="/admin/users/{{ user_item.id }}/edit">
+                                            <i class="bi bi-pencil me-2"></i>Edit User
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    {% if user_item.is_active %}
+                                    <li>
+                                        <button class="dropdown-item text-warning" 
+                                                onclick="confirmInactivate('{{ user_item.id }}', '{{ user_item.name }}')">
+                                            <i class="bi bi-person-slash me-2"></i>Inactivate User
+                                        </button>
+                                    </li>
+                                    {% else %}
+                                    <li>
+                                        <button class="dropdown-item text-success" 
+                                                onclick="confirmActivate('{{ user_item.id }}', '{{ user_item.name }}')">
+                                            <i class="bi bi-person-check me-2"></i>Activate User
+                                        </button>
+                                    </li>
+                                    {% endif %}
+                                    {% if user_item.id != user.id %}
+                                    <li>
+                                        <button class="dropdown-item text-danger" 
+                                                onclick="confirmDelete('{{ user_item.id }}', '{{ user_item.name }}')">
+                                            <i class="bi bi-trash me-2"></i>Delete User
+                                        </button>
+                                    </li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Inactivate Confirmation Modal -->
+<div class="modal fade" id="inactivateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Inactivate User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to inactivate user <strong id="inactivateUserName"></strong>?</p>
+                <p class="text-warning small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    The user will no longer be able to access the system.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="inactivateForm" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-person-slash me-1"></i>Inactivate User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activate Confirmation Modal -->
+<div class="modal fade" id="activateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Activate User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to activate user <strong id="activateUserName"></strong>?</p>
+                <p class="text-success small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    The user will regain access to the system.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="activateForm" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-person-check me-1"></i>Activate User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmInactivate(userId, userName) {
+    document.getElementById('inactivateUserName').textContent = userName;
+    document.getElementById('inactivateForm').action = `/admin/users/${userId}/inactivate`;
+    new bootstrap.Modal(document.getElementById('inactivateModal')).show();
+}
+
+function confirmActivate(userId, userName) {
+    document.getElementById('activateUserName').textContent = userName;
+    document.getElementById('activateForm').action = `/admin/users/${userId}/activate`;
+    new bootstrap.Modal(document.getElementById('activateModal')).show();
+}
+</script>
+{% endblock %}
