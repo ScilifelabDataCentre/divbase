@@ -125,7 +125,8 @@ class BcftoolsQueryManager:
         """
 
         in_docker = os.path.exists("/.dockerenv")
-        if not in_docker:
+        in_k8s = self._is_in_kubernetes()
+        if not in_docker and not in_k8s:
             logger.info("Running outside Docker container, ensuring Docker container is available")
             try:
                 get_container_id = self.get_container_id(self.CONTAINER_NAME)
@@ -278,9 +279,10 @@ class BcftoolsQueryManager:
         logger.info(f"Running: bcftools {command}")
 
         in_docker = os.path.exists("/.dockerenv")
+        in_k8s = self._is_in_kubernetes()
 
-        if in_docker:
-            logger.debug("Running inside Celery worker's Docker container, executing bcftools directly")
+        if in_docker or in_k8s:
+            logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
             try:
                 subprocess.run(["bcftools"] + command.split(), check=True)
             except subprocess.CalledProcessError as e:
@@ -446,6 +448,12 @@ class BcftoolsQueryManager:
         Simply put, if any sample set in the input dict has more than one file, samples overlap between files
         """
         return not any(len(files) > 1 for files in sample_set_to_files.values())
+
+    def _is_in_kubernetes(self) -> bool:
+        """
+        Check if k8s environment variable is set in containter.
+        """
+        return "KUBERNETES_SERVICE_HOST" in os.environ
 
 
 class SidecarQueryManager:
