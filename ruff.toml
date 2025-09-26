@@ -15,7 +15,8 @@ lint.select = [
 
 lint.ignore = [
     "E501", # line too long
-    "SIM108" # if-else-block-instead-of-if-exp
+    "SIM108", # if-else-block-instead-of-if-exp
+    "B008", # allow FastAPI Depends(...) in functions
 ] 
 
 [lint.flake8-bugbear]

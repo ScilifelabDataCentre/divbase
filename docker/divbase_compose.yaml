@@ -117,11 +117,35 @@ services:
     - DIVBASE_USER=divbase_user_set_in_compose_file
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+    - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+    - FIRST_ADMIN_EMAIL=admin@divbase.com
+    - FIRST_ADMIN_PASSWORD=badpassword
     depends_on:
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U divbase_user -d divbase_db"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data/pgdata
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_USER=divbase_user
+      - POSTGRES_DB=divbase_db
+      - POSTGRES_PASSWORD=badpassword
 volumes:
   rabbitmq-data:
   redis-data:
@@ -129,3 +153,4 @@ volumes:
   minio-data:
   minio-bitnami-data:
   minio-certs:
+  postgres-data:

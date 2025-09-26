@@ -1,0 +1,89 @@
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <div class="text-center mb-4">
+            <i class="bi bi-person-plus-fill display-4 text-success"></i>
+            <h4 class="mt-2">Create an account</h4>
+        </div>
+
+        <form method="post" action="/auth/register" id="registerForm">
+            <div class="mb-3">
+                <label for="name" class="form-label">Full Name</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-person"></i>
+                    </span>
+                    <input type="text" 
+                           class="form-control" 
+                           id="name" 
+                           name="name" 
+                           placeholder="Enter your full name"
+                           value="{{ name or '' }}"
+                           required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="email" class="form-label">Email Address</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-envelope"></i>
+                    </span>
+                    <input type="email" 
+                           class="form-control" 
+                           id="email" 
+                           name="email" 
+                           placeholder="Enter your email address"
+                           value="{{ email or '' }}"
+                           required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-lock"></i>
+                    </span>
+                    <input type="password" 
+                           class="form-control" 
+                           id="password" 
+                           name="password" 
+                           placeholder="Create a password"
+                           required>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="confirm_password" class="form-label">Confirm Password</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-lock-fill"></i>
+                    </span>
+                    <input type="password" 
+                           class="form-control" 
+                           id="confirm_password" 
+                           name="confirm_password" 
+                           placeholder="Confirm your password"
+                           required>
+                    </button>
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="bi bi-person-plus me-2"></i>Create Account
+                </button>
+            </div>
+        </form>
+
+        <hr class="my-4">
+
+        <div class="text-center">
+            <p class="text-muted mb-2">Already have an account?</p>
+            <a href="/auth/login" class="btn btn-outline-primary">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Login here
+            </a>
+        </div>
+    </div>
+</div>
