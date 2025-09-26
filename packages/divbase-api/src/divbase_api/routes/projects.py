@@ -5,9 +5,10 @@ Routes for project management.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.projects import create_project, get_all_projects, get_project_by_id
+from divbase_api.crud.projects import add_project_member, create_project, get_all_projects, get_project_by_id
 from divbase_api.db import get_db
-from divbase_api.schemas.projects import ProjectCreate, ProjectResponse
+from divbase_api.models.projects import ProjectRoles
+from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 
 projects_router = APIRouter()
 
@@ -32,13 +33,17 @@ async def get_project_by_id_endpoint(project_id: int, db: AsyncSession = Depends
     return project
 
 
-# TODO
-@projects_router.post("/{project_id}/members/{user_id}")
-async def add_project_member():
-    pass
+@projects_router.post(
+    "/{project_id}/members/{user_id}", response_model=ProjectMembershipResponse, status_code=status.HTTP_201_CREATED
+)
+async def add_project_member_endpoint(
+    project_id: int, user_id: int, role: ProjectRoles, db: AsyncSession = Depends(get_db)
+):
+    membership = await add_project_member(db=db, project_id=project_id, user_id=user_id, role=role)
+    return membership
 
 
-# TODO
-@projects_router.get("/{project_id}/members")
-async def get_project_members():
-    pass
+# # TODO
+# @projects_router.get("/{project_id}/members")
+# async def get_project_members():
+#     pass
