@@ -37,3 +37,13 @@ class UserRegistrationError(DivBaseAPIException):
     ):
         self.user_message = user_message
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectNotFoundError(DivBaseAPIException):
+    def __init__(self, message: str = "Project not found or you don't have access"):
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class ProjectMemberNotFoundError(DivBaseAPIException):
+    def __init__(self, message: str = "Project member not found"):
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
