@@ -17,11 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.crud.auth import authenticate_user
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
+from divbase_api.deps import get_current_user
+from divbase_api.models.users import UserDB
 from divbase_api.schemas.auth import (
     CLILoginResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
+from divbase_api.schemas.users import UserResponse
 from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
@@ -101,3 +104,9 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
 async def logout_endpoint():
     # TODO
     pass
+
+
+@auth_router.post("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
+async def whoami_endpoint(current_user: UserDB = Depends(get_current_user)):
+    """Endpoint to return current logged in user's details."""
+    return UserResponse.model_validate(current_user)

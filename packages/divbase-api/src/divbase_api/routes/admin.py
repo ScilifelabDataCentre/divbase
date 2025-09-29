@@ -1,5 +1,7 @@
 """
-Admin only routes.
+Admin only routes for basic DivBase management tasks.
+
+This maybe fully replaced by something like: Starlette-Admin
 
 NOTE: All routes in here should depend on get_current_admin_user.
 """
@@ -10,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import add_project_member, create_project
-from divbase_api.crud.users import create_user, get_user_by_id
+from divbase_api.crud.users import create_user, get_all_users, get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_admin_user
 from divbase_api.models.projects import ProjectRoles
@@ -34,6 +36,24 @@ async def create_user_endpoint(
     new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin)
     logger.info(f"Admin user: {current_admin.email} created a new user: {new_user.email}")
     return new_user
+
+
+@admin_router.get("/{user_id}", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def get_user_by_id_endpoint(
+    user_id: int, db: AsyncSession = Depends(get_db), current_admin: UserDB = Depends(get_current_admin_user)
+):
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserResponse.model_validate(user)
+
+
+@admin_router.get("/", response_model=list[UserResponse], status_code=status.HTTP_200_OK)
+async def get_all_users_endpoint(
+    limit: int = 1000, db: AsyncSession = Depends(get_db), current_admin: UserDB = Depends(get_current_admin_user)
+):
+    users = await get_all_users(db, limit=limit)
+    return [UserResponse.model_validate(user) for user in users]
 
 
 @admin_router.patch("/users/{user_id}/deactivate", response_model=UserResponse, status_code=status.HTTP_200_OK)
