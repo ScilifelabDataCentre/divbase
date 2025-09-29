@@ -71,3 +71,15 @@ class ProjectMembershipResponse(BaseModel):
     user_id: int
     project_id: int
     role: ProjectRoles
+
+
+class ProjectMemberResponse(BaseModel):
+    """Response schema for project member with user details."""
+
+    user_id: int
+    user_name: str
+    user_email: str
+    user_is_active: bool
+    role: ProjectRoles
+
+    model_config = ConfigDict(from_attributes=True)

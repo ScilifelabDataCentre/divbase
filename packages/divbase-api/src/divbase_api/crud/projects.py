@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from divbase_api.crud.users import get_user_by_id
+from divbase_api.exceptions import ProjectMemberNotFoundError, ProjectNotFoundError
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.schemas.projects import ProjectCreate, UserProjectResponse
+from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, UserProjectResponse
 
 
 async def create_project(db: AsyncSession, proj_data: ProjectCreate) -> ProjectDB:
@@ -46,9 +47,7 @@ async def get_user_projects_with_roles(db: AsyncSession, user_id: int) -> list[t
     return [(row[0], ProjectRoles(row[1])) for row in result.all()]
 
 
-async def get_project_with_user_role(
-    db: AsyncSession, project_id: int, user_id: int
-) -> tuple[ProjectDB | None, ProjectRoles | None]:
+async def get_project_with_user_role(db: AsyncSession, project_id: int, user_id: int) -> tuple[ProjectDB, ProjectRoles]:
     """Get project by ID and the user's role in that project."""
     stmt = (
         select(ProjectDB, ProjectMembershipDB.role)
@@ -61,7 +60,7 @@ async def get_project_with_user_role(
 
     if row:
         return row[0], ProjectRoles(row[1])
-    return None, None
+    raise ProjectNotFoundError("Project not found or the user has no access")
 
 
 async def add_project_member(
@@ -72,19 +71,33 @@ async def add_project_member(
 
     project = await get_project_by_id(db=db, id=project_id)
     if not project:
-        raise ValueError("Project not found")
+        raise ProjectNotFoundError()
 
     user = await get_user_by_id(db=db, id=user_id)
     if not user:
         raise ValueError("User not found")
 
-    # TODO - check if membership already exists
+    already_member = await is_user_member_of_project(db=db, project_id=project_id, user_id=user_id)
+    if already_member:
+        raise ValueError("User is already a member of this project")
+
     membership = ProjectMembershipDB(project_id=project_id, user_id=user_id, role=role)
 
     db.add(membership)
     await db.commit()
     await db.refresh(membership)
     return membership
+
+
+async def is_user_member_of_project(db: AsyncSession, project_id: int, user_id: int) -> bool:
+    """Check if a user is already a member of a project."""
+    stmt = select(ProjectMembershipDB).where(
+        ProjectMembershipDB.project_id == project_id,
+        ProjectMembershipDB.user_id == user_id,
+    )
+    result = await db.execute(stmt)
+    membership = result.scalar_one_or_none()
+    return membership is not None
 
 
 def create_user_project_responses(
@@ -105,3 +118,70 @@ def create_user_project_responses(
         )
         project_responses.append(project_response)
     return project_responses
+
+
+async def get_project_members(db: AsyncSession, project_id: int) -> list[ProjectMembershipDB]:
+    """Get all members of a project with user details loaded."""
+    stmt = (
+        select(ProjectMembershipDB)
+        .where(ProjectMembershipDB.project_id == project_id)
+        .options(selectinload(ProjectMembershipDB.user))
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+def project_member_response_from_db(membership: ProjectMembershipDB) -> ProjectMemberResponse:
+    """Helper function to convert ProjectMembershipDB to ProjectMemberResponse."""
+    return ProjectMemberResponse(
+        user_id=membership.user_id,
+        user_name=membership.user.name,
+        user_email=membership.user.email,
+        user_is_active=membership.user.is_active,
+        role=membership.role,
+    )
+
+
+async def get_project_membership(db: AsyncSession, project_id: int, user_id: int) -> ProjectMembershipDB:
+    """Get a specific project membership by project ID and user ID."""
+    stmt = select(ProjectMembershipDB).where(
+        ProjectMembershipDB.project_id == project_id, ProjectMembershipDB.user_id == user_id
+    )
+    result = await db.execute(stmt)
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise ProjectMemberNotFoundError()
+
+    return membership
+
+
+async def update_project_member_role(
+    db: AsyncSession, project_id: int, user_id: int, new_role: ProjectRoles
+) -> ProjectMembershipDB:
+    """Update a project member's role."""
+    membership = await get_project_membership(db, project_id, user_id)
+    membership.role = new_role
+
+    await db.commit()
+    await db.refresh(membership)
+    return membership
+
+
+async def remove_project_member(db: AsyncSession, project_id: int, user_id: int) -> None:
+    """Remove a user from a project."""
+    membership = await get_project_membership(db, project_id, user_id)
+    await db.delete(membership)
+    await db.commit()
+
+
+def has_required_role(user_role: ProjectRoles, required_role: ProjectRoles) -> bool:
+    """
+    Check if a user's role meets or exceeds the required role.
+    (If you EDIT access, you also have READ access, etc.)
+    """
+    role_hierarchy = {
+        ProjectRoles.READ: 1,
+        ProjectRoles.EDIT: 2,
+        ProjectRoles.MANAGE: 3,
+    }
+    return role_hierarchy[user_role] >= role_hierarchy[required_role]
