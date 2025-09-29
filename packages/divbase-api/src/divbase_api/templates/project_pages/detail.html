@@ -93,11 +93,14 @@
                     </div>
                 </div>
             </div>
-
-            <!-- TODO Project Members Management (Only for Role:Manager) -->
-            
-
         </div>
+
+        {% include "components/project_members.html" %}
+
+        {% if project.user_role == 'manage' %}
+            {% include "components/add_user_to_project.html" %}
+        {% endif %}
+            
     </div>
 </div>
 {% endblock %}
