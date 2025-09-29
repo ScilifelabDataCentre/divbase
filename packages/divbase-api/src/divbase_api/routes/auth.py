@@ -53,9 +53,15 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
         )
 
     logger.info(f"User {user.email} logged in successfully.")
+
+    access_token, exp_access = create_access_token(subject=user.id)
+    refresh_token, exp_refresh = create_refresh_token(subject=user.id)
+
     return CLILoginResponse(
-        access_token=create_access_token(subject=user.id),
-        refresh_token=create_refresh_token(subject=user.id),
+        access_token=access_token,
+        access_token_expires_at=exp_access,
+        refresh_token=refresh_token,
+        refresh_token_expires_at=exp_refresh,
         email=user.email,
     )
 

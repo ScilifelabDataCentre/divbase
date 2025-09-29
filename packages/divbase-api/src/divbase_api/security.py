@@ -33,28 +33,28 @@ class TokenType(str, Enum):
     REFRESH = "refresh_token"
 
 
-def create_access_token(subject: str | Any) -> str:
+def create_access_token(subject: str | Any) -> tuple[str, int]:
     """
-    Create a new access token for a user.
+    Create a new access token for a user. Return token + expiration timestamp.
 
     Token types differ by the "type" field in the payload, which is either "access" or "refresh".
     """
     expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.access_token_expires_seconds)
     to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.ACCESS.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt
+    return encoded_jwt, int(expire.timestamp())
 
 
-def create_refresh_token(subject: str | Any) -> str:
+def create_refresh_token(subject: str | Any) -> tuple[str, int]:
     """
-    Create a new refresh token for a user.
+    Create a new refresh token for a user. Return token + expiration timestamp.
 
     Token types differ by the "type" field in the payload, which is either "access" or "refresh".
     """
     expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.refresh_token_expires_seconds)
     to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.REFRESH.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt
+    return encoded_jwt, int(expire.timestamp())
 
 
 def verify_token(token: str, desired_token_type: TokenType) -> int | None:
