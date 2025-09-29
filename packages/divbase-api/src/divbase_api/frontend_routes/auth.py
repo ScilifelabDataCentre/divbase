@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.config import settings
 from divbase_api.crud.auth import authenticate_user
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
@@ -51,8 +50,8 @@ async def post_login(
             context={"request": request, "error": "Invalid email or password"},
         )
 
-    access_token = create_access_token(subject=user.id)
-    refresh_token = create_refresh_token(subject=user.id)
+    access_token, access_expires_at = create_access_token(subject=user.id)
+    refresh_token, refresh_expires_at = create_refresh_token(subject=user.id)
 
     response = templates.TemplateResponse(
         request=request,
@@ -63,7 +62,7 @@ async def post_login(
     response.set_cookie(
         key=TokenType.ACCESS.value,
         value=access_token,
-        max_age=settings.jwt.access_token_expires_seconds,
+        expires=access_expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
@@ -72,7 +71,7 @@ async def post_login(
     response.set_cookie(
         key=TokenType.REFRESH.value,
         value=refresh_token,
-        max_age=settings.jwt.refresh_token_expires_seconds,
+        expires=refresh_expires_at,
         httponly=True,
         secure=True,
         samesite="lax",

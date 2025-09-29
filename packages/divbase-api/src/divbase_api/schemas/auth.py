@@ -15,12 +15,6 @@ class CLILoginResponse(BaseModel):
     email: str = Field(..., description="Email of the authenticated user")
 
 
-class WebLoginResponse(BaseModel):
-    """Response model for web login endpoint."""
-
-    pass  # TODO
-
-
 class RefreshTokenRequest(BaseModel):
     """Request model for refresh token endpoint."""
 
@@ -31,3 +25,4 @@ class RefreshTokenResponse(BaseModel):
     """Response model for refresh token endpoint."""
 
     access_token: str = Field(..., description="Bearer access token for authentication")
+    expires_at: int = Field(..., description="Unix timestamp when the access token expires")

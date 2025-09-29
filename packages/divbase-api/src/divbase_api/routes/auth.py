@@ -93,8 +93,8 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(subject=user.id)
-    return RefreshTokenResponse(access_token=access_token)
+    access_token, expires_at = create_access_token(subject=user.id)
+    return RefreshTokenResponse(access_token=access_token, expires_at=expires_at)
 
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
