@@ -9,10 +9,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.projects import add_project_member, create_project
 from divbase_api.crud.users import create_user, get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_admin_user
+from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 from divbase_api.schemas.users import UserCreate, UserResponse
 
 logger = logging.getLogger(__name__)
@@ -65,3 +68,39 @@ async def activate_user_endpoint(
     await db.refresh(user)
     logger.info(f"Admin user: {current_admin.email} activated user: {user.email}")
     return user
+
+
+@admin_router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project_endpoint(
+    proj_data: ProjectCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    new_project = await create_project(db=db, proj_data=proj_data)
+    logger.info(f"Admin user: {current_admin.email} created a new project: {new_project.name}")
+    return new_project
+
+
+@admin_router.post(
+    "/projects/{project_id}/members/{user_id}",
+    response_model=ProjectMembershipResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_project_member_endpoint(
+    project_id: int,
+    user_id: int,
+    role: ProjectRoles,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    membership = await add_project_member(db=db, project_id=project_id, user_id=user_id, role=role)
+    logger.info(
+        f"Admin user: {current_admin.email} added user with id: {user_id} to project with id: {project_id} with role: {role}"
+    )
+
+    return ProjectMembershipResponse(
+        id=membership.id,
+        project_id=membership.project_id,
+        user_id=membership.user_id,
+        role=membership.role,
+    )

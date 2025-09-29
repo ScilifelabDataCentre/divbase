@@ -30,7 +30,6 @@ from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
-from divbase_api.routes.projects import projects_router
 from divbase_api.routes.users import users_router
 from divbase_worker.tasks import (
     bcftools_pipe_task,
@@ -66,17 +65,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
-app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
-app.include_router(fr_auth_router, prefix="/auth", tags=["frontend", "auth"])
-app.include_router(fr_admin_router, prefix="/admin", tags=["frontend", "admin"])
-app.include_router(fr_admin_projects_router, prefix="/admin/projects", tags=["frontend", "admin", "projects"])
-app.include_router(fr_admin_users_router, prefix="/admin/users", tags=["frontend", "admin", "users"])
-app.include_router(fr_core_router, prefix="", tags=["frontend"])
-app.include_router(fr_profile_router, prefix="/profile", tags=["frontend", "profile"])
-app.include_router(fr_projects_router, prefix="/projects", tags=["frontend", "projects"])
+app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)
+app.include_router(fr_admin_router, prefix="/admin", include_in_schema=False)
+app.include_router(fr_admin_projects_router, prefix="/admin/projects", include_in_schema=False)
+app.include_router(fr_admin_users_router, prefix="/admin/users", include_in_schema=False)
+app.include_router(fr_core_router, prefix="", include_in_schema=False)
+app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
+app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
 register_exception_handlers(app)
 
