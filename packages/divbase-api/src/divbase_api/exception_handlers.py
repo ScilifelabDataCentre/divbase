@@ -105,7 +105,7 @@ async def project_not_found_error_handler(request: Request, exc: ProjectNotFound
         return RedirectResponse(url="/projects", status_code=status.HTTP_302_FOUND)
 
 
-async def project_member_not_found_error_handler(request: Request, exc: ProjectNotFoundError):
+async def project_member_not_found_error_handler(request: Request, exc: ProjectMemberNotFoundError):
     logger.warning(f"Project member not found for {request.method} {request.url.path}: {exc.message}", exc_info=True)
     if is_api_request(request):
         return JSONResponse(

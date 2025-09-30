@@ -2,7 +2,7 @@
 CRUD operations for projects.
 """
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -192,12 +192,12 @@ async def _validate_project_create(db: AsyncSession, name: str, bucket_name: str
     """
     Validate that both the project and bucket name are unique.
     """
-    stmt = select(ProjectDB).where((ProjectDB.name == name) | (ProjectDB.bucket_name == bucket_name))
-    result = await db.execute(stmt)
-    existing_projects = result.scalars().all()
+    name_exists_stmt = select(exists().where(ProjectDB.name == name))
+    name_exists_result = await db.execute(name_exists_stmt)
+    if name_exists_result.scalar():
+        raise ProjectCreationError(f"Project name '{name}' is already in use")
 
-    for project in existing_projects:
-        if project.name == name:
-            raise ProjectCreationError(f"Project name '{name}' is already in use")
-        if project.bucket_name == bucket_name:
-            raise ProjectCreationError(f"Bucket name '{bucket_name}' is already in use")
+    bucket_exists_stmt = select(exists().where(ProjectDB.bucket_name == bucket_name))
+    bucket_exists_result = await db.execute(bucket_exists_stmt)
+    if bucket_exists_result.scalar():
+        raise ProjectCreationError(f"Bucket name '{bucket_name}' is already in use")
