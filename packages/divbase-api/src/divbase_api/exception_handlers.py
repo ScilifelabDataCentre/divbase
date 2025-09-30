@@ -3,7 +3,7 @@ Global exception handlers for FastAPI.
 
 Handles both API and frontend requests, returning JSON or HTML responses as appropriate.
 
-The idea of centralising this is  to:
+The idea of centralising this is to:
 1. Handle logging of exceptions all in one place.
 2. Control what the users sees (not too much info and no accidental leakage)
 3. Less work/duplication in the routes themselves, just raise the exception and the handler makes it pretty.
@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
     UserRegistrationError,
@@ -116,6 +117,18 @@ async def project_member_not_found_error_handler(request: Request, exc: ProjectN
         return RedirectResponse(url="/projects", status_code=status.HTTP_302_FOUND)
 
 
+async def project_creation_error_handler(request: Request, exc: ProjectCreationError):
+    logger.error(f"Project creation failed for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "project_creation_error"},
+            headers=exc.headers,
+        )
+    else:
+        return RedirectResponse(url="/projects", status_code=status.HTTP_302_FOUND)
+
+
 def register_exception_handlers(app: FastAPI):
     """
     Register all exception handlers with FastAPI app.
@@ -127,3 +140,4 @@ def register_exception_handlers(app: FastAPI):
     app.add_exception_handler(UserRegistrationError, user_registration_error_handler)  # type: ignore
     app.add_exception_handler(ProjectNotFoundError, project_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore

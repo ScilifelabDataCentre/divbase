@@ -7,14 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from divbase_api.crud.users import get_user_by_id
-from divbase_api.exceptions import ProjectMemberNotFoundError, ProjectNotFoundError
+from divbase_api.exceptions import ProjectCreationError, ProjectMemberNotFoundError, ProjectNotFoundError
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
 from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, UserProjectResponse
 
 
 async def create_project(db: AsyncSession, proj_data: ProjectCreate) -> ProjectDB:
     """Create a new project"""
-    # TODO - add validation, e.g. check unique name, bucket not already being used etc...
+    await _validate_project_create(db=db, name=proj_data.name, bucket_name=proj_data.bucket_name)
+
     project = ProjectDB(**proj_data.model_dump())
     db.add(project)
     await db.commit()
@@ -185,3 +186,18 @@ def has_required_role(user_role: ProjectRoles, required_role: ProjectRoles) -> b
         ProjectRoles.MANAGE: 3,
     }
     return role_hierarchy[user_role] >= role_hierarchy[required_role]
+
+
+async def _validate_project_create(db: AsyncSession, name: str, bucket_name: str) -> None:
+    """
+    Validate that both the project and bucket name are unique.
+    """
+    stmt = select(ProjectDB).where((ProjectDB.name == name) | (ProjectDB.bucket_name == bucket_name))
+    result = await db.execute(stmt)
+    existing_projects = result.scalars().all()
+
+    for project in existing_projects:
+        if project.name == name:
+            raise ProjectCreationError(f"Project name '{name}' is already in use")
+        if project.bucket_name == bucket_name:
+            raise ProjectCreationError(f"Bucket name '{bucket_name}' is already in use")

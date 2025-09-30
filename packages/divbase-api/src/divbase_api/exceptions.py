@@ -47,3 +47,8 @@ class ProjectNotFoundError(DivBaseAPIException):
 class ProjectMemberNotFoundError(DivBaseAPIException):
     def __init__(self, message: str = "Project member not found"):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class ProjectCreationError(DivBaseAPIException):
+    def __init__(self, message: str = "Project creation failed"):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
