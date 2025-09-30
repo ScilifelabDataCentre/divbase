@@ -55,7 +55,7 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
     Log in to the DivBase server and return user tokens.
     """
     response = httpx.post(
-        f"{divbase_url}/api/v1/auth/login",
+        f"{divbase_url}/v1/auth/login",
         data={
             "grant_type": "password",
             "username": email,  # OAuth2 uses 'username', not 'email'
@@ -76,10 +76,7 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
 
 
 def logout_of_divbase(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> None:
-    """
-    Log out of the DivBase server.
-    TODO - Decide whether to implement token blacklisting on server side.
-    """
+    """Log out of the DivBase server."""
     if token_path.exists():
         token_path.unlink()
 
@@ -110,7 +107,7 @@ def make_authenticated_request(
     **kwargs,
 ) -> httpx.Response:
     """
-    Make an authenticated request to the DivBase server, refreshing tokens if necessary.
+    Make an authenticated request to the DivBase server, handles refreshing tokens if needed.
     """
     token_data = load_user_tokens(token_path=token_path)
 
@@ -124,7 +121,7 @@ def make_authenticated_request(
     headers["Authorization"] = f"Bearer {token_data.access_token}"
     kwargs["headers"] = headers
 
-    url = f"{divbase_base_url}/api/{api_route.lstrip('/')}"
+    url = f"{divbase_base_url}/{api_route.lstrip('/')}"
     response = httpx.request(method, url, **kwargs)
     response.raise_for_status()
     return response
@@ -137,12 +134,10 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     Returns the new TokenData object which can be used immediately in a new request.
     """
     response = httpx.post(
-        f"{divbase_base_url}/api/v1/auth/refresh",
-        data={
-            "grant_type": "refresh_token",
+        f"{divbase_base_url}/v1/auth/refresh",
+        json={
             "refresh_token": token_data.refresh_token,
         },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
     # Possible if e.g. token revoked on server side.
@@ -155,7 +150,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     new_token_data = TokenData(
         access_token=data["access_token"],
         refresh_token=token_data.refresh_token,
-        access_token_expires_at=data["access_token_expires_at"],
+        access_token_expires_at=data["expires_at"],
         refresh_token_expires_at=token_data.refresh_token_expires_at,
     )
     new_token_data.dump_tokens()

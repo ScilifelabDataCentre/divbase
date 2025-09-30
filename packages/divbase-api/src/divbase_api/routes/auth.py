@@ -77,7 +77,7 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
     Creates a new access token using the refresh token.
     Unlike access token pathway, refresh token validates a user still exists and is still active.
 
-    TODO: Decided if refresh token should not also be refreshed here.
+    TODO: Decided if refresh token should also be refreshed here.
     """
 
     user_id = verify_token(token=refresh_token.refresh_token, desired_token_type=TokenType.REFRESH)

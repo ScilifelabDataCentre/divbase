@@ -138,11 +138,7 @@ def show_user_config(
     config = load_user_config(config_file)
     console = Console()
 
-    table = Table(title=f"Your DivBase user configuration file's contents located at: '{config_file}'")
-    table.add_column("Bucket Name", style="cyan")
-    table.add_column("DivBase URL", style="green")
-    table.add_column("S3 URL", style="green")
-    table.add_column("Is default", style="yellow")
+    console.print(f"[bold]Your DivBase user configuration file's contents located at:[/bold] '{config_file}'")
 
     if not config.default_download_dir:
         dload_dir_info = "Not specified, meaning the working directory of wherever you run the download command from."
@@ -150,15 +146,26 @@ def show_user_config(
         dload_dir_info = "Working directory of wherever you run the download command from."
     else:
         dload_dir_info = config.default_download_dir
-
     console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+
+    if config.logged_in_url:
+        console.print(f"[bold]You're logged into DivBase API at URL:[/bold] {config.logged_in_url}")
+    else:
+        console.print("[bold]Not currently logged into any DivBase API URL.[/bold]")
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
         console.print("You can add a project using the command: 'divbase config add-project <project_name>'")
         return
 
+    table = Table(title="\nProjects in your DivBase CLI user config file")
+    table.add_column("Bucket Name", style="cyan")
+    table.add_column("DivBase URL", style="green")
+    table.add_column("S3 URL", style="green")
+    table.add_column("Is default", style="yellow")
+
     for project in config.projects:
         is_default = "Yes" if project.name == config.default_project else ""
         table.add_row(project.name, project.divbase_url, project.s3_url, is_default)
+
     console.print(table)
