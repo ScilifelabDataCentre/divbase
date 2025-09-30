@@ -1,0 +1,82 @@
+{# Project Cards Component, used in projects view and user profile views #}
+
+{% if projects %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="bi bi-folder2-open me-2"></i>My Projects</h2>
+                <p class="text-muted">Projects you're a member of</p>
+            </div>
+            <div>
+                <span class="badge bg-primary fs-6">{{ projects|length }} Project{{ 's' if projects|length != 1 else '' }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    {% for project in projects %}
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-folder me-2"></i>{{ project.name }}
+                </h5>
+                <span class="badge bg-{{ 'success' if project.user_role == 'manage' else 'info' if project.user_role == 'edit' else 'secondary' }}">
+                    {{ project.user_role|title }}
+                </span>
+            </div>
+            
+            <div class="card-body">
+                {% if project.description %}
+                <p class="card-text text-muted">{{ project.description }}</p>
+                {% else %}
+                <p class="card-text text-muted fst-italic">No description provided</p>
+                {% endif %}
+                
+                <!-- Storage Info -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted">Storage Used</small>
+                        <small class="text-muted">
+                            {{ "%.1f"|format(project.storage_used_gb) }} GB / {{ "%.1f"|format(project.storage_quota_gb) }} GB
+                        </small>
+                    </div>
+                </div>
+                
+                <!-- Project Stats -->
+                <div class="row text-center">
+                    <div class="col-4">
+                        <small class="text-muted d-block">Status</small>
+                        <span class="badge bg-{{ 'success' if project.is_active else 'danger' }}">
+                            {{ 'Active' if project.is_active else 'Inactive' }}
+                        </span>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted d-block">Created</small>
+                        <small>{{ project.created_at.strftime('%b %d, %Y') if project.created_at else 'Unknown' }}</small>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted d-block">Bucket</small>
+                        <small class="font-monospace">{{ project.bucket_name }}</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-footer bg-transparent">
+                <a href="/projects/{{ project.id }}" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-eye me-2"></i>View Project
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-folder2-open display-1 text-muted"></i>
+    <h4 class="mt-3">No Projects Yet</h4>
+    <p class="text-muted">You're not a member of any projects yet.</p>
+</div>
+{% endif %}

@@ -4,16 +4,15 @@ Frontend routes for authentication-related pages.
 
 import logging
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.config import settings
 from divbase_api.crud.auth import authenticate_user
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_user_from_cookie
+from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
@@ -26,14 +25,14 @@ fr_auth_router = APIRouter()
 
 
 @fr_auth_router.get("/login", response_class=HTMLResponse)
-async def get_login(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie)):
-    """Render the login page."""
+async def get_login(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
+    """
+    Render the login page.
+    If user is already logged in, redirect to home page.
+    """
     if current_user:
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={"request": request, "user": UserResponse.model_validate(current_user)},
-        )
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
     return templates.TemplateResponse(request=request, name="auth_pages/login.html")
 
 
@@ -44,25 +43,26 @@ async def post_login(
     """Handle login form submission."""
     user = await authenticate_user(db, email=email, password=password)
     if not user:
+        logger.info(f"Failed login attempt for email: {email}")
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
             context={"request": request, "error": "Invalid email or password"},
         )
 
-    access_token = create_access_token(subject=user.id)
-    refresh_token = create_refresh_token(subject=user.id)
+    access_token, access_expires_at = create_access_token(subject=user.id)
+    refresh_token, refresh_expires_at = create_refresh_token(subject=user.id)
 
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"user": UserResponse.model_validate(user)},
+        context={"current_user": UserResponse.model_validate(user)},
     )
 
     response.set_cookie(
         key=TokenType.ACCESS.value,
         value=access_token,
-        max_age=settings.jwt.access_token_expires_seconds,
+        expires=access_expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
@@ -71,7 +71,7 @@ async def post_login(
     response.set_cookie(
         key=TokenType.REFRESH.value,
         value=refresh_token,
-        max_age=settings.jwt.refresh_token_expires_seconds,
+        expires=refresh_expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
@@ -87,7 +87,7 @@ async def post_logout(request: Request):
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"user": None},
+        context={"current_user": None},
     )
 
     response.delete_cookie(TokenType.ACCESS.value)
@@ -97,13 +97,13 @@ async def post_logout(request: Request):
 
 
 @fr_auth_router.get("/register", response_class=HTMLResponse)
-async def get_register(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie)):
+async def get_register(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
     """Render the registration page."""
     if current_user:
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={"request": request, "user": UserResponse.model_validate(current_user)},
+            context={"request": request, "current_user": UserResponse.model_validate(current_user)},
         )
     return templates.TemplateResponse(request=request, name="auth_pages/register.html")
 
@@ -147,7 +147,6 @@ async def post_register(
         return registration_failed_response("Registration failed, please try again.")
 
     logger.info(f"New user registered: {user_data.email=}")
-
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register_success.html",

@@ -1,0 +1,140 @@
+{# Used on project detail page to display project members #}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-people me-2"></i>Project Members 
+                    <span class="badge bg-primary ms-2">{{ members|length }}</span>
+                </h5>
+                {% if project.user_role == 'manage' %}
+                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addUserToProjectModal">
+                    <i class="bi bi-person-plus me-2"></i>Add Member
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if members %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Member</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                {% if project.user_role == 'manage' %}
+                                <th class="text-center">Actions</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for member in members %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-person-circle me-2 text-muted"></i>
+                                        <div>
+                                            <div class="fw-medium">{{ member.user_name }}</div>
+                                            {% if member.user_id == current_user.id %}
+                                            <small class="text-muted">(You)</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-muted">{{ member.user_email }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if member.role == 'manage' else 'info' if member.role == 'edit' else 'secondary' }}">
+                                        {{ member.role|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if member.user_is_active else 'danger' }} bg-opacity-25 text-{{ 'success' if member.user_is_active else 'danger' }}">
+                                        <i class="bi bi-{{ 'check-circle' if member.user_is_active else 'x-circle' }} me-1"></i>
+                                        {{ 'Active' if member.user_is_active else 'Inactive' }}
+                                    </span>
+                                </td>
+                                {% if project.user_role == 'manage' %}
+                                <td class="text-center">
+                                    {% if member.user_id == current_user.id %}
+                                    <!-- Manager can't edit their own role -->
+                                    <span class="text-muted small">
+                                        <i class="bi bi-shield-check me-1"></i>Owner
+                                    </span>
+                                    {% else %}
+                                    <!-- Edit dropdown for other members -->
+                                    <div class="dropdown">
+                                        <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" 
+                                                id="memberActions{{ member.user_id }}" data-bs-toggle="dropdown" 
+                                                aria-expanded="false" title="Manage Member">
+                                            <i class="bi bi-three-dots"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="memberActions{{ member.user_id }}">
+                                            <li>
+                                                <h6 class="dropdown-header">Change Role</h6>
+                                            </li>
+                                            <li>
+                                                <form method="post" action="/projects/{{ project.id }}/members/{{ member.user_id }}/role" style="display: inline;">
+                                                    <input type="hidden" name="role" value="read">
+                                                    <button class="dropdown-item" type="submit" 
+                                                            {% if member.role == 'read' %}disabled{% endif %}>
+                                                        <i class="bi bi-eye me-2"></i>Read
+                                                        {% if member.role == 'read' %}<i class="bi bi-check-lg ms-auto text-success"></i>{% endif %}
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li>
+                                                <form method="post" action="/projects/{{ project.id }}/members/{{ member.user_id }}/role" style="display: inline;">
+                                                    <input type="hidden" name="role" value="edit">
+                                                    <button class="dropdown-item" type="submit" 
+                                                            {% if member.role == 'edit' %}disabled{% endif %}>
+                                                        <i class="bi bi-pencil me-2"></i>Edit
+                                                        {% if member.role == 'edit' %}<i class="bi bi-check-lg ms-auto text-success"></i>{% endif %}
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li>
+                                                <form method="post" action="/projects/{{ project.id }}/members/{{ member.user_id }}/role" style="display: inline;">
+                                                    <input type="hidden" name="role" value="manage">
+                                                    <button class="dropdown-item" type="submit" 
+                                                            {% if member.role == 'manage' %}disabled{% endif %}>
+                                                        <i class="bi bi-shield me-2"></i>Manage
+                                                        {% if member.role == 'manage' %}<i class="bi bi-check-lg ms-auto text-success"></i>{% endif %}
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <button class="dropdown-item text-danger" type="button" 
+                                                        onclick="confirmRemoveMember('{{ member.user_id }}', '{{ member.user_name }}')">
+                                                    <i class="bi bi-person-dash me-2"></i>Remove Member
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if project.user_role == 'manage' %}
+<form id="removeMemberForm" method="post" style="display: none;"></form>
+<script>
+function confirmRemoveMember(userId, userName) {
+    if (confirm(`Are you sure you want to remove ${userName} from this project?`)) {
+        const form = document.getElementById('removeMemberForm');
+        form.action = `/projects/{{ project.id }}/members/${userId}/remove`;
+        form.submit();
+    }
+}
+</script>
+{% endif %}

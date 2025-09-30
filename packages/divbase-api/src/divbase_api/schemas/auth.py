@@ -9,14 +9,10 @@ class CLILoginResponse(BaseModel):
     """Response model for API (aka divbase-cli) login endpoint."""
 
     access_token: str = Field(..., description="Bearer access token for authentication")
+    access_token_expires_at: int = Field(..., description="Unix timestamp when the access token expires")
     refresh_token: str = Field(..., description="Bearer refresh token for obtaining new access tokens")
+    refresh_token_expires_at: int = Field(..., description="Unix timestamp when the refresh token expires")
     email: str = Field(..., description="Email of the authenticated user")
-
-
-class WebLoginResponse(BaseModel):
-    """Response model for web login endpoint."""
-
-    pass  # TODO
 
 
 class RefreshTokenRequest(BaseModel):
@@ -29,3 +25,4 @@ class RefreshTokenResponse(BaseModel):
     """Response model for refresh token endpoint."""
 
     access_token: str = Field(..., description="Bearer access token for authentication")
+    expires_at: int = Field(..., description="Unix timestamp when the access token expires")

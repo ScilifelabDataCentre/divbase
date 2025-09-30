@@ -1,0 +1,86 @@
+{# Component for adding a user to a project - used in modals #}
+<div class="modal fade" id="addUserToProjectModal" tabindex="-1" aria-labelledby="addUserToProjectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/projects/{{ project.id }}/members/add" class="needs-validation" novalidate>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addUserToProjectModalLabel">
+                        <i class="bi bi-person-plus me-2"></i>Add Member to {{ project.name }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_email" class="form-label">
+                            User Email Address <span class="text-danger">*</span>
+                        </label>
+                        <input type="email" class="form-control" id="user_email" name="user_email" required 
+                               placeholder="Enter the user's email address">
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>
+                            The user must already have an account in the system.
+                        </div>
+                        <div class="invalid-feedback">
+                            Please provide a valid email address.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="project_role" class="form-label">
+                            Project Role <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="project_role" name="role" required>
+                            <option value="">Select a role...</option>
+                            <option value="read">
+                                <i class="bi bi-eye"></i> Read - Can view and download files
+                            </option>
+                            <option value="edit">
+                                <i class="bi bi-pencil"></i> Edit - Can upload, modify, and delete files
+                            </option>
+                            <option value="manage">
+                                <i class="bi bi-shield"></i> Manage - Full project management access
+                            </option>
+                        </select>
+                        <div class="form-text">
+                            <strong>Role Permissions:</strong>
+                            <ul class="small mb-0 mt-1">
+                                <li><strong>Read:</strong> View project info, browse and download files</li>
+                                <li><strong>Edit:</strong> All Read permissions + upload, modify, delete files</li>
+                                <li><strong>Manage:</strong> All Edit permissions + add/remove members, project settings</li>
+                            </ul>
+                        </div>
+                        <div class="invalid-feedback">
+                            Please select a role for this user.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-2"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-person-plus me-2"></i>Add Member
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Bootstrap form validation
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        });
+    });
+});
+</script>

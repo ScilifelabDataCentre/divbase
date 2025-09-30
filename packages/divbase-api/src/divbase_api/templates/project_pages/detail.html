@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/projects">My Projects</a></li>
+                            <li class="breadcrumb-item active">{{ project.name }}</li>
+                        </ol>
+                    </nav>
+                    <h2><i class="bi bi-folder me-2"></i>{{ project.name }}</h2>
+                    {% if project.description %}
+                    <p class="text-muted">{{ project.description }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="badge bg-{{ 'success' if project.user_role == 'manage' else 'info' if project.user_role == 'edit' else 'secondary' }} fs-6">
+                        Project Role: {{ project.user_role|title }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Project Overview -->
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Project Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-sm-6 mb-3">
+                                    <label class="form-label text-muted">Project Name</label>
+                                    <p class="mb-0">{{ project.name }}</p>
+                                </div>
+                                <div class="col-sm-6 mb-3">
+                                    <label class="form-label text-muted">Assigned KTH S3 Bucket</label>
+                                    <p class="mb-0 font-monospace">{{ project.bucket_name }}</p>
+                                </div>
+                                <div class="col-sm-6 mb-3">
+                                    <label class="form-label text-muted">Status</label>
+                                    <p class="mb-0">
+                                        <span class="badge bg-{{ 'success' if project.is_active else 'danger' }}">
+                                            {{ 'Active' if project.is_active else 'Inactive' }}
+                                        </span>
+                                    </p>
+                                </div>
+                                {% if project.description %}
+                                <div class="col-12">
+                                    <label class="form-label text-muted">Description</label>
+                                    <p class="mb-0">{{ project.description }}</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-hdd me-2"></i>Storage Usage</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <p class="mb-0">
+                                    <strong>{{ "%.1f"|format(project.storage_used_gb) }} GB</strong> of 
+                                    <strong>{{ "%.1f"|format(project.storage_quota_gb) }} GB</strong> used
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Code block to add this project to divbase-cli config file -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Add this project to your DivBase CLI Configuration file</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">To configure the <code>divbase-cli</code> tool to use this project, run the following command to add this project to your local configuration file:</p>
+                            <pre class="bg-light p-3 rounded"><code> divbase-cli config add-project {{ project.name }} </code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% include "components/project_members.html" %}
+
+        {% if project.user_role == 'manage' %}
+            {% include "components/add_user_to_project.html" %}
+        {% endif %}
+            
+    </div>
+</div>
+{% endblock %}

@@ -1,7 +1,5 @@
 """
 The API server for DivBase.
-
-TODO: user_name would later be determined by the authentication system.
 """
 
 import logging
@@ -10,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 
 from divbase_api.config import settings
 from divbase_api.db import (
@@ -19,15 +17,17 @@ from divbase_api.db import (
     engine,
     health_check_db,
 )
-from divbase_api.deps import get_current_user
+from divbase_api.exception_handlers import register_exception_handlers
+from divbase_api.frontend_routes.admin import fr_admin_router
+from divbase_api.frontend_routes.admin_projects import fr_admin_projects_router
+from divbase_api.frontend_routes.admin_users import fr_admin_users_router
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
+from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
-from divbase_api.routes.projects import projects_router
-from divbase_api.routes.users import users_router
 from divbase_worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
@@ -61,23 +61,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
-app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
-app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"])
+
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
-app.include_router(fr_core_router, prefix="", tags=["frontend"])
-app.include_router(fr_auth_router, prefix="/auth", tags=["frontend", "auth"])
-app.include_router(fr_profile_router, prefix="/profile", tags=["frontend", "profile"])
+app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)
+app.include_router(fr_admin_router, prefix="/admin", include_in_schema=False)
+app.include_router(fr_admin_projects_router, prefix="/admin/projects", include_in_schema=False)
+app.include_router(fr_admin_users_router, prefix="/admin/users", include_in_schema=False)
+app.include_router(fr_core_router, prefix="", include_in_schema=False)
+app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
+app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
+
+register_exception_handlers(app)
 
 
 # TODO - move below routes into routes dir when ready.
-@app.get("/logged_in")
-async def check_logged_in_route(current_user=Depends(get_current_user)):
-    """Test route to check if user is logged in and get their info."""
-    return {"message": f"You are logged in as {current_user.name} with email: {current_user.email}"}
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}

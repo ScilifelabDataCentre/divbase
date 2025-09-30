@@ -10,8 +10,8 @@
 
 <p>Welcome to DivBase</p>
 
-{% if user %}
-    <p>Hello, {{ user.email }}!</p>
+{% if current_user %}
+    <p>Hello, {{ current_user.email }}!</p>
     <p>You're logged in!</p>
 {% else %}
     <p>You're not logged in.</p>

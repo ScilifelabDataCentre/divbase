@@ -17,11 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.crud.auth import authenticate_user
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
+from divbase_api.deps import get_current_user
+from divbase_api.models.users import UserDB
 from divbase_api.schemas.auth import (
     CLILoginResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
+from divbase_api.schemas.users import UserResponse
 from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
@@ -53,9 +56,15 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
         )
 
     logger.info(f"User {user.email} logged in successfully.")
+
+    access_token, exp_access = create_access_token(subject=user.id)
+    refresh_token, exp_refresh = create_refresh_token(subject=user.id)
+
     return CLILoginResponse(
-        access_token=create_access_token(subject=user.id),
-        refresh_token=create_refresh_token(subject=user.id),
+        access_token=access_token,
+        access_token_expires_at=exp_access,
+        refresh_token=refresh_token,
+        refresh_token_expires_at=exp_refresh,
         email=user.email,
     )
 
@@ -87,11 +96,17 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(subject=user.id)
-    return RefreshTokenResponse(access_token=access_token)
+    access_token, expires_at = create_access_token(subject=user.id)
+    return RefreshTokenResponse(access_token=access_token, expires_at=expires_at)
 
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout_endpoint():
     # TODO
     pass
+
+
+@auth_router.post("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
+async def whoami_endpoint(current_user: UserDB = Depends(get_current_user)):
+    """Endpoint to return current logged in user's details."""
+    return UserResponse.model_validate(current_user)

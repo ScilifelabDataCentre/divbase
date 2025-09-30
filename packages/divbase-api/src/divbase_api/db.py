@@ -1,10 +1,5 @@
 """
 Handles connection between FastAPI and the postgresql db.
-
-# TODO:
-- Add db health check
-- Add ability to create first admin user if none exist.
-- Read into async_sessionmaker params more e.g. pool_recycle.
 """
 
 import logging
