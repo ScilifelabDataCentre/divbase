@@ -17,10 +17,10 @@ BASE_URL = "http://localhost:8000/api/v1"
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
 
 USERS_TO_CREATE = [
-    {"name": "Alice", "email": "alice@example.com", "password": "password123"},
-    {"name": "Bob", "email": "bob@example.com", "password": "password123"},
-    {"name": "Charlie", "email": "charlie@example.com", "password": "password123"},
-    {"name": "Diana", "email": "diana@example.com", "password": "password123"},
+    {"name": "Alice", "email": "alice@example.com", "password": "badpassword"},
+    {"name": "Bob", "email": "bob@example.com", "password": "badpassword"},
+    {"name": "Charlie", "email": "charlie@example.com", "password": "badpassword"},
+    {"name": "Diana", "email": "diana@example.com", "password": "badpassword"},
 ]
 
 PROJECTS_TO_CREATE = [

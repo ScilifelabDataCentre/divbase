@@ -1,10 +1,8 @@
 """
-Frontend routes for core functionality.
+Frontend routes for core pages (e.g. home page, about page etc...)
 
-E.g. home page, about page etc.
-
-These routes will return Jinja2 Template Responses.
-TODO - is it correct to say responsetype is html if we use Jinja2?
+For these routes you will likely want to use the 'get_current_user_from_cookie_optional' dependency
+to get the current user if they are logged in, but not require it.
 """
 
 from pathlib import Path

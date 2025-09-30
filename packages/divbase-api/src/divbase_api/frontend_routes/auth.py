@@ -147,7 +147,6 @@ async def post_register(
         return registration_failed_response("Registration failed, please try again.")
 
     logger.info(f"New user registered: {user_data.email=}")
-
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register_success.html",

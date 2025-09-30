@@ -1,8 +1,15 @@
 """
 Frontend routes for user to view and (if manager) manage their projects.
 
-These routes will return Template Responses.
+For these routes you'll likely want to use one of the following dependencies:
+- 'get_current_user_from_cookie':
+    Just ensures the user is logged in
+- 'get_project_member_from_cookie':
+    Ensures the user is a member of a specific project and gives details about the project, user and their project role.
+    (You need to validate their role is sufficient for what they're trying to do though).
 """
+
+import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -27,6 +34,8 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import UserProjectResponse
 from divbase_api.schemas.users import UserResponse
+
+logger = logging.getLogger(__name__)
 
 fr_projects_router = APIRouter()
 
@@ -100,24 +109,22 @@ async def add_project_member_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """Add a member to the project via frontend form."""
-    _, _, user_role = project_and_user_and_role
+    project, current_user, user_role = project_and_user_and_role
 
     if not has_required_role(user_role, ProjectRoles.MANAGE):
         raise AuthorizationError("You don't have permission to access this project.")
 
     user_to_add = await get_user_by_email(db=db, email=user_email.lower())
     if not user_to_add:
+        # TODO - custom exception.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with email '{user_email}' not found. Make sure they have an account.",
         )
 
     await add_project_member(db=db, project_id=project_id, user_id=user_to_add.id, role=ProjectRoles(role))
-
-    return RedirectResponse(
-        url=f"/projects/{project_id}",
-        status_code=status.HTTP_303_SEE_OTHER,
-    )
+    logger.info(f"User '{user_to_add.email}' added to project {project.name} by user: {current_user.email}")
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @fr_projects_router.post("/{project_id}/members/{user_id}/role", response_class=HTMLResponse)
@@ -129,7 +136,7 @@ async def update_member_role_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a member's role via frontend form."""
-    _, current_user, user_role = project_and_user_and_role
+    project, current_user, user_role = project_and_user_and_role
 
     if not has_required_role(user_role, ProjectRoles.MANAGE):
         raise AuthorizationError("You don't have permission to manage this project.")
@@ -137,7 +144,7 @@ async def update_member_role_endpoint(
     _prevent_self_modification(user_id=user_id, current_user=current_user)
 
     _ = await update_project_member_role(db=db, project_id=project_id, user_id=user_id, new_role=ProjectRoles(role))
-
+    logger.info(f"User '{user_id}' roles was updated in project {project.name} by user: {current_user.email}")
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -157,7 +164,7 @@ async def remove_member_endpoint(
     _prevent_self_modification(user_id=user_id, current_user=current_user)
 
     await remove_project_member(db=db, project_id=project.id, user_id=user_id)
-
+    logger.info(f"User '{user_id}' was removed from project {project.name} by user: {current_user.email}")
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 

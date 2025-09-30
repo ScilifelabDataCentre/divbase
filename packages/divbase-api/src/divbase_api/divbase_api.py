@@ -1,7 +1,5 @@
 """
 The API server for DivBase.
-
-TODO: user_name would later be determined by the authentication system.
 """
 
 import logging

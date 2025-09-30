@@ -1,9 +1,12 @@
 """
 Frontend routes for user to manage their profile/account.
 
-These routes will return Template Responses.
+All routes here should rely on get_current_user_from_cookie dependency to ensure user is logged in.
 
-TODO: Currently only handle GET requests.
+TODO: (some of this relies on having email sending set up)
+- Change password
+- Delete account
+- Change email
 """
 
 from fastapi import APIRouter, Depends, Form, Request, status
@@ -61,7 +64,6 @@ async def get_edit_user_profile_endpoint(
 
 @fr_profile_router.post("/edit", response_class=HTMLResponse)
 async def post_edit_user_profile_endpoint(
-    request: Request,
     name: str = Form(...),
     email: str = Form(...),
     current_user: UserDB = Depends(get_current_user_from_cookie),
