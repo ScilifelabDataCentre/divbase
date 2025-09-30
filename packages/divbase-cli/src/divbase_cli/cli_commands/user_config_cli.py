@@ -11,17 +11,14 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
+from divbase_cli.config import settings
 from divbase_cli.user_config import (
     create_user_config,
     load_user_config,
 )
 
-DIVBASE_API_URL = "http://localhost:8000"
-DIVBASE_S3_URL = "http://localhost:9000"
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
-
 CONFIG_FILE_OPTION = typer.Option(
-    DEFAULT_CONFIG_PATH,
+    settings.DEFAULT_CONFIG_PATH,
     "--config",
     "-c",
     help="Path to your user configuration file. By default it is stored at ~/.config/.divbase_tools.yaml.",
@@ -32,7 +29,9 @@ config_app = typer.Typer(help="Manage your user configuration file for the DivBa
 
 @config_app.command("create")
 def create_user_config_command(
-    config_file: Path = typer.Option(DEFAULT_CONFIG_PATH, help="Where to store your config file locally on your pc."),
+    config_file: Path = typer.Option(
+        settings.DEFAULT_CONFIG_PATH, help="Where to store your config file locally on your pc."
+    ),
 ):
     """Create a user configuration file for the divbase-cli tool."""
     create_user_config(config_path=config_file)
@@ -42,8 +41,10 @@ def create_user_config_command(
 @config_app.command("add-project")
 def add_project_command(
     name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
-    divbase_url: str = typer.Option(DIVBASE_API_URL, help="DivBase API URL associated with this project."),
-    s3_url: str = typer.Option(DIVBASE_S3_URL, help="S3 object store URL associated with this project."),
+    divbase_url: str = typer.Option(
+        settings.DEFAULT_DIVBASE_API_URL, help="DivBase API URL associated with this project."
+    ),
+    s3_url: str = typer.Option(settings.DEFAULT_S3_URL, help="S3 object store URL associated with this project."),
     make_default: bool = typer.Option(
         False,
         "--default",

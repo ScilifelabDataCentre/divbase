@@ -11,8 +11,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-# TODO - update user config path here too.
-DEFAULT_TOKEN_PATH = Path.home() / ".config" / "divbase" / ".env"
+from divbase_cli.config import settings
 
 
 @dataclass
@@ -26,7 +25,7 @@ class TokenData:
     access_token_expires_at: int
     refresh_token_expires_at: int
 
-    def dump_tokens(self, output_path: Path) -> None:
+    def dump_tokens(self, output_path: Path = settings.DEFAULT_TOKEN_PATH) -> None:
         """Dump the user token data to the specified output path"""
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -70,19 +69,19 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
         access_token_expires_at=data["access_token_expires_at"],
         refresh_token_expires_at=data["refresh_token_expires_at"],
     )
-    token_data.dump_tokens(output_path=DEFAULT_TOKEN_PATH)
+    token_data.dump_tokens()
 
 
-def logout_of_divbase() -> None:
+def logout_of_divbase(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> None:
     """
     Log out of the DivBase server.
     TODO - Decide whether to implement token blacklisting on server side.
     """
-    if DEFAULT_TOKEN_PATH.exists():
-        DEFAULT_TOKEN_PATH.unlink()
+    if token_path.exists():
+        token_path.unlink()
 
 
-def load_user_tokens(token_path: Path = DEFAULT_TOKEN_PATH) -> TokenData:
+def load_user_tokens(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> TokenData:
     """
     Load user tokens from the specified path.
     """
