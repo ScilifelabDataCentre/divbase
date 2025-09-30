@@ -12,6 +12,9 @@ import httpx
 import yaml
 
 from divbase_cli.config import settings
+from divbase_lib.exceptions import AuthenticationError
+
+LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 
 
 @dataclass
@@ -40,11 +43,11 @@ class TokenData:
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
-        return time.time() >= self.access_token_expires_at
+        return time.time() >= (self.access_token_expires_at - 5)  # 5 second buffer
 
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
-        return time.time() >= self.refresh_token_expires_at
+        return time.time() >= (self.refresh_token_expires_at - 5)  # 5 second buffer
 
 
 def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
@@ -97,3 +100,63 @@ def load_user_tokens(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> TokenDat
         access_token_expires_at=token_dict["access_token_expires_at"],
         refresh_token_expires_at=token_dict["refresh_token_expires_at"],
     )
+
+
+def make_authenticated_request(
+    method: str,
+    divbase_base_url: str,
+    api_route: str,
+    token_path: Path = settings.DEFAULT_TOKEN_PATH,
+    **kwargs,
+) -> httpx.Response:
+    """
+    Make an authenticated request to the DivBase server, refreshing tokens if necessary.
+    """
+    token_data = load_user_tokens(token_path=token_path)
+
+    if token_data.is_access_token_expired():
+        if token_data.is_refresh_token_expired():
+            raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
+        else:
+            token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
+
+    headers = kwargs.get("headers", {})
+    headers["Authorization"] = f"Bearer {token_data.access_token}"
+    kwargs["headers"] = headers
+
+    url = f"{divbase_base_url}/api/{api_route.lstrip('/')}"
+    response = httpx.request(method, url, **kwargs)
+    response.raise_for_status()
+    return response
+
+
+def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> TokenData:
+    """
+    Use the refresh token to get a new access token and update the token file.
+
+    Returns the new TokenData object which can be used immediately in a new request.
+    """
+    response = httpx.post(
+        f"{divbase_base_url}/api/v1/auth/refresh",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": token_data.refresh_token,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    # Possible if e.g. token revoked on server side.
+    if response.status_code == 401:
+        raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
+
+    response.raise_for_status()
+    data = response.json()
+
+    new_token_data = TokenData(
+        access_token=data["access_token"],
+        refresh_token=token_data.refresh_token,
+        access_token_expires_at=data["access_token_expires_at"],
+        refresh_token_expires_at=token_data.refresh_token_expires_at,
+    )
+    new_token_data.dump_tokens()
+    return new_token_data

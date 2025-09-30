@@ -2,7 +2,7 @@
 Local dev convenience script.
 
 Seperated from local_dev_setup.py until happy with approach.
-Will likely convert these to divbase0-cli command first.
+Will likely convert these to divbase-cli command first.
 
 Creates test users and projects with various role assignments for development.
 Assumes the DivBase stack is already running locally on http://localhost:8000
@@ -25,25 +25,25 @@ USERS_TO_CREATE = [
 
 PROJECTS_TO_CREATE = [
     {
-        "name": "local-squirrel-1",
+        "name": "local-project-1",
         "description": "First test project for local development",
         "bucket_name": "local-project-1",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-mongoose-2",
+        "name": "local-project-2",
         "description": "Second test project for local development",
         "bucket_name": "local-project-2",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-salmon-3",
+        "name": "local-project-3",
         "description": "Third test project for local development",
         "bucket_name": "local-project-3",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-badger-4",
+        "name": "local-project-4",
         "description": "Fourth test project for local development",
         "bucket_name": "local-project-4",
         "storage_quota_bytes": 10737418240,
@@ -51,22 +51,22 @@ PROJECTS_TO_CREATE = [
 ]
 
 ROLE_ASSIGNMENTS = {
-    "local-squirrel-1": [
+    "local-project-1": [
         ("alice@example.com", "manage"),
         ("bob@example.com", "edit"),
         ("charlie@example.com", "read"),
     ],
-    "local-mongoose-2": [
+    "local-project-2": [
         ("alice@example.com", "edit"),
         ("bob@example.com", "manage"),
         ("diana@example.com", "read"),
     ],
-    "local-salmon-3": [
+    "local-project-3": [
         ("charlie@example.com", "manage"),
         ("diana@example.com", "edit"),
         ("alice@example.com", "read"),
     ],
-    "local-badger-4": [
+    "local-project-4": [
         ("diana@example.com", "manage"),
         ("charlie@example.com", "edit"),
         ("bob@example.com", "read"),

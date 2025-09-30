@@ -318,3 +318,10 @@ class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
 
     pass
+
+
+class AuthenticationError(Exception):
+    """Raised for user authentication errors when using CLI tool."""
+
+    def __init__(self, error_message: str = "Authentication required, make sure you're logged in."):
+        super().__init__(error_message)

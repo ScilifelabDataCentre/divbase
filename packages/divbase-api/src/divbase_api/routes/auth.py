@@ -106,7 +106,7 @@ async def logout_endpoint():
     pass
 
 
-@auth_router.post("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
+@auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
 async def whoami_endpoint(current_user: UserDB = Depends(get_current_user)):
     """Endpoint to return current logged in user's details."""
     return UserResponse.model_validate(current_user)
