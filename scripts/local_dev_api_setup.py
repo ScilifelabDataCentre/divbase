@@ -1,14 +1,12 @@
 """
 Local dev convenience script.
 
-Seperated from local_dev_setup.py until happy with approach.
-Will likely convert these to divbase-cli command first.
+Separated from local_dev_setup.py until happy with approach.
+Will likely convert these to divbase0-cli command first.
 
 Creates test users and projects with various role assignments for development.
 Assumes the DivBase stack is already running locally on http://localhost:8000
 """
-
-from typing import Dict
 
 import httpx
 
@@ -111,7 +109,7 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
     return response
 
 
-def create_users(token: str) -> Dict[str, int]:
+def create_users(token: str) -> dict[str, int]:
     print("Creating test users...")
 
     user_map = {}
@@ -130,7 +128,7 @@ def create_users(token: str) -> Dict[str, int]:
     return user_map
 
 
-def create_projects(token: str) -> Dict[str, int]:
+def create_projects(token: str) -> dict[str, int]:
     print("Creating test projects...")
     project_map = {}
     for project_data in PROJECTS_TO_CREATE:
@@ -143,7 +141,7 @@ def create_projects(token: str) -> Dict[str, int]:
     return project_map
 
 
-def assign_project_roles(token: str, user_map: Dict[str, int], project_map: Dict[str, int]) -> None:
+def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict[str, int]) -> None:
     """Assign users to projects with specified roles."""
     print("Assigning users to projects with roles...")
 
