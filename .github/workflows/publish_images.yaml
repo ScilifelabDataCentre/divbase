@@ -2,15 +2,14 @@ name: Build and Push images to GitHub Container Registry
 # The logic for settings Docker image tags is in ./scripts/ci/set_docker_tag.sh
 
 on:
-  push:
-    # Tag = commit hash
-    branches:
-      - main 
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
-      - '.gitignore'
-      - '.dockerignore'
+#   push:
+#     # Tag = commit hash
+#     branches:
+#       - main 
+#     paths-ignore:
+#       - 'README.md'
+#       - 'docs/**'
+#       - '.gitignore'
   release:
     # Tag = release version
     types: [published]
