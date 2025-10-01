@@ -69,5 +69,5 @@ jobs:
             context: .
             file: ./docker/${{ matrix.dockerfile }}
             tags: |
-                ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:${{ steps.set-tag.outputs.tag }}
-                ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}:latest
+                ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ steps.set-tag.outputs.tag }}
+                ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:latest
