@@ -10,7 +10,7 @@ Assumes the DivBase stack is already running locally on http://localhost:8000
 
 import httpx
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8000/api"
 
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
 
@@ -78,7 +78,7 @@ def get_admin_access_token() -> str:
     print("Getting admin access token...")
 
     response = httpx.post(
-        f"{BASE_URL}/auth/login",
+        f"{BASE_URL}/v1/auth/login",
         data={
             "grant_type": "password",
             "username": ADMIN_CREDENTIALS["username"],

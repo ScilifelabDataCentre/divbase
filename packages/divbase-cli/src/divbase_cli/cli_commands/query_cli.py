@@ -152,8 +152,8 @@ def check_status(
     divbase_url = resolve_divbase_api_url(url=divbase_url, config_path=config_file)
 
     if task_id:
-        task_items = httpx.get(f"{divbase_url}/query/{task_id}").json()
+        task_items = httpx.get(f"{divbase_url}/v1/query/{task_id}").json()
     else:
-        task_items = httpx.get(f"{divbase_url}/query/").json()
+        task_items = httpx.get(f"{divbase_url}/v1/query/").json()
     task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
     task_history_manager.print_task_history()
