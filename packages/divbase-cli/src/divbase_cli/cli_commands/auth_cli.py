@@ -2,6 +2,7 @@
 CLI subcommand for managing user auth with DivBase server.
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -9,7 +10,12 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.config import settings
-from divbase_cli.user_auth import login_to_divbase, logout_of_divbase, make_authenticated_request
+from divbase_cli.user_auth import (
+    check_existing_session,
+    login_to_divbase,
+    logout_of_divbase,
+    make_authenticated_request,
+)
 from divbase_cli.user_config import load_user_config
 from divbase_lib.exceptions import AuthenticationError
 
@@ -24,16 +30,30 @@ def login(
     password: Annotated[str, typer.Option(prompt=True, hide_input=True)],
     divbase_url: str = typer.Option(settings.DEFAULT_DIVBASE_API_URL, help="DivBase server URL to connect to."),
     config_file: Path = CONFIG_FILE_OPTION,
+    force: bool = typer.Option(False, "--force", "-f", help="Force login again even if already logged in"),
 ):
     """
     Log in to the DivBase server.
-    """
-    # TODO handle already logged in.
-    login_to_divbase(email=email, password=password, divbase_url=divbase_url)
-    config = load_user_config(config_file)
-    config.set_logged_in_url(divbase_url)
 
-    print(f"Logged in successfully with email: {email}")
+    TODO - think abit more about already logged in validation and UX.
+    One thing to consider would be use case of very close to refresh token expiry, that could be bad UX.
+    (But that is dependant on whether we will allow renewal of refresh tokens...)
+    """
+    config = load_user_config(config_file)
+
+    if not force:
+        session_expires_at = check_existing_session(divbase_url=divbase_url, config=config)
+        if session_expires_at:
+            print(f"Already logged in to {divbase_url}")
+            print(f"Session expires: {datetime.fromtimestamp(session_expires_at)}")
+
+            if not typer.confirm("Do you want to login again? This will replace your current session."):
+                print("Login cancelled.")
+                return
+
+    login_to_divbase(email=email, password=password, divbase_url=divbase_url)
+    config.set_logged_in_url(divbase_url)
+    print(f"Logged in successfully as: {email}")
 
 
 @auth_app.command("logout")

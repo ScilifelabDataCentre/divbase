@@ -47,7 +47,29 @@ class TokenData:
 
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
-        return time.time() >= (self.refresh_token_expires_at - 5)  # 5 second buffer
+        return time.time() >= (self.refresh_token_expires_at - 300)  # 5 minute buffer
+
+
+def check_existing_session(divbase_url: str, config) -> int | None:
+    """
+    Check if a user is already logged in to DivBase.
+    Used to prevent unnecessary multiple logins.
+
+    Returns the refresh token expiry timestamp if logged in (POSIX time), else None.
+    """
+    if not config.logged_in_url or config.logged_in_url != divbase_url:
+        return None
+
+    try:
+        token_data = load_user_tokens()
+    except (FileNotFoundError, KeyError):
+        # e.g. if user manually deleted or modded token file
+        return None
+
+    if token_data.is_refresh_token_expired():
+        return None
+
+    return token_data.refresh_token_expires_at
 
 
 def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
