@@ -85,7 +85,7 @@ def sample_metadata_query(
     project_config = resolve_project(project_name=project, config_path=config_file)
 
     params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
-    response = httpx.post(f"{project_config.divbase_url}/query/sample-metadata/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/v1/query/sample-metadata/", params=params)
     response.raise_for_status()
 
     results = SidecarQueryResult(**response.json())
@@ -127,7 +127,7 @@ def pipe_query(
         "metadata_tsv_name": metadata_tsv_name,
         "project": project_config.name,
     }
-    response = httpx.post(f"{project_config.divbase_url}/query/bcftools-pipe/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/v1/query/bcftools-pipe/", params=params)
     response.raise_for_status()
 
     task_id = response.json()

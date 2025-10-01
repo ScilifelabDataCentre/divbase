@@ -32,7 +32,7 @@ def update_dimensions_index(
     params = {
         "project": project_config.name,
     }
-    response = httpx.post(f"{project_config.divbase_url}/dimensions/update/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/v1/dimensions/update/", params=params)
     response.raise_for_status()
 
     task_id = response.json()
