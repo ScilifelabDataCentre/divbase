@@ -17,8 +17,8 @@ from divbase_cli.user_config import load_user_config
 runner = CliRunner()
 
 
-def test_create_config_command():
-    command = "config create"
+def test_create_config_command(tmp_config_path):
+    command = f"config create --config-file {tmp_config_path}"
     result = runner.invoke(app, command)
 
     print(f"cli_settings.CONFIG_PATH: {cli_settings.CONFIG_PATH}")
@@ -27,8 +27,8 @@ def test_create_config_command():
     assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
 
-def test_cant_create_config_if_exists():
-    command = "config create"
+def test_cant_create_config_if_exists(tmp_config_path):
+    command = f"config create --config-file {tmp_config_path}"
     result1 = runner.invoke(app, command)
     assert result1.exit_code == 0
 

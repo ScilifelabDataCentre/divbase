@@ -8,21 +8,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "divbase" / "config.yaml"
 DEFAULT_TOKENS_PATH = Path.home() / ".config" / "divbase" / ".secrets"
 DEFAULT_METADATA_TSV_NAME = "sample_metadata.tsv"
 DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"  # TODO - change to production URL when time comes
 DEFAULT_S3_URL = "http://localhost:9000"  # TODO - change to production URL when time comes
-
-
-# This is used to get pytest to read the enviroment variables before the cli_settings instance is created.
-# Pytest needs to overwrite the default paths and urls to prevent test pollution.
-# Trying to set these env variables in conftest.py does not work
-# as this module is imported before conftest.py is processed.
-if os.getenv("PYTEST", "").lower() in ("1", "true"):
-    load_dotenv("tests/cli_settings.txt")
 
 
 @dataclass
