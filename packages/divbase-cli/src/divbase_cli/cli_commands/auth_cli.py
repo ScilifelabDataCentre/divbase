@@ -9,7 +9,7 @@ import typer
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_cli.config import settings
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.user_auth import (
     check_existing_session,
     login_to_divbase,
@@ -28,7 +28,7 @@ auth_app = typer.Typer(
 def login(
     email: str,
     password: Annotated[str, typer.Option(prompt=True, hide_input=True)],
-    divbase_url: str = typer.Option(settings.DEFAULT_DIVBASE_API_URL, help="DivBase server URL to connect to."),
+    divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase server URL to connect to."),
     config_file: Path = CONFIG_FILE_OPTION,
     force: bool = typer.Option(False, "--force", "-f", help="Force login again even if already logged in"),
 ):

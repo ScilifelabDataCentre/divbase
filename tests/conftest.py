@@ -50,6 +50,23 @@ def set_env_vars():
     os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
 
 
+@pytest.fixture(autouse=True, scope="function")
+def clean_tmp_config_token_dir():
+    """
+    To avoid test pollution, ensure that any config or token files created in tests
+    are removed after each test function and are not created where the local dev/user has their config or token file.
+
+    Related to this fixture is cli_config.py where the cli_settings instance is created at module load time.
+    Using env variables we point to these "testing" paths instead for the config and token paths.
+    """
+    test_config_path = Path("tests/fixtures/tmp/config.yaml")
+    test_token_path = Path("tests/fixtures/tmp/.fakesecrets")
+    if test_config_path.exists():
+        test_config_path.unlink()
+    if test_token_path.exists():
+        test_token_path.unlink()
+
+
 @pytest.fixture(scope="session")
 def CONSTANTS():
     return {

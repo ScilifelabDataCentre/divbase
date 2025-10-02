@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-from divbase_cli.config import settings
+from divbase_cli.cli_config import cli_settings
 from divbase_lib.exceptions import AuthenticationError
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
@@ -28,7 +28,7 @@ class TokenData:
     access_token_expires_at: int
     refresh_token_expires_at: int
 
-    def dump_tokens(self, output_path: Path = settings.DEFAULT_TOKEN_PATH) -> None:
+    def dump_tokens(self, output_path: Path = cli_settings.TOKENS_PATH) -> None:
         """Dump the user token data to the specified output path"""
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -62,7 +62,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
 
     try:
         token_data = load_user_tokens()
-    except (FileNotFoundError, KeyError):
+    except (AuthenticationError, KeyError):
         # e.g. if user manually deleted or modded token file
         return None
 
@@ -97,18 +97,20 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
     token_data.dump_tokens()
 
 
-def logout_of_divbase(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> None:
+def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     """Log out of the DivBase server."""
     if token_path.exists():
         token_path.unlink()
 
 
-def load_user_tokens(token_path: Path = settings.DEFAULT_TOKEN_PATH) -> TokenData:
+def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
     """
     Load user tokens from the specified path.
     """
     if not token_path.exists():
-        raise FileNotFoundError(f"Your Tokens were not found at {token_path}. Please check you are logged in first.")
+        raise AuthenticationError(
+            f"Your access tokens were not found at {token_path}. Please check you are logged in first."
+        )
 
     with open(token_path, "r") as file:
         token_dict = yaml.safe_load(file)
@@ -125,7 +127,7 @@ def make_authenticated_request(
     method: str,
     divbase_base_url: str,
     api_route: str,
-    token_path: Path = settings.DEFAULT_TOKEN_PATH,
+    token_path: Path = cli_settings.TOKENS_PATH,
     **kwargs,
 ) -> httpx.Response:
     """

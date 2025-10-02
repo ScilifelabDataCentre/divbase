@@ -10,22 +10,25 @@ Tests start from 1 of 3 types of user config files:
 import pytest
 from typer.testing import CliRunner
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.divbase_cli import app
 from divbase_cli.user_config import load_user_config
 
 runner = CliRunner()
 
 
-def test_create_config_command(tmp_config_path):
-    command = f"config create --config-file {tmp_config_path}"
+def test_create_config_command():
+    command = "config create"
     result = runner.invoke(app, command)
 
+    print(f"cli_settings.CONFIG_PATH: {cli_settings.CONFIG_PATH}")
+
     assert result.exit_code == 0
-    assert tmp_config_path.exists(), "Config file was not created at the temporary path"
+    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
 
-def test_cant_create_config_if_exists(tmp_config_path):
-    command = f"config create --config-file {tmp_config_path}"
+def test_cant_create_config_if_exists():
+    command = "config create"
     result1 = runner.invoke(app, command)
     assert result1.exit_code == 0
 

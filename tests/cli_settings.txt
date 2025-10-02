@@ -1,0 +1,2 @@
+DIVBASE_CONFIG_PATH="tests/fixtures/tmp/config.yaml"
+DIVBASE_TOKENS_PATH="tests/fixtures/tmp/.fakesecrets"
