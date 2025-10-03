@@ -106,7 +106,7 @@ services:
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
-    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/packages/divbase-api/src/divbase_api/divbase_api.py"]
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/usr/local/lib/python3.12/site-packages/divbase_api/divbase_api.py"]
     develop: # rebuild only on changes to deps. 
       watch:
         - action: sync
