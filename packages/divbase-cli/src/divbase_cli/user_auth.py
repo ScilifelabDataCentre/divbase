@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 import yaml
+from pydantic import SecretStr
 
 from divbase_cli.cli_config import cli_settings
 from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError
@@ -23,8 +24,8 @@ class TokenData:
     Class to hold user token information.
     """
 
-    access_token: str
-    refresh_token: str
+    access_token: SecretStr
+    refresh_token: SecretStr
     access_token_expires_at: int
     refresh_token_expires_at: int
 
@@ -33,8 +34,8 @@ class TokenData:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         token_dict = {
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
+            "access_token": self.access_token.get_secret_value(),
+            "refresh_token": self.refresh_token.get_secret_value(),
             "access_token_expires_at": self.access_token_expires_at,
             "refresh_token_expires_at": self.refresh_token_expires_at,
         }
@@ -43,7 +44,8 @@ class TokenData:
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
-        return time.time() >= (self.access_token_expires_at - 5)  # 5 second buffer
+        # TODO
+        return time.time() + 10000000000 >= (self.access_token_expires_at - 5)  # 5 second buffer
 
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
@@ -72,7 +74,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
-def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
+def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """
@@ -82,12 +84,14 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
             data={
                 "grant_type": "password",
                 "username": email,  # OAuth2 uses 'username', not 'email'
-                "password": password,
+                "password": password.get_secret_value(),
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-    except httpx.ConnectError as e:
-        raise DivBaseAPIConnectionError() from e
+    except httpx.ConnectError:
+        # We don't raise the full error as it contains the password in the stack trace.
+        # a user could unknowingly dump this into e.g. a bug report/GitHub issue.
+        raise DivBaseAPIConnectionError() from None
 
     if response.status_code == 401:
         raise AuthenticationError("Invalid email or password. Please try again.")
@@ -96,8 +100,8 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
 
     data = response.json()
     token_data = TokenData(
-        access_token=data["access_token"],
-        refresh_token=data["refresh_token"],
+        access_token=SecretStr(data["access_token"]),
+        refresh_token=SecretStr(data["refresh_token"]),
         access_token_expires_at=data["access_token_expires_at"],
         refresh_token_expires_at=data["refresh_token_expires_at"],
     )
@@ -123,8 +127,8 @@ def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
         token_dict = yaml.safe_load(file)
 
     return TokenData(
-        access_token=token_dict["access_token"],
-        refresh_token=token_dict["refresh_token"],
+        access_token=SecretStr(token_dict["access_token"]),
+        refresh_token=SecretStr(token_dict["refresh_token"]),
         access_token_expires_at=token_dict["access_token_expires_at"],
         refresh_token_expires_at=token_dict["refresh_token_expires_at"],
     )
@@ -149,7 +153,7 @@ def make_authenticated_request(
             token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
 
     headers = kwargs.get("headers", {})
-    headers["Authorization"] = f"Bearer {token_data.access_token}"
+    headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
     kwargs["headers"] = headers
 
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
@@ -172,7 +176,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     response = httpx.post(
         f"{divbase_base_url}/v1/auth/refresh",
         json={
-            "refresh_token": token_data.refresh_token,
+            "refresh_token": token_data.refresh_token.get_secret_value(),
         },
     )
 
@@ -184,8 +188,8 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     data = response.json()
 
     new_token_data = TokenData(
-        access_token=data["access_token"],
-        refresh_token=token_data.refresh_token,
+        access_token=SecretStr(data["access_token"]),
+        refresh_token=token_data.refresh_token,  # (refresh_token is still a SecretStr)
         access_token_expires_at=data["expires_at"],
         refresh_token_expires_at=token_data.refresh_token_expires_at,
     )
