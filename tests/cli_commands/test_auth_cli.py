@@ -1,6 +1,8 @@
 """
 E2E tests for the "divbase-cli auth" CLI commands.
 
+NOTE: Without a user config file already created, these tests will fail
+
 TODO - add some non e2e tests for logging in with expired tokens etc.
 """
 
@@ -46,7 +48,7 @@ def log_in_as_admin():
     assert "Logged in successfully" in result.stdout
 
 
-def test_login_command():
+def test_login_command(fresh_config_path):
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']}"
 
     result = runner.invoke(app, command)
@@ -55,7 +57,7 @@ def test_login_command():
     assert admin_credentials["email"] in result.stdout
 
 
-def test_login_command_fails_with_invalid_credentials():
+def test_login_command_fails_with_invalid_credentials(fresh_config_path):
     """Test login command fails with invalid credentials."""
     command = f"auth login {admin_credentials['email']} --password wrongpassword"
 
@@ -65,7 +67,7 @@ def test_login_command_fails_with_invalid_credentials():
     assert "Invalid email or password" in str(result.exception)
 
 
-def test_login_command_with_invalid_server_url():
+def test_login_command_with_invalid_server_url(fresh_config_path):
     """Test login command fails with an invalid server URL."""
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']} --divbase-url https://invalid-url"
 
@@ -74,7 +76,7 @@ def test_login_command_with_invalid_server_url():
     assert isinstance(result.exception, DivBaseAPIConnectionError)
 
 
-def test_login_command_already_logged_in():
+def test_login_command_already_logged_in(fresh_config_path):
     """Test login command when already logged in."""
     log_in_as_admin()
 
@@ -96,7 +98,7 @@ def test_login_command_already_logged_in():
     assert admin_credentials["email"] in result.stdout
 
 
-def test_force_login_option():
+def test_force_login_option(fresh_config_path):
     """Should not prompt about logging in again"""
     log_in_as_admin()
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']} --force"
@@ -107,7 +109,7 @@ def test_force_login_option():
     assert admin_credentials["email"] in result.stdout
 
 
-def test_logout_command():
+def test_logout_command(fresh_config_path):
     """Test basic usage of logout and that running multiple times is ok."""
     command = "auth logout"
 
@@ -120,7 +122,7 @@ def test_logout_command():
     assert "Logged out successfully" in result.stdout
 
 
-def test_login_logout_cycle():
+def test_login_logout_cycle(fresh_config_path):
     """Test a few repeated login/logout cycles."""
     login_command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']}"
     logout_command = "auth logout"
@@ -136,7 +138,7 @@ def test_login_logout_cycle():
         assert "Logged out successfully" in result.stdout
 
 
-def test_whoami_command():
+def test_whoami_command(fresh_config_path):
     """Test basic usage of whoami command."""
     log_in_as_admin()
     command = "auth whoami"
@@ -146,7 +148,7 @@ def test_whoami_command():
     assert admin_credentials["email"] in result.stdout
 
 
-def test_whoami_command_fails_if_not_logged_in():
+def test_whoami_command_fails_if_not_logged_in(fresh_config_path):
     """Test basic usage of whoami command."""
     command = "auth whoami"
 

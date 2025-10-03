@@ -72,7 +72,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
     run_update_dimensions(bucket_name=bucket_name)
 
     # Basic version of command
-    command = f"dimensions show --project {bucket_name} --config {user_config_path}"
+    command = f"dimensions show --project {bucket_name}"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
@@ -83,7 +83,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
         assert vcf_file in cli_result.stdout, f"{vcf_file} not found in CLI output:\n{cli_result.stdout}"
 
     # Unique-scaffolds version of command
-    command = f"dimensions show --project {bucket_name} --config {user_config_path} --unique-scaffolds"
+    command = f"dimensions show --project {bucket_name} --unique-scaffolds"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
@@ -97,7 +97,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
 
     # Filename version of command
     for vcf_file in vcf_files:
-        command = f"dimensions show --project {bucket_name} --config {user_config_path} --filename {vcf_file}"
+        command = f"dimensions show --project {bucket_name} --filename {vcf_file}"
         cli_result = runner.invoke(app, command)
         assert cli_result.exit_code == 0
         match = re.search(r"HOM_20ind_17SNPs\.(\d+)\.vcf\.gz", vcf_file)
@@ -114,7 +114,7 @@ def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, user_config_path,
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
-    command = f"dimensions show --project {bucket_name} --config {user_config_path}"
+    command = f"dimensions show --project {bucket_name}"
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
