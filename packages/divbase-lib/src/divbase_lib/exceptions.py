@@ -325,3 +325,13 @@ class AuthenticationError(Exception):
 
     def __init__(self, error_message: str = "Authentication required, make sure you're logged in."):
         super().__init__(error_message)
+
+
+class DivBaseAPIConnectionError(Exception):
+    """Raised when CLI tool can't connect to the provided DivBase API URL."""
+
+    def __init__(
+        self,
+        error_message: str = "Unable to connect to the DivBase API. Check the API URL and your network connection. Perhaps the server is down?",
+    ):
+        super().__init__(error_message)

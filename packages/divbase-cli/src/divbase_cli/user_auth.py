@@ -12,7 +12,7 @@ import httpx
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_lib.exceptions import AuthenticationError
+from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 
@@ -76,15 +76,22 @@ def login_to_divbase(email: str, password: str, divbase_url: str) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """
-    response = httpx.post(
-        f"{divbase_url}/v1/auth/login",
-        data={
-            "grant_type": "password",
-            "username": email,  # OAuth2 uses 'username', not 'email'
-            "password": password,
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
+    try:
+        response = httpx.post(
+            f"{divbase_url}/v1/auth/login",
+            data={
+                "grant_type": "password",
+                "username": email,  # OAuth2 uses 'username', not 'email'
+                "password": password,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+    except httpx.ConnectError as e:
+        raise DivBaseAPIConnectionError() from e
+
+    if response.status_code == 401:
+        raise AuthenticationError("Invalid email or password. Please try again.")
+
     response.raise_for_status()
 
     data = response.json()
@@ -146,7 +153,12 @@ def make_authenticated_request(
     kwargs["headers"] = headers
 
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
-    response = httpx.request(method, url, **kwargs)
+
+    try:
+        response = httpx.request(method, url, **kwargs)
+    except httpx.HTTPError as e:
+        raise DivBaseAPIConnectionError() from e
+
     response.raise_for_status()
     return response
 
