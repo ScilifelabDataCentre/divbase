@@ -61,10 +61,12 @@ def clean_tmp_config_token_dir():
     """
     test_config_path = Path("tests/fixtures/tmp/config.yaml")
     test_token_path = Path("tests/fixtures/tmp/.fakesecrets")
-    if test_config_path.exists():
-        test_config_path.unlink()
-    if test_token_path.exists():
-        test_token_path.unlink()
+
+    test_config_path.unlink(missing_ok=True)
+    test_token_path.unlink(missing_ok=True)
+    yield
+    test_config_path.unlink(missing_ok=True)
+    test_token_path.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session")
