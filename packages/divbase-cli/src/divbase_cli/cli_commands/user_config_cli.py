@@ -11,17 +11,14 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.user_config import (
     create_user_config,
     load_user_config,
 )
 
-DIVBASE_API_URL = "http://localhost:8000"
-DIVBASE_S3_URL = "http://localhost:9000"
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / ".divbase_tools.yaml"
-
 CONFIG_FILE_OPTION = typer.Option(
-    DEFAULT_CONFIG_PATH,
+    cli_settings.CONFIG_PATH,
     "--config",
     "-c",
     help="Path to your user configuration file. By default it is stored at ~/.config/.divbase_tools.yaml.",
@@ -32,7 +29,9 @@ config_app = typer.Typer(help="Manage your user configuration file for the DivBa
 
 @config_app.command("create")
 def create_user_config_command(
-    config_file: Path = typer.Option(DEFAULT_CONFIG_PATH, help="Where to store your config file locally on your pc."),
+    config_file: Path = typer.Option(
+        cli_settings.CONFIG_PATH, help="Where to store your config file locally on your pc."
+    ),
 ):
     """Create a user configuration file for the divbase-cli tool."""
     create_user_config(config_path=config_file)
@@ -42,8 +41,8 @@ def create_user_config_command(
 @config_app.command("add-project")
 def add_project_command(
     name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
-    divbase_url: str = typer.Option(DIVBASE_API_URL, help="DivBase API URL associated with this project."),
-    s3_url: str = typer.Option(DIVBASE_S3_URL, help="S3 object store URL associated with this project."),
+    divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase API URL associated with this project."),
+    s3_url: str = typer.Option(cli_settings.S3_URL, help="S3 object store URL associated with this project."),
     make_default: bool = typer.Option(
         False,
         "--default",
@@ -137,11 +136,7 @@ def show_user_config(
     config = load_user_config(config_file)
     console = Console()
 
-    table = Table(title=f"Your DivBase user configuration file's contents located at: '{config_file}'")
-    table.add_column("Bucket Name", style="cyan")
-    table.add_column("DivBase URL", style="green")
-    table.add_column("S3 URL", style="green")
-    table.add_column("Is default", style="yellow")
+    console.print(f"[bold]Your DivBase user configuration file's contents located at:[/bold] '{config_file}'")
 
     if not config.default_download_dir:
         dload_dir_info = "Not specified, meaning the working directory of wherever you run the download command from."
@@ -149,15 +144,26 @@ def show_user_config(
         dload_dir_info = "Working directory of wherever you run the download command from."
     else:
         dload_dir_info = config.default_download_dir
-
     console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+
+    if config.logged_in_url:
+        console.print(f"[bold]You're logged into DivBase API at URL:[/bold] {config.logged_in_url}")
+    else:
+        console.print("[bold]Not currently logged into any DivBase API URL.[/bold]")
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
         console.print("You can add a project using the command: 'divbase config add-project <project_name>'")
         return
 
+    table = Table(title="\nProjects in your DivBase CLI user config file")
+    table.add_column("Bucket Name", style="cyan")
+    table.add_column("DivBase URL", style="green")
+    table.add_column("S3 URL", style="green")
+    table.add_column("Is default", style="yellow")
+
     for project in config.projects:
         is_default = "Yes" if project.name == config.default_project else ""
         table.add_row(project.name, project.divbase_url, project.s3_url, is_default)
+
     console.print(table)

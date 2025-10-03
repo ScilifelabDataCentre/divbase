@@ -77,12 +77,12 @@ register_exception_handlers(app)
 
 
 # TODO - move below routes into routes dir when ready.
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {"status": "ok"}
 
 
-@app.get("/query/")
+@app.get("/api/v1/query/")
 def get_jobs_by_user(user_name: str = "Default User"):
     """
     TODO: user_name would later be determined by the authentication system.
@@ -91,13 +91,13 @@ def get_jobs_by_user(user_name: str = "Default User"):
     return task_items
 
 
-@app.get("/query/{task_id}")
+@app.get("/api/v1/query/{task_id}")
 def get_task_by_id(task_id: str):
     task_items = get_task_history(task_id=task_id)
     return task_items
 
 
-@app.post("/query/sample-metadata/")
+@app.post("/api/v1/query/sample-metadata/")
 def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str):
     """
     Create a new bcftools query job for the specified project.
@@ -114,7 +114,7 @@ def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str)
     return result_dict
 
 
-@app.post("/query/bcftools-pipe/")
+@app.post("/api/v1/query/bcftools-pipe/")
 def create_bcftools_jobs(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -138,7 +138,7 @@ def create_bcftools_jobs(
     return results.id
 
 
-@app.post("/dimensions/update/")
+@app.post("/api/v1/dimensions/update/")
 def update_vcf_dimensions_for_a_project(project: str, user_name: str = "Default User"):
     """
     Update the VCF dimensions files for the specified project

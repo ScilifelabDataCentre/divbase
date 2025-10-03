@@ -42,7 +42,7 @@ def start_with_clean_project(CONSTANTS):
 
 def test_list_files(user_config_path, CONSTANTS):
     """Test basic usage of files list command."""
-    command = f"files list --config {user_config_path}"
+    command = "files list"
 
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -58,7 +58,7 @@ def test_list_non_default_project(user_config_path, CONSTANTS):
     non_default_project = CONSTANTS["NON_DEFAULT_PROJECT"]
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][non_default_project]
 
-    command = f"files list --config {user_config_path} --project {non_default_project}"
+    command = f"files list --project {non_default_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for file in files_in_project:
@@ -67,7 +67,7 @@ def test_list_non_default_project(user_config_path, CONSTANTS):
 
 def test_list_files_empty_project(user_config_path, CONSTANTS):
     """Test list files for an empty project."""
-    command = f"files list --config {user_config_path} --project {CONSTANTS['EMPTY_PROJECT']}"
+    command = f"files list --project {CONSTANTS['EMPTY_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "No files found" in result.stdout
@@ -77,7 +77,7 @@ def test_upload_1_file(user_config_path, CONSTANTS, fixtures_dir):
     """Test upload 1 file to the project."""
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
-    command = f"files upload {test_file} --config {user_config_path}"
+    command = f"files upload {test_file}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -87,7 +87,7 @@ def test_upload_1_file(user_config_path, CONSTANTS, fixtures_dir):
 def test_upload_1_file_to_non_default_project(user_config_path, CONSTANTS, fixtures_dir):
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
-    command = f"files upload {test_file} --config {user_config_path} --project {CONSTANTS['NON_DEFAULT_PROJECT']}"
+    command = f"files upload {test_file} --project {CONSTANTS['NON_DEFAULT_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -97,7 +97,7 @@ def test_upload_1_file_to_non_default_project(user_config_path, CONSTANTS, fixtu
 def test_upload_multiple_files_at_once(user_config_path, CONSTANTS, fixtures_dir):
     test_files = [(fixtures_dir / file_name).resolve() for file_name in CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"]]
 
-    command = f"files upload {' '.join(map(str, test_files))} --config {user_config_path}"
+    command = f"files upload {' '.join(map(str, test_files))}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -109,7 +109,7 @@ def test_upload_dir_contents(user_config_path, CONSTANTS, fixtures_dir):
     """Test upload all files in a directory."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
-    command = f"files upload --upload-dir {fixtures_dir.resolve()} --config {user_config_path}"
+    command = f"files upload --upload-dir {fixtures_dir.resolve()}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -122,9 +122,7 @@ def test_upload_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
     """Test upload with safe mode works first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
-    command = (
-        f"files upload {file_path} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']} --config {user_config_path}"
-    )
+    command = f"files upload {file_path} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
 
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -142,19 +140,17 @@ def test_no_file_uploaded_if_some_duplicated_with_safe_mode(user_config_path, CO
     test_files = [(fixtures_dir / file_name).resolve() for file_name in CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"]]
 
     # upload just 1 of the files first
-    command = (
-        f"files upload {test_files[0]} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']} --config {user_config_path}"
-    )
+    command = f"files upload {test_files[0]} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     # none should be uploaded as the first one already exists
-    command = f"files upload {' '.join(map(str, test_files))} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']} --config {user_config_path}"
+    command = f"files upload {' '.join(map(str, test_files))} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, FilesAlreadyInBucketError)
 
-    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']} --config {user_config_path}"
+    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert test_files[0].name in result.stdout
@@ -167,7 +163,7 @@ def test_download_1_file(user_config_path, CONSTANTS, tmp_path):
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download {file_name} --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download {file_name} --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -180,7 +176,7 @@ def test_download_multiple_files(user_config_path, CONSTANTS, tmp_path):
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download {' '.join(files_in_project)} --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download {' '.join(files_in_project)} --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -196,7 +192,7 @@ def test_download_from_non_default_project(user_config_path, CONSTANTS, tmp_path
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download {file_to_download} --project {non_default_project} --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download {file_to_download} --project {non_default_project} --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -213,7 +209,7 @@ def test_download_using_file_list(user_config_path, CONSTANTS, tmp_path):
     with open(file_list, "w") as f:
         f.write("\n".join(files_in_project))
 
-    command = f"files download --file-list {file_list} --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download --file-list {file_list} --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -226,7 +222,7 @@ def test_download_nonexistent_file(user_config_path, tmp_path):
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download nonexistent_file.txt --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download nonexistent_file.txt --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
@@ -249,11 +245,11 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
     with open(file_path, "w") as f:
         f.write(v1_content)
 
-    command = f"files upload {file_path} --project {clean_project} --config {user_config_path}"
+    command = f"files upload {file_path} --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"version add v1.0.0 --project {clean_project} --config {user_config_path}"
+    command = f"version add v1.0.0 --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -261,16 +257,18 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
     with open(file_path, "w") as f:
         f.write(v2_content)
 
-    command = f"files upload {file_path} --project {clean_project} --config {user_config_path}"
+    command = f"files upload {file_path} --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"version add v2.0.0 --project {clean_project} --config {user_config_path}"
+    command = f"version add v2.0.0 --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     # Download + assert contents at v1.0.0
-    command = f"files download {file_name} --bucket-version v1.0.0 --project {clean_project} --download-dir {download_dir} --config {user_config_path}"
+    command = (
+        f"files download {file_name} --bucket-version v1.0.0 --project {clean_project} --download-dir {download_dir}"
+    )
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert (download_dir / file_name).exists()
@@ -280,7 +278,9 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
     assert downloaded_content == v1_content
 
     # Download + assert contents at v2.0.0
-    command = f"files download {file_name} --bucket-version v2.0.0 --project {clean_project} --download-dir {download_dir} --config {user_config_path}"
+    command = (
+        f"files download {file_name} --bucket-version v2.0.0 --project {clean_project} --download-dir {download_dir}"
+    )
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert (download_dir / file_name).exists()
@@ -290,7 +290,7 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
     assert downloaded_content == v2_content
 
     # Download without specifiying bucket version works like "latest"
-    command = f"files download {file_name} --project {clean_project} --download-dir {download_dir} --config {user_config_path}"
+    command = f"files download {file_name} --project {clean_project} --download-dir {download_dir}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert (download_dir / file_name).exists()
@@ -303,13 +303,13 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
 def test_remove_with_dry_run(user_config_path, CONSTANTS):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
 
-    command = f"files remove {file_name} --dry-run --config {user_config_path}"
+    command = f"files remove {file_name} --dry-run"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"{file_name}" in result.stdout
 
-    command = f"files list --config {user_config_path}"
+    command = "files list"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name in result.stdout
@@ -322,22 +322,22 @@ def test_remove_file(user_config_path, CONSTANTS, fixtures_dir):
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
 
-    command = f"files upload {file_path} --project {clean_project} --config {user_config_path}"
+    command = f"files upload {file_path} --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"files list --project {clean_project} --config {user_config_path}"
+    command = f"files list --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name in result.stdout
 
-    command = f"files remove {file_name} --project {clean_project} --config {user_config_path}"
+    command = f"files remove {file_name} --project {clean_project}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"{file_name}" in result.stdout
 
-    command = f"files list --project {clean_project} --config {user_config_path}"
+    command = f"files list --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name not in result.stdout

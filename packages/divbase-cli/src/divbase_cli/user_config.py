@@ -43,6 +43,7 @@ class UserConfig:
     """Overall user configuration"""
 
     config_path: Path
+    logged_in_url: str | None = None  # URL of the divbase server the user is currently logged in to, if any.
     projects: list[ProjectConfig] = field(default_factory=list)
     default_project: str | None = None
     # default_download_dir is a string (rather than Path) for easier loading/saving.
@@ -59,6 +60,7 @@ class UserConfig:
         Don't include the config_path in the dumped file.
         """
         config_dict = {
+            "logged_in_url": self.logged_in_url,
             "projects": [project.__dict__ for project in self.projects],
             "default_project": self.default_project,
             "default_download_dir": self.default_download_dir,
@@ -136,6 +138,14 @@ class UserConfig:
                 return project
         raise ProjectNotInConfigError(config_path=self.config_path, project_name=name)
 
+    def set_logged_in_url(self, url: str | None) -> None:
+        """
+        Set the URL of the DivBase server the user is currently logged in to.
+        Used during login/logout to track the state.
+        """
+        self.logged_in_url = url
+        self.dump_config()
+
 
 def load_user_config(config_path: Path) -> UserConfig:
     """Helper function to load the user config file"""
@@ -145,6 +155,7 @@ def load_user_config(config_path: Path) -> UserConfig:
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
     return UserConfig(
+        logged_in_url=config_contents.get("logged_in_url"),
         config_path=config_path,
         projects=projects,
         default_project=config_contents.get("default_project"),

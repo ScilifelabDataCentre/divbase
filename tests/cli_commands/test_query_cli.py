@@ -49,9 +49,9 @@ def clean_dimensions(user_config_path, CONSTANTS):
     yield
 
 
-def wait_for_task_complete(task_id: str, config_file: str, max_retries: int = 30):
+def wait_for_task_complete(task_id: str, max_retries: int = 30):
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"query task-status {task_id} --config {config_file}"
+    command = f"query task-status {task_id}"
     while max_retries > 0:
         result = runner.invoke(app, command)
         # Add checks for error keywords
@@ -95,7 +95,7 @@ def test_sample_metadata_query(CONSTANTS, user_config_path):
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
     expected_filenames = ["HOM_20ind_17SNPs_last_10_samples.vcf.gz", "HOM_20ind_17SNPs_first_10_samples.vcf.gz"]
 
-    command = f"query tsv '{query_string}' --project {project_name} --config {user_config_path}"
+    command = f"query tsv '{query_string}' --project {project_name}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -113,15 +113,15 @@ def test_bcftools_pipe_query(run_update_dimensions, user_config_path, CONSTANTS)
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
     run_update_dimensions(bucket_name=project_name)
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
     task_id = result.stdout.strip().split()[-1]
-    wait_for_task_complete(task_id=task_id, config_file=user_config_path)
+    wait_for_task_complete(task_id=task_id)
 
-    command = f"files list --project {project_name} --config {user_config_path}"
+    command = f"files list --project {project_name} "
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -135,7 +135,7 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, user_config_pat
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert isinstance(result.exception, ProjectNotInConfigError)
 
@@ -168,13 +168,13 @@ def test_bcftools_pipe_query_errors(
         command = "view -s SAMPLES"
     run_update_dimensions(bucket_name=project_name)
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} --config {user_config_path}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     result = runner.invoke(app, command)
 
     task_id = result.stdout.strip().split()[-1]
     # TODO, assertion below should become 1, when API has the role of validating input.
     assert result.exit_code == 0
-    result = wait_for_task_complete(task_id=task_id, config_file=user_config_path)
+    result = wait_for_task_complete(task_id=task_id)
     assert expected_error in result.stdout
 
 
@@ -186,7 +186,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} --config {user_config_path}"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     first_task_result = runner.invoke(app, command)
     assert first_task_result.exit_code == 0
     first_task_id = first_task_result.stdout.strip().split()[-1]
@@ -610,7 +610,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 
-        command = f"files upload {test_file} --config {user_config_path} --project {bucket_name}"
+        command = f"files upload {test_file}  --project {bucket_name}"
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0

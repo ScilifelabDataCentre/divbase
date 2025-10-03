@@ -10,7 +10,7 @@ Assumes the DivBase stack is already running locally on http://localhost:8000
 
 import httpx
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8000/api"
 
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
 
@@ -23,25 +23,25 @@ USERS_TO_CREATE = [
 
 PROJECTS_TO_CREATE = [
     {
-        "name": "local-squirrel-1",
+        "name": "local-project-1",
         "description": "First test project for local development",
         "bucket_name": "local-project-1",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-mongoose-2",
+        "name": "local-project-2",
         "description": "Second test project for local development",
         "bucket_name": "local-project-2",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-salmon-3",
+        "name": "local-project-3",
         "description": "Third test project for local development",
         "bucket_name": "local-project-3",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-badger-4",
+        "name": "local-project-4",
         "description": "Fourth test project for local development",
         "bucket_name": "local-project-4",
         "storage_quota_bytes": 10737418240,
@@ -49,22 +49,22 @@ PROJECTS_TO_CREATE = [
 ]
 
 ROLE_ASSIGNMENTS = {
-    "local-squirrel-1": [
+    "local-project-1": [
         ("alice@example.com", "manage"),
         ("bob@example.com", "edit"),
         ("charlie@example.com", "read"),
     ],
-    "local-mongoose-2": [
+    "local-project-2": [
         ("alice@example.com", "edit"),
         ("bob@example.com", "manage"),
         ("diana@example.com", "read"),
     ],
-    "local-salmon-3": [
+    "local-project-3": [
         ("charlie@example.com", "manage"),
         ("diana@example.com", "edit"),
         ("alice@example.com", "read"),
     ],
-    "local-badger-4": [
+    "local-project-4": [
         ("diana@example.com", "manage"),
         ("charlie@example.com", "edit"),
         ("bob@example.com", "read"),
@@ -78,7 +78,7 @@ def get_admin_access_token() -> str:
     print("Getting admin access token...")
 
     response = httpx.post(
-        f"{BASE_URL}/auth/login",
+        f"{BASE_URL}/v1/auth/login",
         data={
             "grant_type": "password",
             "username": ADMIN_CREDENTIALS["username"],

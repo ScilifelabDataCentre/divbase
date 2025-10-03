@@ -13,10 +13,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.divbase_cli import app
-from tests.helpers.minio_setup import (
-    MINIO_URL,
-)
 
 runner = CliRunner()
 
@@ -32,41 +30,43 @@ def tmp_config_path(tmp_path):
 
 
 @pytest.fixture
-def fresh_config(tmp_path):
+def fresh_config_path():
     """
-    Fixture to provide a path to a pre-existing configuration file.
+    Fixture to provide a freshly created user configuration file.
+    Returns the path to the config file if needed by the test.
     """
-    fresh_config_path = tmp_path / ".divbase_config.yaml"
-    create_command = f"config create --config-file {fresh_config_path}"
+    create_command = "config create"
     result = runner.invoke(app, create_command)
 
     assert result.exit_code == 0
-    assert tmp_path.exists(), "Config file was not created"
-
-    return fresh_config_path
+    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
+    return cli_settings.CONFIG_PATH
 
 
 @pytest.fixture
-def user_config_path(tmp_path, CONSTANTS):
+def user_config_path(CONSTANTS):
     """
-    Fixture to provide a path to an "existing" user configuration file with
+    Fixture to provide a path to a more complete "existing" user configuration file with
     some existing projects and a default project set.
+
+    Returns the path to the config file if needed by the test.
     """
-    existing_config_path = tmp_path / ".divbase_config.yaml"
-    create_command = f"config create --config-file {existing_config_path}"
+
+    create_command = "config create"
     result = runner.invoke(app, create_command)
     assert result.exit_code == 0
 
     for project in CONSTANTS["PROJECT_CONTENTS"]:
-        add_command = f"config add-project {project} --divbase-url http://localhost:8001 --s3-url {MINIO_URL} --config {existing_config_path}"
+        add_command = f"config add-project {project}"
         result = runner.invoke(app, add_command)
         assert result.exit_code == 0
 
-    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']} --config {existing_config_path}"
+    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']}"
     result = runner.invoke(app, set_default_command)
     assert result.exit_code == 0
 
-    return existing_config_path
+    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
+    return cli_settings.CONFIG_PATH
 
 
 @pytest.fixture
