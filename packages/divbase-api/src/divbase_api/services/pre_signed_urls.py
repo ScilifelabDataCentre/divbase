@@ -1,0 +1,64 @@
+"""
+Logic to generate presigned URLs for S3 objects.
+Gives end users access to S3 objects without needing AWS credentials.
+
+Certain operations like "list files" etc... instead performed directly by the backend and returned to end user.
+Pre-signed url approach not used when the request to s3 can be done in the (user to API) request-response cycle.
+"""
+
+import logging
+
+import boto3
+from botocore.exceptions import ClientError
+
+from divbase_api.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class S3PreSignedService:
+    """
+    Service to create pre-signed URLs for S3 object upload/download.
+    Knows nothing about user authentication/authorization.
+    """
+
+    def __init__(self):
+        self.s3_client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3.endpoint_url,
+            aws_access_key_id=settings.s3.access_key.get_secret_value(),
+            aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
+        )
+
+    def make_download_urls(self, bucket_name: str, object_names: list[str]) -> dict[str, str | None]:
+        dload_urls = {}
+        for object_name in object_names:
+            url = self._create_presigned_url_for_download(
+                bucket_name=bucket_name,
+                object_name=object_name,
+            )
+            dload_urls[object_name] = url
+        return dload_urls
+
+    def _create_presigned_url_for_download(self, bucket_name: str, object_name: str) -> str | None:
+        """
+        Generate a presigned URL for S3 object download
+
+        The generate_presigned_url method from boto3 has following params:
+            :param client_method_name: Name of the S3.Client method, e.g., 'list_buckets'
+            :param method_parameters: Dictionary of parameters to send to the method
+            :param expiration: Time in seconds for the presigned URL to remain valid
+            :param http_method: HTTP method to use (GET, etc.)
+            :return: Presigned URL as string. If error, returns None.
+        """
+        try:
+            url = self.s3_client.generate_presigned_url(
+                ClientMethod="get_object",
+                Params={"Bucket": bucket_name, "Key": object_name},
+                ExpiresIn=3600,  # 1 hour
+            )
+        except ClientError as e:
+            logger.error(f"Failed to generate presigned URL for {bucket_name}/{object_name}: {e}")
+            return None
+
+        return url
