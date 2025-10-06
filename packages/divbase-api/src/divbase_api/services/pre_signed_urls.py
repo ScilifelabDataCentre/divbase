@@ -4,6 +4,8 @@ Gives end users access to S3 objects without needing AWS credentials.
 
 Certain operations like "list files" etc... instead performed directly by the backend and returned to end user.
 Pre-signed url approach not used when the request to s3 can be done in the (user to API) request-response cycle.
+
+TODO, what is user wants to download same object at multiple versions? - will approach fail as dict keys must be unique.
 """
 
 import logging
@@ -30,17 +32,9 @@ class S3PreSignedService:
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
         )
 
-    def make_download_urls(self, bucket_name: str, object_names: list[str]) -> dict[str, str | None]:
-        dload_urls = {}
-        for object_name in object_names:
-            url = self._create_presigned_url_for_download(
-                bucket_name=bucket_name,
-                object_name=object_name,
-            )
-            dload_urls[object_name] = url
-        return dload_urls
-
-    def _create_presigned_url_for_download(self, bucket_name: str, object_name: str) -> str | None:
+    def create_presigned_url_for_download(
+        self, bucket_name: str, object_name: str, version_id: str | None
+    ) -> str | None:
         """
         Generate a presigned URL for S3 object download
 
@@ -48,17 +42,20 @@ class S3PreSignedService:
             :param client_method_name: Name of the S3.Client method, e.g., 'list_buckets'
             :param method_parameters: Dictionary of parameters to send to the method
             :param expiration: Time in seconds for the presigned URL to remain valid
-            :param http_method: HTTP method to use (GET, etc.)
             :return: Presigned URL as string. If error, returns None.
         """
+        extra_args = {"VersionId": version_id} if version_id else None
+        # TODO - consider drop the try/except and let the exception propagate?
         try:
             url = self.s3_client.generate_presigned_url(
                 ClientMethod="get_object",
-                Params={"Bucket": bucket_name, "Key": object_name},
+                Params={"Bucket": bucket_name, "Key": object_name, **(extra_args or {})},
                 ExpiresIn=3600,  # 1 hour
             )
         except ClientError as e:
-            logger.error(f"Failed to generate presigned URL for {bucket_name}/{object_name}: {e}")
+            logger.error(
+                f"Failed to generate presigned URL for {bucket_name}/{object_name}: with version {version_id} - {e}"
+            )
             return None
 
         return url
