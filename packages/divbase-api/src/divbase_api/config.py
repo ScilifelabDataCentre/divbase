@@ -44,7 +44,7 @@ class FlowerSettings:
 class S3Settings:
     """S3 configuration settings."""
 
-    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")
+    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://minio:9000")  # TODO, when stack updated, will be localhost
     access_key: SecretStr = SecretStr(os.getenv("S3_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SECRET_KEY", "NOT_SET"))
 
