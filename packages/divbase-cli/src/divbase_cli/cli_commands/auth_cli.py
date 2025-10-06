@@ -25,18 +25,10 @@ auth_app = typer.Typer(
 )
 
 
-def parse_password(password: str) -> SecretStr:
-    """
-    Makes typer parse the str password directly into a SecretStr.
-    Typer can't do this alone.
-    """
-    return SecretStr(password)
-
-
 @auth_app.command("login")
 def login(
     email: str,
-    password: Annotated[SecretStr, typer.Option(prompt=True, hide_input=True, parser=parse_password)],
+    password: Annotated[str, typer.Option(prompt=True, hide_input=True)],
     divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase server URL to connect to."),
     config_file: Path = CONFIG_FILE_OPTION,
     force: bool = typer.Option(False, "--force", "-f", help="Force login again even if already logged in"),
@@ -46,8 +38,11 @@ def login(
 
     TODO - think abit more about already logged in validation and UX.
     One thing to consider would be use case of very close to refresh token expiry, that could be bad UX.
-    (But that is dependant on whether we will allow renewal of refresh tokens...)
+    (But that is dependent on whether we will allow renewal of refresh tokens...)
     """
+    secret_password = SecretStr(password)
+    del password  # avoid user passwords showing up in error messages etc...
+
     config = load_user_config(config_file)
 
     if not force:
@@ -60,7 +55,7 @@ def login(
                 print("Login cancelled.")
                 return
 
-    login_to_divbase(email=email, password=password, divbase_url=divbase_url)
+    login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url)
     config.set_logged_in_url(divbase_url)
     print(f"Logged in successfully as: {email}")
 

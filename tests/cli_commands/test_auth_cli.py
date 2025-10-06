@@ -57,6 +57,15 @@ def test_login_command(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
+def test_login_command_with_password_prompted(fresh_config_path):
+    command = f"auth login {admin_credentials['email']}"
+
+    result = runner.invoke(app, command, input=f"{admin_credentials['password']}\n")
+    assert result.exit_code == 0
+    assert "Logged in successfully" in result.stdout
+    assert admin_credentials["email"] in result.stdout
+
+
 def test_login_command_fails_with_invalid_credentials(fresh_config_path):
     """Test login command fails with invalid credentials."""
     command = f"auth login {admin_credentials['email']} --password wrongpassword"
