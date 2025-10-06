@@ -11,7 +11,6 @@ TODO, what is user wants to download same object at multiple versions? - will ap
 import logging
 
 import boto3
-from botocore.exceptions import ClientError
 
 from divbase_api.config import settings
 
@@ -32,9 +31,7 @@ class S3PreSignedService:
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
         )
 
-    def create_presigned_url_for_download(
-        self, bucket_name: str, object_name: str, version_id: str | None
-    ) -> str | None:
+    def create_presigned_url_for_download(self, bucket_name: str, object_name: str, version_id: str | None) -> str:
         """
         Generate a presigned URL for S3 object download
 
@@ -45,17 +42,31 @@ class S3PreSignedService:
             :return: Presigned URL as string. If error, returns None.
         """
         extra_args = {"VersionId": version_id} if version_id else None
-        # TODO - consider drop the try/except and let the exception propagate?
-        try:
-            url = self.s3_client.generate_presigned_url(
-                ClientMethod="get_object",
-                Params={"Bucket": bucket_name, "Key": object_name, **(extra_args or {})},
-                ExpiresIn=3600,  # 1 hour
-            )
-        except ClientError as e:
-            logger.error(
-                f"Failed to generate presigned URL for {bucket_name}/{object_name}: with version {version_id} - {e}"
-            )
-            return None
+        url = self.s3_client.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={"Bucket": bucket_name, "Key": object_name, **(extra_args or {})},
+            ExpiresIn=3600,  # 1 hour
+        )
 
         return url
+
+    def create_presigned_url_for_upload(self, bucket_name: str, object_name: str, fields=None, conditions=None) -> dict:
+        """
+        Generate a presigned S3 POST URL to upload a file.
+
+        Notes:
+        :param fields: Dictionary of prefilled form fields
+        :param conditions: List of conditions to include in the policy
+
+        Returns a dictionary with two elements: url and fields. Url is the url to post to.
+        Fields is a dictionary filled with the form fields and respective values
+        to use when submitting the post.
+        """
+        response = self.s3_client.generate_presigned_post(
+            Bucket=bucket_name,
+            Key=object_name,
+            Fields=fields,
+            Conditions=conditions,
+            ExpiresIn=3600 * 24,  # 24 hours
+        )
+        return response

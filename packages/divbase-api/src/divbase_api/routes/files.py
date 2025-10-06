@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Query, status
 
 from divbase_api.config import settings
-from divbase_api.schemas.files import DownloadObjectResponse, DownloadObjectsRequest
+from divbase_api.schemas.files import DownloadObjectResponse, DownloadObjectsRequest, UploadObjectResponse
 from divbase_api.services.pre_signed_urls import S3PreSignedService
 from divbase_lib.s3_client import S3FileManager
 
@@ -18,11 +18,11 @@ files_router = APIRouter()
 
 @files_router.get("/download", status_code=status.HTTP_200_OK, response_model=list[DownloadObjectResponse])
 async def download_files(
-    project_name: str = "local-project-1",
+    project: str = "local-project-1",
     object_names: list[str] = Query(..., description="List of object names to download"),
 ):
     """Download a file from S3."""
-    bucket_name = project_name  # TODO, in future handle mapping
+    bucket_name = project  # TODO, in future handle mapping
 
     s3_signer_service = S3PreSignedService()
 
@@ -45,10 +45,10 @@ async def download_files(
 @files_router.post("/download_at_version", status_code=status.HTTP_200_OK, response_model=list[DownloadObjectResponse])
 async def download_files_at_version(
     objects_list: DownloadObjectsRequest,
-    project_name: str = "local-project-1",
+    project: str = "local-project-1",
 ):
     """Download a files at specific versions from S3."""
-    bucket_name = project_name  # TODO, in future handle mapping
+    bucket_name = project  # TODO, in future handle mapping
     s3_signer_service = S3PreSignedService()
 
     response = []
@@ -69,10 +69,10 @@ async def download_files_at_version(
 
 @files_router.get("/list", status_code=status.HTTP_200_OK)
 async def list_files(
-    project_name: str = "local-project-1",
+    project: str = "local-project-1",
 ):
     """List all files in the project's bucket"""
-    bucket_name = project_name  # TODO, in future handle mapping
+    bucket_name = project  # TODO, in future handle mapping
 
     s3_file_manager = S3FileManager(
         url=settings.s3.endpoint_url,
@@ -81,3 +81,34 @@ async def list_files(
     )
 
     return s3_file_manager.list_files(bucket_name=bucket_name)
+
+
+@files_router.post("/upload", status_code=status.HTTP_200_OK, response_model=UploadObjectResponse)
+async def generate_upload_url(
+    project: str = "local-project-1",
+    object_name: str = Query(..., description="Name of the object to upload"),
+):
+    """
+    Generate a presigned POST URL for uploading a single file to S3.
+    """
+    bucket_name = project  # TODO, in future handle mapping
+    s3_signer_service = S3PreSignedService()
+
+    response = s3_signer_service.create_presigned_url_for_upload(
+        bucket_name=bucket_name,
+        object_name=object_name,
+    )
+    return UploadObjectResponse(
+        object_name=object_name,
+        post_url=response["url"],
+        fields=response["fields"],
+    )
+
+
+@files_router.delete("/soft_delete", status_code=status.HTTP_200_OK)
+async def soft_delete_files(
+    project: str = "local-project-1",
+    object_names: list[str] = Query(..., description="List of object names to soft delete"),
+):
+    """Soft delete files in the project's bucket"""
+    pass
