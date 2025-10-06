@@ -30,6 +30,7 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
 
 RUN pip install --upgrade pip
 
+# Pip will complain if the readme is not copied over, since it is referenced in pyproject.toml    
 COPY README.md ./
 
 # Copy all package sources and install in dependency order
@@ -57,9 +58,6 @@ RUN apk add --no-cache \
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /usr/local/bin/bcftools /usr/local/bin/bcftools
-
-COPY README.md ./
 
 # Create a proper user and group to avoid Celery warnings. Write access to /app is needed for bcftools.
 RUN addgroup -g 1000 appuser && \

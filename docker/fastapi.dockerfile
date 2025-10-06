@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apk add --no-cache curl gcc g++ musl-dev && \
     pip install --upgrade pip
 
+# Pip will complain if readme is not copied over, since it is referenced in the pyproject.toml     
 COPY README.md ./
 
 # Copy all package sources and install in dependency order
