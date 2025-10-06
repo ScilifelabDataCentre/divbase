@@ -116,7 +116,7 @@ def create_users(token: str) -> dict[str, int]:
     for user_data in USERS_TO_CREATE:
         response = make_authenticated_request(
             "POST",
-            f"{BASE_URL}/admin/users/",
+            f"{BASE_URL}/v1/admin/users/",
             token,
             json={"name": user_data["name"], "email": user_data["email"], "password": user_data["password"]},
         )
@@ -132,7 +132,7 @@ def create_projects(token: str) -> dict[str, int]:
     print("Creating test projects...")
     project_map = {}
     for project_data in PROJECTS_TO_CREATE:
-        response = make_authenticated_request("POST", f"{BASE_URL}/admin/projects", token, json=project_data)
+        response = make_authenticated_request("POST", f"{BASE_URL}/v1/admin/projects", token, json=project_data)
 
         project = response.json()
         project_map[project["name"]] = project["id"]
@@ -153,14 +153,14 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
             user_id = user_map[user_email]
 
             make_authenticated_request(
-                "POST", f"{BASE_URL}/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
+                "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
             )
             print(f"Assigned {user_email} as {role} to {project_name}")
 
         # assign admin as manager to all projects
         # Hardcoded user_id=1 as FIRST_ADMIN_USER should have that by being created in local_dev_setup.py
         make_authenticated_request(
-            "POST", f"{BASE_URL}/admin/projects/{project_id}/members/1", token, params={"role": "manage"}
+            "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/1", token, params={"role": "manage"}
         )
         print(f"Assigned first admin user as manager to {project_name}")
 
