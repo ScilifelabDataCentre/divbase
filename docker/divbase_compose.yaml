@@ -43,23 +43,12 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_S3_ACCESS_KEY=minioadmin
       - DIVBASE_S3_SECRET_KEY=badpassword
-    develop: &watch-celery-src
-      watch:
-        - action: sync+restart
-          path: ../packages/divbase-worker/src
-          target:  /app/packages/divbase-worker/src
-        - action: sync+restart
-          path: ../packages/divbase-lib/src
-          target:  /app/packages/divbase-lib/src
-        - action: rebuild
-          path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
   worker-long:
     build: *worker-build
     healthcheck: *worker-healthcheck
     depends_on: *worker-depends
     environment: *worker-env
-    develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
   flower:
     build:
@@ -77,7 +66,6 @@ services:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - FLOWER_BASIC_AUTH=floweradmin:badpassword
-    develop: *watch-celery-src
     command: ["flower", "--persistent=True", "--db=/data/flower.db"]
     volumes:
       - flower-data:/data
@@ -107,19 +95,6 @@ services:
     ports:
       - 8000:8000
     command: ["fastapi", "dev", "--host", "0.0.0.0", "/usr/local/lib/python3.12/site-packages/divbase_api/divbase_api.py"]
-    develop: # rebuild only on changes to deps. 
-      watch:
-        - action: sync
-          path: ../packages/divbase-api/src
-          target: /app/packages/divbase-api/src
-        - action: sync
-          path: ../packages/divbase-worker/src
-          target: /app/packages/divbase-worker/src
-        - action: sync
-          path: ../packages/divbase-lib/src
-          target: /app/packages/divbase-lib/src
-        - action: rebuild
-          path: ../uv.lock
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
