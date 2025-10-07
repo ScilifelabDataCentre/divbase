@@ -357,7 +357,7 @@ class DivBaseAPIError(Exception):
         self.url = url
 
         self.error_message = (
-            f"Error sending request to DivBase Server:\n"
+            f"DivBase Server returned an error response:\n"
             f"HTTP Status code: {status_code}\n"
             f"HTTP method: {http_method}\n"
             f"URL: {url}\n"
