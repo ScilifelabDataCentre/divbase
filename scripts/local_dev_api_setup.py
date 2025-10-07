@@ -10,7 +10,9 @@ Assumes the DivBase stack is already running locally on http://localhost:8000
 
 import httpx
 
-BASE_URL = "http://localhost:8000/api/v1"
+from divbase_lib.exceptions import DivBaseAPIError
+
+BASE_URL = "http://localhost:8000/api"
 
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
 
@@ -23,25 +25,25 @@ USERS_TO_CREATE = [
 
 PROJECTS_TO_CREATE = [
     {
-        "name": "local-squirrel-1",
+        "name": "local-project-1",
         "description": "First test project for local development",
         "bucket_name": "local-project-1",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-mongoose-2",
+        "name": "local-project-2",
         "description": "Second test project for local development",
         "bucket_name": "local-project-2",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-salmon-3",
+        "name": "local-project-3",
         "description": "Third test project for local development",
         "bucket_name": "local-project-3",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-badger-4",
+        "name": "local-project-4",
         "description": "Fourth test project for local development",
         "bucket_name": "local-project-4",
         "storage_quota_bytes": 10737418240,
@@ -49,22 +51,22 @@ PROJECTS_TO_CREATE = [
 ]
 
 ROLE_ASSIGNMENTS = {
-    "local-squirrel-1": [
+    "local-project-1": [
         ("alice@example.com", "manage"),
         ("bob@example.com", "edit"),
         ("charlie@example.com", "read"),
     ],
-    "local-mongoose-2": [
+    "local-project-2": [
         ("alice@example.com", "edit"),
         ("bob@example.com", "manage"),
         ("diana@example.com", "read"),
     ],
-    "local-salmon-3": [
+    "local-project-3": [
         ("charlie@example.com", "manage"),
         ("diana@example.com", "edit"),
         ("alice@example.com", "read"),
     ],
-    "local-badger-4": [
+    "local-project-4": [
         ("diana@example.com", "manage"),
         ("charlie@example.com", "edit"),
         ("bob@example.com", "read"),
@@ -78,7 +80,7 @@ def get_admin_access_token() -> str:
     print("Getting admin access token...")
 
     response = httpx.post(
-        f"{BASE_URL}/auth/login",
+        f"{BASE_URL}/v1/auth/login",
         data={
             "grant_type": "password",
             "username": ADMIN_CREDENTIALS["username"],
@@ -105,7 +107,20 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
     kwargs["timeout"] = 10.0
 
     response = httpx.request(method, url, **kwargs)
-    response.raise_for_status()
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        error_details = response.json().get("detail", "No error details provided")
+        error_type = response.json().get("type", "unknown")
+        raise DivBaseAPIError(
+            error_details=error_details,
+            status_code=response.status_code,
+            http_method=method,
+            url=url,
+            error_type=error_type,
+        ) from None
+
     return response
 
 
@@ -116,7 +131,7 @@ def create_users(token: str) -> dict[str, int]:
     for user_data in USERS_TO_CREATE:
         response = make_authenticated_request(
             "POST",
-            f"{BASE_URL}/admin/users/",
+            f"{BASE_URL}/v1/admin/users/",
             token,
             json={"name": user_data["name"], "email": user_data["email"], "password": user_data["password"]},
         )
@@ -132,7 +147,7 @@ def create_projects(token: str) -> dict[str, int]:
     print("Creating test projects...")
     project_map = {}
     for project_data in PROJECTS_TO_CREATE:
-        response = make_authenticated_request("POST", f"{BASE_URL}/admin/projects", token, json=project_data)
+        response = make_authenticated_request("POST", f"{BASE_URL}/v1/admin/projects", token, json=project_data)
 
         project = response.json()
         project_map[project["name"]] = project["id"]
@@ -153,14 +168,14 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
             user_id = user_map[user_email]
 
             make_authenticated_request(
-                "POST", f"{BASE_URL}/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
+                "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
             )
             print(f"Assigned {user_email} as {role} to {project_name}")
 
         # assign admin as manager to all projects
         # Hardcoded user_id=1 as FIRST_ADMIN_USER should have that by being created in local_dev_setup.py
         make_authenticated_request(
-            "POST", f"{BASE_URL}/admin/projects/{project_id}/members/1", token, params={"role": "manage"}
+            "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/1", token, params={"role": "manage"}
         )
         print(f"Assigned first admin user as manager to {project_name}")
 

@@ -25,6 +25,7 @@ from rich import print
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_divbase_api_url, resolve_project
 from divbase_cli.display_task_history import TaskHistoryManager
 from divbase_lib.queries import SidecarQueryResult
@@ -32,10 +33,8 @@ from divbase_lib.queries import SidecarQueryResult
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_METADATA_TSV = "sample_metadata.tsv"
-
 METADATA_TSV_ARGUMENT = typer.Option(
-    DEFAULT_METADATA_TSV, help="Name of the sample metadata TSV file in the project's storage bucket."
+    cli_settings.METADATA_TSV_NAME, help="Name of the sample metadata TSV file in the project's storage bucket."
 )
 
 BCFTOOLS_ARGUMENT = typer.Option(
@@ -86,7 +85,7 @@ def sample_metadata_query(
     project_config = resolve_project(project_name=project, config_path=config_file)
 
     params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
-    response = httpx.post(f"{project_config.divbase_url}/query/sample-metadata/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/v1/query/sample-metadata/", params=params)
     response.raise_for_status()
 
     results = SidecarQueryResult(**response.json())
@@ -128,7 +127,7 @@ def pipe_query(
         "metadata_tsv_name": metadata_tsv_name,
         "project": project_config.name,
     }
-    response = httpx.post(f"{project_config.divbase_url}/query/bcftools-pipe/", params=params)
+    response = httpx.post(f"{project_config.divbase_url}/v1/query/bcftools-pipe/", params=params)
     response.raise_for_status()
 
     task_id = response.json()
@@ -153,8 +152,8 @@ def check_status(
     divbase_url = resolve_divbase_api_url(url=divbase_url, config_path=config_file)
 
     if task_id:
-        task_items = httpx.get(f"{divbase_url}/query/{task_id}").json()
+        task_items = httpx.get(f"{divbase_url}/v1/query/{task_id}").json()
     else:
-        task_items = httpx.get(f"{divbase_url}/query/").json()
+        task_items = httpx.get(f"{divbase_url}/v1/query/").json()
     task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
     task_history_manager.print_task_history()
