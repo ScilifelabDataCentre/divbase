@@ -13,7 +13,7 @@ import yaml
 from pydantic import SecretStr
 
 from divbase_cli.cli_config import cli_settings
-from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError
+from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 
@@ -163,7 +163,12 @@ def make_authenticated_request(
     except httpx.HTTPError as e:
         raise DivBaseAPIConnectionError() from e
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        error_details = response.json().get("detail", "No error details provided")
+        raise DivBaseAPIError(error_details=error_details, status_code=response.status_code) from None
+
     return response
 
 

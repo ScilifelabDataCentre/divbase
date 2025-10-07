@@ -10,6 +10,8 @@ Assumes the DivBase stack is already running locally on http://localhost:8000
 
 import httpx
 
+from divbase_lib.exceptions import DivBaseAPIError
+
 BASE_URL = "http://localhost:8000/api"
 
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
@@ -105,7 +107,15 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
     kwargs["timeout"] = 10.0
 
     response = httpx.request(method, url, **kwargs)
-    response.raise_for_status()
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        error_details = response.json().get("detail", "No error details provided")
+        raise DivBaseAPIError(
+            error_details=error_details, status_code=response.status_code, http_method=method, url=url
+        ) from None
+
     return response
 
 
