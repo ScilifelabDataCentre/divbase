@@ -347,11 +347,13 @@ class DivBaseAPIError(Exception):
     def __init__(
         self,
         error_details: str = "Not Provided",
+        error_type: str = "unknown",
         status_code: int = None,
         http_method: str = "unknown",
         url: str = "unknown",
     ):
         self.status_code = status_code
+        self.error_type = error_type
         self.error_details = error_details
         self.http_method = http_method
         self.url = url
@@ -361,6 +363,7 @@ class DivBaseAPIError(Exception):
             f"HTTP Status code: {status_code}\n"
             f"HTTP method: {http_method}\n"
             f"URL: {url}\n"
+            f"Error type: {error_type}\n"
             f"Details: {error_details}\n"
         )
         super().__init__(self.error_message)

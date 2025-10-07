@@ -112,8 +112,13 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
         response.raise_for_status()
     except httpx.HTTPStatusError:
         error_details = response.json().get("detail", "No error details provided")
+        error_type = response.json().get("type", "unknown")
         raise DivBaseAPIError(
-            error_details=error_details, status_code=response.status_code, http_method=method, url=url
+            error_details=error_details,
+            status_code=response.status_code,
+            http_method=method,
+            url=url,
+            error_type=error_type,
         ) from None
 
     return response
