@@ -9,6 +9,7 @@ TODO, what is user wants to download same object at multiple versions? - will ap
 """
 
 import logging
+from functools import lru_cache
 
 import boto3
 
@@ -26,7 +27,7 @@ class S3PreSignedService:
     def __init__(self):
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.s3.endpoint_url,
+            endpoint_url=settings.s3.s3_external_url,
             aws_access_key_id=settings.s3.access_key.get_secret_value(),
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
         )
@@ -70,3 +71,9 @@ class S3PreSignedService:
             ExpiresIn=3600 * 24,  # 24 hours
         )
         return response
+
+
+@lru_cache()
+def get_pre_signed_service() -> S3PreSignedService:
+    """Dependency to get pre-signed S3 service. To be used in FastAPI endpoints."""
+    return S3PreSignedService()

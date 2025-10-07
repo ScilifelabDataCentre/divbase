@@ -42,9 +42,16 @@ class FlowerSettings:
 
 @dataclass
 class S3Settings:
-    """S3 configuration settings."""
+    """
+    S3 configuration settings.
 
-    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://minio:9000")  # TODO, when stack updated, will be localhost
+    External is used by the API to generate pre-signed URLs for end users.
+    Internal is used by the backend to communicate with S3 directly.
+    (This wont be needed later when S3 is moved outside of local docker network).
+    """
+
+    s3_external_url: str = os.getenv("S3_EXTERNAL_URL", "http://localhost:9000")
+    s3_internal_url: str = os.getenv("S3_INTERNAL_URL", "http://minio:9000")
     access_key: SecretStr = SecretStr(os.getenv("S3_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SECRET_KEY", "NOT_SET"))
 
@@ -80,7 +87,6 @@ class Settings:
             "FLOWER_USER": self.flower.user,
             "FLOWER_PASSWORD": self.flower.password,
             "JWT_SECRET_KEY": self.jwt.secret_key,
-            "S3_ENDPOINT_URL": self.s3.endpoint_url,
             "S3_ACCESS_KEY": self.s3.access_key,
             "S3_SECRET_KEY": self.s3.secret_key,
         }
