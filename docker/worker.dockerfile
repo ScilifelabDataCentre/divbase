@@ -1,4 +1,5 @@
-FROM python:3.12-alpine
+## Stage 1: Build
+FROM python:3.12.11-alpine3.22 AS builder
 
 WORKDIR /app
 
@@ -20,23 +21,42 @@ RUN apk update && \
     openssl-dev \
     perl-dev
 
-
 RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
     | tar -C /tmp -xjf- \
     && cd /tmp/bcftools-${BCFTOOLS_VERSION} \
     && make \
     && make install \
-    && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
+    && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}  \
+    && pip install --upgrade pip
 
-RUN pip install --upgrade pip 
-
+# Pip will complain if the readme is not copied over, since it is referenced in pyproject.toml   
 COPY README.md ./
 
 # Copy all package sources and install in dependency order
 COPY packages/divbase-lib/ ./packages/divbase-lib/
-RUN pip install -e ./packages/divbase-lib/
+RUN pip install ./packages/divbase-lib/
 COPY packages/divbase-worker/ ./packages/divbase-worker/
-RUN pip install -e ./packages/divbase-worker/
+RUN pip install ./packages/divbase-worker/
+
+
+## Stage 2: Final image
+FROM python:3.12.11-alpine3.22
+
+WORKDIR /app
+
+# Only install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    libffi \
+    zlib \
+    bzip2 \
+    xz \
+    openssl \
+    perl
+
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Create a proper user and group to avoid Celery warnings. Write access to /app is needed for bcftools.
 RUN addgroup -g 1000 appuser && \
