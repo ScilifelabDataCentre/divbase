@@ -122,13 +122,13 @@ def upload_files_command(project_config: ProjectConfig, all_files: list[Path], s
     return uploaded_files
 
 
-def delete_objects_command(project_config: ProjectConfig, all_files: list[str]) -> list[str]:
+def soft_delete_objects_command(project_config: ProjectConfig, all_files: list[str]) -> list[str]:
     """
-    Delete objects from the project's S3 bucket.
-    Returns a list of the deleted objects
+    Soft delete objects from the project's S3 bucket.
+    Returns a list of the soft deleted objects
     """
     s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
-    return s3_file_manager.delete_objects(objects=all_files, bucket_name=project_config.bucket_name)
+    return s3_file_manager.soft_delete_objects(objects=all_files, bucket_name=project_config.bucket_name)
 
 
 def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
