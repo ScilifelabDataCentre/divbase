@@ -41,7 +41,7 @@ This initial system design is intended to cover all the architectural components
 
 ### Core Technology Stack
 
-- **Orchestration:** [Kubernetes](https://kubernetes.io/) for production and deployed test instance. [Docker Compose](https://docs.docker.com/compose/) for local development (with an overlay for testing). 
+- **Orchestration:** [Kubernetes](https://kubernetes.io/) for production and deployed test instance. [Docker Compose](https://docs.docker.com/compose/) for local development (with an overlay for testing). We will use [kustomize](https://kustomize.io) to manage deploying to different enviroments due to prior in team experience with the technology. 
 - **S3 object store:** In prod (and deployed test instance), this will be KTH NetApp. For local dev/tests, a MinIO image. 
 - **WebAPI**: [FastAPI](https://fastapi.tiangolo.com/) with Postgresql as database (db). There will be a small frontend using Jinja2 templating and HTMX if needed (see [adr/002-Basic-API-design.md](adr/002-Basic-API-design.md) for more details). 
 - **Job management system:** Consisting of [Celery](https://docs.celeryq.dev) worker(s); [RabbitMQ](https://www.rabbitmq.com/) queue/message broker; [Redis](https://redis.io/open-source/) results backend. Interaction with job management system using [Flower API](https://flower.readthedocs.io/en/latest/). 
@@ -85,7 +85,6 @@ The guiding principle in choosing the proposed tech stack was to keep the servic
 
 For readers that are unfamiliar with working with VCF files, the importance of bcftools might not be immediately apparent from the core tech stack. However, its role as the core query engine in DivBase cannot be understated. Bcftools is a very popular tool with an established syntax. By writing wrapper logic around bcftools commands, the team will save a substantial amount of work compared to developing a custom VCF query engine. The intention is to use bcftools syntax as much as possible for DivBase to benefit from the fact that most researchers working with genetic diversity data are likely to have at least encountered bcftools, if not already be proficient users. 
 
-
 ## Alternatives considered
 
 - **Using Django (or flask) instead of FastAPI:** see [002-API-design.md](002-API-design.md)
@@ -95,6 +94,13 @@ For readers that are unfamiliar with working with VCF files, the importance of b
 - **RabbitMQ also as a job system results backend instead of Redis**. While RabbitMQ is primarily designed to be a job system message broker, it is able to take on the role of job systems result backend as well. Doing so would result in one less component to maintain in the tech stack. However, Redis was chosen as a results backend for its performance, ability to store persistent logs, and its excellent integration with the Flower monitoring system.
 
 - **The proof-of-concept demo for DivBase uses flat files to store sample and system metadata**. The asynchronous, concurrent job system, combined with the possibility of multiple users working simultaneously on the same files in the bucket, may pose challenges.
+
+- **Polars instead of Pandas**. Pandas is a framework we in the team have experience with. The sample metadata files that Pandas will work on are expected to be small and therefore the potential performance improvement is not deemed to be enough to use a tool we have no experience with. This can be revisited if we observe bottlenecks due to pandas operations. 
+
+**Single S3 bucket shared between all projects** (instead of 1 project, 1 bucket) This was considered but deemed less ideal due to the added complexity of managing user access. We were able to get KTH IT support to batch make 10 different buckets publically avaialble in one go. This approach is expected to meet project needs for at least 1-2 years.
+
+**proxy S3 requests through DivBase instead of pre-signed URLs** Due to the large size of VCF files (~GBs) that users may want to up/download, we do not want to proxy the files through DivBase. We are not able to create accounts for users on S3 directly (and that would make access control more awkard) so pre-signed URLs was deemed the best option
+
 
 ## Consequences
 
@@ -114,4 +120,4 @@ Adopting the proposed tech stack for developing the inital prototype for Divbase
 
 - **Creating a robust system that can handle concurrent operations**. The use of concurrent operations in a multi-user service means that files will need to be protected against data errors and corruption due to parallel I/O operations. This is not only a technical risk but also an information security risk. How will data integrity issues affect the system, the users, their collaborators, and the quality of the research project? This will need to specifically addressed during the development Jobs will likely need to keep track of file version ID from the S3 store to ensure that all operations happen on the file versions present in the bucket at the time of job start.
 
-- **Performance and implementation challenges on the cluster hardware is currently an unknown** We have not yet been able to test how our proposed tech stack would handle large files/big queries. We are aware of the possibility that once we get access to the production hardware and can get an idea of query performance, there is a risk that we need to reconsider some tech choices.
+- **Performance and implementation challenges on the cluster hardware is currently an unknown** We have not yet been able to test how our proposed tech stack would handle large files/big queries. We are aware of the possibility that once we get access to the production hardware and can get an idea of query performance, there is a risk that we need to reconsider some tech choices. Once we have a deployed instance on the dev cluster we will aim to use [Locust](https://locust.io/) for load testing, given that Team Whale have experience with using it. 

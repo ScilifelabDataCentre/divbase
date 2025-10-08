@@ -105,6 +105,6 @@ Negative:
 
 ## 6. Alternatives Considered:
 
-- Django/Flask: Not arguing one is better than the other. Due to the low priority of having a frontend and that the frontend is expected to be quite limited, we have decided to try out FastAPI initially. The admin panel that comes with Django would be one benefit of using Django instead (make viewing users/projects easier). The support for async in FastAPI would be one advantage of using FastAPI.    
+- Django Ninja/Flask/Django: We're not arguing one is better than the other. Due to the low priority of having a frontend and that the frontend is expected to be quite limited, we have decided to try out FastAPI initially. The admin panel that comes with Django would be one benefit of using Django instead (make viewing users/projects easier). The support for async in FastAPI would be one advantage of using FastAPI. To avoid the need to create an admin panel in FastAPI we will try out [Starlette-Admin](https://jowilf.github.io/starlette-admin/ and/or ([sqladmin](https://aminalaee.github.io/sqladmin/). Of all alternatives considered, Django Ninja is arguably the best alternative candidate to reconsider in the future due to its simlarity to FastAPI and being a paved path tool (or at least Django is).  
 
 - Jobs Table: Instead of relying on the FlowerAPI to parse jobs statuses a Jobs table could be added to the database to track job submissions and statuses. This could provide more control over job management but requires potentially a substational amount of additional dev work. 
