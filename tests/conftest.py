@@ -83,6 +83,10 @@ def CONSTANTS():
         "EMPTY_PROJECT": "empty-project",
         "PROJECT_CONTENTS": PROJECTS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
+        "ADMIN_CREDENTIALS": {
+            "email": "admin@divbase.com",
+            "password": "badpassword",
+        },
     }
 
 

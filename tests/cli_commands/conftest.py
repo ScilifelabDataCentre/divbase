@@ -30,31 +30,40 @@ def tmp_config_path(tmp_path):
 
 
 @pytest.fixture
-def fresh_config_path():
+def logged_out_user_with_fresh_config():
     """
-    Fixture to provide a freshly created user configuration file.
-    Returns the path to the config file if needed by the test.
+    Fixture to provide a user with a fresh config file that is not logged in anywhere.
     """
-    create_command = "config create"
-    result = runner.invoke(app, create_command)
+    # ensure no config or tokens file exist before test
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
+    # create fresh config file
+    result = runner.invoke(app, "config create")
     assert result.exit_code == 0
     assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
-    return cli_settings.CONFIG_PATH
+
+    yield
+
+    # clean up after test, delete config and tokens file
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture
-def user_config_path(CONSTANTS):
+def logged_out_user_with_existing_config(CONSTANTS):
     """
-    Fixture to provide a path to a more complete "existing" user configuration file with
+    Fixture to provide a not logged in user with an "existing" user configuration file with
     some existing projects and a default project set.
-
-    Returns the path to the config file if needed by the test.
     """
+    # ensure no config or tokens file exist before test
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
     create_command = "config create"
     result = runner.invoke(app, create_command)
     assert result.exit_code == 0
+    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
     for project in CONSTANTS["PROJECT_CONTENTS"]:
         add_command = f"config add-project {project}"
@@ -65,8 +74,24 @@ def user_config_path(CONSTANTS):
     result = runner.invoke(app, set_default_command)
     assert result.exit_code == 0
 
-    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
-    return cli_settings.CONFIG_PATH
+    yield
+
+    # clean up after test, delete config and tokens file
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+
+# @pytest.fixture
+# def logged_in_admin_with_config(CONSTANTS):
+#     """
+#     Fixture to provide both a more complete user config file as well as logged in admin user.
+
+#     """
+#     login_command = f"auth login --email {CONSTANTS['ADMIN_CREDENTIALS']['email']} --password {CONSTANTS['ADMIN_CREDENTIALS']['password']}"
+#     result = runner.invoke(app, login_command)
+#     assert result.exit_code == 0, f"Login failed: {result.output}"
+
+#     assert cli_settings.CONFIG_PATH.exists(), "Config file was not updated with login details."
 
 
 @pytest.fixture

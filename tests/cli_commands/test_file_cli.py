@@ -40,7 +40,7 @@ def start_with_clean_project(CONSTANTS):
     yield
 
 
-def test_list_files(user_config_path, CONSTANTS):
+def test_list_files(logged_out_user_with_existing_config, CONSTANTS):
     """Test basic usage of files list command."""
     command = "files list"
 
@@ -53,7 +53,7 @@ def test_list_files(user_config_path, CONSTANTS):
         assert file in result.stdout, f"File {file} not found in the output of the list_files command"
 
 
-def test_list_non_default_project(user_config_path, CONSTANTS):
+def test_list_non_default_project(logged_out_user_with_existing_config, CONSTANTS):
     """Test list files for the non-default project."""
     non_default_project = CONSTANTS["NON_DEFAULT_PROJECT"]
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][non_default_project]
@@ -65,7 +65,7 @@ def test_list_non_default_project(user_config_path, CONSTANTS):
         assert file in result.stdout
 
 
-def test_list_files_empty_project(user_config_path, CONSTANTS):
+def test_list_files_empty_project(logged_out_user_with_existing_config, CONSTANTS):
     """Test list files for an empty project."""
     command = f"files list --project {CONSTANTS['EMPTY_PROJECT']}"
     result = runner.invoke(app, command)
@@ -73,7 +73,7 @@ def test_list_files_empty_project(user_config_path, CONSTANTS):
     assert "No files found" in result.stdout
 
 
-def test_upload_1_file(user_config_path, CONSTANTS, fixtures_dir):
+def test_upload_1_file(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload 1 file to the project."""
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
@@ -84,7 +84,7 @@ def test_upload_1_file(user_config_path, CONSTANTS, fixtures_dir):
     assert f"{str(test_file)}" in result.stdout
 
 
-def test_upload_1_file_to_non_default_project(user_config_path, CONSTANTS, fixtures_dir):
+def test_upload_1_file_to_non_default_project(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
     command = f"files upload {test_file} --project {CONSTANTS['NON_DEFAULT_PROJECT']}"
@@ -94,7 +94,7 @@ def test_upload_1_file_to_non_default_project(user_config_path, CONSTANTS, fixtu
     assert f"{str(test_file)}" in result.stdout
 
 
-def test_upload_multiple_files_at_once(user_config_path, CONSTANTS, fixtures_dir):
+def test_upload_multiple_files_at_once(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     test_files = [(fixtures_dir / file_name).resolve() for file_name in CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"]]
 
     command = f"files upload {' '.join(map(str, test_files))}"
@@ -105,7 +105,7 @@ def test_upload_multiple_files_at_once(user_config_path, CONSTANTS, fixtures_dir
         assert f"{str(file)}" in result.stdout
 
 
-def test_upload_dir_contents(user_config_path, CONSTANTS, fixtures_dir):
+def test_upload_dir_contents(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload all files in a directory."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
@@ -118,7 +118,7 @@ def test_upload_dir_contents(user_config_path, CONSTANTS, fixtures_dir):
         assert str(file.resolve()) in clean_stdout
 
 
-def test_upload_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
+def test_upload_with_safe_mode(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload with safe mode works first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
@@ -132,7 +132,9 @@ def test_upload_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
     assert isinstance(result.exception, FilesAlreadyInBucketError)
 
 
-def test_no_file_uploaded_if_some_duplicated_with_safe_mode(user_config_path, CONSTANTS, fixtures_dir):
+def test_no_file_uploaded_if_some_duplicated_with_safe_mode(
+    logged_out_user_with_existing_config, CONSTANTS, fixtures_dir
+):
     """
     Test that no files are uploaded with safe mode on,
     if at least 1 of the files trying to be uploaded already exists in the project's bucket.
@@ -158,7 +160,7 @@ def test_no_file_uploaded_if_some_duplicated_with_safe_mode(user_config_path, CO
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
 
 
-def test_download_1_file(user_config_path, CONSTANTS, tmp_path):
+def test_download_1_file(logged_out_user_with_existing_config, CONSTANTS, tmp_path):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
@@ -171,7 +173,7 @@ def test_download_1_file(user_config_path, CONSTANTS, tmp_path):
     assert (download_dir / file_name).exists()
 
 
-def test_download_multiple_files(user_config_path, CONSTANTS, tmp_path):
+def test_download_multiple_files(logged_out_user_with_existing_config, CONSTANTS, tmp_path):
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]]
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
@@ -185,7 +187,7 @@ def test_download_multiple_files(user_config_path, CONSTANTS, tmp_path):
         assert (download_dir / file_name).exists()
 
 
-def test_download_from_non_default_project(user_config_path, CONSTANTS, tmp_path):
+def test_download_from_non_default_project(logged_out_user_with_existing_config, CONSTANTS, tmp_path):
     non_default_project = CONSTANTS["NON_DEFAULT_PROJECT"]
     file_to_download = CONSTANTS["PROJECT_CONTENTS"][non_default_project][0]
 
@@ -200,7 +202,7 @@ def test_download_from_non_default_project(user_config_path, CONSTANTS, tmp_path
     assert (download_dir / file_to_download).exists()
 
 
-def test_download_using_file_list(user_config_path, CONSTANTS, tmp_path):
+def test_download_using_file_list(logged_out_user_with_existing_config, CONSTANTS, tmp_path):
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]]
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
@@ -218,7 +220,7 @@ def test_download_using_file_list(user_config_path, CONSTANTS, tmp_path):
         assert (download_dir / file_name).exists()
 
 
-def test_download_nonexistent_file(user_config_path, tmp_path):
+def test_download_nonexistent_file(logged_out_user_with_existing_config, tmp_path):
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
@@ -229,7 +231,7 @@ def test_download_nonexistent_file(user_config_path, tmp_path):
     assert isinstance(result.exception, ObjectDoesNotExistError)
 
 
-def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fixtures_dir):
+def test_download_at_a_project_version(logged_out_user_with_existing_config, CONSTANTS, tmp_path, fixtures_dir):
     """Test downloading at specified project versions."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -300,7 +302,7 @@ def test_download_at_a_project_version(user_config_path, CONSTANTS, tmp_path, fi
     assert downloaded_content == v2_content
 
 
-def test_remove_with_dry_run(user_config_path, CONSTANTS):
+def test_remove_with_dry_run(logged_out_user_with_existing_config, CONSTANTS):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
 
     command = f"files remove {file_name} --dry-run"
@@ -315,7 +317,7 @@ def test_remove_with_dry_run(user_config_path, CONSTANTS):
     assert file_name in result.stdout
 
 
-def test_remove_file(user_config_path, CONSTANTS, fixtures_dir):
+def test_remove_file(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test removing a file from the project's bucket, using a clean project to avoid side effects in other tests."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 

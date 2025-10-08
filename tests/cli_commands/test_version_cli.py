@@ -25,7 +25,7 @@ VERSION_3_NAME = "v3.0.0"
 
 
 @pytest.fixture(autouse=True)
-def clean_versions(user_config_path, CONSTANTS):
+def clean_versions(logged_out_user_with_existing_config, CONSTANTS):
     """
     Remove the versioning file and create a new one before each test.
     Used in all tests in this module.
@@ -47,14 +47,14 @@ def clean_versions(user_config_path, CONSTANTS):
     yield
 
 
-def test_create_version_file_fails_if_already_exists(user_config_path):
+def test_create_version_file_fails_if_already_exists(logged_out_user_with_existing_config):
     command = "version create"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, BucketVersioningFileAlreadyExistsError)
 
 
-def test_create_version_for_non_default_project(user_config_path, CONSTANTS):
+def test_create_version_for_non_default_project(logged_out_user_with_existing_config, CONSTANTS):
     project_name = CONSTANTS["NON_DEFAULT_PROJECT"]
     command = f"version create --project {project_name}"
     result = runner.invoke(app, command)
@@ -63,7 +63,7 @@ def test_create_version_for_non_default_project(user_config_path, CONSTANTS):
     assert f"Bucket versioning file created for project: '{project_name}'" in result.stdout
 
 
-def test_add_version(user_config_path):
+def test_add_version(logged_out_user_with_existing_config):
     command = f"version add {VERSION_1_NAME}"
     result = runner.invoke(app, command)
 
@@ -71,7 +71,7 @@ def test_add_version(user_config_path):
     assert f"New version: '{VERSION_1_NAME}'" in result.stdout
 
 
-def test_add_version_with_description(user_config_path):
+def test_add_version_with_description(logged_out_user_with_existing_config):
     description = "Initial release"
     command = f'version add {VERSION_1_NAME} --description "{description}"'
     result = runner.invoke(app, command)
@@ -85,7 +85,7 @@ def test_add_version_with_description(user_config_path):
     assert description in list_result.stdout
 
 
-def test_add_multiple_versions(user_config_path):
+def test_add_multiple_versions(logged_out_user_with_existing_config):
     versions = [VERSION_1_NAME, VERSION_2_NAME, VERSION_3_NAME]
     for version in versions:
         command = f"version add {version}"
@@ -100,7 +100,7 @@ def test_add_multiple_versions(user_config_path):
         assert version in result.stdout
 
 
-def test_attempt_add_version_that_already_exists_fails(user_config_path):
+def test_attempt_add_version_that_already_exists_fails(logged_out_user_with_existing_config):
     command = "version add v1.0.0"
 
     result = runner.invoke(app, command)
@@ -111,7 +111,7 @@ def test_attempt_add_version_that_already_exists_fails(user_config_path):
     assert isinstance(result.exception, BucketVersionAlreadyExistsError)
 
 
-def test_add_version_works_with_clean_project(user_config_path, CONSTANTS):
+def test_add_version_works_with_clean_project(logged_out_user_with_existing_config, CONSTANTS):
     """
     Using the clean project which has no files at all in the bucket (not even the bucket metadata file)
     So validating you don't need to run `version create` first.
@@ -128,7 +128,7 @@ def test_add_version_works_with_clean_project(user_config_path, CONSTANTS):
     assert VERSION_1_NAME in result.stdout
 
 
-def test_list_versions(user_config_path):
+def test_list_versions(logged_out_user_with_existing_config):
     runner.invoke(app, f"version add {VERSION_1_NAME}")
     runner.invoke(app, f"version add {VERSION_2_NAME}")
 
@@ -140,7 +140,7 @@ def test_list_versions(user_config_path):
     assert f"- '{VERSION_2_NAME}':" in result.stdout
 
 
-def test_delete_version(user_config_path):
+def test_delete_version(logged_out_user_with_existing_config):
     command = f"version add {VERSION_1_NAME}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -156,7 +156,7 @@ def test_delete_version(user_config_path):
     assert VERSION_1_NAME not in result.stdout
 
 
-def test_delete_nonexistent_version(user_config_path):
+def test_delete_nonexistent_version(logged_out_user_with_existing_config):
     nonexistent_version = "v99.99.99"
     command = f"version delete {nonexistent_version}"
     result = runner.invoke(app, command)
@@ -165,7 +165,7 @@ def test_delete_nonexistent_version(user_config_path):
     assert isinstance(result.exception, BucketVersionNotFoundError)
 
 
-def test_get_version_info(user_config_path, CONSTANTS):
+def test_get_version_info(logged_out_user_with_existing_config, CONSTANTS):
     default_project = CONSTANTS["DEFAULT_PROJECT"]
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][default_project]
 
@@ -184,7 +184,7 @@ def test_get_version_info(user_config_path, CONSTANTS):
         assert f"- '{file}' :" in result.stdout
 
 
-def test_get_version_info_for_version_that_does_not_exist(user_config_path, CONSTANTS):
+def test_get_version_info_for_version_that_does_not_exist(logged_out_user_with_existing_config, CONSTANTS):
     command = "version info does_not_exist"
     result = runner.invoke(app, command)
 
@@ -192,7 +192,7 @@ def test_get_version_info_for_version_that_does_not_exist(user_config_path, CONS
     assert isinstance(result.exception, BucketVersionNotFoundError)
 
 
-def test_get_version_updates_hashes_on_new_upload(user_config_path, CONSTANTS, fixtures_dir):
+def test_get_version_updates_hashes_on_new_upload(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
     """
     Test a simple protocol where:
     1. upload file
