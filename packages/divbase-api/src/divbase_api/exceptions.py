@@ -52,3 +52,10 @@ class ProjectMemberNotFoundError(DivBaseAPIException):
 class ProjectCreationError(DivBaseAPIException):
     def __init__(self, message: str = "Project creation failed"):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class TooManyObjectsInRequestError(DivBaseAPIException):
+    """Raise when e.g. too many files are requested to be downloaded in a single request."""
+
+    def __init__(self, message: str = "Too many objects to work on in a single request"):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)

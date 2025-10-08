@@ -9,12 +9,12 @@ NOTE:
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from divbase_api.config import settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.deps import get_project_member
-from divbase_api.exceptions import AuthorizationError
+from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.files import DownloadObjectResponse, DownloadObjectsRequest, UploadObjectResponse
@@ -26,15 +26,14 @@ logger = logging.getLogger(__name__)
 files_router = APIRouter()
 
 
-def check_too_many_objects_to_download(numb_objects: int, max_objects: int = 100) -> None:
+def check_too_many_objects_in_request(numb_objects: int, max_objects: int = 100) -> None:
     """
-    Helper function to check if too many objects are being requested.
-    Will raise error if fails
+    Helper function to check if too many objects are being requested to be worked on
+    in one single request.
     """
     if numb_objects > max_objects:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Too many objects to download provided. Maximum allowed is {max_objects}.",
+        raise TooManyObjectsInRequestError(
+            f"Too many objects/files provided to be worked on. You provided: {numb_objects}. Maximum allowed: {max_objects}."
         )
 
 
@@ -54,7 +53,7 @@ async def download_files(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to download files from this project.")
 
-    check_too_many_objects_to_download(len(object_names))
+    check_too_many_objects_in_request(len(object_names))
 
     response = []
     for obj_name in object_names:
@@ -84,7 +83,7 @@ async def download_files_at_version(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to download files from this project.")
 
-    check_too_many_objects_to_download(len(objects_list.objects))
+    check_too_many_objects_in_request(len(objects_list.objects))
 
     response = []
     for obj in objects_list.objects:
@@ -152,9 +151,19 @@ async def soft_delete_files(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     object_names: list[str] = Query(..., description="List of object names to soft delete"),
 ):
-    """Soft delete files in the project's bucket"""
+    """Soft delete files in the project's bucket. This adds a deletion marker to the files, but does not actually delete them."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to soft delete files in this project.")
 
-    return {"not_implemented :)": True}
+    check_too_many_objects_in_request(len(object_names))
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.s3_internal_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    deleted_objects = s3_file_manager.soft_delete_objects(objects=object_names, bucket_name=project.bucket_name)
+
+    return {"deleted": deleted_objects}
