@@ -21,53 +21,50 @@ TEST_USERS = {
 # TODO - bucket and project names should not match to be closer to reality.
 TEST_PROJECTS = [
     {
-        "name": "local-project-1",
+        "name": "project-1",
         "description": "First test project",
-        "bucket_name": "local-project-1",
+        "bucket_name": "project-1",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-project-2",
+        "name": "project-2",
         "description": "Second test project",
-        "bucket_name": "local-project-2",
+        "bucket_name": "project-2",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-project-3",
+        "name": "query-project",
         "description": "Third test project",
-        "bucket_name": "local-project-3",
+        "bucket_name": "query-project",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "local-project-4",
+        "name": "split-scaffold-project",
         "description": "Fourth test project",
-        "bucket_name": "local-project-4",
+        "bucket_name": "split-scaffold-project",
+        "storage_quota_bytes": 10737418240,
+    },
+    {
+        "name": "cleaned-project",
+        "description": "Fifth test project",
+        "bucket_name": "cleaned-project",
+        "storage_quota_bytes": 10737418240,
+    },
+    {
+        "name": "empty-project",
+        "description": "Sixth test project",
+        "bucket_name": "empty-project",
         "storage_quota_bytes": 10737418240,
     },
 ]
 
-ROLE_ASSIGNMENTS = {
-    "local-project-1": [
-        ("read@divbase.se", "read"),
-        ("edit@divbase.se", "edit"),
-        ("manage@divbase.se", "manage"),
-    ],
-    "local-project-2": [
-        ("read@divbase.se", "read"),
-        ("edit@divbase.se", "edit"),
-        ("manage@divbase.se", "manage"),
-    ],
-    "local-project-3": [
-        ("read@divbase.se", "read"),
-        ("edit@divbase.se", "edit"),
-        ("manage@divbase.se", "manage"),
-    ],
-    "local-project-4": [
-        ("read@divbase.se", "read"),
-        ("edit@divbase.se", "edit"),
-        ("manage@divbase.se", "manage"),
-    ],
+USER_ROLES = {
+    "read@divbase.se": "read",
+    "edit@divbase.se": "edit",
+    "manage@divbase.se": "manage",
 }
+
+ROLE_ASSIGNMENTS = {project["name"]: [(email, role) for email, role in USER_ROLES.items()] for project in TEST_PROJECTS}
 
 
 def get_admin_access_token() -> str:

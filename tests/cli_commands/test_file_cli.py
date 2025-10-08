@@ -302,7 +302,7 @@ def test_download_at_a_project_version(logged_out_user_with_existing_config, CON
     assert downloaded_content == v2_content
 
 
-def test_remove_with_dry_run(logged_out_user_with_existing_config, CONSTANTS):
+def test_remove_with_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
 
     command = f"files remove {file_name} --dry-run"
@@ -317,7 +317,7 @@ def test_remove_with_dry_run(logged_out_user_with_existing_config, CONSTANTS):
     assert file_name in result.stdout
 
 
-def test_remove_file(logged_out_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_remove_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test removing a file from the project's bucket, using a clean project to avoid side effects in other tests."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
