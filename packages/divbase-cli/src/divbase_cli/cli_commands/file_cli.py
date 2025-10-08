@@ -14,7 +14,7 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
-from divbase_cli.config_resolver import resolve_download_dir, resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services import (
     download_files_command,
     list_files_command,
@@ -183,6 +183,7 @@ def remove_files(
     'dry_run' mode will not actually delete the files, just print what would be deleted.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -204,7 +205,8 @@ def remove_files(
         return
 
     deleted_files = soft_delete_objects_command(
-        project_config=project_config,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
         all_files=list(all_files),
     )
 

@@ -78,6 +78,8 @@ def whoami(
     """
     config = load_user_config(config_file)
     logged_in_url = config.logged_in_url
+
+    # TODO - move logged in check to the make_authenticated_request function?
     if not logged_in_url:
         raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
@@ -86,9 +88,6 @@ def whoami(
         divbase_base_url=logged_in_url,
         api_route="v1/auth/whoami",
     )
-
-    if not request.json():
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
     current_user = request.json()
     print(f"Currently logged in as: {current_user['email']} (Name: {current_user['name']})")

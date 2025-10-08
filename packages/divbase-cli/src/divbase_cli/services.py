@@ -3,10 +3,15 @@ CLI commands for managing S3 bucket versions.
 """
 
 from pathlib import Path
+from urllib.parse import urlencode
 
 from divbase_cli.bucket_versioning import BucketVersionManager
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import ProjectConfig
-from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
+from divbase_lib.exceptions import (
+    FilesAlreadyInBucketError,
+    ObjectDoesNotExistInSpecifiedVersionError,
+)
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
@@ -122,13 +127,22 @@ def upload_files_command(project_config: ProjectConfig, all_files: list[Path], s
     return uploaded_files
 
 
-def soft_delete_objects_command(project_config: ProjectConfig, all_files: list[str]) -> list[str]:
+def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
     """
     Soft delete objects from the project's S3 bucket.
     Returns a list of the soft deleted objects
     """
-    s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
-    return s3_file_manager.soft_delete_objects(objects=all_files, bucket_name=project_config.bucket_name)
+    query_params = {
+        "project_name": project_name,
+        "object_names": all_files,
+    }
+
+    response = make_authenticated_request(
+        method="DELETE",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/files/soft_delete?{urlencode(query_params, doseq=True)}",
+    )
+    return response.json().get("deleted", [])
 
 
 def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
