@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_worker.tasks import update_vcf_dimensions_task
+from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS, setup_api_data
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.helpers.minio_setup import (
     MINIO_FAKE_ACCESS_KEY,
@@ -83,10 +84,8 @@ def CONSTANTS():
         "EMPTY_PROJECT": "empty-project",
         "PROJECT_CONTENTS": PROJECTS,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
-        "ADMIN_CREDENTIALS": {
-            "email": "admin@divbase.com",
-            "password": "badpassword",
-        },
+        "ADMIN_CREDENTIALS": ADMIN_CREDENTIALS,
+        "TEST_USERS": TEST_USERS,
     }
 
 
@@ -98,6 +97,7 @@ def docker_testing_stack():
     try:
         start_compose_stack()
         setup_minio_data()
+        setup_api_data()
         yield
     finally:
         stop_compose_stack()
