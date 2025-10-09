@@ -100,25 +100,18 @@ class FilesAlreadyInBucketError(FileExistsError):
     """
     Raised when trying to upload file(s) that already exists in the bucket
     and the user does not want to accidently create a new version of any file.
-
-    TODO - This needs some thought in the future, as currenly the path of the file is not used in setting the name of the object,
-    only the file name is.
-    This decision was taken as the s3 bucket does not have a directory structure.
-
-    But error will be raised if previously uploaded file looks like this: dir1/file1.txt
-    and to be uploaded file looks like this: dir2/file1.txt
     """
 
-    def __init__(self, existing_objects: list[str], bucket_name: str):
+    def __init__(self, existing_objects: list[str], project_name: str):
         files_list = "\n".join(f"- '{name}'" for name in existing_objects)
         error_message = (
-            f"In the bucket: '{bucket_name}'\n"
-            "The following objects that you're trying to upload already exist in the bucket:\n"
+            f"For the project: '{project_name}'\n"
+            "The following objects that you're trying to upload already exist in the project's bucket:\n"
             f"{files_list}."
         )
         super().__init__(error_message)
         self.existing_objects = existing_objects
-        self.bucket = bucket_name
+        self.project_name = project_name
         self.error_message = error_message
 
     def __str__(self):

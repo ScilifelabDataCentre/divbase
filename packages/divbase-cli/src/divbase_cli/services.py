@@ -9,6 +9,7 @@ from divbase_cli.bucket_versioning import BucketVersionManager
 from divbase_cli.pre_signed_urls import download_multiple_pre_signed_urls, upload_multiple_pre_signed_urls
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import ProjectConfig
+from divbase_lib.exceptions import FilesAlreadyInBucketError
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
@@ -99,23 +100,20 @@ def upload_files_command(
 
     Safe mode checks if any of the files that are to be uploaded already exist in the bucket.
     """
-    # TODO - reimplement safe mode after changes
-    # Probably can do this by running list_files first?
-    if safe_mode:
-        raise NotImplementedError("Safe mode is not yet (re)implemented.")
-    #     bucket_version_manager = BucketVersionManager(
-    #         bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager
-    #     )
-    #     current_files = bucket_version_manager._get_all_objects_names_and_ids().keys()
-    #     file_names = [file.name for file in all_files]
-
-    #     existing_objects = set(file_names) & set(current_files)
-    #     if existing_objects:
-    #         raise FilesAlreadyInBucketError(
-    #             existing_objects=list(existing_objects), bucket_name=project_config.bucket_name
-    #         )
-
     object_names = [file.name for file in all_files]
+
+    if safe_mode:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/list?project_name={project_name}",
+        )
+        current_files = response.json()
+
+        existing_objects = set(object_names) & set(current_files)
+        if existing_objects:
+            raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), project_name=project_name)
+
     query_params = {
         "project_name": project_name,
         "object_names": object_names,
