@@ -17,3 +17,7 @@ pytest.ini
 
 .env*
 .env 
+
+__pycache__/
+*.pyc
+*.pyo

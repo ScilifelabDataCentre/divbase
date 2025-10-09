@@ -30,13 +30,15 @@ class AuthorizationError(DivBaseAPIException):
 
 
 class UserRegistrationError(DivBaseAPIException):
+    """Exception for failed registration of new user or update of existing user."""
+
     def __init__(
         self,
-        message: str,
+        internal_logging_message: str,  # for logs, can be more detailed
         user_message: str = "Registration failed. Please try again.",  # given to end user, generic
     ):
         self.user_message = user_message
-        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+        super().__init__(message=internal_logging_message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class ProjectNotFoundError(DivBaseAPIException):

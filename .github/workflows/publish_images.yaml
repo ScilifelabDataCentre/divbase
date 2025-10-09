@@ -1,0 +1,73 @@
+name: Build and Push images to GitHub Container Registry
+# The logic for settings Docker image tags is in ./scripts/ci/set_docker_tag.sh
+
+on:
+#   push:
+#     # Tag = commit hash
+#     branches:
+#       - main 
+#     paths-ignore:
+#       - 'README.md'
+#       - 'docs/**'
+#       - '.gitignore'
+  release:
+    # Tag = release version
+    types: [published]
+  workflow_dispatch:
+    # Tag = commit hash or custom tag set when manually triggering the GH action
+    inputs:
+      docker_tag:
+        description: 'Docker image tag (default: full commit hash)'
+        required: false
+
+jobs:
+  push-to-container-registry:
+    if: github.repository == 'ScilifelabDataCentre/divbase'  
+    name: Build and push DivBase images GitHub Container Registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: ./scripts/ci
+
+    strategy:
+      matrix:
+        include:
+          - dockerfile: fastapi.dockerfile
+            image_name: divbase-fastapi
+          - dockerfile: flower.dockerfile
+            image_name: divbase-flower
+          - dockerfile: worker.dockerfile
+            image_name: divbase-worker
+            
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set Docker tag
+        id: set-tag
+        run: |
+          ./set_docker_tag.sh ${{ github.event_name }} \
+                           ${{ github.ref_name }} \
+                           ${{ github.sha }} \
+                           ${{ github.event.inputs.docker_tag }} \
+                           >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+            push: ${{ github.event_name != 'pull_request' }}
+            context: .
+            file: ./docker/${{ matrix.dockerfile }}
+            tags: |
+                ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ steps.set-tag.outputs.tag }}
+                ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:latest

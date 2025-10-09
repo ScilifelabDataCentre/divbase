@@ -39,7 +39,7 @@ async def create_user(db: AsyncSession, user_data: UserCreate, is_admin: bool = 
     current_user = await get_user_by_email(db=db, email=proposed_email)
     if current_user:
         raise UserRegistrationError(
-            message=f"Attempt made to register new account with existing email: {proposed_email}"
+            internal_logging_message=f"Attempt made to register new account with existing email: {proposed_email}"
         )
 
     user_dict = user_data.model_dump(exclude={"password"})
@@ -62,7 +62,7 @@ async def update_user_profile(db: AsyncSession, user_data: UserUpdate, user_id: 
         existing_user = await get_user_by_email(db=db, email=user_data.email)
         if existing_user:
             raise UserRegistrationError(
-                message=f"Attempt to change email to existing email: {user_data.email}",
+                internal_logging_message=f"Attempt to change email to existing email: {user_data.email}",
                 user_message="Account update failed, please try again later.",
             )
 
