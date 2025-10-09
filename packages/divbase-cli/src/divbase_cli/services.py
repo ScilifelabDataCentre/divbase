@@ -6,12 +6,9 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from divbase_cli.bucket_versioning import BucketVersionManager
+from divbase_cli.pre_signed_urls import download_multiple_pre_signed_urls, upload_multiple_pre_signed_urls
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import ProjectConfig
-from divbase_lib.exceptions import (
-    FilesAlreadyInBucketError,
-    ObjectDoesNotExistInSpecifiedVersionError,
-)
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
@@ -50,81 +47,88 @@ def delete_version_command(project_config: ProjectConfig, bucket_version: str) -
     return manager.delete_version(bucket_version=bucket_version)
 
 
-def list_files_command(project_config: ProjectConfig) -> list[str]:
-    s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
-    return s3_file_manager.list_files(bucket_name=project_config.bucket_name)
+def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
+    """List all files in a project."""
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/list?project_name={project_name}",
+    )
+    return response.json()
 
 
 def download_files_command(
-    project_config: ProjectConfig, all_files: list[str], download_dir: Path, bucket_version: str | None = None
+    divbase_base_url: str,
+    project_name: str,
+    all_files: list[str],
+    download_dir: Path,
+    bucket_version: str | None = None,
 ) -> list[Path]:
     """
-    Download files from the project's S3 bucket.
+    Download files from the given project's S3 bucket.
     """
-    s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
-
     if not download_dir.is_dir():
         raise NotADirectoryError(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
-    # Get the files at the specified version.
+    # TODO - rewrite logic only once bucket versioning changes implemented for pre-signed url strategy
     if bucket_version:
-        bucket_version_manager = BucketVersionManager(
-            bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager
-        )
-        files_at_version = bucket_version_manager.all_files_at_bucket_version(bucket_version=bucket_version)
+        raise NotImplementedError("Downloading files at a specific bucket version is not yet (re)implemented.")
 
-        # check if all files specified exist for download exist at this bucket version
-        missing_objects = [f for f in all_files if f not in files_at_version]
-        if missing_objects:
-            raise ObjectDoesNotExistInSpecifiedVersionError(
-                bucket_name=project_config.bucket_name,
-                bucket_version=bucket_version,
-                missing_objects=missing_objects,
-            )
+    query_params = {
+        "project_name": project_name,
+        "object_names": all_files,
+    }
 
-        files_to_download = {file: files_at_version[file] for file in all_files}
-    else:
-        files_to_download = {file: None for file in all_files}
-
-    download_files = s3_file_manager.download_files(
-        objects=files_to_download,
-        download_dir=download_dir,
-        bucket_name=project_config.bucket_name,
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/download?{urlencode(query_params, doseq=True)}",
     )
 
-    return download_files
+    return download_multiple_pre_signed_urls(pre_signed_urls=response.json(), download_dir=download_dir)
 
 
-def upload_files_command(project_config: ProjectConfig, all_files: list[Path], safe_mode: bool) -> dict[str, Path]:
+def upload_files_command(
+    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool
+) -> dict[str, Path]:
     """
     Upload files to the project's S3 bucket.
     Files uploaded and there names in  returned as a list Paths
 
     Safe mode checks if any of the files that are to be uploaded already exist in the bucket.
     """
-    s3_file_manager = create_s3_file_manager(url=project_config.s3_url)
-
+    # TODO - reimplement safe mode after changes
+    # Probably can do this by running list_files first?
     if safe_mode:
-        bucket_version_manager = BucketVersionManager(
-            bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager
-        )
-        current_files = bucket_version_manager._get_all_objects_names_and_ids().keys()
-        file_names = [file.name for file in all_files]
+        raise NotImplementedError("Safe mode is not yet (re)implemented.")
+    #     bucket_version_manager = BucketVersionManager(
+    #         bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager
+    #     )
+    #     current_files = bucket_version_manager._get_all_objects_names_and_ids().keys()
+    #     file_names = [file.name for file in all_files]
 
-        existing_objects = set(file_names) & set(current_files)
-        if existing_objects:
-            raise FilesAlreadyInBucketError(
-                existing_objects=list(existing_objects), bucket_name=project_config.bucket_name
-            )
+    #     existing_objects = set(file_names) & set(current_files)
+    #     if existing_objects:
+    #         raise FilesAlreadyInBucketError(
+    #             existing_objects=list(existing_objects), bucket_name=project_config.bucket_name
+    #         )
 
-    uploaded_files = s3_file_manager.upload_files(
-        to_upload={file.name: file for file in all_files},
-        bucket_name=project_config.bucket_name,
+    object_names = [file.name for file in all_files]
+    query_params = {
+        "project_name": project_name,
+        "object_names": object_names,
+    }
+
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/upload?{urlencode(query_params, doseq=True)}",
     )
+    pre_signed_urls = response.json()
 
-    return uploaded_files
+    return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)
 
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
@@ -140,7 +144,7 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
     response = make_authenticated_request(
         method="DELETE",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/files/soft_delete?{urlencode(query_params, doseq=True)}",
+        api_route=f"v1/s3/soft_delete?{urlencode(query_params, doseq=True)}",
     )
     return response.json().get("deleted", [])
 
