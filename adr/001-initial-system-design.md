@@ -61,7 +61,7 @@ This initial system design is intended to cover all the architectural components
 
 The core functions of the DivBase is not public-facing but locked behind authentication/authorization. DivBase will require storage and compute, so the deployment on SciLifeLab hardware will - in line with scope the DDLS project - be limited to users that are affiliated with Swedish research institutions. Furthermore, DivBase is largely intended for use with unpublished data which also emphasizes the need for access control. Since auth is central to the service, it is likely a big architectural decision that will require its own ADR. 
 
-DivBase is not a data publication platform. At the end of of research project, the users should submit their data and metadata to domain specific end-repositories for publication. This has implications for user roles, the lifespan of a given bucket, support/enforcement of metadata standards for key end-repositories (such as [EVA](https://www.ebi.ac.uk/eva/)). These should be covered in their own ADRs.
+DivBase is not a data publication platform. At the end of the research project, the users should submit their data and metadata to domain specific end-repositories for publication. This has implications for user roles, the lifespan of a given bucket, support/enforcement of metadata standards for key end-repositories (such as [EVA](https://www.ebi.ac.uk/eva/)). These should be covered in their own ADRs.
 
 In line with the scope of the DDLS research area in Evolution and Biodiversity in which the team operates, DivBase will initially target research projects on non-model organisms. DivBase is not intended for use with sensitive data, such as human genetic variant data.
 
