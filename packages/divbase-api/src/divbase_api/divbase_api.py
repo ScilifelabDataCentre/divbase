@@ -28,7 +28,7 @@ from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
-from divbase_api.routes.files import files_router
+from divbase_api.routes.s3 import s3_router
 from divbase_worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
@@ -65,7 +65,7 @@ app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(files_router, prefix="/api/v1/files", tags=["files"])
+app.include_router(s3_router, prefix="/api/v1/s3", tags=["objects", "s3"])
 
 
 app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)

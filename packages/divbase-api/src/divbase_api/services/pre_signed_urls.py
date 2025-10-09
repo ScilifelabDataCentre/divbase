@@ -14,6 +14,7 @@ from functools import lru_cache
 import boto3
 
 from divbase_api.config import settings
+from divbase_api.schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,9 @@ class S3PreSignedService:
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
         )
 
-    def create_presigned_url_for_download(self, bucket_name: str, object_name: str, version_id: str | None) -> str:
+    def create_presigned_url_for_download(
+        self, bucket_name: str, object_name: str, version_id: str | None
+    ) -> PreSignedDownloadResponse:
         """
         Generate a presigned URL for S3 object download
 
@@ -49,9 +52,15 @@ class S3PreSignedService:
             ExpiresIn=3600,  # 1 hour
         )
 
-        return url
+        return PreSignedDownloadResponse(
+            object_name=object_name,
+            pre_signed_url=url,
+            version_id=version_id,
+        )
 
-    def create_presigned_url_for_upload(self, bucket_name: str, object_name: str, fields=None, conditions=None) -> dict:
+    def create_presigned_url_for_upload(
+        self, bucket_name: str, object_name: str, fields=None, conditions=None
+    ) -> PreSignedUploadResponse:
         """
         Generate a presigned S3 POST URL to upload a file.
 
@@ -70,7 +79,11 @@ class S3PreSignedService:
             Conditions=conditions,
             ExpiresIn=3600 * 24,  # 24 hours
         )
-        return response
+        return PreSignedUploadResponse(
+            object_name=object_name,
+            post_url=response["url"],
+            fields=response["fields"],
+        )
 
 
 @lru_cache()
