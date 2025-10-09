@@ -21,15 +21,15 @@ TEST_USERS = {
 # TODO - bucket and project names should not match to be closer to reality.
 TEST_PROJECTS = [
     {
-        "name": "project-1",
+        "name": "project1",
         "description": "First test project",
-        "bucket_name": "project-1",
+        "bucket_name": "project1",
         "storage_quota_bytes": 10737418240,
     },
     {
-        "name": "project-2",
+        "name": "project2",
         "description": "Second test project",
-        "bucket_name": "project-2",
+        "bucket_name": "project2",
         "storage_quota_bytes": 10737418240,
     },
     {
@@ -54,6 +54,12 @@ TEST_PROJECTS = [
         "name": "empty-project",
         "description": "Sixth test project",
         "bucket_name": "empty-project",
+        "storage_quota_bytes": 10737418240,
+    },
+    {
+        "name": "mixed-concat-merge-project",
+        "description": "7th test project",
+        "bucket_name": "mixed-concat-merge-project",
         "storage_quota_bytes": 10737418240,
     },
 ]
