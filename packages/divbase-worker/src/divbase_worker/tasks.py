@@ -65,20 +65,24 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
     """
     Run a sample metadata query task as a Celery task.
     """
-    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    try:
+        s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    metadata_path = download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-    )
+        metadata_path = download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
 
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
-    )
-    # celery serializes the return value, hence conversion to dict.
-    return dataclasses.asdict(metadata_result)
+        metadata_result = run_sidecar_metadata_query(
+            file=metadata_path,
+            filter_string=tsv_filter,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
+        )
+        # celery serializes the return value, hence conversion to dict.
+        return dataclasses.asdict(metadata_result)
+    except Exception as e:
+        # bring error back up to API level
+        return {"error": str(e), "type": type(e).__name__, "status": "error"}
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
