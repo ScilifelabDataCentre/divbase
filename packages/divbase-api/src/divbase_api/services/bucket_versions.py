@@ -2,14 +2,20 @@
 Responsible for managing the versioning of the bucket state.
 
 Note: this means the overall state of the bucket, not the individual files.
+
+This was previously a part of the CLI but now due to redesign
+
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import yaml
 
+from divbase_api.config import settings
+
+# TODO - move to API exceptions
 from divbase_lib.exceptions import (
     BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,
@@ -27,18 +33,9 @@ logger = logging.getLogger(__name__)
 class BucketVersionManager:
     bucket_name: str
     s3_file_manager: S3FileManager
+    version_info: dict
 
-    # not defined till post_init method run.
-    version_info: dict = field(init=False)
-
-    def __post_init__(self):
-        # empty dict if file doesn't exist
-        self.version_info = self._get_bucket_version_file()
-
-        if self.version_info:
-            logger.info(f"Version file found inside Bucket: {self.bucket_name}.")
-
-    def create_metadata_file(self) -> None:
+    def create_metadata_file(self, name: str | None, description: str | None) -> None:
         """
         Create the initial metadata file with a default version.
         """
@@ -48,9 +45,10 @@ class BucketVersionManager:
         timestamp = self._create_timestamp()
         files = self._get_all_objects_names_and_ids()
 
-        version_metadata = {
-            "versions": {"v0.0.0": {"timestamp": timestamp, "description": "First version", "files": files}}
-        }
+        name = name or "v0.0.0"
+        description = description or "First version"
+
+        version_metadata = {"versions": {name: {"timestamp": timestamp, "description": description, "files": files}}}
 
         self._upload_bucket_version_file(version_data=version_metadata)
         logger.info("Bucket versioning file created and uploaded successfully.")
@@ -119,21 +117,6 @@ class BucketVersionManager:
     def _create_timestamp(self) -> str:
         return datetime.now(tz=timezone.utc).isoformat()
 
-    def _get_bucket_version_file(self) -> dict:
-        """
-        If bucket version files exists, download version metadata file from the S3 bucket.
-        If doesn't exist, return empty dict.
-        """
-        try:
-            content = self.s3_file_manager.download_s3_file_to_str(key=VERSION_FILE_NAME, bucket_name=self.bucket_name)
-        except ObjectDoesNotExistError:
-            logger.info(f"No bucket versioning file found in the bucket: {self.bucket_name}.")
-            return {}
-        if not content:
-            return {}
-
-        return yaml.safe_load(content)
-
     def _get_all_objects_names_and_ids(self) -> dict[str, str]:
         """
         Create a dict of the latest version of each file in the bucket and its unique versionID (hash).
@@ -154,3 +137,28 @@ class BucketVersionManager:
             key=VERSION_FILE_NAME, content=text_content, bucket_name=self.bucket_name
         )
         logging.info(f"New version updated in the bucket: {self.bucket_name}.")
+
+
+def create_bucket_version_manager(bucket_name: str) -> BucketVersionManager:
+    """
+    Create a BucketVersionManager instance.
+
+    If bucket version files exists, download version metadata file from the S3 bucket.
+    If doesn't exist, create an empty version info dict.
+    """
+    s3_file_manager = S3FileManager(
+        url=settings.s3.s3_internal_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    try:
+        content = s3_file_manager.download_s3_file_to_str(key=VERSION_FILE_NAME, bucket_name=bucket_name)
+    except ObjectDoesNotExistError:
+        logger.info(f"No bucket versioning file found in the bucket: {bucket_name}.")
+        version_info = {}
+    if not content:
+        version_info = {}
+
+    version_info = yaml.safe_load(content)
+    return BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager, version_info=version_info)
