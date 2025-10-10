@@ -23,6 +23,8 @@ from divbase_lib.exceptions import (
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
 )
+from divbase_lib.s3_client import S3FileManager
+from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -39,25 +41,35 @@ class SidecarQueryResult:
     query_message: str
 
 
-def run_sidecar_metadata_query(file: Path, filter_string: str = None) -> SidecarQueryResult:
-    """Run a query on a sidecar metadata TSV file."""
+def run_sidecar_metadata_query(
+    file: Path, filter_string: str = None, bucket_name: str = None, s3_file_manager: S3FileManager = None
+) -> SidecarQueryResult:
+    """
+    Run a query on a sidecar metadata TSV file.
+    Call SidecarQueryManager to filter on the metadata, then call VCFDimensionIndexManager to get the
+    sample-file name mapping. Combine the results and return a SidecarQueryResult object.
+    """
+
     sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
-
-    query_result = sidecar_manager.query_result
     query_message = sidecar_manager.query_message
-
-    unique_filenames = sidecar_manager.get_unique_values("Filename")
     unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
 
-    sample_and_filename_subset = query_result[["Sample_ID", "Filename"]]
-    serialized_samples = sample_and_filename_subset.to_dict(orient="records")
+    dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    dimensions_info = dimensions_manager.get_dimensions_info()
 
-    # TODO - we should handle the case where no samples match the query.
+    sample_and_filename_subset = []
+    unique_filenames = set()
+    for entry in dimensions_info.get("dimensions", []):
+        filename = entry["filename"]
+        for sample_id in entry["dimensions"]["sample_names"]:
+            if sample_id in unique_sample_ids:
+                sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+                unique_filenames.add(filename)
 
     return SidecarQueryResult(
-        sample_and_filename_subset=serialized_samples,
-        unique_sample_ids=unique_sample_ids,
-        unique_filenames=unique_filenames,
+        sample_and_filename_subset=sample_and_filename_subset,
+        unique_sample_ids=list(unique_sample_ids),
+        unique_filenames=list(unique_filenames),
         query_message=query_message,
     )
 
@@ -486,18 +498,11 @@ class SidecarQueryManager:
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
         try:
+            logger.info(f"Loading sidecar metadata file: {self.file}")
             self.df = pd.read_csv(self.file, sep="\t")
             self.df.columns = self.df.columns.str.lstrip("#")
             if "Sample_ID" not in self.df.columns:
                 raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
-            if "Filename" not in self.df.columns:
-                raise SidecarColumnNotFoundError("The 'Filename' column is required in the metadata file.")
-            self.df["Filename"] = self.df["Filename"].astype(str)
-            self.df = self.df.assign(Filename=self.df["Filename"].str.split(",")).explode("Filename")
-            self.df["Filename"] = self.df["Filename"].str.strip()
-            self.df = self.df[self.df["Filename"] != ""]
-
-            self._purge_duplicate_filenames_per_sample()
 
         except Exception as e:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
@@ -586,18 +591,3 @@ class SidecarQueryManager:
             return self.query_result[column].unique().tolist()
         else:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
-
-    def _purge_duplicate_filenames_per_sample(self):
-        """
-        Helper method that sanitizes input for the case when the user has mistakenly assigned the same VCF
-        file twice to the same sample in the sidecar metadata file.
-        Removes duplicate (Sample_ID, Filename) pairs and ensures only one filename remains per sample.
-        Keeps the first filename for each Sample_ID.
-        """
-
-        duplicates = self.df.duplicated(subset=["Sample_ID", "Filename"])
-        if duplicates.any():
-            dup_rows = self.df[duplicates]
-            logger.warning(f"Duplicate (Sample_ID, Filename) pairs found in metadata TSV:\n{dup_rows}")
-        self.df = self.df.drop_duplicates(subset=["Sample_ID", "Filename"], keep="first")
-        return self

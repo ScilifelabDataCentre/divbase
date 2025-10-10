@@ -74,6 +74,8 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
     )
     # celery serializes the return value, hence conversion to dict.
     return dataclasses.asdict(metadata_result)
@@ -107,6 +109,8 @@ def bcftools_pipe_task(
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
     )
 
     check_that_file_versions_match_dimensions_index(
