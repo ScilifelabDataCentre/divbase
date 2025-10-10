@@ -22,6 +22,7 @@ from divbase_lib.exceptions import (
     SidecarColumnNotFoundError,
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
+    VCFDimensionsFileMissingOrEmptyError,
 )
 from divbase_lib.s3_client import S3FileManager
 from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
@@ -56,6 +57,9 @@ def run_sidecar_metadata_query(
 
     dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     dimensions_info = dimensions_manager.get_dimensions_info()
+
+    if not dimensions_manager.dimensions_info or not dimensions_manager.dimensions_info.get("dimensions"):
+        raise VCFDimensionsFileMissingOrEmptyError(dimensions_manager.bucket_name)
 
     sample_and_filename_subset = []
     unique_filenames = set()
