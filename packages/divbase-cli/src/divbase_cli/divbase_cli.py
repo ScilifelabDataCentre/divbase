@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 def load_cli_env_vars() -> None:
     """
+    TODO: Once swap to pre-signed urls complete, drop this.
+
     Determine and load in the correct env variables to use for DivBase CLI.
     Env to use controlled by `DIVBASE_ENV` environment variable (can pass in front of any cli command).
     If not set, will default to taking settings from '.env' (for production user).

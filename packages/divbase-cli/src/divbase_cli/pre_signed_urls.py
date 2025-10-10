@@ -1,5 +1,7 @@
 """
-Support functions to handle using pre-signed URLs for file download and upload.
+Helper functions to handle using pre-signed URLs for file download and upload.
+
+TODO: Consider adding retries, error handling, progress bars, etc.
 """
 
 from pathlib import Path
@@ -47,7 +49,7 @@ def upload_multiple_pre_signed_urls(pre_signed_urls: list[dict], all_files: list
 
             file_path = file_map[object_name]
             with open(file_path, "rb") as file:
-                files = {"file": (object_name, file)}
+                files = {"file": (object_name, file, "application/octet-stream")}
                 response = client.post(post_url, data=fields, files=files)
                 response.raise_for_status()
 

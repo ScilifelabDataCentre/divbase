@@ -2,7 +2,6 @@
 Command line interface for managing files in a DivBase project's storage bucket.
 
 TODO - support for specifying versions of files when downloading files?
-TODO - some duplication of logic here, but awkward as not exactly same logic for different ops.
 """
 
 from pathlib import Path
@@ -78,7 +77,7 @@ def download_files(
         print("Please specify only one of --files or --file-list.")
         raise typer.Exit(1)
 
-    all_files = set()
+    all_files: set[str] = set()
     if files:
         all_files.update(files)
     if file_list:
@@ -98,17 +97,9 @@ def download_files(
         bucket_version=bucket_version,
     )
 
-    downloaded_file_names = [file.name for file in downloaded_files]
-    missing_files = all_files - set(downloaded_file_names)
-
-    if missing_files:
-        print("WARNING: The following files were not downloaded:")
-        for file in missing_files:
-            print(f"- {file}")
-    else:
-        print(f"The following files were downloaded to {download_dir_path.resolve()}:")
-        for file in downloaded_files:
-            print(f"- '{file}'")
+    print(f"The following files were downloaded to {download_dir_path.resolve()}:")
+    for file in downloaded_files:
+        print(f"- '{file}'")
 
 
 @file_app.command("upload")

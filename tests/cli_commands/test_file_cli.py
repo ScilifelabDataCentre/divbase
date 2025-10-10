@@ -1,7 +1,7 @@
 """
 Tests for the "divbase-cli files" commands
 
-All tests are run against a MinIO server on localhost from docker-compose.
+All tests are run against the docker compose test overlay
 
 A clean project (its bucket is auto emptied before each test) is available to any test that requires a clean slate.
 """
