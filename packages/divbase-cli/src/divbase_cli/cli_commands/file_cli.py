@@ -2,7 +2,6 @@
 Command line interface for managing files in a DivBase project's storage bucket.
 
 TODO - support for specifying versions of files when downloading files?
-TODO - some duplication of logic here, but awkward as not exactly same logic for different ops.
 """
 
 from pathlib import Path
@@ -14,11 +13,11 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
-from divbase_cli.config_resolver import resolve_download_dir, resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services import (
-    delete_objects_command,
     download_files_command,
     list_files_command,
+    soft_delete_objects_command,
     upload_files_command,
 )
 
@@ -37,7 +36,9 @@ def list_files(
     you can instead use the 'divbase version info [VERSION_NAME]' command.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
-    files = list_files_command(project_config=project_config)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    files = list_files_command(divbase_base_url=logged_in_url, project_name=project_config.name)
     if not files:
         print("No files found in the project's storage bucket.")
     else:
@@ -69,13 +70,14 @@ def download_files(
         2. providing a directory to download the files to.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
         raise typer.Exit(1)
 
-    all_files = set()
+    all_files: set[str] = set()
     if files:
         all_files.update(files)
     if file_list:
@@ -88,23 +90,16 @@ def download_files(
         raise typer.Exit(1)
 
     downloaded_files = download_files_command(
-        project_config=project_config,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
         all_files=list(all_files),
         download_dir=download_dir_path,
         bucket_version=bucket_version,
     )
 
-    downloaded_file_names = [file.name for file in downloaded_files]
-    missing_files = all_files - set(downloaded_file_names)
-
-    if missing_files:
-        print("WARNING: The following files were not downloaded:")
-        for file in missing_files:
-            print(f"- {file}")
-    else:
-        print(f"The following files were downloaded to {download_dir_path.resolve()}:")
-        for file in downloaded_files:
-            print(f"- '{file}'")
+    print(f"The following files were downloaded to {download_dir_path.resolve()}:")
+    for file in downloaded_files:
+        print(f"- '{file}'")
 
 
 @file_app.command("upload")
@@ -128,6 +123,7 @@ def upload_files(
         3. providing a text file with or a file list.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
     if bool(files) + bool(upload_dir) + bool(file_list) > 1:
         print("Please specify only one of --files, --upload_dir, or --file-list.")
@@ -150,7 +146,8 @@ def upload_files(
         raise typer.Exit(1)
 
     uploaded_files = upload_files_command(
-        project_config=project_config,
+        project_name=project_config.name,
+        divbase_base_url=logged_in_url,
         all_files=list(all_files),
         safe_mode=safe_mode,
     )
@@ -183,6 +180,7 @@ def remove_files(
     'dry_run' mode will not actually delete the files, just print what would be deleted.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only one of --files or --file-list.")
@@ -203,8 +201,9 @@ def remove_files(
             print(f"- '{file}'")
         return
 
-    deleted_files = delete_objects_command(
-        project_config=project_config,
+    deleted_files = soft_delete_objects_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
         all_files=list(all_files),
     )
 

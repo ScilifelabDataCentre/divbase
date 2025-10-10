@@ -64,6 +64,14 @@ async def get_project_with_user_role(db: AsyncSession, project_id: int, user_id:
     raise ProjectNotFoundError("Project not found or the user has no access")
 
 
+async def get_project_id_from_name(db: AsyncSession, project_name: str) -> int | None:
+    """Get a project's ID from its name."""
+    stmt = select(ProjectDB.id).where(ProjectDB.name == project_name)
+    result = await db.execute(stmt)
+    project_id = result.scalar_one_or_none()
+    return project_id
+
+
 async def add_project_member(
     db: AsyncSession, project_id: int, user_id: int, role: ProjectRoles
 ) -> ProjectMembershipDB:

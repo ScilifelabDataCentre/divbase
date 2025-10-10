@@ -2,8 +2,8 @@
 Tests for the user configuration CLI commands.
 
 Tests start from 1 of 3 types of user config files:
-- fresh_config: A newly created user config file with no projects.
-- user_config_path: A config file with some pre-existing projects and a default project set.
+- logged_out_user_with_fresh_config: A newly created user config file with no projects and not logged in anywhere.
+- logged_out_user_with_existing_config: A config file with some pre-existing projects and a default project set.
 - No config file: To test the "config create" command...
 """
 
@@ -34,29 +34,29 @@ def test_cant_create_config_if_exists(tmp_config_path):
     assert isinstance(result2.exception, FileExistsError)
 
 
-def test_add_project_command(fresh_config_path):
+def test_add_project_command(logged_out_user_with_fresh_config):
     project_name = "test_project"
     command = f"config add-project {project_name}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    config_contents = load_user_config(fresh_config_path)
+    config_contents = load_user_config()
     assert project_name in config_contents.all_project_names
 
 
-def test_add_project_as_default_command(fresh_config_path):
+def test_add_project_as_default_command(logged_out_user_with_fresh_config):
     project_name = "test_project"
 
     command = f"config add-project {project_name} --default"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    config = load_user_config(fresh_config_path)
+    config = load_user_config()
     assert project_name in config.all_project_names
     assert config.default_project == project_name
 
 
-def test_add_project_and_specify_urls(fresh_config_path):
+def test_add_project_and_specify_urls(logged_out_user_with_fresh_config):
     project_name = "test_project"
     divbase_url = "https://divbasewebsite.com"
     s3_url = "http://s3.divbasewebsite.com"
@@ -65,7 +65,7 @@ def test_add_project_and_specify_urls(fresh_config_path):
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    config_contents = load_user_config(fresh_config_path)
+    config_contents = load_user_config()
     project = config_contents.project_info(name=project_name)
 
     assert project is not None
@@ -74,7 +74,7 @@ def test_add_project_and_specify_urls(fresh_config_path):
     assert project.s3_url == s3_url
 
 
-def test_add_project_that_already_exists(fresh_config_path):
+def test_add_project_that_already_exists(logged_out_user_with_fresh_config):
     """
     Should warn user and not be duplicated in the config.
     The newer project settings should be in the config file (i.e. overwrite the old ones).
@@ -87,7 +87,7 @@ def test_add_project_that_already_exists(fresh_config_path):
     result = runner.invoke(app, initial_command)
     assert result.exit_code == 0
 
-    user_config = load_user_config(fresh_config_path)
+    user_config = load_user_config()
     project_info = user_config.project_info(name=project_name)
     assert project_info.divbase_url == initial_divbase_url
     assert project_info.name in user_config.all_project_names
@@ -98,56 +98,56 @@ def test_add_project_that_already_exists(fresh_config_path):
         result = runner.invoke(app, new_command)
     assert result.exit_code == 0
 
-    user_config = load_user_config(fresh_config_path)
+    user_config = load_user_config()
     project_info = user_config.project_info(name=project_name)
     assert project_info.divbase_url == new_divbase_url
     assert project_info.name in user_config.all_project_names
 
 
-def test_set_default_project_command(user_config_path):
-    user_config = load_user_config(user_config_path)
+def test_set_default_project_command(logged_out_user_with_existing_config):
+    user_config = load_user_config()
     assert user_config.default_project != "project2"
 
     command = "config set-default project2"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    user_config = load_user_config(user_config_path)
+    user_config = load_user_config()
     assert user_config.default_project == "project2"
 
 
-def test_set_default_project_for_a_project_that_does_not_exist(user_config_path):
+def test_set_default_project_for_a_project_that_does_not_exist(logged_out_user_with_existing_config):
     """Test setting a default project that does not exist in the config."""
     command = "config set-default made-up-project"
     result = runner.invoke(app, command)
     assert isinstance(result.exception, ValueError)
 
 
-def test_show_default_project_command(user_config_path, CONSTANTS):
+def test_show_default_project_command(logged_out_user_with_existing_config, CONSTANTS):
     command = "config show-default"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert CONSTANTS["DEFAULT_PROJECT"] in result.output
 
 
-def test_show_default_with_no_default_set_command(fresh_config_path):
+def test_show_default_with_no_default_set_command(logged_out_user_with_fresh_config):
     command = "config show-default"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "No default project" in result.output
 
 
-def test_remove_project_command(user_config_path, CONSTANTS):
+def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS):
     for project_name in CONSTANTS["PROJECT_CONTENTS"]:
         command = f"config remove-project {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
 
-        user_config = load_user_config(user_config_path)
+        user_config = load_user_config()
         assert project_name not in user_config.all_project_names
 
 
-def test_remove_project_that_does_not_exist(user_config_path):
+def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config):
     project_name = "does-not-exist"
     command = f"config remove-project {project_name}"
     result = runner.invoke(app, command)
@@ -156,28 +156,28 @@ def test_remove_project_that_does_not_exist(user_config_path):
     assert f"The project '{project_name}' was not found in your config file" in result.output
 
 
-def test_remove_default_project_command(user_config_path, CONSTANTS):
+def test_remove_default_project_command(logged_out_user_with_existing_config, CONSTANTS):
     command = f"config remove-project {CONSTANTS['DEFAULT_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    user_config = load_user_config(user_config_path)
+    user_config = load_user_config()
     assert CONSTANTS["DEFAULT_PROJECT"] not in user_config.all_project_names
     assert user_config.default_project is None
 
 
-def test_set_default_dload_dir_command(user_config_path):
+def test_set_default_dload_dir_command(logged_out_user_with_existing_config):
     download_dir = "/tmp/downloads"
 
     command = f"config set-dload-dir {download_dir}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    user_config = load_user_config(user_config_path)
+    user_config = load_user_config()
     assert user_config.default_download_dir == download_dir
 
 
-def test_show_user_config_command(user_config_path, CONSTANTS):
+def test_show_user_config_command(logged_out_user_with_existing_config, CONSTANTS):
     command = "config show"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -186,7 +186,7 @@ def test_show_user_config_command(user_config_path, CONSTANTS):
         assert project_name in result.output
 
 
-def test_show_user_config_with_no_projects_command(fresh_config_path):
+def test_show_user_config_with_no_projects_command(logged_out_user_with_fresh_config):
     command = "config show"
     result = runner.invoke(app, command)
 

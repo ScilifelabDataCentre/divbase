@@ -25,7 +25,7 @@ runner = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def clean_dimensions(user_config_path, CONSTANTS):
+def clean_dimensions(logged_out_user_with_existing_config, CONSTANTS):
     """
     Remove the dimensions file and create a new one before each test.
     Used in all tests in this module.
@@ -62,7 +62,7 @@ def test_update_vcf_dimensions_task_directly(CONSTANTS, run_update_dimensions):
         assert vcf_file in indexed_files
 
 
-def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_path):
+def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_out_user_with_existing_config):
     """
     Test that first runs the run_update_dimensions fixture to create a .vcf_dimensions.yaml file in the bucket.
     Then it runs the CLI command to show the VCF dimensions and asserts that the output is as expected.
@@ -107,7 +107,7 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, user_config_
         assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
 
 
-def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, user_config_path, caplog):
+def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_out_user_with_existing_config, caplog):
     """
     Test runs CLI command to show the VCF dimensions handles the case when the dimensions file is missing.
     """

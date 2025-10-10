@@ -13,6 +13,7 @@ import yaml
 from pydantic import SecretStr
 
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.user_config import load_user_config
 from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
@@ -74,7 +75,9 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
-def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
+def login_to_divbase(
+    email: str, password: SecretStr, divbase_url: str, config_path: Path = cli_settings.CONFIG_PATH
+) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """
@@ -107,11 +110,20 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
     )
     token_data.dump_tokens()
 
+    config = load_user_config(config_path)
+    config.set_logged_in_url(divbase_url)
+    config.dump_config()
 
-def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
+
+def logout_of_divbase(
+    token_path: Path = cli_settings.TOKENS_PATH, config_path: Path = cli_settings.CONFIG_PATH
+) -> None:
     """Log out of the DivBase server."""
-    if token_path.exists():
-        token_path.unlink()
+    token_path.unlink(missing_ok=True)
+
+    config = load_user_config(config_path)
+    config.set_logged_in_url(None)
+    config.dump_config()
 
 
 def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:

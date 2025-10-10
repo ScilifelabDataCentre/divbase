@@ -35,6 +35,9 @@ services:
     develop: !reset [] 
     ports: !override
       - 8001:8000
+    environment:
+      - S3_EXTERNAL_URL=http://localhost:9002
+      - S3_INTERNAL_URL=http://minio:9000
   postgres:
     ports: !override
       - "5433:5432"
