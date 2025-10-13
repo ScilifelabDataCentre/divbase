@@ -64,38 +64,6 @@ class BucketVersioningFileDoesNotExist(FileNotFoundError):
         return self.error_message
 
 
-class BucketVersionNotFoundError(KeyError):
-    """Raised when the specified bucket version file is not found in the bucket versioning dictionary"""
-
-    def __init__(self, bucket_version: str, bucket_name: str):
-        error_message = (
-            f"The version of the bucket specified: '{bucket_version}' does not exist in the bucket '{bucket_name}'."
-        )
-        super().__init__(error_message)
-        self.bucket_version = bucket_version
-        self.bucket_name = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class BucketVersionAlreadyExistsError(Exception):
-    """Raised when user tries to add new version with version name same as prexisting version. To prevent overwrite"""
-
-    def __init__(self, version_name: str, bucket_name: str):
-        error_message = (
-            f"You're trying to add a version: '{version_name}' that already exists in the bucket '{bucket_name}'."
-        )
-        super().__init__(error_message)
-        self.version_name = version_name
-        self.bucket_name = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
 class FilesAlreadyInBucketError(FileExistsError):
     """
     Raised when trying to upload file(s) that already exists in the bucket
@@ -112,24 +80,6 @@ class FilesAlreadyInBucketError(FileExistsError):
         super().__init__(error_message)
         self.existing_objects = existing_objects
         self.project_name = project_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class BucketVersioningFileAlreadyExistsError(FileExistsError):
-    """
-    Raised when trying to create a bucket versioning file that already exists in the bucket.
-    """
-
-    def __init__(self, bucket_name: str):
-        error_message = (
-            f"The bucket versioning file already exists for the bucket: '{bucket_name}'.\n"
-            "You can already add a new bucket version to this file using the 'add' command"
-        )
-        super().__init__(error_message)
-        self.bucket_name = bucket_name
         self.error_message = error_message
 
     def __str__(self):
