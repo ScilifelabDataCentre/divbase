@@ -7,13 +7,13 @@ from pydantic import BaseModel, Field
 
 # Request Models
 class CreateVersioningFileRequest(BaseModel):
-    name: str = Field(default="v0.0.0", description="Initial version name")
-    description: str = Field(default="First version", description="Initial version description")
+    name: str = Field(..., description="Initial version name")
+    description: str = Field(..., description="Initial version description")
 
 
 class AddVersionRequest(BaseModel):
     name: str = Field(..., description="Name of the new version to add")
-    description: str = Field(default="", description="Description of the new version")
+    description: str = Field("", description="Description of the new version")
 
 
 class DeleteVersionRequest(BaseModel):

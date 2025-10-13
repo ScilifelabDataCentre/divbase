@@ -13,6 +13,7 @@ from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
+    BucketVersionDetail,
     CreateVersioningFileRequest,
     CreateVersioningFileResponse,
     DeleteVersionRequest,
@@ -24,7 +25,7 @@ from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 
 def create_version_object_command(
-    project_name: str, divbase_base_url: str, version_name: str = "v0.0.0", description: str = "First version"
+    project_name: str, divbase_base_url: str, version_name: str, description: str
 ) -> CreateVersioningFileResponse:
     """Create the initial bucket versioning file for a project."""
     request_data = CreateVersioningFileRequest(name=version_name, description=description)
@@ -33,15 +34,13 @@ def create_version_object_command(
         method="POST",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/bucket-versions/create?project_name={project_name}",
-        json_data=request_data.model_dump(),
+        json=request_data.model_dump(),
     )
 
     return CreateVersioningFileResponse(**response.json())
 
 
-def add_version_command(
-    project_name: str, divbase_base_url: str, name: str, description: str = ""
-) -> AddVersionResponse:
+def add_version_command(project_name: str, divbase_base_url: str, name: str, description: str) -> AddVersionResponse:
     """Add a new version to the bucket versioning file"""
     request_data = AddVersionRequest(name=name, description=description)
 
@@ -49,39 +48,45 @@ def add_version_command(
         method="PATCH",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/bucket-versions/add?project_name={project_name}",
-        json_data=request_data.model_dump(),
+        json=request_data.model_dump(),
     )
 
     return AddVersionResponse(**response.json())
 
 
-def list_versions_command(project_name: str, divbase_base_url: str) -> VersionListResponse:
-    """List all versions in the bucket versioning file"""
+def list_versions_command(project_name: str, divbase_base_url: str) -> dict[str, BucketVersionDetail]:
+    """
+    List all versions in the bucket versioning file
+    Returns a dict of version names (keys) to details about the versions.
+    """
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/bucket-versions/list?project_name={project_name}",
     )
 
-    return VersionListResponse(**response.json())
+    response_data = VersionListResponse(**response.json())
+
+    return response_data.versions
 
 
-def list_files_at_version_command(
-    project_name: str, divbase_base_url: str, bucket_version: str
-) -> FilesAtVersionResponse:
+def list_files_at_version_command(project_name: str, divbase_base_url: str, bucket_version: str) -> dict[str, str]:
     """List all files at a specific version"""
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/bucket-versions/list_detailed?project_name={project_name}&bucket_version={bucket_version}",
     )
+    response_data = FilesAtVersionResponse(**response.json())
 
-    return FilesAtVersionResponse(**response.json())
+    return response_data.files
 
 
-def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> DeleteVersionResponse:
+def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
     """
-    Delete a version from the bucket versioning file
+    Delete a version from the bucket versioning file.
+
+    Returns the deleted version's name.
     """
     request_data = DeleteVersionRequest(version_name=version_name)
 
@@ -89,10 +94,11 @@ def delete_version_command(project_name: str, divbase_base_url: str, version_nam
         method="DELETE",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/bucket-versions/delete?project_name={project_name}",
-        json_data=request_data.model_dump(),
+        json=request_data.model_dump(),
     )
 
-    return DeleteVersionResponse(**response.json())
+    response_data = DeleteVersionResponse(**response.json())
+    return response_data.deleted_version
 
 
 def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
