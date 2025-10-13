@@ -1,10 +1,9 @@
 from pathlib import Path
 
 import typer
-from rich import print
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_cli.config_resolver import resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.services import (
     add_version_command,
     create_version_object_command,
@@ -27,13 +26,22 @@ version_app = typer.Typer(
 
 @version_app.command("create")
 def create_version(
+    name: str = typer.Argument(None, help="Name of the version (e.g., semantic version)."),
+    description: str = typer.Option(None, help="Optional description of the version."),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """Create a bucket versioning file that is stored inside the project's storage bucket."""
     project_config = resolve_project(project_name=project, config_path=config_file)
-    create_version_object_command(project_config)
-    print(f"Bucket versioning file created for project: '{project_config.name}'")
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    new_version = create_version_object_command(
+        project_name=project_config.name,
+        divbase_base_url=logged_in_url,
+        version_name=name,
+        description=description if description else "",
+    )
+    print(f"Bucket versioning file created for project: {project}, with initial version named: {new_version.name}'")
 
 
 @version_app.command("add")
@@ -45,7 +53,14 @@ def add_version(
 ):
     """Add an entry to the bucket versioning file specfying the current state of all files in the project's storage bucket."""
     project_config = resolve_project(project_name=project, config_path=config_file)
-    add_version_command(project_config=project_config, name=name, description=description)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    add_version_command(
+        name=name,
+        description=description,
+        project_name=project_config.name,
+        divbase_base_url=logged_in_url,
+    )
     print(f"New version: '{name}' added to the project: '{project_config.name}'")
 
 
@@ -56,16 +71,18 @@ def list_versions(
 ):
     """List all entries in the bucket versioning file."""
     project_config = resolve_project(project_name=project, config_path=config_file)
-    version_info = list_versions_command(project_config=project_config)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    if not version_info:
+    version_info = list_versions_command(project_name=project_config.name, divbase_base_url=logged_in_url)
+
+    if not version_info.versions:
         print(f"No versions found for project: {project_config.name}.")
         return
 
     print("Project versions:")
-    for version, details in version_info.items():
-        desc = details["description"] or "No description provided"
-        print(f"- '{version}': '{details['timestamp']}' : {desc}")
+    for version, details in version_info.versions.items():
+        desc = details.description or "No description provided"
+        print(f"- '{version}': '{details.timestamp}' : {desc}")
 
 
 @version_app.command("delete")
