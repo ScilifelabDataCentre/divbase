@@ -5,6 +5,9 @@ NOTE:
 - The project_name needs to be provided to all routes, it is used by the dependency get_project_member
 - Each route can assume the user exists and has access to the project, BUT
 we need to use has_required_role to check if they have permission to do the operation.
+
+TODO:
+Could be nice to have a detailed list route (so version IDs, sizes, last modified etc).
 """
 
 import logging

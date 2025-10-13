@@ -1,10 +1,8 @@
 """
 Responsible for managing the versioning of the bucket state.
 
-Note: this means the overall state of the bucket, not the individual files.
-
-This was previously a part of the CLI but now due to redesign
-
+Note: A version entry here refers to the overall state of all files in the bucket at a timestamp.
+So it is a record of all files and their unique version IDs (hashes) at a point in time.
 """
 
 import logging
@@ -14,15 +12,20 @@ from datetime import datetime, timezone
 import yaml
 
 from divbase_api.config import settings
-
-# TODO - move to API exceptions
-from divbase_lib.exceptions import (
+from divbase_api.exceptions import (
     BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,
-    ObjectDoesNotExistError,
 )
+from divbase_lib.exceptions import ObjectDoesNotExistError
 from divbase_lib.s3_client import S3FileManager
+from divbase_lib.schemas.bucket_versions import (
+    AddVersionResponse,
+    BucketVersionDetail,
+    CreateVersioningFileResponse,
+    FilesAtVersionResponse,
+    VersionListResponse,
+)
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
 
@@ -35,7 +38,7 @@ class BucketVersionManager:
     s3_file_manager: S3FileManager
     version_info: dict
 
-    def create_metadata_file(self, name: str | None, description: str | None) -> None:
+    def create_metadata_file(self, name: str | None, description: str | None) -> CreateVersioningFileResponse:
         """
         Create the initial metadata file with a default version.
         """
@@ -51,9 +54,10 @@ class BucketVersionManager:
         version_metadata = {"versions": {name: {"timestamp": timestamp, "description": description, "files": files}}}
 
         self._upload_bucket_version_file(version_data=version_metadata)
-        logger.info("Bucket versioning file created and uploaded successfully.")
 
-    def add_version(self, name: str, description: str | None) -> None:
+        return CreateVersioningFileResponse(name=name, description=description)
+
+    def add_version(self, name: str, description: str | None) -> AddVersionResponse:
         """
         Add a new version to the metadata file.
         """
@@ -74,6 +78,8 @@ class BucketVersionManager:
         version_data["versions"][name] = {"timestamp": timestamp, "description": description, "files": files}
         self._upload_bucket_version_file(version_data=version_data)
 
+        return AddVersionResponse(name=name, description=description)
+
     def delete_version(self, bucket_version: str) -> str:
         """
         Delete the version specified from the bucket versioning metadata file.
@@ -91,13 +97,21 @@ class BucketVersionManager:
         self._upload_bucket_version_file(version_data=self.version_info)
         return bucket_version
 
-    def get_version_info(self) -> dict[str, dict]:
+    def get_version_info(self) -> VersionListResponse:
         if not self.version_info:
             logger.info("No bucket level versioning has been created for this bucket as of yet.")
-            return {}
-        return self.version_info["versions"]
+            return VersionListResponse(versions={})
 
-    def all_files_at_bucket_version(self, bucket_version: str) -> dict[str, str]:
+        # Convert raw version data to BucketVersionDetail objects
+        versions = {}
+        for name, data in self.version_info["versions"].items():
+            versions[name] = BucketVersionDetail(
+                timestamp=data["timestamp"], description=data["description"], files=data["files"]
+            )
+
+        return VersionListResponse(versions=versions)
+
+    def all_files_at_bucket_version(self, bucket_version: str) -> FilesAtVersionResponse:
         """
         Get all files in the bucket at a user specified bucket version.
         If the version does not exist, raise an error.
@@ -112,7 +126,7 @@ class BucketVersionManager:
         except KeyError as err:
             raise BucketVersionNotFoundError(bucket_name=self.bucket_name, bucket_version=bucket_version) from err
 
-        return version_info["files"]
+        return FilesAtVersionResponse(files=version_info["files"])
 
     def _create_timestamp(self) -> str:
         return datetime.now(tz=timezone.utc).isoformat()
@@ -154,11 +168,9 @@ def create_bucket_version_manager(bucket_name: str) -> BucketVersionManager:
 
     try:
         content = s3_file_manager.download_s3_file_to_str(key=VERSION_FILE_NAME, bucket_name=bucket_name)
+        version_info = yaml.safe_load(content) if content else {}
     except ObjectDoesNotExistError:
         logger.info(f"No bucket versioning file found in the bucket: {bucket_name}.")
         version_info = {}
-    if not content:
-        version_info = {}
 
-    version_info = yaml.safe_load(content)
     return BucketVersionManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager, version_info=version_info)
