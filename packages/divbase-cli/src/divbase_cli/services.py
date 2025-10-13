@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from divbase_cli.pre_signed_urls import download_multiple_pre_signed_urls, upload_multiple_pre_signed_urls
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import ProjectConfig
-from divbase_lib.exceptions import FilesAlreadyInBucketError
+from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.schemas.bucket_versions import (
     AddVersionRequest,
@@ -127,19 +127,29 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
-    # TODO - rewrite logic only once bucket versioning changes implemented for pre-signed url strategy
     if bucket_version:
-        raise NotImplementedError("Downloading files at a specific bucket version is not yet (re)implemented.")
+        file_versions_at_desired_state = list_files_at_version_command(
+            project_name=project_name, divbase_base_url=divbase_base_url, bucket_version=bucket_version
+        )
 
-    query_params = {
-        "project_name": project_name,
-        "object_names": all_files,
-    }
+        # check if all files specified exist for download exist at this bucket version
+        missing_objects = [f for f in all_files if f not in file_versions_at_desired_state]
+        if missing_objects:
+            raise ObjectDoesNotExistInSpecifiedVersionError(
+                project_name=project_name,
+                bucket_version=bucket_version,
+                missing_objects=missing_objects,
+            )
+        to_download = {file: file_versions_at_desired_state[file] for file in all_files}
+        json_data = {"objects": [{"object_name": obj, "version_id": to_download[obj]} for obj in all_files]}
+    else:
+        json_data = {"objects": [{"object_name": obj, "version_id": None} for obj in all_files]}
 
     response = make_authenticated_request(
-        method="GET",
+        method="POST",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/download?{urlencode(query_params, doseq=True)}",
+        api_route=f"v1/s3/download?project_name={project_name}",
+        json=json_data,
     )
 
     return download_multiple_pre_signed_urls(pre_signed_urls=response.json(), download_dir=download_dir)

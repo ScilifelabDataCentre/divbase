@@ -45,33 +45,9 @@ def check_too_many_objects_in_request(numb_objects: int, max_objects: int = 100)
         )
 
 
-@s3_router.get("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
+# Post request instead of GET as GET doesn't support/encourage body content.
+@s3_router.post("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
 async def download_files(
-    project_name: str,
-    s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
-    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-    object_names: list[str] = Query(description="List of object names to download"),
-):
-    """Download a file from S3."""
-    project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.READ):
-        raise AuthorizationError("You don't have permission to download files from this project.")
-
-    check_too_many_objects_in_request(len(object_names))
-
-    response = []
-    for obj_name in object_names:
-        pre_signed_response = s3_signer_service.create_presigned_url_for_download(
-            bucket_name=project.bucket_name, object_name=obj_name, version_id=None
-        )
-        response.append(pre_signed_response)
-
-    return response
-
-
-# Post request instead of GET as get doesn't support/encourage body content.
-@s3_router.post("/download_at_version", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
-async def download_files_at_version(
     project_name: str,
     objects_list: DownloadObjectsRequest,
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
@@ -120,9 +96,7 @@ async def generate_upload_url(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     object_names: list[str] = Query(..., description="Name of the objects to upload"),
 ):
-    """
-    Generate a presigned POST URL for uploading multiple files to S3.
-    """
+    """Generate pre-signed POST urls to upload 1 or more file to S3. Max 100 files at a time."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to upload files to this project.")

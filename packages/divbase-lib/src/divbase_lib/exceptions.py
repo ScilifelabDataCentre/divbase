@@ -27,16 +27,16 @@ class ObjectDoesNotExistError(FileNotFoundError):
 class ObjectDoesNotExistInSpecifiedVersionError(KeyError):
     """Raised when an S3 object/key does not exist in the specified bucket versioning yaml file."""
 
-    def __init__(self, bucket_name: str, bucket_version: str, missing_objects: list[str]):
+    def __init__(self, project_name: str, bucket_version: str, missing_objects: list[str]):
         missing_objects_str = "\n".join(f"- '{name}'" for name in missing_objects)
         error_message = (
-            f"In the bucket: '{bucket_name}'\n"
-            f"For the bucket version you specified: '{bucket_version}':\n"
+            f"For the project: '{project_name}'\n"
+            f"And bucket version you specified: '{bucket_version}':\n"
             "The following objects could not be found in the metadata file:\n"
             f"{missing_objects_str}"
-            "\n Maybe they only existed in a later version of the bucket?"
+            "\n Maybe they only existed in a later version of the project/bucket?"
         )
-        self.bucket_name = bucket_name
+        self.bucket_name = project_name
         self.bucket_version = bucket_version
         self.missing_objects = missing_objects
         self.error_message = error_message
