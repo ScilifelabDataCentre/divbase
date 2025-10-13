@@ -45,8 +45,7 @@ class TokenData:
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
-        # TODO
-        return time.time() + 10000000000 >= (self.access_token_expires_at - 5)  # 5 second buffer
+        return time.time() >= (self.access_token_expires_at - 5)  # 5 second buffer
 
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
