@@ -71,13 +71,36 @@ divbase-cli auth login ...
 divbase-cli query ... # Both tokens passed in HTTP request sent to the DivBase API. 
 ```
 
+### Refresh Token Revocation 
+
+For any of the following scenarios: {`logout`, `manual revoke` `password reset`, `account deactivation`, }. The users prior refresh tokens should not be usable and this will covered by a mixture of blacklisting with a `RevokedRefreshTokens` table (see table schema in following section) and db lookups when trying to use the refresh token.  
+
+##### Flows:
+
+- On logout/revoke: Insert `JTI` (JWT ID) into table
+- On password reset: update Users table `last_password_change` value. 
+- On account deactivation: update Users table with `is_active` = False,
+- On manual revoke: Admin eithers adds entry to RevokedRefreshTokens (if possible) or sets Users `last_password_change` value to now.  
+- On refresh: Check if: 
+  1. `JTI` revoked. 
+  2. Account deactivated.  
+  3. Refresh token `iat` is older than last user last_password_change. 
+
+
+##### Notes: 
+
+- Access token revocation not implemented due to need to do a db lookup on every request and short token lifespan (15 mins). 
+- User roles + projects not stored in JWT (only user id), so a role change does not require a token blacklist. 
+
+
+
 ### DB Models - defined with sqlalchemy 2
 ```bash
 Base: # inherited by all other models
   UUID, created_at, updated_at
 
 Users(Base): 
-  name, email, hashed_password, is_admin, is_active
+  name, email, hashed_password, is_admin, is_active, last_password_change(datetime) 
 
 Projects (Base): 
     name, description, storage_quota, bucket_name, is_active
@@ -86,8 +109,8 @@ ProjectMembership(Base): # To handle many-to-many relationship between users and
     user_id, project_id, role*, joined_at, is_active
     # *role would be an enum: {READ, WRITE, MANAGE}
 
-# optional 
-- RevokedRefreshTokens(Base) # For if users logs out or want could have this as a blacklist table. 
+RevokedRefreshTokens(Base): # blacklisted refresh tokens 
+    token_jti, user_id, revoked_at, revoked_reason, expires_at
 ```
 
 **Why no Jobs Table?** Our current approach is that the DivBase API queries the FlowerAPI for the job status/details and passes that back to the user. (see diagram in [ADR-001](adr/imgs/001-initial-design.png))
@@ -100,7 +123,8 @@ Positive:
 - Pre-signed URLs mean only once place for user administration. 
 
 Negative:
-- JWTs being stateless Token revocation requires additional infrastructure. That said users will only have soft delete powers on S3 (so a leaked access/refresh token cannot do too much damage). 
+- JWTs being stateless means tokens are not by default invalidated if a user's account becomes inactive or logs out. To manage this we will perform [refresh token blacklisting described here](#refresh-token-revocation)
+
 - Dependency on FlowerAPI for job management introduces potential latency.
 
 ## 6. Alternatives Considered:
@@ -108,3 +132,5 @@ Negative:
 - Django Ninja/Flask/Django: We're not arguing one is better than the other. Due to the low priority of having a frontend and that the frontend is expected to be quite limited, we have decided to try out FastAPI initially. The admin panel that comes with Django would be one benefit of using Django instead (make viewing users/projects easier). The support for async in FastAPI would be one advantage of using FastAPI. To avoid the need to create an admin panel in FastAPI we will try out [Starlette-Admin](https://jowilf.github.io/starlette-admin/ and/or ([sqladmin](https://aminalaee.github.io/sqladmin/). Of all alternatives considered, Django Ninja is arguably the best alternative candidate to reconsider in the future due to its simlarity to FastAPI and being a paved path tool (or at least Django is).  
 
 - Jobs Table: Instead of relying on the FlowerAPI to parse jobs statuses a Jobs table could be added to the database to track job submissions and statuses. This could provide more control over job management but requires potentially a substational amount of additional dev work. 
+
+- Redis blacklist vs RevokedRefreshTokens PostgreSQL Table for blacklisting user refresh tokens. RevokedRefreshTokens PostgreSQL Table chosen as PostgreSQL already in stack/used by FastAPI and minimal performance impact (check only on refresh), simple to implement. Redis blacklist would add latency to every request.
