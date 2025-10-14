@@ -38,7 +38,7 @@ class BucketVersionManager:
     s3_file_manager: S3FileManager
     version_info: dict
 
-    def create_metadata_file(self, name: str | None, description: str | None) -> CreateVersioningFileResponse:
+    def create_metadata_file(self, name: str, description: str) -> CreateVersioningFileResponse:
         """
         Create the initial metadata file with a default version.
         """
@@ -57,7 +57,7 @@ class BucketVersionManager:
 
         return CreateVersioningFileResponse(name=name, description=description)
 
-    def add_version(self, name: str, description: str | None) -> AddVersionResponse:
+    def add_version(self, name: str, description: str) -> AddVersionResponse:
         """
         Add a new version to the metadata file.
         """
