@@ -134,7 +134,6 @@ class BucketVersionManager:
     def _get_all_objects_names_and_ids(self) -> dict[str, str]:
         """
         Create a dict of the latest version of each file in the bucket and its unique versionID (hash).
-        # TODO - does this handle soft deleted objects correctly?
         """
         files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
         if not files:
