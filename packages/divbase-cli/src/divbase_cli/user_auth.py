@@ -180,7 +180,11 @@ def make_authenticated_request(
         error_details = response.json().get("detail", "No error details provided")
         error_type = response.json().get("type", "unknown")
         raise DivBaseAPIError(
-            error_details=error_details, status_code=response.status_code, error_type=error_type
+            error_details=error_details,
+            status_code=response.status_code,
+            error_type=error_type,
+            http_method=method,
+            url=url,
         ) from None
 
     return response
