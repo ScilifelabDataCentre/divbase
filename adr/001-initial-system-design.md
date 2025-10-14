@@ -46,7 +46,7 @@ This initial system design is intended to cover all the architectural components
 - **WebAPI**: [FastAPI](https://fastapi.tiangolo.com/) with Postgresql as database (db). There will be a small frontend using Jinja2 templating and HTMX if needed (see [adr/002-Basic-API-design.md](adr/002-Basic-API-design.md) for more details). 
 - **Job management system:** Consisting of [Celery](https://docs.celeryq.dev) worker(s); [RabbitMQ](https://www.rabbitmq.com/) queue/message broker; [Redis](https://redis.io/open-source/) results backend. Interaction with job management system using [Flower API](https://flower.readthedocs.io/en/latest/). 
 - **Jobs logic:** [Pandas](https://pandas.pydata.org/) for queries on sample metadata files (e.g. subsets and filters).  [bcftools](https://samtools.github.io/bcftools/howtos/index.html) for working on VCF files.
-- **Metadata files:** Initial prototype will be done with flat files such as TSV and YAML. A more robust solution is possibly needed to handle I/O concurrency resulting from being a multi-user service with an asynchronous job system.
+- **Metadata files:** Initial prototype will be done with flat files such as TSV and YAML. A more robust solution is possibly needed to handle I/O concurrency resulting from being a multi-user service with an asynchronous job system. There will be sample metadata files that describe the samples contained in the VCF files. There will also be a technical metadata for the VCF files files to facilitate logic decisions and ensure robustness; please see [ADR-003](003-concurrency-strategy.md) for more details on this file.
 - **Testing:** [pytest](https://docs.pytest.org/en/stable/). For frontend e2e tests, Playwright would likely be used.
 - **CLI tool (for users to interact with service)**: [Typer](https://typer.tiangolo.com/). Built as separate uv/pip installable package. 
 
@@ -73,11 +73,11 @@ This ADR (001) is for the initial design of a DivBase prototype. More architectu
 
 - [ADR-002: API-design](002-API-design.md) 
 
+- [ADR-003: Concurrency stragedy](003-concurrency-strategy.md)
+
 - Metadata schema
 
 - Query syntax
-
-- Handling of metadata files (with a database engine?)
 
 ### Why these choices
 
@@ -97,9 +97,9 @@ For readers that are unfamiliar with working with VCF files, the importance of b
 
 - **Polars instead of Pandas**. Pandas is a framework we in the team have experience with. The sample metadata files that Pandas will work on are expected to be small and therefore the potential performance improvement is not deemed to be enough to use a tool we have no experience with. This can be revisited if we observe bottlenecks due to pandas operations. 
 
-**Single S3 bucket shared between all projects** (instead of 1 project, 1 bucket) This was considered but deemed less ideal due to the added complexity of managing user access. We were able to get KTH IT support to batch make 10 different buckets publically avaialble in one go. This approach is expected to meet project needs for at least 1-2 years.
+- **Single S3 bucket shared between all projects** (instead of 1 project, 1 bucket) This was considered but deemed less ideal due to the added complexity of managing user access. We were able to get KTH IT support to batch make 10 different buckets publically avaialble in one go. This approach is expected to meet project needs for at least 1-2 years.
 
-**proxy S3 requests through DivBase instead of pre-signed URLs** Due to the large size of VCF files (~GBs) that users may want to up/download, we do not want to proxy the files through DivBase. We are not able to create accounts for users on S3 directly (and that would make access control more awkard) so pre-signed URLs was deemed the best option
+- **Proxy S3 requests through DivBase instead of pre-signed URLs** Due to the large size of VCF files (~GBs) that users may want to up/download, we do not want to proxy the files through DivBase. We are not able to create accounts for users on S3 directly (and that would make access control more awkard) so pre-signed URLs was deemed the best option
 
 
 ## Consequences
