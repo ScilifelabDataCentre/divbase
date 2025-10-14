@@ -41,6 +41,22 @@ class FlowerSettings:
 
 
 @dataclass
+class S3Settings:
+    """
+    S3 configuration settings.
+
+    External is used by the API to generate pre-signed URLs for end users.
+    Internal is used by the backend to communicate with S3 directly.
+    (This wont be needed later when S3 is moved outside of local docker network).
+    """
+
+    s3_external_url: str = os.getenv("S3_EXTERNAL_URL", "http://localhost:9000")
+    s3_internal_url: str = os.getenv("S3_INTERNAL_URL", "http://minio:9000")
+    access_key: SecretStr = SecretStr(os.getenv("S3_ACCESS_KEY", "NOT_SET"))
+    secret_key: SecretStr = SecretStr(os.getenv("S3_SECRET_KEY", "NOT_SET"))
+
+
+@dataclass
 class JWTSettings:
     """JSON Web Token (JWT) configuration settings."""
 
@@ -57,6 +73,7 @@ class Settings:
     api: APISettings = field(default_factory=APISettings)
     database: DBSettings = field(default_factory=DBSettings)
     flower: FlowerSettings = field(default_factory=FlowerSettings)
+    s3: S3Settings = field(default_factory=S3Settings)
     jwt: JWTSettings = field(default_factory=JWTSettings)
 
     def __post_init__(self):
@@ -70,6 +87,8 @@ class Settings:
             "FLOWER_USER": self.flower.user,
             "FLOWER_PASSWORD": self.flower.password,
             "JWT_SECRET_KEY": self.jwt.secret_key,
+            "S3_ACCESS_KEY": self.s3.access_key,
+            "S3_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":

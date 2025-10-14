@@ -9,7 +9,25 @@ Based on provider user input and their config file.
 from pathlib import Path
 
 from divbase_cli.user_config import ProjectConfig, load_user_config
-from divbase_lib.exceptions import ProjectNameNotSpecifiedError
+from divbase_lib.exceptions import AuthenticationError, ProjectNameNotSpecifiedError
+
+
+def ensure_logged_in(config_path: Path, desired_url: str | None = None) -> str:
+    """
+    Ensure the user is logged in by checking the logged_in_url value in the user config.
+
+    Optionally checks the logged_in_url matches the desired_url (e.g. for project-specific commands) if provided.
+
+    Returns the logged_in_url if valid, otherwise raises an AuthenticationError.
+    """
+    config = load_user_config(config_path)
+    if not config.logged_in_url:
+        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    if desired_url and config.logged_in_url != desired_url:
+        raise AuthenticationError(
+            f"You are not logged in to the correct DivBase URL: {desired_url}. Please log in again."
+        )
+    return config.logged_in_url
 
 
 def resolve_project(project_name: str | None, config_path: Path) -> ProjectConfig:

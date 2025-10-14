@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml
 
+from divbase_cli.cli_config import cli_settings
 from divbase_lib.exceptions import ProjectNotInConfigError
 
 
@@ -147,7 +148,7 @@ class UserConfig:
         self.dump_config()
 
 
-def load_user_config(config_path: Path) -> UserConfig:
+def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig:
     """Helper function to load the user config file"""
     with open(config_path, "r") as file:
         config_contents = yaml.safe_load(file)

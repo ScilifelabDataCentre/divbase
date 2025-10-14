@@ -32,7 +32,7 @@ runner = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def clean_dimensions(user_config_path, CONSTANTS):
+def clean_dimensions(logged_in_edit_user_with_existing_config, CONSTANTS):
     """
     Remove the dimensions file and create a new one before each test.
     Used in all tests in this module.
@@ -88,7 +88,7 @@ def reset_query_projects_bucket(CONSTANTS):
     yield
 
 
-def test_sample_metadata_query(CONSTANTS, user_config_path):
+def test_sample_metadata_query(CONSTANTS, logged_in_edit_user_with_existing_config):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
@@ -106,7 +106,7 @@ def test_sample_metadata_query(CONSTANTS, user_config_path):
         assert filename in result.stdout
 
 
-def test_bcftools_pipe_query(run_update_dimensions, user_config_path, CONSTANTS):
+def test_bcftools_pipe_query(run_update_dimensions, logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
@@ -130,7 +130,7 @@ def test_bcftools_pipe_query(run_update_dimensions, user_config_path, CONSTANTS)
     )
 
 
-def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, user_config_path):
+def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_user_with_existing_config):
     project_name = "non_existent_project"
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES"
@@ -152,7 +152,13 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, user_config_pat
     ],
 )
 def test_bcftools_pipe_query_errors(
-    run_update_dimensions, project_name, tsv_filter, command, expected_error, CONSTANTS, user_config_path
+    run_update_dimensions,
+    project_name,
+    tsv_filter,
+    command,
+    expected_error,
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
 ):
     """
     Test bad formatted input raises errors
@@ -178,7 +184,7 @@ def test_bcftools_pipe_query_errors(
     assert expected_error in result.stdout
 
 
-def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
+def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config):
     """Get the status of a task by its ID. Uses flower API via get_task_history to get the task info.
     Note that this does not test the CLI command for testing task status.
     """
@@ -575,7 +581,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 def test_query_exits_when_vcf_file_version_is_outdated(
     mock_create_s3_manager,
     CONSTANTS,
-    user_config_path,
+    logged_in_edit_user_with_existing_config,
     fixtures_dir,
     run_update_dimensions,
 ):
