@@ -90,6 +90,41 @@ async def activate_user_endpoint(
     return user
 
 
+@admin_router.patch("/users/{user_id}/soft_delete", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def soft_delete_user_endpoint(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    """Soft delete a user"""
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = False  # also deactivate as deleted users should not be active
+    user.is_deleted = True
+    await db.commit()
+    await db.refresh(user)
+    logger.info(f"Admin user: {current_admin.email} soft deleted user: {user.email}")
+    return user
+
+
+@admin_router.patch("/users/{user_id}/revert_soft_delete", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def revert_soft_delete_user_endpoint(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    """Revert soft delete of a user"""
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_deleted = False
+    await db.commit()
+    await db.refresh(user)
+    logger.info(f"Admin user: {current_admin.email} reverted soft delete for user: {user.email}")
+    return user
+
+
 @admin_router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project_endpoint(
     proj_data: ProjectCreate,

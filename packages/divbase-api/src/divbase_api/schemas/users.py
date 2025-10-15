@@ -37,6 +37,7 @@ class AdminUserUpdate(UserBase):
 
     is_admin: bool | None = None
     is_active: bool | None = None
+    is_deleted: bool | None = None
 
 
 class UserPasswordUpdate(BaseModel):
@@ -62,3 +63,4 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    is_deleted: bool
