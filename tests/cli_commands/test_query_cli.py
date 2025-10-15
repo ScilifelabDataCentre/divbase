@@ -17,6 +17,7 @@ from unittest.mock import patch
 import boto3
 import httpx
 import pytest
+import yaml
 from celery import current_app
 from typer.testing import CliRunner
 
@@ -34,7 +35,7 @@ runner = CliRunner()
 @pytest.fixture(autouse=True)
 def clean_dimensions(user_config_path, CONSTANTS):
     """
-    Remove the dimensions file and create a new one before each test.
+    Remove the dimensions file and any merged output files before each test.
     Used in all tests in this module.
     """
     for project_name in CONSTANTS["PROJECT_CONTENTS"]:
@@ -45,6 +46,19 @@ def clean_dimensions(user_config_path, CONSTANTS):
             aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
         )
         s3_client.delete_object(Bucket=project_name, Key=DIMENSIONS_FILE_NAME)
+
+        try:
+            # List all objects and delete any that match merged*.vcf.gz pattern, which caused contamination issues in parameterized tests)
+            response = s3_client.list_objects_v2(Bucket=project_name)
+            if "Contents" in response:
+                for obj in response["Contents"]:
+                    if obj["Key"].startswith("merged_") and obj["Key"].endswith(".vcf.gz"):
+                        s3_client.delete_object(Bucket=project_name, Key=obj["Key"])
+                        print(f"Deleted lingering merged file: {obj['Key']} from {project_name}")
+        except Exception as e:
+            print(f"Error cleaning up merged files: {e}")
+
+        time.sleep(1)  # Give MinIO/S3 time to propagate deletion
 
     yield
 
@@ -529,6 +543,18 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
     if ensure_dimensions_file:
         run_update_dimensions(bucket_name=params["bucket_name"])
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=CONSTANTS["MINIO_URL"],
+            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+        )
+        obj = s3_client.get_object(Bucket=params["bucket_name"], Key=DIMENSIONS_FILE_NAME)
+        dimensions = yaml.safe_load(obj["Body"])
+        print("VCF Dimensions file for bucket", params["bucket_name"])
+        for filename, samples in dimensions.items():
+            print(f"{filename}: {samples}")
 
     try:
         current_app.conf.update(
