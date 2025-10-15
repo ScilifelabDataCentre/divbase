@@ -202,7 +202,7 @@ async def bucket_version_not_found_error_handler(request: Request, exc: BucketVe
         return render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-def register_exception_handlers(app: FastAPI):
+def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with FastAPI app.
 
