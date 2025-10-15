@@ -17,7 +17,6 @@ from unittest.mock import patch
 import boto3
 import httpx
 import pytest
-import yaml
 from celery import current_app
 from typer.testing import CliRunner
 
@@ -49,6 +48,7 @@ def clean_dimensions(user_config_path, CONSTANTS):
 
         try:
             # List all objects and delete any that match merged*.vcf.gz pattern, which caused contamination issues in parameterized tests)
+            # Note: This is a symptom of a logic flaw in the dimensions Sample-Filename mapping and neeeds to be implemented in the core logic!
             response = s3_client.list_objects_v2(Bucket=project_name)
             if "Contents" in response:
                 for obj in response["Contents"]:
@@ -543,18 +543,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
     if ensure_dimensions_file:
         run_update_dimensions(bucket_name=params["bucket_name"])
-
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=CONSTANTS["MINIO_URL"],
-            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-        obj = s3_client.get_object(Bucket=params["bucket_name"], Key=DIMENSIONS_FILE_NAME)
-        dimensions = yaml.safe_load(obj["Body"])
-        print("VCF Dimensions file for bucket", params["bucket_name"])
-        for filename, samples in dimensions.items():
-            print(f"{filename}: {samples}")
 
     try:
         current_app.conf.update(
