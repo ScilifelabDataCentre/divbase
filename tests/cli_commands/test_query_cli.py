@@ -102,9 +102,11 @@ def reset_query_projects_bucket(CONSTANTS):
     yield
 
 
-def test_sample_metadata_query(CONSTANTS, user_config_path):
+def test_sample_metadata_query(CONSTANTS, user_config_path, run_update_dimensions):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
+    run_update_dimensions(bucket_name=project_name)
+
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
     expected_filenames = ["HOM_20ind_17SNPs_last_10_samples.vcf.gz", "HOM_20ind_17SNPs_first_10_samples.vcf.gz"]
