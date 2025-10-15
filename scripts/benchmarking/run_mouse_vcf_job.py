@@ -14,7 +14,11 @@ Usage:
 
     Ensure that divbase docker compose stack is running, e.g. with
     docker compose -f docker/divbase_compose.yaml up --build -d
-    then:
+    then initialize the local environment with:
+
+    python scripts/benchmarking/local_dev_setup.py
+
+    and then:
 
     python scripts/benchmarking/run_mouse_vcf_job.py
 """
@@ -22,8 +26,26 @@ Usage:
 import os
 import shlex
 import subprocess
+import sys
 
-from _benchmarking_shared_utils import LOCAL_ENV, ensure_project_exists, ensure_project_in_config
+import boto3
+import yaml
+from _benchmarking_shared_utils import LOCAL_ENV
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import local_dev_setup
+
+local_dev_setup.PROJECTS = [
+    {
+        "name": "benchmarking-mouse",
+        "description": "Benchmarking project",
+        "bucket_name": "benchmarking-mouse",
+        "storage_quota_bytes": 10737418240,
+        "files": ["README.md"],
+    }
+]
+# they way this is implemented in local_dev_setup.py, files cannot be empty. So just upload README.md for now
 
 
 def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metadata: str, url: str) -> None:
@@ -65,29 +87,120 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
             subprocess.run(cmd_upload, check=True, env=LOCAL_ENV)
 
 
+def upload_mock_vcf_dimensions_file(project_name: str, filename: str) -> None:
+    """
+    Upload a pre-calculated dimensions file to the bucket to save time (and avoid timing issues since the query task requires the file).
+    Need to patch the fixture with the version number of the latest version of the VCF file in the bucket.
+    """
+
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=local_dev_setup.MINIO_URL,
+        aws_access_key_id=local_dev_setup.MINIO_FAKE_ACCESS_KEY,
+        aws_secret_access_key=local_dev_setup.MINIO_FAKE_SECRET_KEY,
+    )
+
+    response = s3.list_object_versions(Bucket=project_name, Prefix=filename)
+    latest_version = None
+    for version in response.get("Versions", []):
+        if version.get("IsLatest"):
+            latest_version = version["VersionId"]
+            break
+
+    # Check if there is a .vcf_dimensions.yaml in the bucket already, and which VCF file version it refers to
+    try:
+        response = s3.get_object(Bucket=project_name, Key=".vcf_dimensions.yaml")
+        s3_yaml_str = response["Body"].read().decode("utf-8")
+    except s3.exceptions.NoSuchKey:
+        s3_yaml_str = None
+
+    if s3_yaml_str:
+        dimensions_data = yaml.safe_load(s3_yaml_str)
+        for entry in dimensions_data.get("dimensions", []):
+            if (
+                entry.get("filename") == "mgp.v3.snps.rsIDdbSNPv137.vcf.gz"
+                and entry.get("file_version_ID_in_bucket") == latest_version
+            ):
+                print("Bucket already contains .vcf_dimensions.yaml with the latest version ID. Skipping upload.")
+                return
+
+    # If not latest VCF version  .vcf_dimensions.yaml in the bucket in update and upload a new version
+    with open("tests/fixtures/vcf_dimensions_mgp.v3.snps.rsIDdbSNPv137.yaml", "r") as f:
+        dimensions_data = yaml.safe_load(f)
+
+    for entry in dimensions_data.get("dimensions", []):
+        if entry.get("filename") == "mgp.v3.snps.rsIDdbSNPv137.vcf.gz":
+            entry["file_version_ID_in_bucket"] = latest_version
+
+    with open(".vcf_dimensions.yaml", "w") as f:
+        yaml.safe_dump(dimensions_data, f)
+
+    cmd_upload = shlex.split(f"divbase-cli files upload --project {project_name} .vcf_dimensions.yaml")
+    subprocess.run(cmd_upload, check=True, env=LOCAL_ENV)
+    os.remove(".vcf_dimensions.yaml")
+    print("Uploaded new .vcf_dimensions.yaml with updated version ID.")
+
+
+def ensure_project_exists_and_assign_manager(project_name: str, admin_token: str) -> None:
+    """
+    Wrapper around local_dev_setup.create_projects() that allows the script to be run multiple times.
+    First time, the project will not exist and it will be created. Next time, it will see that the project
+    exists and skip the creation step.
+    """
+    try:
+        for project in local_dev_setup.PROJECTS:
+            project_data = {
+                "name": project["name"],
+                "description": project["description"],
+                "bucket_name": project["bucket_name"],
+                "storage_quota_bytes": project["storage_quota_bytes"],
+            }
+            response = local_dev_setup.make_authenticated_request(
+                "POST", f"{local_dev_setup.BASE_URL}/v1/admin/projects", admin_token, json=project_data
+            )
+
+            project = response.json()
+            project_id = project["id"]
+            print(f"Created project: {project_id}")
+
+        local_dev_setup.make_authenticated_request(
+            "POST",
+            f"{local_dev_setup.BASE_URL}/v1/admin/projects/{project_id}/members/1",
+            admin_token,
+            params={"role": "manage"},
+        )
+        print(f"Assigned first admin user as manager to {project_name}")
+
+    except Exception as e:
+        if "already in use" in str(e):
+            print(f"Project '{project_name}' already exists in the API. Skipping creation and role assignment.")
+        else:
+            raise
+
+
 def main():
     filename = "mgp.v3.snps.rsIDdbSNPv137.vcf.gz"
     url = "ftp://ftp.sra.ebi.ac.uk/vol1/analysis/ERZ022/ERZ022025/mgp.v3.snps.rsIDdbSNPv137.vcf.gz"
     mock_metadata = "mock_metadata_mgpv3snps.tsv"
-    project_name = "benchmarking"
+    project = local_dev_setup.PROJECTS[0]
+    project_name = project["name"]
 
-    ensure_project_exists(project_name=project_name)
+    admin_token = local_dev_setup.get_admin_access_token()
+    ensure_project_exists_and_assign_manager(project_name=project_name, admin_token=admin_token)
 
-    ensure_project_in_config(project_name=project_name)
+    local_dev_setup.create_local_config()
+
+    local_dev_setup.setup_minio_buckets()
 
     ensure_required_files_in_bucket(project_name=project_name, filename=filename, mock_metadata=mock_metadata, url=url)
+
+    upload_mock_vcf_dimensions_file(project_name=project_name, filename=filename)
 
     print("\nSubmitting query job to task queue...")
     cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project {project_name}"
     subprocess.run(shlex.split(cmd_query), check=True, env=LOCAL_ENV)
 
     print("\nThe query has been submitted. Check the task status or the flower logs for updates.")
-
-    print(
-        "\nCalculating dimensions of the VCF file... (Run as the final step of the script since it can take some time for large VCF files)\n"
-    )
-    cmd_calculate_dimensions = f"python scripts/calculate_dimensions_of_vcf.py --vcf {filename}"
-    subprocess.run(shlex.split(cmd_calculate_dimensions), check=True)
 
 
 if __name__ == "__main__":
