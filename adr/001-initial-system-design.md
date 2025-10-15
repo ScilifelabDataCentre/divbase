@@ -85,6 +85,30 @@ The guiding principle in choosing the proposed tech stack was to keep the servic
 
 For readers that are unfamiliar with working with VCF files, the importance of bcftools might not be immediately apparent from the core tech stack. However, its role as the core query engine in DivBase cannot be understated. Bcftools is a very popular tool with an established syntax. By writing wrapper logic around bcftools commands, the team will save a substantial amount of work compared to developing a custom VCF query engine. The intention is to use bcftools syntax as much as possible for DivBase to benefit from the fact that most researchers working with genetic diversity data are likely to have at least encountered bcftools, if not already be proficient users. 
 
+### Performance validation
+
+As discussed in the [Risks & Challenges](#risks--challenges) section below, performance on the cluster is an unknown that needs to be evaluated. Depending on the outcome, optimization or even archetechtural redesign might be needed.
+
+Below are estimates for querying a 5.5 Gb vcf.gz file. The estimates are based on local benchmarking with [public SNP data from mouse](https://www.ebi.ac.uk/ena/browser/view/PRJEB6911) in a Docker Compose stack on a laptop. This is likely not comparable to the performance on K1H, but provides a starting estimate. The mouse data is to be considered fairly large: 66,007,044 variants, 18 samples, 5.5 Gb gzipped; it was made with a query that subsets 50% of the samples based on a mock sample metadata file. Note that it is expected that runtimes will vary for the same VCF file depending on the query, so it should be considered an average query.
+
+**Estimated benchmark goals (K1H cluster):**
+- Single VCF query (~5GB): Target <10min, Acceptable <20min
+- Multi-file (10×5GB): Target <30min, Acceptable <90min
+- 5 concurrent users: <25% degradation acceptable
+- S3 transfer: >50 MB/s minimum
+
+**Testing:** 
+- Locust to submit query tasks
+- Evaluation based on runtime (stored in the results backend and fetchable by e.g. flower API).
+- 10-50GB VCF test data
+- To gather additional data that will be useful for potential optimization, resource monitoring will be done with k8s metrics server (will need recurrent polling to fetch time-series data). An alternative could be to use [Prometheus](https://prometheus.io/) for resource logging since it supports time-series data collection.
+
+**Decision criteria:**
+- Targets met → acceptable for production
+- Acceptable range → optimization 
+- Below acceptable → re-evaluate architectural choices
+
+
 ## Alternatives considered
 
 - **Using Django (or flask) instead of FastAPI:** see [002-API-design.md](002-API-design.md)
@@ -120,4 +144,5 @@ Adopting the proposed tech stack for developing the inital prototype for Divbase
 
 - **Creating a robust system that can handle concurrent operations**. The use of concurrent operations in a multi-user service means that files will need to be protected against data errors and corruption due to parallel I/O operations. This is not only a technical risk but also an information security risk. How will data integrity issues affect the system, the users, their collaborators, and the quality of the research project? This will need to specifically addressed during the development Jobs will likely need to keep track of file version ID from the S3 store to ensure that all operations happen on the file versions present in the bucket at the time of job start.
 
-- **Performance and implementation challenges on the cluster hardware is currently an unknown** We have not yet been able to test how our proposed tech stack would handle large files/big queries. We are aware of the possibility that once we get access to the production hardware and can get an idea of query performance, there is a risk that we need to reconsider some tech choices. Once we have a deployed instance on the dev cluster we will aim to use [Locust](https://locust.io/) for load testing, given that Team Whale have experience with using it. 
+- **Performance and implementation challenges on the cluster hardware is currently an unknown** We have not yet been able to test how our proposed tech stack would handle large files/big queries. We are aware of the possibility that once we get access to the production hardware and can get an idea of query performance, there is a risk that we need to reconsider some tech choices. Once we have a deployed instance on the dev cluster we will aim to use [Locust](https://locust.io/) for load testing, given that Team Whale have experience with using it. The [Performance validation](#performance- validation) decision above will be used as guideance for evaluating if performance is acceptable, needs optimization, or needs archetechtual redesign.
+
