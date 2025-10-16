@@ -3,9 +3,6 @@ Manage the starlette-admin interface for the DivBase API.
 
 The views created for each model rely on overriding some of the default behavior provided by starlette-admin.
 These overrides are on methods inside BaseModelView (parent of ModelView, which each custom class is inheriting from).
-
-TODOs:
-- Test out a custom homepage view https://github.com/jowilf/starlette-admin-demo/blob/a03b8261e4bd9d60c1d2b93d3ec201893c10bf48/app/sqla/views.py#L106C7-L106C15
 """
 
 import logging
@@ -29,6 +26,8 @@ from divbase_api.security import get_password_hash
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 
+logger = logging.getLogger(__name__)
+
 
 class UserView(ModelView):
     """
@@ -36,9 +35,9 @@ class UserView(ModelView):
 
     Some Notes:
     - To handle password hashing, we override the create method to hash the password before calling the original create method.
-    - We disable deletion of users, you can mark a user as soft deleted though.
+    - Deletion of users is disabled, you can still mark a user as soft deleted though.
     - Adding/editing project memberships is disabled in this view, they should be handled in the ProjectMembership view.
-    - Changing password for existing user is not supported: We will support a custom password reset flow later.
+    - Changing password for existing user is not supported: We will support a custom password reset flow instead.
     """
 
     page_size_options = PAGINATION_DEFAULTS
@@ -74,7 +73,7 @@ class UserView(ModelView):
     async def create(self, request: Request, data: dict) -> Any:
         """
         We override the default create method so we can take a password from the frontend form
-        and create a hashed password which will be needed to add to the db.
+        and create a hashed password which will be needed to add to the db before calling the original create method.
         """
         password = data["password"]
         hashed_password = get_password_hash(SecretStr(password))
@@ -93,7 +92,9 @@ class ProjectView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     fields = [
         "id",
-        StringField("name", required=True, label="Project Name"),
+        StringField(
+            "name", required=True, label="Project Name", help_text="Unique name for the project, no spaces allowed."
+        ),
         TextAreaField("description", required=False, label="Description"),
         StringField("bucket_name", required=True, label="Bucket Name"),
         IntegerField(
@@ -127,13 +128,13 @@ class ProjectMembershipView(ModelView):
     Custom admin panel View for the ProjectMembershipDB model.
 
     This view allows admins to manage project memberships: So assign users to projects
-    and define their roles within the project.
+    and (re)define their roles within the project.
     """
 
     page_size_options = PAGINATION_DEFAULTS
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
     exclude_fields_from_detail = []
 
 
@@ -154,7 +155,11 @@ class DivBaseAuthProvider(AuthProvider):
 
     async def is_authenticated(self, request: Request) -> bool:
         """
-        Check if the user is authenticated using the JWT token stored in the `access_token` cookie.
+        Overrides the default implementation to use our pre-existing DivBase auth system.
+
+        In which we determine the user from their JWT tokens stored in httponly cookies.
+
+        As expected, we also confirm user.is_admin for access.
         """
         access_token = request.cookies.get("access_token")
         refresh_token = request.cookies.get("refresh_token")
@@ -174,7 +179,7 @@ class DivBaseAuthProvider(AuthProvider):
                     request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
                     return True
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
             )
             return False
