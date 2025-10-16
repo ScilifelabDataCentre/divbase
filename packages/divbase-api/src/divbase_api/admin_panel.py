@@ -4,20 +4,28 @@ Manage the starlette-admin interface for the DivBase API.
 The views created for each model rely on overriding some of the default behavior provided by starlette-admin.
 These overrides are on methods inside BaseModelView (parent of ModelView, which each custom class is inheriting from).
 
+TODOs:
+- Test out a custom homepage view https://github.com/jowilf/starlette-admin-demo/blob/a03b8261e4bd9d60c1d2b93d3ec201893c10bf48/app/sqla/views.py#L106C7-L106C15
 """
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
-from starlette_admin import BooleanField, EmailField, IntegerField, StringField, TextAreaField
+from starlette_admin import BaseAdmin, BooleanField, EmailField, IntegerField, StringField, TextAreaField
+from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 
+from divbase_api.crud.users import get_user_by_id
+from divbase_api.db import get_db
+from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.users import UserDB
-from divbase_api.security import get_password_hash
+from divbase_api.security import TokenType, get_password_hash, verify_token
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 
@@ -129,11 +137,71 @@ class ProjectMembershipView(ModelView):
     exclude_fields_from_detail = []
 
 
+class DivBaseAuthProvider(AuthProvider):
+    """
+    This class allows starlette-admin to make use of DivBase's pre-existing auth system.
+    """
+
+    async def render_login(self, request: Request, admin: BaseAdmin) -> RedirectResponse | HTMLResponse:
+        """Override the default starlette-admin login method to use our frontend get_login route/page."""
+        return await get_login(request)
+
+    async def render_logout(self, request: Request, admin: BaseAdmin) -> HTMLResponse:
+        """Override the default starlette-admin logout to use our frontend post_logout function/route."""
+        return await post_logout(request)
+
+    async def is_authenticated(self, request: Request) -> bool:
+        """
+        Check if the user is authenticated using the JWT token stored in the `access_token` cookie.
+        # TODO - no thought about refresh token here yet.
+        """
+        access_token = request.cookies.get("access_token")
+        if not access_token:
+            return False
+
+        try:
+            user_id = verify_token(token=access_token, desired_token_type=TokenType.ACCESS)
+            if not user_id:
+                return False
+
+            # Starlette does not support dependency injection like FastAPI,
+            # so we need to manually obtain the database session dependency here.
+            async for db in get_db():
+                user = await get_user_by_id(db=db, id=user_id)
+                if user and user.is_admin and user.is_active:
+                    request.state.user = user  # Save the user in the request state
+                    return True
+        except Exception as e:
+            logging.warning(f"An error occurred in an attempt to authenticate on the starlette-admin panel {e}")
+            return False
+
+        return False
+
+    def get_admin_user(self, request: Request) -> AdminUser | None:
+        """
+        Retrieve the current (admin) user for display on the admin panel.
+
+        This controls the display of the user info in the top right of the admin panel and makes having a logout button possible.
+        """
+        user = request.state.user
+        if not user:
+            return None
+
+        return AdminUser(
+            username=user.name,
+            photo_url=None,
+        )
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
     """
-    admin = Admin(engine, title="DivBase Admin")
+    admin = Admin(
+        engine=engine,
+        title="DivBase Admin",
+        auth_provider=DivBaseAuthProvider(),
+    )
 
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
