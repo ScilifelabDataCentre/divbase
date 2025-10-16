@@ -20,12 +20,12 @@ from starlette_admin import BaseAdmin, BooleanField, EmailField, IntegerField, S
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 
-from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
+from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.users import UserDB
-from divbase_api.security import TokenType, get_password_hash, verify_token
+from divbase_api.security import get_password_hash
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 
@@ -139,7 +139,9 @@ class ProjectMembershipView(ModelView):
 
 class DivBaseAuthProvider(AuthProvider):
     """
-    This class allows starlette-admin to make use of DivBase's pre-existing auth system.
+    This class enables starlette-admin to make use of DivBase's pre-existing auth system.
+
+    The methods below are overriding several existing methods in the AuthProvider class (and its parent BaseAuthProvider).
     """
 
     async def render_login(self, request: Request, admin: BaseAdmin) -> RedirectResponse | HTMLResponse:
@@ -153,26 +155,28 @@ class DivBaseAuthProvider(AuthProvider):
     async def is_authenticated(self, request: Request) -> bool:
         """
         Check if the user is authenticated using the JWT token stored in the `access_token` cookie.
-        # TODO - no thought about refresh token here yet.
         """
         access_token = request.cookies.get("access_token")
-        if not access_token:
+        refresh_token = request.cookies.get("refresh_token")
+        if not access_token and not refresh_token:
             return False
 
         try:
-            user_id = verify_token(token=access_token, desired_token_type=TokenType.ACCESS)
-            if not user_id:
-                return False
-
             # Starlette does not support dependency injection like FastAPI,
-            # so we need to manually obtain the database session dependency here.
+            # so we need to manually obtain the database session here.
             async for db in get_db():
-                user = await get_user_by_id(db=db, id=user_id)
+                user = await _authenticate_frontend_user_from_tokens(
+                    access_token=access_token, refresh_token=refresh_token, db=db
+                )
+
                 if user and user.is_admin and user.is_active:
-                    request.state.user = user  # Save the user in the request state
+                    # Store user info in the request state so it can be accessed by e.g. get_admin_user
+                    request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
                     return True
         except Exception as e:
-            logging.warning(f"An error occurred in an attempt to authenticate on the starlette-admin panel {e}")
+            logging.warning(
+                f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
+            )
             return False
 
         return False
@@ -187,10 +191,7 @@ class DivBaseAuthProvider(AuthProvider):
         if not user:
             return None
 
-        return AdminUser(
-            username=user.name,
-            photo_url=None,
-        )
+        return AdminUser(username=user["name"], photo_url=None)
 
 
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
