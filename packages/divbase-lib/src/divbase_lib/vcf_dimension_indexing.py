@@ -46,6 +46,9 @@ class VCFDimensionIndexManager:
 
         vcf_path = Path(vcf_filename)
         vcf_dims = self._wrapper_calculate_dimensions(vcf_path)
+        if vcf_dims is None:
+            logger.info(f"Skipping indexing of {vcf_filename}: detected DivBase-generated result VCF.")
+            return
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         latest_versions_of_bucket_files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
         file_version_ID = latest_versions_of_bucket_files.get(vcf_filename, "null")
@@ -123,6 +126,8 @@ class VCFDimensionIndexManager:
         scaffold_names = set()
 
         for line in file:
+            if line.startswith("##DivBase_created"):
+                return None
             if line.startswith("#CHROM"):
                 header = line.strip().split("\t")
                 sample_IDs = header[9:]
