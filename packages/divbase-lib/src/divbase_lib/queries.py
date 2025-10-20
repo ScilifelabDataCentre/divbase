@@ -341,6 +341,7 @@ class BcftoolsQueryManager:
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
         unsorted_output_file = f"merged_unsorted_{identifier}.vcf.gz"
+        annotated_unsorted_output_file = f"merged_annotated_unsorted_{identifier}.vcf.gz"
         output_file = f"merged_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
 
@@ -388,12 +389,20 @@ class BcftoolsQueryManager:
             logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
 
-        sort_command = f"sort -Oz -o {output_file} {unsorted_output_file}"
-        self.run_bcftools(command=sort_command)
+        self._check_if_need_to_prepare_txt_with_divbase_header_for_vcf()
+        annotate_command = (
+            f"annotate -h divbase_header.txt -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
+        )
+        self.run_bcftools(command=annotate_command)
         self.temp_files.append(unsorted_output_file)
+
+        sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
+        self.run_bcftools(command=sort_command)
+        self.temp_files.append(annotated_unsorted_output_file)
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
         )
+
         return output_file
 
     def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
@@ -470,6 +479,21 @@ class BcftoolsQueryManager:
         Check if k8s environment variable is set in containter.
         """
         return "KUBERNETES_SERVICE_HOST" in os.environ
+
+    def _check_if_need_to_prepare_txt_with_divbase_header_for_vcf(self) -> None:
+        """
+        The command 'bcftools annotate -h' can be used to append a custom line to the header of a VCF file.
+        The command requires a text file. This method checks if such a file exists, and if not, creates it.
+        The 'annotate' command expects the pattern '##key=value' in the text file.
+        """
+        header_path = "divbase_header.txt"
+        if not os.path.exists(header_path):
+            try:
+                with open(header_path, "w", encoding="utf-8") as fh:
+                    fh.write('##DivBase_created="This is a results file created by a DivBase query"\n')
+                    logger.info("Added header to VCF saying that this results file was created with DivBase.")
+            except Exception as e:
+                logger.warning(f"Could not create {header_path}: {e}")
 
 
 class SidecarQueryManager:
