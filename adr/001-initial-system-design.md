@@ -79,6 +79,8 @@ This ADR (001) is for the initial design of a DivBase prototype. More architectu
 
 - Query syntax
 
+- OAuth2 implementation plan 
+
 ### Why these choices
 
 The guiding principle in choosing the proposed tech stack was to keep the service as lightweight as possible while allowing us to demonstrate proof-of-concept for its basic functionalities. We believe these choices meet the technological needs discussed above while also aligning with DC paved-path technologies whenever possible. 
@@ -108,6 +110,21 @@ Below are estimates for querying a 5.5 Gb vcf.gz file. The estimates are based o
 - Acceptable range → optimization 
 - Below acceptable → re-evaluate architectural choices
 
+
+### Authentication Evolution Strategy
+
+**Phase 1 (Prototype - Q4 2025):**
+- Custom JWT with username/password
+- Fast iteration, no dependency on Identity Providers (IdPs).  
+
+**Phase 2 (Production - Q2 2026):**
+- OAuth2/OIDC with LS-Login
+- Separate ADR for detailed design. 
+- Decision to be made at this point: OAuth2-only or keep username/password fallback? (Need to consider if all users have access to which OAuth2 IdPs we support - e.g. external collaborators). 
+
+**Migration effort:** 3-4 weeks
+
+**Rationale:** Prototype needs speed; production benefits from institutional SSO.
 
 ## Alternatives considered
 
