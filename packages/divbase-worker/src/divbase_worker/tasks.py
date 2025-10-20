@@ -206,7 +206,6 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     for file in non_indexed_vcfs:
         try:
             result_msg = manager.add_dimension_entry(vcf_filename=file)
-            # TODO: return a message, if it says added or updated, append to one list, if it says skipped, append to another list
             if "Added" in result_msg or "Updated" in result_msg:
                 files_indexed_by_this_job.append(file)
             elif "Skipping" in result_msg:

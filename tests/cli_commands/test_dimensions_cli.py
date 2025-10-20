@@ -233,3 +233,31 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
         f"Expected that this file was skipped; {divbase_vcf_name}; got: {skipped_files}"
     )
     assert result["status"] == "completed"
+
+
+@patch("divbase_worker.tasks.create_s3_file_manager")
+def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_manager, CONSTANTS, tmp_path):
+    """
+    Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,
+    the task returns a message indicating no new files were found.
+    """
+
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+
+    assert result_first_run["status"] == "completed"
+    added_files = result_first_run["VCF files that were added to dimensions file by this job"]
+    expected_files = PROJECTS["split-scaffold-project"]
+    expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
+    for vcf in expected_vcfs:
+        assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
+
+    result_second_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+    assert result_second_run["status"] == "completed"
+    assert (
+        "None: no new VCF files or file versions were detected in the project."
+        in result_second_run["VCF files that were added to dimensions file by this job"]
+    )
