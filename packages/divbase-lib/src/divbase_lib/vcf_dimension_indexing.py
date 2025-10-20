@@ -47,8 +47,9 @@ class VCFDimensionIndexManager:
         vcf_path = Path(vcf_filename)
         vcf_dims = self._wrapper_calculate_dimensions(vcf_path)
         if vcf_dims is None:
-            logger.info(f"Skipping indexing of {vcf_filename}: detected DivBase-generated result VCF.")
-            return
+            result_msg = f"Skipping indexing of {vcf_filename}: detected DivBase-generated result VCF."
+            logger.info(result_msg)
+            return result_msg
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         latest_versions_of_bucket_files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
         file_version_ID = latest_versions_of_bucket_files.get(vcf_filename, "null")
@@ -56,14 +57,15 @@ class VCFDimensionIndexManager:
         existing_entry = next((entry for entry in dimensions if entry.get("filename") == vcf_filename), None)
 
         if existing_entry and existing_entry.get("file_version_ID_in_bucket") == file_version_ID:
-            logger.info(f"Filename '{vcf_filename}' with current version is already present in .vcf_dimensions.yaml.")
-            return
+            result_msg = f"Filename '{vcf_filename}' with current version is already present in .vcf_dimensions.yaml."
+            logger.info(result_msg)
+            return result_msg
 
         if existing_entry:
             existing_entry["timestamp_from_dimensions_indexing"] = timestamp
             existing_entry["file_version_ID_in_bucket"] = file_version_ID
             existing_entry["dimensions"] = vcf_dims
-            logger.info(f"Updated entry for {vcf_filename} in vcf_dimensions index.")
+            result_msg = f"Updated entry for {vcf_filename} in vcf_dimensions index."
         else:
             new_entry = {
                 "filename": vcf_filename,
@@ -72,10 +74,12 @@ class VCFDimensionIndexManager:
                 "dimensions": vcf_dims,
             }
             dimensions.append(new_entry)
-            logger.info(f"Added new entry for {vcf_filename} to vcf_dimensions index.")
-
+            result_msg = f"Added entry for {vcf_filename} to vcf_dimensions index."
         yaml_data["dimensions"] = dimensions
         self.dimensions_info = yaml_data
+
+        logger.info(result_msg)
+        return result_msg
 
     def remove_dimension_entry(self, vcf_filename: str) -> None:
         """

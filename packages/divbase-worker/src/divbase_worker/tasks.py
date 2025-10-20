@@ -202,10 +202,17 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     )
 
     files_indexed_by_this_job = []
+    divbase_results_files_skipped_by_this_job = []
     for file in non_indexed_vcfs:
         try:
-            manager.add_dimension_entry(vcf_filename=file)
-            files_indexed_by_this_job.append(file)
+            result_msg = manager.add_dimension_entry(vcf_filename=file)
+            print("FOO")
+            print(result_msg)
+            # TODO: return a message, if it says added or updated, append to one list, if it says skipped, append to another list
+            if "Added" in result_msg or "Updated" in result_msg:
+                files_indexed_by_this_job.append(file)
+            elif "Skipping" in result_msg:
+                divbase_results_files_skipped_by_this_job.append(file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
@@ -232,6 +239,7 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
         "status": "completed",
         "submitter": user_name,
         "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
+        "VCF files skipped by this job (DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
     }
 
 
