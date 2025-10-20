@@ -235,11 +235,15 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             "task_id": task_id,
         }
 
+    if files_indexed_by_this_job == []:
+        files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
+    if divbase_results_files_skipped_by_this_job == []:
+        divbase_results_files_skipped_by_this_job = ["None: no DivBase-generated results were detected in the project."]
     return {
         "status": "completed",
         "submitter": user_name,
         "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
-        "VCF files skipped by this job (DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
+        "VCF files skipped by this job (previous DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
     }
 
 
