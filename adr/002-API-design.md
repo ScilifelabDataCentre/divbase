@@ -81,10 +81,12 @@ For any of the following scenarios: {`logout`, `manual revoke` `password reset`,
 - On password reset: update Users table `last_password_change` value. 
 - On account deactivation: update Users table with `is_active` = False,
 - On manual revoke: Admin eithers adds entry to RevokedRefreshTokens (if possible) or sets Users `last_password_change` value to now.  
-- On refresh: Check if: 
-  1. `JTI` revoked. 
-  2. Account deactivated.  
-  3. Refresh token `iat` is older than last user last_password_change. 
+-  **On refresh request:**
+1. Check if token JTI in RevokedRefreshTokens → reject if found
+2. Fetch user from DB by user_id (from token)
+3. Check user.is_active → reject if False
+4. Check token.iat < user.last_password_change → reject if older
+5. If all checks pass (including signature) → issue new tokens
 
 
 ##### Notes: 
@@ -100,7 +102,7 @@ Base: # inherited by all other models
   UUID, created_at, updated_at
 
 Users(Base): 
-  name, email, hashed_password, is_admin, is_active, last_password_change(datetime) 
+  name, email, hashed_password, is_admin, is_active, last_password_change(datetime), last_login(DateTime)
 
 Projects (Base): 
     name, description, storage_quota, bucket_name, is_active
