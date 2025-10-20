@@ -332,16 +332,25 @@ class BcftoolsQueryManager:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
 
+        This method adds some temp files list used by temp_file_management() for cleanup after processing. Note that
+        the results file is not included in this list. Clean up of the results file is handled by tasks.py: only
+        after successfull upload to S3 will the results file be deleted.
 
         # for all sets that have len(files) > 1, perform concat, save the temp filename to a new list
         # for all sets that have len(files) == 1, save the temp filename to a new list
         # for all the temp filenames in the new list, perform merge
+
 
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
         unsorted_output_file = f"merged_unsorted_{identifier}.vcf.gz"
         annotated_unsorted_output_file = f"merged_annotated_unsorted_{identifier}.vcf.gz"
+        divbase_header_for_vcf = "divbase_header.txt"
+        self.temp_files.append(unsorted_output_file)
+        self.temp_files.append(annotated_unsorted_output_file)
+        self.temp_files.append(divbase_header_for_vcf)
+
         output_file = f"merged_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
 
@@ -389,18 +398,14 @@ class BcftoolsQueryManager:
             logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
 
-        divbase_header_for_vcf = "divbase_header.txt"
         self._prepare_txt_with_divbase_header_for_vcf(header_filename=divbase_header_for_vcf)
         annotate_command = (
             f"annotate -h {divbase_header_for_vcf} -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
         self.run_bcftools(command=annotate_command)
-        self.temp_files.append(unsorted_output_file)
-        self.temp_files.append(divbase_header_for_vcf)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
         self.run_bcftools(command=sort_command)
-        self.temp_files.append(annotated_unsorted_output_file)
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
         )
