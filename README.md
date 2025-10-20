@@ -170,7 +170,7 @@ This information is used by the backend to for the queries. By storing this in a
 
 ### 2. Query sidecar metadata file for sample IDs and VCF filenames
 
-Attributes of the samples that are typically not part of the data in the VCF file can be stored in a tabular sidecar file where each row describe a sample. The file need to start with a header row that contains one mandatory column: `Sample_ID`. Other columns can be added based on the needs of the project. The mapping between Sample IDs and the VCF file they are contained in is handled by the VCF dimensions file in the backed, so filenames should not be included in the sample metadata file. Since the VCF dimensions file is needed for the queries, the below assumes that the user has run `divbase-cli dimensions update` (as described above) since last time a VCF file was uploaded to the project.
+Attributes of the samples that are typically not part of the data in the VCF file can be stored in a tabular sidecar file where each row describe a sample. The file need to start with a header row that contains one mandatory column: `Sample_ID`. Other columns can be added based on the needs of the project. The mapping between Sample IDs and the VCF file they are contained in is handled by the VCF dimensions file in the backend, so filenames should not be included in the sample metadata file. Since the VCF dimensions file is needed for the queries, the below assumes that the user has run `divbase-cli dimensions update` (as described above) since last time a VCF file was uploaded to the project.
 
 To accomodate queries of user-defined columns, the following query syntax is used:
 

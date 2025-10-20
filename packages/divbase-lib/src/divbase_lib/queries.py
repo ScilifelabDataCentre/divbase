@@ -529,7 +529,6 @@ class SidecarQueryManager:
         Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names
 
-        If a sample exists in multiple files, it can be entered in the form: 'file1.vcf.gz,file2.vcf.gz' and all files will be extracted using pandas explode.
         Strip empty filenames if there e.g. are typos with trailing commas
         """
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
