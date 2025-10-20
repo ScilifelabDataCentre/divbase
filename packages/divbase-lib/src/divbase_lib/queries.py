@@ -389,12 +389,14 @@ class BcftoolsQueryManager:
             logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
 
-        self._check_if_need_to_prepare_txt_with_divbase_header_for_vcf()
+        divbase_header_for_vcf = "divbase_header.txt"
+        self._prepare_txt_with_divbase_header_for_vcf(header_filename=divbase_header_for_vcf)
         annotate_command = (
-            f"annotate -h divbase_header.txt -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
+            f"annotate -h {divbase_header_for_vcf} -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
         self.run_bcftools(command=annotate_command)
         self.temp_files.append(unsorted_output_file)
+        self.temp_files.append(divbase_header_for_vcf)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
         self.run_bcftools(command=sort_command)
@@ -480,20 +482,21 @@ class BcftoolsQueryManager:
         """
         return "KUBERNETES_SERVICE_HOST" in os.environ
 
-    def _check_if_need_to_prepare_txt_with_divbase_header_for_vcf(self) -> None:
+    def _prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
         """
         The command 'bcftools annotate -h' can be used to append a custom line to the header of a VCF file.
         The command requires a text file. This method checks if such a file exists, and if not, creates it.
         The 'annotate' command expects the pattern '##key=value' in the text file.
         """
-        header_path = "divbase_header.txt"
-        if not os.path.exists(header_path):
-            try:
-                with open(header_path, "w", encoding="utf-8") as fh:
-                    fh.write('##DivBase_created="This is a results file created by a DivBase query"\n')
-                    logger.info("Added header to VCF saying that this results file was created with DivBase.")
-            except Exception as e:
-                logger.warning(f"Could not create {header_path}: {e}")
+        try:
+            with open(header_filename, "w", encoding="utf-8") as fh:
+                timestamp_in_format_used_by_bcftools = datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")
+                fh.write(
+                    f'##DivBase_created="This is a results file created by a DivBase query; Date={timestamp_in_format_used_by_bcftools}"\n'
+                )
+                logger.info("Added header to VCF saying that this results file was created with DivBase.")
+        except Exception as e:
+            logger.warning(f"Could not write {header_filename}: {e}")
 
 
 class SidecarQueryManager:
