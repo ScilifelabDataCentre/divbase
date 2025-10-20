@@ -6,6 +6,7 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for the tests.
 """
 
+import datetime
 import logging
 import os
 import subprocess
@@ -227,7 +228,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
     [
-        # Case: expected to be fail, vcf dimensions file is empty so the early check for the file in the task raises an error
+        # Case 0: expected to be fail, vcf dimensions file is empty so the early check for the file in the task raises an error
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -244,7 +245,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             ],
             ["The VCF dimensions file in project split-scaffold-project is missing or empty."],
         ),
-        # case: expected to be sucessful, should lead to concat
+        # Case 1: expected to be sucessful, should lead to concat
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -262,11 +263,11 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Only one file remained after concatenation, renamed this file to",
                 "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
                 "bcftools processing completed successfully",
-                "Cleaning up 12 temporary files",
+                "Cleaning up 14 temporary files",
             ],
             [],
         ),
-        # case: expected to fail since there are no scaffolds in the vcf files that match the -r query
+        # Case 2: expected to fail since there are no scaffolds in the vcf files that match the -r query
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -284,7 +285,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files.To see a list of all unique scaffolds that are present across the VCF files in the project:'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>"
             ],
         ),
-        # case: expected to be sucessful, code should handle no tsv-filter in query
+        # Case 3: expected to be sucessful, code should handle no tsv-filter in query
         (
             {
                 "tsv_filter": "",
@@ -311,7 +312,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
             ],
             [],
         ),
-        # case: expected to be sucessful, should lead to merge
+        # Case 4: expected to be sucessful, should lead to merge
         (
             {
                 "tsv_filter": "Area:Northern Portugal",
@@ -331,11 +332,11 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Merged all temporary files into 'merged_unsorted_",
                 "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
                 "bcftools processing completed successfully",
-                "Cleaning up 5 temporary files",
+                "Cleaning up 7 temporary files",
             ],
             [],
         ),
-        # case: expected to be sucessful, should lead one file being subset and renamed rather than bcftools merge/concat
+        # Case 5: expected to be sucessful, should lead one file being subset and renamed rather than bcftools merge/concat
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf",
@@ -360,11 +361,11 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 10 temporary files",
+                "Cleaning up 12 temporary files",
             ],
             [],
         ),
-        # case: expected to be sucessful, should lead to two different sample sets being concatenated, then merged with a third file
+        # Case 6: expected to be sucessful, should lead to two different sample sets being concatenated, then merged with a third file
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf,Iceland",
@@ -392,7 +393,7 @@ def test_get_task_status_by_task_id(CONSTANTS, user_config_path):
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 17 temporary files",
+                "Cleaning up 19 temporary files",
             ],
             [],
         ),
@@ -543,6 +544,13 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             kwargs["endpoint_url"] = MINIO_URL
         return original_boto3_client(service_name, **kwargs)
 
+    def patched_prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
+        """Create header file in the fixtures directory where the testing stack workers can find it"""
+        header_path = ensure_fixture_path(header_filename)
+        with open(header_path, "w") as file:
+            file.write('##DivBase_created="This is a results file created by a DivBase query; ')
+            file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
+
     if ensure_dimensions_file:
         run_update_dimensions(bucket_name=params["bucket_name"])
 
@@ -565,6 +573,10 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             ),
             patch("divbase_worker.tasks.upload_results_file", new=patched_upload_results_file),
             patch("divbase_worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
+            patch(
+                "divbase_lib.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
+                new=patched_prepare_txt_with_divbase_header_for_vcf,
+            ),
         ):
             if not expect_success:
                 with pytest.raises(ValueError) as e:
