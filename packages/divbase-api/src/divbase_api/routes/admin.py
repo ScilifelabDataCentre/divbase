@@ -8,11 +8,19 @@ NOTE: All routes in here should depend on get_current_admin_user.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import add_project_member, create_project
-from divbase_api.crud.users import create_user, get_all_users, get_user_by_id
+from divbase_api.crud.users import (
+    create_user,
+    deactivate_user,
+    get_all_users,
+    get_user_by_id_or_raise,
+    reactivate_user,
+    revert_soft_delete_user,
+    soft_delete_user,
+)
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_admin_user
 from divbase_api.models.projects import ProjectRoles
@@ -42,9 +50,7 @@ async def create_user_endpoint(
 async def get_user_by_id_endpoint(
     user_id: int, db: AsyncSession = Depends(get_db), current_admin: UserDB = Depends(get_current_admin_user)
 ):
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user = await get_user_by_id_or_raise(db=db, id=user_id)
     return UserResponse.model_validate(user)
 
 
@@ -63,12 +69,7 @@ async def deactivate_user_endpoint(
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Deactivate a user"""
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_active = False
-    await db.commit()
-    await db.refresh(user)
+    user = await deactivate_user(db=db, user_id=user_id)
     logger.info(f"Admin user: {current_admin.email} deactivated user: {user.email}")
     return user
 
@@ -80,12 +81,7 @@ async def activate_user_endpoint(
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Activate a user"""
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_active = True
-    await db.commit()
-    await db.refresh(user)
+    user = await reactivate_user(db=db, user_id=user_id)
     logger.info(f"Admin user: {current_admin.email} activated user: {user.email}")
     return user
 
@@ -97,13 +93,7 @@ async def soft_delete_user_endpoint(
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Soft delete a user"""
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_active = False  # also deactivate as deleted users should not be active
-    user.is_deleted = True
-    await db.commit()
-    await db.refresh(user)
+    user = await soft_delete_user(db=db, user_id=user_id)
     logger.info(f"Admin user: {current_admin.email} soft deleted user: {user.email}")
     return user
 
@@ -115,12 +105,7 @@ async def revert_soft_delete_user_endpoint(
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Revert soft delete of a user"""
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_deleted = False
-    await db.commit()
-    await db.refresh(user)
+    user = await revert_soft_delete_user(db=db, user_id=user_id)
     logger.info(f"Admin user: {current_admin.email} reverted soft delete for user: {user.email}")
     return user
 
