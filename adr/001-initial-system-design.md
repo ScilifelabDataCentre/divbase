@@ -97,19 +97,27 @@ Below are estimates for querying a 5.5 Gb vcf.gz file. The estimates are based o
 - Single VCF query (~5GB): Target <10min, Acceptable <20min
 - Multi-file (10×5GB): Target <30min, Acceptable <90min
 - 5 concurrent users: <25% degradation acceptable
-- S3 transfer: >50 MB/s minimum
+- S3 transfer: Needs to be evaluated. This including investigating if KTH NetApp has (per-connection) bandwidth limits. An initial estimate is that a transfer rate of >50 MB/s per-file will be acceptable. Aggregate downloads are assumed to be slightly slower. 
 
 **Testing:** 
+(Note: May need to adjust benchmarks based on KTH NetApp S3 performance testing)
 - Locust to submit query tasks
 - Evaluation based on runtime (stored in the results backend and fetchable by e.g. flower API).
+- Dedicated worker pool for large queries: all jobs that require bcftools go to a dedicated queue
 - 10-50GB VCF test data
-- To gather additional data that will be useful for potential optimization, resource monitoring will be done with k8s metrics server (will need recurrent polling to fetch time-series data). An alternative could be to use [Prometheus](https://prometheus.io/) for resource logging since it supports time-series data collection.
+- Test whether concurrent downloads to Celery workers are possible. If yes, it would likely decrease the total runtime.
+- To gather additional data that will be useful for potential optimization, resource monitoring will be done [Prometheus](https://prometheus.io/). A benefit with Prometheus compared with the k8s metrics server is that the former has built-in support for time-series data collection, whereas the latter will require recurrent polling to collect data over time.
 
 **Decision criteria:**
 - Targets met → acceptable for production
 - Acceptable range → optimization 
 - Below acceptable → re-evaluate architectural choices
 
+**If below acceptable thresholds, consider:**
+- Implement query result-caching in Redis for repeated queries
+- Use pre-indexed VCF files (bcftools index, CSI format). Currently, VCF file are planned to be indexed by the worker prior to each bcftools operation, but indexes could be pre-computed and stored in the S3 bucket to reduce recurring compute.
+- Horizontal scaling (spin up more Celery workers when there is demand)
+- Estimate how long a job will take based on number of variants and samples and assign it to a worker pool that handles long- or very long-duration jobs. 
 
 ### Authentication Evolution Strategy
 
