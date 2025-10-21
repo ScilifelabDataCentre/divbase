@@ -8,8 +8,7 @@ These overrides are on methods inside BaseModelView (parent of ModelView, which 
 import logging
 from typing import Any
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Response
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
@@ -145,11 +144,11 @@ class DivBaseAuthProvider(AuthProvider):
     The methods below are overriding several existing methods in the AuthProvider class (and its parent BaseAuthProvider).
     """
 
-    async def render_login(self, request: Request, admin: BaseAdmin) -> RedirectResponse | HTMLResponse:
+    async def render_login(self, request: Request, admin: BaseAdmin) -> Response:
         """Override the default starlette-admin login method to use our frontend get_login route/page."""
         return await get_login(request)
 
-    async def render_logout(self, request: Request, admin: BaseAdmin) -> HTMLResponse:
+    async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
         """Override the default starlette-admin logout to use our frontend post_logout function/route."""
         return await post_logout(request)
 
