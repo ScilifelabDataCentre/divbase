@@ -10,7 +10,7 @@ As described in [ADR-001](adr/001-initial-system-design.md), the core of the Div
 
 ## 4. Decision
 
-The decision consists of two parts: a general strategy that can be applied to all Celery tasks that handle files in S3 (Section 4.1), and specific details for individual tasks (Sections 4.2.-4.3).
+The decision consists of two parts: a general strategy that can be applied to all Celery tasks that handle files in S3 (Section 4.1), and specific details for individual tasks (Sections 4.2.-4.3). Failure scenarios are covered in Section 4.4.
 
 ### 4.1. General strategy that applies to all tasks
 To ensure robust operations, every user interaction that goes through the job system need to do the following in sequential order
@@ -22,8 +22,12 @@ To ensure robust operations, every user interaction that goes through the job sy
 	- If the file version IDs were successfully verified, tell the user that the task will use these specific versions of the files (= version ID captured in step 1). For transparency and information secutiry, let the user know whether or not these are the latest files (for the case that files in the bucket have been updated in the time window between the task submission and task start).
 	- If the file version IDs failed verification, return an error message to the user informing them of the issue. If the files have been deleted from S3, tell the user to ensure that files are in S3. If the system cannot connect to S3, tell them that.
 5. Download the verified versions of files from S3 to worker. 
-    - TO BE DISCUSSED: celery workers can have concurrency (unless specified, default= 4), but it is also possible to set worker concurrency to 1 and handle scaling in kubernetes. If we decide to use celery workers with concurrency >1, unique temp file names becomes crucial. For example, a worker with concurrency=2 picks up two jobs that each act on a different bucket, but happen to have files that share name but not content (e.g. sample_metadata.tsv), errors are likely to occur. Appending the Celery Task-ID to the filename and parsing for that in the tasks is one solution to this issue. 
-6. Return results of query and clean up temp files. This is different from task to task, but can involve writing to S3. Task-specific details will be addressed below.
+	- It is possible to control worker concurrency in Celery and in Kubernetes. The decision is to use Celery concurrency=1 together with K8s horizontal scaling. This means that each worker pod only handles one job at a time; if the queue is long and resources permit, new pods can be scaled up to accept more jobs.
+	- This has several benefits: simpler file management (no filename collision risk - e.g. if one worker would handle >1 job and they would happend to have the same filenames); resource isolation (job or pod failure doesn't affect other jobs); separated logging and resource monitoring (pod logs become per-job logs); simpler temp file garbage collection (identifying which files belong to which job).
+	- Depending on S3 perforance and bandwith limitations (see [ADR-001: Performance validation](adr/001-initial-system-design.md#performance-validation)), the input VCFs might be cached by the workers to enable reuse by subsequent jobs. If so, caching will be done by appending their S3 version ID to the filename. First, the worker checks if the specified file version already exists in its mounted volume; if not, it downloads it to a shared persistent volume claim (ReadWriteMany PVC); caching is also shared between workers in this way. A Time-To-Live based cache eviction will be used: a cron job will be run that delete files older than 24 hours. 
+6. Return results of query and clean up temp files. This is different from task to task, but can involve writing to S3 or to a database table. Redis lock will be used to coordinate access to shared resources to avoid race conditions and data corruption. The `python-redis-lock` library and Redis SETNX-based locks will be the first choice for implementing Redis locks.
+
+Task-specific details will be addressed below.
 
 ### 4.2. Strategy specific to metadata query tasks
 
@@ -42,22 +46,42 @@ The sample metadata file is user-provided and is not updated by the system.
 
 #### 4.2.2. Technical metadata
 
-- Worker needs to read file from S3: Yes
-- Worker needs to write file to S3: Yes
+- Worker needs to read file from database table: Yes
+- Worker needs to write file to database table: Yes
 
 **Context:**
 
 A technical metadata file that stores key information about each VCF file in the bucket is also planned. This file will, for each VCF file, store the samples, scaffold names, and number of variants contained in each file, and the file version ID (for verification). By storing this information in a metadata file, the system will only need to download each VCF file once (for each version of the file submitted to S3) and log these parameters, instead of having to download each VCF every time this information is needed to make a logic decision in the system. This will save on resources and be more time efficient for users. For example, there are invalid sample set combinations for `bcftools merge` or `bcftools concat`, and having a technical metadata file allows us to implement _a priori_ checks to see if a bcftools-dependent task is feasible, and ensure an early-exit for the task if needed.    
 
-Unlike the sample metadata file, this file is intendedn to be updated by the backend and should never be interacted with by the users, except to perhaps manually schedule a refresh. As VCF files change in the bucket, this file can be subject to several concurrent requests. Capturing the metadata requires to parse the whole VCF file (not just the headers, since there are row-specific information, such as the scaffold names, that needs to be stored) and thus that should be done by the workers. Updates to this file will be scheduled by the API each time a new version of a VCF file is uploaded to the bucket. As a failsafe, tasks that deal with VCF files will check if the version IDs of the files indexed in the latest version of the metadata file are up to date with the files in the bucket; if not, send an error to the users asking them to run the update command.
+Unlike the sample metadata file, this file is intended to be updated by the backend and should never be interacted with by the users, except to perhaps manually schedule a refresh. As VCF files change in the bucket, this file can be subject to several concurrent requests. Capturing the metadata requires to parse the whole VCF file (not just the headers, since there are row-specific information, such as the scaffold names, that needs to be stored) and thus that should be done by the workers. Updates to this file will be scheduled by the API each time a new version of a VCF file is uploaded to the bucket. As a failsafe, tasks that deal with VCF files will check if the version IDs of the files indexed in the latest version of the metadata file are up to date with the files in the bucket; if not, send an error to the users asking them to run the update command.
 
-(TO BE DISCUSSED: this technical metadata file can be stored in S3 along with the VCF files, but since the users don't need to directly interact with it, it could as well be stored in a worker-mounted PVC, or in a PostgreSQL table. In either way, redis lock would be convenient since it can handle all three of those use-cases. Loss of this file is not a major risk, since it can be regenerated by reading the VCF files again)
+Since this technical metadata is for the backusers and not for the users, it will be stored in a PostgreSQL table. This is an ACID-compliant database that is compatible SQL SELECT queries, indexing for fast lookups, and Redis locks. Another benefit is that the CloudNativePG on the KTH cluster can be used for automated backups. For continuity with the auth database strategy in [ADR-002: ](adr/002-API-design.md), database models will be defined with sqlalchemy 2. Redis locks will be applied to the given table rows when a update job is queued, and released once the computations are complete and the metadata updated in the row. The planned schema looks like this:
+
+```bash
+class VCFMetadata(Base):
+	#Inherits Base as defined in ADR-002 (UUID, created_at, updated_at)
+
+    __tablename__ = "vcf_metadata"
+
+    vcf_file_s3_key = Column(String, primary_key=True, index=True) # the unique path or key for the file in the S3 bucket.
+    project_id = Column(UUID, ForeignKey('projects.id'), index=True)
+    s3_version_id = Column(String, nullable=False, index=True)
+
+    # VCF dimensions
+    samples: Mapped[list[str]] = mapped_column(ARRAY(String), index=True)  # List of sample names
+    scaffolds: Mapped[list[str]] = mapped_column(ARRAY(String))  # List of Chromosome/scaffold names
+    variant_count: Mapped[int] = mapped_column(BigInteger)
+    sample_count: Mapped[int] = mapped_column(Integer)
+
+    # Metadata
+    file_size_bytes: Mapped[int] = mapped_column(BigInteger)
+    indexed_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now()) # Timestamp from last update to row
+```
 
 
 **Addition to general sequence in Section 4.1.:**
-- 3. Upon task start, apply a redis lock to the file in the bucket. If errors are raised duing the task, release the redis lock. The redis locks should also have an expiry time to avoid deadlocks, say 24 h.
-- 5. Download the verified version of the technical metadata from S3 to worker. Upon download to worker container, add Celery Task-ID to the file name.
-- 6. If the task includes making updates to the technical metadata file, write the new version to the S3 bucket. After writing, release the lock. 
+- 3. Upon task start, apply a redis lock to the row in the technical metadata table. If errors are raised duing the task, release the redis lock. The redis locks should also have an expiry time to avoid deadlocks, at 2-3 times the worse-case time it takes to perform the operation. The runtime for updating the technical metadata scales proportionally to number of variants in all VCF files in the bucket. In a worst-case time, the deadlock should need no longer than 1-2 h, but this needs to be tested.
+- 6. If the task includes making updates to the technical metadata database, write the new version to the table. After writing, release the lock.
 
 
 ### 4.3. Strategy specific to VCF query tasks
@@ -74,6 +98,16 @@ Queries on VCF files in DivBase relies on bcftools to subset VCF files. If a que
 - The VCF queries can optionally take a sample metadata query as input. In that case, the additions listed in 4.2.1. apply. 
 - 6. The output of the query is a subset VCF file that is uploaded to the given S3 bucket. This file should include the Celery Task-ID in the filename for uniqueness and traceability.
 
+### 4.4. Failure scenarios
+
+# TODO
+- Redis lock expires before job completes? (Deadlock prevention)
+
+- S3 version verification fails mid-job? (Partial processing)
+
+- Worker crashes during file download? (Cleanup)
+
+- Loss of technical metadata. Not a major risk since a) the database will be backed up using CNPG, and b) the technical metadata can be regenerated by reading the VCF files again.
 
 ## 5. Consequences
 
@@ -92,12 +126,15 @@ Negative:
 
 - Redis lock and not S3 conditional writes:
 
-The benefit of S3 conditional writes is that is already available through the S3 object store. The downside is that it can only lock files in S3, whereas Redis lock can act on files in volumes and on database tables. If we ever should decide that the technical metadata should not be stored in the S3 bucket (see next bullet below), using Redis lock from the start will simplify the migration to a non-S3 destination. A downside of Redis lock is that it requires that a Redis service is running. If we decide to use Redis for the job system results backend (decision currently pending discussion in ADR001), the same instance can also be used for locking.
+The benefit of S3 conditional writes is that is already available through the S3 object store. The downside is that it can only lock files in S3, whereas Redis lock can, in addition to files in S3, also act on files in volumes and on database tables. A downside of Redis lock is that it requires that a Redis service is running. However, a Redis instance will be used in the job system results backend, and can thus also be used for locking.
 
-- Store technical metadata in a database table instead of a YAML or JSON:
+- Store technical metadata in S3 in a YAML or JSON instead of a database table:
 
-For early proof-of-concept, using a YAML file was a good way to scope out the needs of the technical metadata file. However, given that users do not need interact directly with it, it would make sense to store the data in a database table. PostgreSQL would be a natural choice since is it already used in the architechture. The technical metadata file does not gain anything from being versioned as long as it is kept up to date with the VCF files in the bucket; this could speak towards using a db table instead. Likewise, ACID compliance would be nice to have in the concurrency solution for this file. Potential downsides could be: added burden on the database instance, overkill solution.
+For early proof-of-concept, using a YAML file was a good way to scope out the needs of the technical metadata file. However, given that users do not need interact directly with it, the decision is to store the technial metadata in a database table instead. Storing this in a YAML file in S3 has several downsides: S3 transfer needed (production S3 is outside the DivBase k8s namespace network), YAML deserialization and parsing overhead, and it has none of the built-in SQL database benefits (query complexity, column indexing, ACID-compliance, etc.).
 
 - Using Celery Task-ID as hash in temp filenames in worker instead of using file version ID:
 
 Hashing of files with Celery Task-ID removes the possibility to reuse the same input files between tasks. VCF files are potentially large in size, and it would decrese the transfer load from S3 to workers if VCF files could be stored temporarily for a limited time on a worker-mounted PVC instead of transferred once for each task. If the S3 version ID is instead used as a hash, it would open up the possibility to reuse files.
+
+- Input file cache eviction strategy: LRU (Least Recently Used) instead of TTL (Time-To-Live)
+The LRU strategy is based on determining which files to remove files when space is needed based on longest time since last accessed. This might be more suitable for DivBase in the long run, since it is predicted that users will use the service in bursts rather than on an everyday basis. The idea is to start with TTL and monitoring the use and investigate the following: how often is the same file needed by the user queries? is it more efficient to store that file for a longer time rather than downloading it again everytime it is needed after TTL eviction?
