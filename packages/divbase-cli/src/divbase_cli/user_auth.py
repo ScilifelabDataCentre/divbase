@@ -45,8 +45,7 @@ class TokenData:
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
-        # TODO
-        return time.time() + 10000000000 >= (self.access_token_expires_at - 5)  # 5 second buffer
+        return time.time() >= (self.access_token_expires_at - 5)  # 5 second buffer
 
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
@@ -181,7 +180,11 @@ def make_authenticated_request(
         error_details = response.json().get("detail", "No error details provided")
         error_type = response.json().get("type", "unknown")
         raise DivBaseAPIError(
-            error_details=error_details, status_code=response.status_code, error_type=error_type
+            error_details=error_details,
+            status_code=response.status_code,
+            error_type=error_type,
+            http_method=method,
+            url=url,
         ) from None
 
     return response

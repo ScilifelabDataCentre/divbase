@@ -9,19 +9,17 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
-from divbase_cli.bucket_versioning import VERSION_FILE_NAME
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import (
-    BucketVersionAlreadyExistsError,
-    BucketVersioningFileAlreadyExistsError,
-    BucketVersionNotFoundError,
-)
+from divbase_lib.exceptions import DivBaseAPIError
 
 runner = CliRunner()
+
 
 VERSION_1_NAME = "v1.0.0"
 VERSION_2_NAME = "v2.0.0"
 VERSION_3_NAME = "v3.0.0"
+
+VERSION_FILE_NAME = ".bucket_versions.yaml"
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +49,9 @@ def test_create_version_file_fails_if_already_exists(logged_in_edit_user_with_ex
     command = "version create"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, BucketVersioningFileAlreadyExistsError)
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "bucket_versioning_file_already_exists_error"
+    assert result.exception.status_code == 400
 
 
 def test_create_version_for_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -108,7 +108,9 @@ def test_attempt_add_version_that_already_exists_fails(logged_in_edit_user_with_
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, BucketVersionAlreadyExistsError)
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "bucket_version_already_exists_error"
+    assert result.exception.status_code == 400
 
 
 def test_add_version_works_with_clean_project(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -136,8 +138,8 @@ def test_list_versions(logged_in_edit_user_with_existing_config):
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert f"- '{VERSION_1_NAME}':" in result.stdout
-    assert f"- '{VERSION_2_NAME}':" in result.stdout
+    assert f"{VERSION_1_NAME}" in result.stdout
+    assert f"{VERSION_2_NAME}" in result.stdout
 
 
 def test_delete_version(logged_in_edit_user_with_existing_config):
@@ -162,7 +164,9 @@ def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert isinstance(result.exception, BucketVersionNotFoundError)
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "bucket_version_not_found_error"
+    assert result.exception.status_code == 404
 
 
 def test_get_version_info(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -189,7 +193,9 @@ def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_wi
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert isinstance(result.exception, BucketVersionNotFoundError)
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "bucket_version_not_found_error"
+    assert result.exception.status_code == 404
 
 
 def test_get_version_updates_hashes_on_new_upload(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
