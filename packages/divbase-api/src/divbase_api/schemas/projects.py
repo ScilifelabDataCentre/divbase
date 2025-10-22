@@ -9,7 +9,7 @@ from divbase_api.models.projects import ProjectRoles
 
 class ProjectBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=100)
-    description: str | None = Field(None, min_length=1, max_length=1000)
+    description: str | None = Field(None, min_length=0, max_length=1000)
     bucket_name: str = Field(..., min_length=3, max_length=63)
 
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
@@ -21,7 +21,7 @@ class ProjectCreate(ProjectBase):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(None, min_length=3, max_length=100)
-    description: str | None = Field(None, min_length=1, max_length=1000)
+    description: str | None = Field(None, min_length=0, max_length=1000)
     bucket_name: str | None = Field(None, min_length=3, max_length=63)
     storage_quota_bytes: int | None = None
 

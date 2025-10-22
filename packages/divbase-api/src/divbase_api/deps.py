@@ -34,17 +34,18 @@ logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-async def get_current_user_from_cookie_optional(
-    access_token: str | None = Cookie(None),
-    refresh_token: str | None = Cookie(None),
-    db: AsyncSession = Depends(get_db),
-    response: Response = None,
+async def _authenticate_frontend_user_from_tokens(
+    access_token: str | None,
+    refresh_token: str | None,
+    db: AsyncSession,
+    response: Response | None = None,
 ) -> UserDB | None:
     """
-    Get user from the JWT access token stored inside the httponly cookie.
+    Helper function to authenticate a user from either their access token
+    (or if that's expired) their refresh token.
 
-    Returns None if not logged in.
-    Use in routes where both logged in and not logged in users are allowed.
+    Used for frontend routes where both access + refresh tokens are sent in all requests
+    as HttpOnly cookies.
     """
     if not access_token and not refresh_token:
         return None
@@ -57,7 +58,7 @@ async def get_current_user_from_cookie_optional(
                 return None
             return user
 
-    # now try refresh token, if this is valid, we give user a new access token
+    # now try refresh token, if this is valid, we will give the user a new access token
     if not refresh_token:
         return None
 
@@ -81,6 +82,23 @@ async def get_current_user_from_cookie_optional(
     return user
 
 
+async def get_current_user_from_cookie_optional(
+    access_token: str | None = Cookie(None),
+    refresh_token: str | None = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+    response: Response = None,
+) -> UserDB | None:
+    """
+    Get user from the JWT access token stored inside the httponly cookie.
+
+    Returns None if not logged in.
+    Use in routes where both logged in and not logged in users are allowed.
+    """
+    return await _authenticate_frontend_user_from_tokens(
+        access_token=access_token, refresh_token=refresh_token, db=db, response=response
+    )
+
+
 async def get_current_user_from_cookie(
     access_token: str | None = Cookie(None),
     refresh_token: str | None = Cookie(None),
@@ -93,25 +111,12 @@ async def get_current_user_from_cookie(
 
     Use in routes where user must be logged in.
     """
-    user = await get_current_user_from_cookie_optional(access_token, refresh_token, db, response)
+    user = await _authenticate_frontend_user_from_tokens(
+        access_token=access_token, refresh_token=refresh_token, db=db, response=response
+    )
     if not user:
         raise AuthenticationError("Authentication required")
     return user
-
-
-async def get_current_admin_user_from_cookie(
-    current_user: Annotated[UserDB, Depends(get_current_user_from_cookie)],
-) -> UserDB:
-    """
-    Verify current user has admin access.
-
-    Note: This function works by using a sub-dependency to get the current user,
-    so all the checks in the sub-dependancy function are ran when you use this dependency.
-    (see here: https://fastapi.tiangolo.com/yo/advanced/security/oauth2-scopes/#dependency-tree-and-scopes)
-    """
-    if not current_user.is_admin:
-        raise AuthorizationError("Admin access required")
-    return current_user
 
 
 async def get_project_member_from_cookie(
@@ -142,6 +147,9 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: As
     Get current user from JWT Access token
 
     We should not be specific about why/if credentials are invalid.
+
+    If wondering why no refresh token handling here like in the frontend:
+    - The CLI can send the refresh token to "auth/refresh" endpoint instead to get a new access token.
     """
     user_id = verify_token(token, desired_token_type=TokenType.ACCESS)
     if user_id is None:

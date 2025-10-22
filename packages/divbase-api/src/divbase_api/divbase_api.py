@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI
 
+from divbase_api.admin_panel import register_admin_panel
 from divbase_api.config import settings
 from divbase_api.db import (
     create_all_tables,
@@ -18,9 +19,6 @@ from divbase_api.db import (
     health_check_db,
 )
 from divbase_api.exception_handlers import register_exception_handlers
-from divbase_api.frontend_routes.admin import fr_admin_router
-from divbase_api.frontend_routes.admin_projects import fr_admin_projects_router
-from divbase_api.frontend_routes.admin_users import fr_admin_users_router
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
@@ -71,14 +69,12 @@ app.include_router(bucket_version_router, prefix="/api/v1/bucket-versions", tags
 
 
 app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)
-app.include_router(fr_admin_router, prefix="/admin", include_in_schema=False)
-app.include_router(fr_admin_projects_router, prefix="/admin/projects", include_in_schema=False)
-app.include_router(fr_admin_users_router, prefix="/admin/users", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
 register_exception_handlers(app)
+register_admin_panel(app=app, engine=engine)
 
 
 # TODO - move below routes into routes dir when ready.
