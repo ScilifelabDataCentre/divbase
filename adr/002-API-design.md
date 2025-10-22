@@ -132,7 +132,7 @@ Negative:
 ## 6. Alternatives Considered:
 
 
-##### 6.1 Django (DC Paved Path) vs FastAPI
+### 6.1 Django (DC Paved Path) vs FastAPI
 
 **DC Paved Path:** Django is the default web framework.
 
@@ -150,6 +150,11 @@ Negative:
 
 **This deviation is documented per DC governance requirements.**
 
-##### 6.2 Jobs Table: Instead of relying on the FlowerAPI to parse jobs statuses a Jobs table could be added to the database to track job submissions and statuses. This could provide more control over job management but requires potentially a substational amount of additional dev work. 
+### 6.2 Jobs Table?
 
-##### 6.3 Redis blacklist vs RevokedRefreshTokens PostgreSQL Table for blacklisting user refresh tokens. RevokedRefreshTokens PostgreSQL Table chosen as PostgreSQL already in stack/used by FastAPI and minimal performance impact (check only on refresh), simple to implement. Redis blacklist would add latency to every request.
+Instead of relying on the FlowerAPI to parse the Redis results backend for jobs statuses, a Jobs table could be added to the database to track job submissions and statuses. This could provide more control over job management but requires potentially a substational amount of additional dev work. 
+
+
+### 6.3 Redis blacklist vs RevokedRefreshTokens PostgreSQL Table for blacklisting user refresh tokens. 
+
+RevokedRefreshTokens PostgreSQL Table chosen as PostgreSQL already in stack/used by FastAPI and minimal performance impact (check only on refresh), simple to implement. Redis blacklist would add latency to every request.
