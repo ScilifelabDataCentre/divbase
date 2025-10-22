@@ -134,6 +134,21 @@ Below are estimates for querying a 5.5 Gb vcf.gz file. The estimates are based o
 
 **Rationale:** Prototype needs speed; production benefits from institutional SSO.
 
+
+### Task History & Job Management
+
+**Approach:** Redis as Celery results backend with RDB+AOF persistence.
+
+**Task metadata:** user_id and project_id passed in Celery task payload, stored in Redis, queryable via Flower API with filtering.
+
+**Durability:** Redis RDB snapshots (hourly) + AOF logs. Acceptable data loss: <1 minute of recent tasks in catastrophic failure.
+
+**Memory management:** Task metadata is lightweight (tens of kB per job). With expected load (<1000 jobs/month initially), Redis memory remains manageable.
+
+**Task retention:** 30 days via Celery `result_expires` configuration. Older tasks automatically purged to manage memory.
+
+**Monitoring implications:** With Redis persistence, Flower can recover task metadata after restart, but users won't see historical task logs older than the TTL.
+
 ## Alternatives considered
 
 - **Using Django (or flask) instead of FastAPI:** see [002-API-design.md](002-API-design.md)
@@ -150,6 +165,8 @@ Below are estimates for querying a 5.5 Gb vcf.gz file. The estimates are based o
 
 - **Proxy S3 requests through DivBase instead of pre-signed URLs** Due to the large size of VCF files (~GBs) that users may want to up/download, we do not want to proxy the files through DivBase. We are not able to create accounts for users on S3 directly (and that would make access control more awkard) so pre-signed URLs was deemed the best option
 
+- **PostgreSQL as Celery backend instead of Redis**
+Redis is chosen as the results backend for the MVP since it is sufficient for the foreseen needs (operational logs from task history) and simple to set up. However, since PostgreSQL will already be used in the archtechture for other features (see [ADR-002](adr/002-Basic-API-design.md) and [ADR-003](003-concurrency-strategy.md)), it could be considered instead of Redis. The benefits of PostgreSQL include: support for more complex and efficient (indexed) queries, able to reduce the number of services (here: Redis) in the architechture, strong support for backup in the KTH cluster through CloudNativePG. Might want to re-evaluate this decision based on lessons learned after Phase 1 (Prototype - Q4 2025).
 
 ## Consequences
 
