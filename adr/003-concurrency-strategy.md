@@ -22,10 +22,11 @@ To ensure robust operations, every user interaction that goes through the job sy
 	- If the file version IDs were successfully verified, tell the user that the task will use these specific versions of the files (= version ID captured in step 1). For transparency and information secutiry, let the user know whether or not these are the latest files (for the case that files in the bucket have been updated in the time window between the task submission and task start).
 	- If the file version IDs failed verification, return an error message to the user informing them of the issue. If the files have been deleted from S3, tell the user to ensure that files are in S3. If the system cannot connect to S3, tell them that.
 5. Download the verified versions of files from S3 to worker. 
-	- It is possible to control worker concurrency in Celery and in Kubernetes. The decision is to use Celery concurrency=1 together with K8s horizontal scaling. This means that each worker pod only handles one job at a time; if the queue is long and resources permit, new pods can be scaled up to accept more jobs.
+	- It is possible to control worker concurrency in Celery and in Kubernetes. The decision is to use Celery concurrency=1 together with K8s horizontal scaling. This means that each worker pod only handles one job at a time; if the queue is long and cluster resources are available, new pods can be scaled up to accept more jobs.
 	- This has several benefits: simpler file management (no filename collision risk - e.g. if one worker would handle >1 job and they would happend to have the same filenames); resource isolation (job or pod failure doesn't affect other jobs); separated logging and resource monitoring (pod logs become per-job logs); simpler temp file garbage collection (identifying which files belong to which job).
-	- Depending on S3 perforance and bandwith limitations (see [ADR-001: Performance validation](adr/001-initial-system-design.md#performance-validation)), the input VCFs might be cached by the workers to enable reuse by subsequent jobs. If so, caching will be done by appending their S3 version ID to the filename. First, the worker checks if the specified file version already exists in its mounted volume; if not, it downloads it to a shared persistent volume claim (ReadWriteMany PVC); caching is also shared between workers in this way. A Time-To-Live based cache eviction will be used: a cron job will be run that delete files older than 24 hours. 
-6. Return results of query and clean up temp files. This is different from task to task, but can involve writing to S3 or to a database table. Redis lock will be used to coordinate access to shared resources to avoid race conditions and data corruption. The `python-redis-lock` library and Redis SETNX-based locks will be the first choice for implementing Redis locks.
+    - File checksums will be verified after all downloads have completed. Which checksum algorithm that will be used will be decided based on the ETAG algoritm used at KTH NetApp.
+	- Depending on S3 perforance and bandwith limitations (see [ADR-001: Performance validation](adr/001-initial-system-design.md#performance-validation)), we might want to cache the input VCF files in the workers to enable reuse by subsequent jobs. If so, caching will be done by appending their S3 version ID to the filename. First, the worker checks if the specified file version already exists in its mounted volume; if not, it downloads it to a shared persistent volume claim (ReadWriteMany PVC); caching is also shared between workers in this way. A Time-To-Live based cache eviction will be used: a cron job will be run that delete files older than 24 hours. If we decide to not use input file caching in the workers, input files will be handled by a context manager to ensure that they are deleted after job completion or on job failure.
+6. Return results of query and clean up temp files. This is different from task to task, but can involve writing to S3 or to a database table. Redis lock will be used to coordinate access to shared resources to avoid race conditions and data corruption. The `python-redis-lock` library and Redis SETNX-based locks will be the first choice for implementing this.
 
 Task-specific details will be addressed below.
 
@@ -46,16 +47,16 @@ The sample metadata file is user-provided and is not updated by the system.
 
 #### 4.2.2. Technical metadata
 
-- Worker needs to read file from database table: Yes
-- Worker needs to write file to database table: Yes
+- Worker needs to read from database table: Yes
+- Worker needs to write to database table: Yes
 
 **Context:**
 
 A technical metadata file that stores key information about each VCF file in the bucket is also planned. This file will, for each VCF file, store the samples, scaffold names, and number of variants contained in each file, and the file version ID (for verification). By storing this information in a metadata file, the system will only need to download each VCF file once (for each version of the file submitted to S3) and log these parameters, instead of having to download each VCF every time this information is needed to make a logic decision in the system. This will save on resources and be more time efficient for users. For example, there are invalid sample set combinations for `bcftools merge` or `bcftools concat`, and having a technical metadata file allows us to implement _a priori_ checks to see if a bcftools-dependent task is feasible, and ensure an early-exit for the task if needed.    
 
-Unlike the sample metadata file, this file is intended to be updated by the backend and should never be interacted with by the users, except to perhaps manually schedule a refresh. As VCF files change in the bucket, this file can be subject to several concurrent requests. Capturing the metadata requires to parse the whole VCF file (not just the headers, since there are row-specific information, such as the scaffold names, that needs to be stored) and thus that should be done by the workers. Updates to this file will be scheduled by the API each time a new version of a VCF file is uploaded to the bucket. As a failsafe, tasks that deal with VCF files will check if the version IDs of the files indexed in the latest version of the metadata file are up to date with the files in the bucket; if not, send an error to the users asking them to run the update command.
+Unlike the sample metadata file, the technical metadata is intended to be updated by the backend and should never be interacted with by the users, except to perhaps manually schedule a refresh. As VCF files change in the bucket, this can be subject to several concurrent requests. Capturing the technical metadata requires to parse the whole VCF file (not just the headers, since there are row-specific information, such as the scaffold names, that needs to be stored) and thus that should be done by the workers. Updates to the technical metadata will be scheduled by the API each time a new version of a VCF file is uploaded to the bucket. As a failsafe, tasks that deal with VCF files will check if the version IDs of the files indexed in the latest version of the technical metadata are up to date with the files in the bucket; if not, send an error to the users asking them to run the update command.
 
-Since this technical metadata is for the backusers and not for the users, it will be stored in a PostgreSQL table. This is an ACID-compliant database that is compatible SQL SELECT queries, indexing for fast lookups, and Redis locks. Another benefit is that the CloudNativePG on the KTH cluster can be used for automated backups. For continuity with the auth database strategy in [ADR-002: ](adr/002-API-design.md), database models will be defined with sqlalchemy 2. Redis locks will be applied to the given table rows when a update job is queued, and released once the computations are complete and the metadata updated in the row. The planned schema looks like this:
+Since the technical metadata is intended to be used by the backend and not by the users, it will be stored in a PostgreSQL table. This is an ACID-compliant database management system that is compatible SQL SELECT queries, indexing for fast lookups, and Redis locks. Another benefit is that the CloudNativePG on the KTH cluster can be used for automated backups. For continuity with the auth database strategy in [ADR-002: ](adr/002-API-design.md), database models will be defined with SQLalchemy 2. Redis locks will be applied to the given table rows when a update job is queued, and released once the computations are complete and the metadata updated in the row. The planned schema looks like this:
 
 ```bash
 class VCFMetadata(Base):
@@ -78,7 +79,6 @@ class VCFMetadata(Base):
     indexed_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now()) # Timestamp from last update to row
 ```
 
-
 **Addition to general sequence in Section 4.1.:**
 - 3. Upon task start, apply a redis lock to the row in the technical metadata table. If errors are raised duing the task, release the redis lock. The redis locks should also have an expiry time to avoid deadlocks, at 2-3 times the worse-case time it takes to perform the operation. The runtime for updating the technical metadata scales proportionally to number of variants in all VCF files in the bucket. In a worst-case time, the deadlock should need no longer than 1-2 h, but this needs to be tested.
 - 6. If the task includes making updates to the technical metadata database, write the new version to the table. After writing, release the lock.
@@ -100,14 +100,24 @@ Queries on VCF files in DivBase relies on bcftools to subset VCF files. If a que
 
 ### 4.4. Failure scenarios
 
-# TODO
-- Redis lock expires before job completes? (Deadlock prevention)
+- Redis lock expires before job completes? 
 
-- S3 version verification fails mid-job? (Partial processing)
+Lock renewal can be used when a job takes longer time than the initial lock expiry time. The challenge is to not renew locks to jobs that are stuck in futile loops. Tasks will log each operational step, and logic can be implemented to check if the job has progressed since the last lock application or renewal and only then renew the lock. The challenge with this approach is that bcftools is not very verbose during processing; on the other hand, any error raised by bcftools will terminate the task. A hard upper limit for job duration should be implemented so that locks cannot be renewed longer than that. Tests will be needed to understand how an upper limit for heavy jobs will look like, but with lock renewal in place, it might need to be as high as 24h.
 
-- Worker crashes during file download? (Cleanup)
+- S3 version verification fails mid-job? 
 
-- Loss of technical metadata. Not a major risk since a) the database will be backed up using CNPG, and b) the technical metadata can be regenerated by reading the VCF files again.
+Version verification will run at the start of the job and used to download the specific the input files versions from S3. If verification fails or an error is raised, the job will exit. A checksum verification will be run after completed download to verify file integrity after transfer. The filenames of the downloaded files will be appended with the version ID as an additional safeguard. All processing steps, e.g. with bcftools, will expect the version ID appended filenames.
+
+- File cleanup if worker crashes during file download?
+
+While context managers and input file caching will handle many cleanup cases, they will not _per se_ handle cleanup after worker pod crashes. For input files, cache eviction jobs is considered sufficient to purge input files after a given time, as described earlier in this ADR. For temp file cleanup, a dedicated clean up job will scheduled that identifies dangling temp files based on the Celery Task ID appended to their filenames, their timestamp, and the RabbitMQ queue. Files with Task IDs that belong to tasks that are no longer running can then be safely purged from the worker volume.
+
+- Loss of technical metadata?
+
+ Not a major risk since: a) the database will be backed up using CNPG, and b) the technical metadata can be regenerated by reading the VCF files again.
+
+
+
 
 ## 5. Consequences
 
@@ -134,7 +144,8 @@ For early proof-of-concept, using a YAML file was a good way to scope out the ne
 
 - Using Celery Task-ID as hash in temp filenames in worker instead of using file version ID:
 
-Hashing of files with Celery Task-ID removes the possibility to reuse the same input files between tasks. VCF files are potentially large in size, and it would decrese the transfer load from S3 to workers if VCF files could be stored temporarily for a limited time on a worker-mounted PVC instead of transferred once for each task. If the S3 version ID is instead used as a hash, it would open up the possibility to reuse files.
+Hashing of all files (input files, temp files, results files) with Celery Task-ID removes the possibility to reuse the same input files between tasks. VCF files are potentially large in size, and it would decrese the transfer load from S3 to workers if VCF files could be stored temporarily for a limited time on a worker-mounted PVC instead of transferred once for each task. If the S3 version ID is instead used as a hash, it opens up the possibility to reuse files.
 
 - Input file cache eviction strategy: LRU (Least Recently Used) instead of TTL (Time-To-Live)
+
 The LRU strategy is based on determining which files to remove files when space is needed based on longest time since last accessed. This might be more suitable for DivBase in the long run, since it is predicted that users will use the service in bursts rather than on an everyday basis. The idea is to start with TTL and monitoring the use and investigate the following: how often is the same file needed by the user queries? is it more efficient to store that file for a longer time rather than downloading it again everytime it is needed after TTL eviction?
