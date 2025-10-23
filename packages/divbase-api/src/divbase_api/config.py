@@ -74,13 +74,41 @@ class EmailSettings:
     Currently only working for local development with Mailpit
     """
 
-    smtp_server: str = "mailpit"  # not localhost as docker service name
-    smtp_port: int = 1025  # default Mailpit port
-    from_email: str = "noreply-divbase@scilifelab.se"
+    smtp_server: str = field(init=False)
+    smtp_port: int = field(init=False)
+    smtp_tls: bool = field(init=False)
+    smtp_ssl: bool = field(init=False)
+
+    smtp_user: str | None = os.getenv("SMTP_USER", None)
+    smtp_password: SecretStr | None = field(init=False)
+
+    from_email: str = os.getenv("FROM_EMAIL", "noreply-divbase@scilifelab.se")
 
     # token expiration times included in emails
     email_verify_expires_seconds: int = int(os.getenv("EMAIL_VERIFY_EXPIRES_HOURS", 60 * 60 * 24))  # 24 hours
     password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_HOURS", 60 * 60))  # 1 hour
+
+    def __post_init__(self):
+        """Handle enviroment specific email settings."""
+        if os.getenv("DIVBASE_ENV") in ["local_dev", "test"]:
+            # using mailpit in docker stack
+            self.smtp_server = "mailpit"
+            self.smtp_port = 1025
+            self.smtp_password = None
+            self.smtp_tls = False
+            self.smtp_ssl = False
+
+        else:
+            self.smtp_server = os.getenv("SMTP_SERVER", "smtp-relay.gmail.com")
+            self.smtp_port = int(os.getenv("SMTP_PORT", 587))
+            self.smtp_tls = bool(os.getenv("SMTP_TLS", "True") == "True")
+            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "False") == "True")
+
+            smtp_password = os.getenv("SMTP_PASSWORD", None)
+            if smtp_password:
+                self.smtp_password = SecretStr(smtp_password)
+            else:
+                self.smtp_password = None
 
 
 @dataclass
@@ -108,6 +136,7 @@ class Settings:
             "JWT_SECRET_KEY": self.jwt.secret_key,
             "S3_ACCESS_KEY": self.s3.access_key,
             "S3_SECRET_KEY": self.s3.secret_key,
+            "SMTP_SERVER": self.email.smtp_server,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":

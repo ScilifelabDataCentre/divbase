@@ -30,7 +30,7 @@ EMAIL_TEMPLATES = Path(__file__).parent / "email_templates" / "build"
 def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     """
     Render an email template with Jinja2.
-    (Jinja2 relies on the context to fill in the variables in the template.)
+    (Jinja2 relies on the context dict to fill in the variables in the template.)
     """
     template_str = (EMAIL_TEMPLATES / template_name).read_text()
     return Template(template_str).render(context)
@@ -49,6 +49,16 @@ def _send_email(email_to: str, subject: str, html_content: str) -> None:
     )
     smtp_options = {"host": settings.email.smtp_server, "port": settings.email.smtp_port}
 
+    if settings.email.smtp_tls:
+        smtp_options["tls"] = True
+    elif settings.email.smtp_ssl:
+        smtp_options["ssl"] = True
+
+    if settings.email.smtp_user:
+        smtp_options["user"] = settings.email.smtp_user
+    if settings.email.smtp_password:
+        smtp_options["password"] = settings.email.smtp_password.get_secret_value()
+
     response = message.send(to=email_to, smtp=smtp_options)
     logger.info(f"Email sent with response: {response}")
 
@@ -57,8 +67,6 @@ def send_test_email(email_to: str) -> None:
     """
     Send a test email to the specified email address.
     """
-    logger.info(f"sending test email to: {email_to}")
-    logger.info(f"using SMTP server: {settings.email.smtp_server}:{settings.email.smtp_port}")
     subject = "DivBase - test email"
     html_content = render_email_template(
         template_name="test_email.html",
