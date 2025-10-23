@@ -18,6 +18,7 @@ from pydantic import SecretStr
 class APISettings:
     """API configuration settings."""
 
+    environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
@@ -67,6 +68,22 @@ class JWTSettings:
 
 
 @dataclass
+class EmailSettings:
+    """
+    Email configuration settings.
+    Currently only working for local development with Mailpit
+    """
+
+    smtp_server: str = "mailpit"  # not localhost as docker service name
+    smtp_port: int = 1025  # default Mailpit port
+    from_email: str = "noreply-divbase@scilifelab.se"
+
+    # token expiration times included in emails
+    email_verify_expires_seconds: int = int(os.getenv("EMAIL_VERIFY_EXPIRES_HOURS", 60 * 60 * 24))  # 24 hours
+    password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_HOURS", 60 * 60))  # 1 hour
+
+
+@dataclass
 class Settings:
     """Configuration settings for DivBase API."""
 
@@ -75,6 +92,7 @@ class Settings:
     flower: FlowerSettings = field(default_factory=FlowerSettings)
     s3: S3Settings = field(default_factory=S3Settings)
     jwt: JWTSettings = field(default_factory=JWTSettings)
+    email: EmailSettings = field(default_factory=EmailSettings)
 
     def __post_init__(self):
         """
@@ -82,6 +100,7 @@ class Settings:
         This means that later on in the codebase we don't have to check for any non set values, we can just assume they are set.
         """
         required_fields = {
+            "DIVBASE_ENV": self.api.environment,
             "DATABASE_URL": self.database.url,
             "FLOWER_URL": self.flower.url,
             "FLOWER_USER": self.flower.user,

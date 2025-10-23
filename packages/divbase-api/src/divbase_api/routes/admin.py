@@ -27,6 +27,7 @@ from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 from divbase_api.schemas.users import UserCreate, UserResponse
+from divbase_api.services.email_sender import send_test_email
 
 logger = logging.getLogger(__name__)
 
@@ -144,3 +145,14 @@ async def add_project_member_endpoint(
         user_id=membership.user_id,
         role=membership.role,
     )
+
+
+@admin_router.post("/test-email/{email_to}", status_code=status.HTTP_200_OK)
+async def test_email_endpoint(
+    email_to: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    """Send a test email"""
+    send_test_email(email_to=email_to)
+    return {"message": f"Test email sent to {email_to}"}

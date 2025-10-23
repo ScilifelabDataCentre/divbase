@@ -126,6 +126,7 @@ services:
       timeout: 5s
       retries: 5
     environment:
+    - DIVBASE_ENV=local_dev
     - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
     - FLOWER_USER=floweradmin
     - FLOWER_PASSWORD=badpassword
@@ -163,6 +164,17 @@ services:
       - POSTGRES_USER=divbase_user
       - POSTGRES_DB=divbase_db
       - POSTGRES_PASSWORD=badpassword
+  mailpit:
+    profiles: ["emails"]  # Only starts if this profile is specified
+    image: axllent/mailpit:v1.27
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI 
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 volumes:
   rabbitmq-data:
   redis-data:
