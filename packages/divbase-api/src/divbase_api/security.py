@@ -28,10 +28,12 @@ def get_password_hash(password: SecretStr) -> str:
 
 
 class TokenType(str, Enum):
-    """Types of JWT tokens used for auth"""
+    """Types of JWT tokens used for e.g. auth or email verification/password reset."""
 
     ACCESS = "access_token"
     REFRESH = "refresh_token"
+    EMAIL_VERIFICATION = "email_verification"
+    PASSWORD_RESET = "password_reset"
 
 
 def create_access_token(subject: str | Any) -> tuple[str, int]:
@@ -54,6 +56,26 @@ def create_refresh_token(subject: str | Any) -> tuple[str, int]:
     """
     expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.refresh_token_expires_seconds)
     to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.REFRESH.value}
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    return encoded_jwt, int(expire.timestamp())
+
+
+def create_email_verification_token(subject: str | Any) -> tuple[str, int]:
+    """
+    Create a new email verification token for a user. Return token + expiration timestamp.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.email.email_verify_expires_seconds)
+    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.EMAIL_VERIFICATION.value}
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    return encoded_jwt, int(expire.timestamp())
+
+
+def create_password_reset_token(subject: str | Any) -> tuple[str, int]:
+    """
+    Create a new password reset token for a user. Return token + expiration timestamp.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.email.password_reset_expires_seconds)
+    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.PASSWORD_RESET.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
     return encoded_jwt, int(expire.timestamp())
 
