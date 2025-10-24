@@ -4,19 +4,19 @@ Frontend routes for authentication-related pages.
 
 import logging
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user
+from divbase_api.crud.auth import authenticate_user, send_user_verification_email, verify_user_email
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
-from divbase_api.security import TokenType, create_access_token, create_refresh_token
+from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +141,12 @@ async def post_register(
 
     try:
         user_data = UserCreate(name=name, email=email, password=SecretStr(password))
-        await create_user(db=db, user_data=user_data, is_admin=False)
+        user = await create_user(db=db, user_data=user_data, is_admin=False)
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         return registration_failed_response("Registration failed, please try again.")
+
+    send_user_verification_email(user=user)
 
     logger.info(f"New user registered: {user_data.email=}")
     return templates.TemplateResponse(
@@ -155,4 +157,37 @@ async def post_register(
             "name": user_data.name,
             "email": user_data.email,
         },
+    )
+
+
+@fr_auth_router.get("/verify-email", response_class=HTMLResponse)
+async def get_verify_email(
+    request: Request,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle email verification.
+
+    To access this endpoint a user recieves an email with link to verify their email.
+    The link contains a JWT as query param in the URL.
+    """
+    # TODO - handle if user already verified email
+
+    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not user_id:
+        # TODO - how do we handle this, can user request a new verification email if token expired?
+        # TODO - should redirect to a specific failed page for this with chance to resend verification email?
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/register.html",
+            context={"error": "Invalid or expired email verification link."},
+        )
+
+    user = await verify_user_email(db=db, id=user_id)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/login.html",
+        context={"success": f"Thank you for verifying your email '{user.email}', you can now log in to DivBase"},
     )
