@@ -60,7 +60,12 @@ def _send_email(email_to: str, subject: str, html_content: str) -> None:
         smtp_options["password"] = settings.email.smtp_password.get_secret_value()
 
     response = message.send(to=email_to, smtp=smtp_options)
-    logger.info(f"Email sent with response: {response}")
+
+    if response.status_code != 250:
+        # TODO - need to raise custom error and probably have some retries.
+        logger.error(f"Failed to send email to {email_to}. Response: {response}")
+    else:
+        logger.info(f"Email sent successfully to {email_to}")
 
 
 def send_test_email(email_to: str) -> None:
@@ -75,10 +80,13 @@ def send_test_email(email_to: str) -> None:
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
 
 
-# TODO
-def send_verification_email():
-    pass
-
-
-def send_password_reset_email():
-    pass
+def send_verification_email(email_to: str, verification_url: str) -> None:
+    """
+    Send a verification email to the specified email address.
+    """
+    subject = "DivBase - verify your email address"
+    html_content = render_email_template(
+        template_name="email_verification.html",
+        context={"email": email_to, "verification_url": verification_url},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
