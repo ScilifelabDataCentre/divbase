@@ -259,12 +259,18 @@ def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_m
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
+    logger.debug(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
+
     objects = {file_name: None for file_name in files_to_download}
-    return s3_file_manager.download_files(
+    downloaded_files = s3_file_manager.download_files(
         objects=objects,
         download_dir=Path.cwd(),
         bucket_name=bucket_name,
     )
+
+    logger.info(f"Downloaded VCF files: {[f.name for f in downloaded_files]}")
+
+    return downloaded_files
 
 
 def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
