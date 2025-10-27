@@ -187,12 +187,18 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     already_indexed_vcfs = manager.get_indexed_filenames()
+    already_skipped_files = manager.get_skipped_divbase_results()
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     non_indexed_vcfs = [
         file
         for file in vcf_files
-        if (file not in already_indexed_vcfs or already_indexed_vcfs[file] != latest_versions_of_bucket_files.get(file))
+        if not (
+            (file in already_skipped_files and already_skipped_files[file] == latest_versions_of_bucket_files.get(file))
+            or (
+                file in already_indexed_vcfs and already_indexed_vcfs[file] == latest_versions_of_bucket_files.get(file)
+            )
+        )
     ]
 
     _ = download_vcf_files(
@@ -209,16 +215,22 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             if "Added" in result_msg or "Updated" in result_msg:
                 files_indexed_by_this_job.append(file)
             elif "Skipping" in result_msg:
+                manager.add_skipped_divbase_result_entry(vcf_filename=file)
                 divbase_results_files_skipped_by_this_job.append(file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
 
     vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
+    skipped_deleted_from_bucket = list(set(already_skipped_files) - set(vcf_files))
 
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             manager.remove_dimension_entry(vcf_filename=file)
+
+    if skipped_deleted_from_bucket:
+        for file in skipped_deleted_from_bucket:
+            manager.remove_skipped_divbase_result_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 

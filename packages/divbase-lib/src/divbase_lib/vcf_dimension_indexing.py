@@ -191,3 +191,67 @@ class VCFDimensionIndexManager:
             logger.info("No VCF dimensions have been created for this bucket as of yet.")
             return {"dimensions": []}
         return self.dimensions_info
+
+    def add_skipped_divbase_result_entry(self, vcf_filename: str) -> str:
+        """
+        DivBase-generated VCF result file in the bucket should not be indexed by the VCFDimensionIndexManager.
+        To persist these results, store them under the skipped_divbase_results section of the dimensions file.
+        This prevents repeated downloads and header parsing of known result files.
+        """
+
+        # TODO the 3 methods add_skipped_divbase_result_entry, get_skipped_divbase_results,remove_skipped_divbase_result_entry that index files under "skipped_divbase_results" have some degrees of code duplication with the methods that indexes files under "dimensions"
+        yaml_data = self.dimensions_info
+
+        skipped_results = yaml_data.get("skipped_divbase_results", [])
+
+        existing_entry = None
+        for entry in skipped_results:
+            if entry.get("filename") == vcf_filename:
+                existing_entry = entry
+                break
+
+        latest_versions_of_bucket_files = self.s3_file_manager.latest_version_of_all_files(bucket_name=self.bucket_name)
+        file_version_ID = latest_versions_of_bucket_files.get(vcf_filename, "null")
+
+        if existing_entry and file_version_ID != existing_entry.get("file_version_ID_in_bucket"):
+            existing_entry["file_version_ID_in_bucket"] = file_version_ID  # ← Fixed!
+            existing_entry["timestamp_skipped"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            result_msg = f"Updated skipped entry of {vcf_filename}. Found new version in bucket."
+        else:
+            new_entry = {
+                "filename": vcf_filename,
+                "file_version_ID_in_bucket": file_version_ID,
+                "timestamp_skipped": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+            skipped_results.append(new_entry)
+            result_msg = f"Added DivBase-generated VCF {vcf_filename} to Ignore section of dimensions file."
+
+        yaml_data["skipped_divbase_results"] = skipped_results
+        self.dimensions_info = yaml_data
+
+        logger.info(result_msg)
+        return result_msg
+
+    def get_skipped_divbase_results(self) -> list[str]:
+        """
+        Reads the dimensions file and returns a list of filenames that are known DivBase-generated results.
+        """
+        yaml_data = self.dimensions_info
+        return {
+            entry.get("filename"): entry.get("file_version_ID_in_bucket")
+            for entry in yaml_data.get("skipped_divbase_results", [])
+            if "filename" in entry
+        }
+
+    def remove_skipped_divbase_result_entry(self, vcf_filename: str) -> None:
+        """
+        Remove a skipped result entry if the file is deleted from the bucket.
+        """
+        yaml_data = self.dimensions_info
+        skipped_results = yaml_data.get("skipped_divbase_results", [])
+
+        skipped_results = [entry for entry in skipped_results if entry.get("filename") != vcf_filename]
+        yaml_data["skipped_divbase_results"] = skipped_results
+        result_msg = f"Removed {vcf_filename} from dimensions file since it was deleted from the bucket."
+        logger.info(result_msg)
+        return result_msg
