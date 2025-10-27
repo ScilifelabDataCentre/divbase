@@ -80,9 +80,9 @@ class S3FileManager:
         """
         self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content.encode("utf-8"))
 
-    def delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
+    def soft_delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
         """
-        Delete files/objects from the S3 bucket, returns a list of the deleted objects.
+        Soft delete files/objects from the S3 bucket, returns a list of the deleted objects.
 
         NOTE:
             - If the object was previously deleted (aka has a deletion marker) OR
@@ -98,8 +98,14 @@ class S3FileManager:
         deleted_object_names = [object_dict["Key"] for object_dict in response["Deleted"]]
         return deleted_object_names
 
-    def delete_specific_object_versions(self, versioned_objects: dict[str, str], bucket_name: str) -> None:
-        """Delete files from the S3 bucket by specifying the version of the object to delete."""
+    def hard_delete_specific_object_versions(self, versioned_objects: dict[str, str], bucket_name: str) -> None:
+        """
+        Hard delete a file from the S3 bucket by specifying the version of the object to delete.
+
+        For versioned buckets,
+        - deleting an object without specifying a version id just adds a deletion marker.
+        - If you specify the version id, it hard deletes that specific version of the object.
+        """
         delete_dict = {"Objects": []}
         for key, version in versioned_objects.items():
             delete_dict["Objects"].append({"Key": key, "VersionId": version})

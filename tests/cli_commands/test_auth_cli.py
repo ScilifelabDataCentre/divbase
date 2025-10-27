@@ -6,7 +6,6 @@ NOTE: Without a user config file already created, these tests will fail
 TODO - add some non e2e tests for logging in with expired tokens etc.
 """
 
-import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.divbase_cli import app
@@ -14,26 +13,11 @@ from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionErro
 
 runner = CliRunner()
 
-# TODO
-# move these over to CONSTANTS later..
-# Create non admin user for testing
+# TODO - move this out of here...
 admin_credentials = {
     "email": "admin@divbase.com",
     "password": "badpassword",
 }
-
-
-@pytest.fixture(autouse=True)
-def ensure_logged_out():
-    """Fixture to ensure we are logged out before and after each test."""
-    command = "auth logout"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    assert "Logged out successfully" in result.stdout
-    yield
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    assert "Logged out successfully" in result.stdout
 
 
 def log_in_as_admin():
@@ -48,7 +32,7 @@ def log_in_as_admin():
     assert "Logged in successfully" in result.stdout
 
 
-def test_login_command(fresh_config_path):
+def test_login_command(logged_out_user_with_fresh_config):
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']}"
 
     result = runner.invoke(app, command)
@@ -57,7 +41,7 @@ def test_login_command(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
-def test_login_command_with_password_prompted(fresh_config_path):
+def test_login_command_with_password_prompted(logged_out_user_with_fresh_config):
     command = f"auth login {admin_credentials['email']}"
 
     result = runner.invoke(app, command, input=f"{admin_credentials['password']}\n")
@@ -66,7 +50,7 @@ def test_login_command_with_password_prompted(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
-def test_login_command_fails_with_invalid_credentials(fresh_config_path):
+def test_login_command_fails_with_invalid_credentials(logged_out_user_with_fresh_config):
     """Test login command fails with invalid credentials."""
     command = f"auth login {admin_credentials['email']} --password wrongpassword"
 
@@ -76,7 +60,7 @@ def test_login_command_fails_with_invalid_credentials(fresh_config_path):
     assert "Invalid email or password" in str(result.exception)
 
 
-def test_login_command_with_invalid_server_url(fresh_config_path):
+def test_login_command_with_invalid_server_url(logged_out_user_with_fresh_config):
     """Test login command fails with an invalid server URL."""
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']} --divbase-url https://invalid-url"
 
@@ -85,7 +69,7 @@ def test_login_command_with_invalid_server_url(fresh_config_path):
     assert isinstance(result.exception, DivBaseAPIConnectionError)
 
 
-def test_login_command_already_logged_in(fresh_config_path):
+def test_login_command_already_logged_in(logged_out_user_with_fresh_config):
     """Test login command when already logged in."""
     log_in_as_admin()
 
@@ -107,7 +91,7 @@ def test_login_command_already_logged_in(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
-def test_force_login_option(fresh_config_path):
+def test_force_login_option(logged_out_user_with_fresh_config):
     """Should not prompt about logging in again"""
     log_in_as_admin()
     command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']} --force"
@@ -118,7 +102,7 @@ def test_force_login_option(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
-def test_logout_command(fresh_config_path):
+def test_logout_command(logged_out_user_with_fresh_config):
     """Test basic usage of logout and that running multiple times is ok."""
     command = "auth logout"
 
@@ -131,7 +115,7 @@ def test_logout_command(fresh_config_path):
     assert "Logged out successfully" in result.stdout
 
 
-def test_login_logout_cycle(fresh_config_path):
+def test_login_logout_cycle(logged_out_user_with_fresh_config):
     """Test a few repeated login/logout cycles."""
     login_command = f"auth login {admin_credentials['email']} --password {admin_credentials['password']}"
     logout_command = "auth logout"
@@ -147,7 +131,7 @@ def test_login_logout_cycle(fresh_config_path):
         assert "Logged out successfully" in result.stdout
 
 
-def test_whoami_command(fresh_config_path):
+def test_whoami_command(logged_out_user_with_fresh_config):
     """Test basic usage of whoami command."""
     log_in_as_admin()
     command = "auth whoami"
@@ -157,7 +141,7 @@ def test_whoami_command(fresh_config_path):
     assert admin_credentials["email"] in result.stdout
 
 
-def test_whoami_command_fails_if_not_logged_in(fresh_config_path):
+def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_fresh_config):
     """Test basic usage of whoami command."""
     command = "auth whoami"
 

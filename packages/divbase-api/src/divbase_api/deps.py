@@ -1,7 +1,13 @@
 """
 Authentication for FastAPI routes.
 
-Several of the dependencies/functions in this file rely on a logged in user (handled by get_current_user).
+The dependcies here are split in two groups:
+1) Deps for routes that use cookies for auth (i.e. the frontend routes)
+2) Deps for routes that use direct API access with bearer tokens (i.e. the /api/v1/* routes)
+
+Several of the dependencies/functions in this file rely on a logged in user, handled by:
+- get_current_user for direct API access routes,
+- get_current_user_from_cookie for frontend based routes.
 
 The dependencies that depend on this can use e.g. get_current_user as a sub-dependency,
 so all checks in the sub-dependancy function are ran when you use this dependency.
@@ -15,7 +21,7 @@ from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.projects import get_project_with_user_role
+from divbase_api.crud.projects import get_project_id_from_name, get_project_with_user_role
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.exceptions import AuthenticationError, AuthorizationError, ProjectNotFoundError
@@ -159,3 +165,26 @@ async def get_current_admin_user(current_user: Annotated[UserDB, Depends(get_cur
     if not current_user.is_admin:
         raise AuthorizationError("Admin access required")
     return current_user
+
+
+async def get_project_member(
+    project_name: str,
+    current_user: Annotated[UserDB, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> tuple[ProjectDB, UserDB, ProjectRoles]:
+    """
+    This function checks that the user is a member of the project and
+    returns the project, user and their role.
+    """
+    project_id = await get_project_id_from_name(db=db, project_name=project_name)
+    if not project_id:
+        raise ProjectNotFoundError()
+
+    project, user_role = await get_project_with_user_role(db=db, project_id=project_id, user_id=current_user.id)
+    if not project:
+        raise ProjectNotFoundError()
+
+    if user_role not in ProjectRoles:
+        raise AuthorizationError("You don't have permission to access this project.")
+
+    return project, current_user, user_role
