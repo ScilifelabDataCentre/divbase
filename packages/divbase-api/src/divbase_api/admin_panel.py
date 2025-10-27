@@ -10,11 +10,13 @@ from typing import Any
 
 from fastapi import FastAPI, Response
 from pydantic import SecretStr
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
 from starlette_admin import BaseAdmin, BooleanField, EmailField, IntegerField, StringField, TextAreaField
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
+from starlette_admin.exceptions import FormValidationError
 
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
@@ -23,9 +25,9 @@ from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
 
-PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
-
 logger = logging.getLogger(__name__)
+
+PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 
 
 class UserView(ModelView):
@@ -80,6 +82,16 @@ class UserView(ModelView):
 
         return await super().create(request, data)
 
+    def handle_exception(self, exc: Exception) -> None:
+        """
+        If an admin tries to create a user with an email that already exists, sqlalchemy will raise an IntegrityError.
+
+        Handles catching and displaying this to avoid 500 internal server errors.
+        """
+        if isinstance(exc, IntegrityError):
+            raise FormValidationError(errors={"email": "A user with this email already exists"})
+        return super().handle_exception(exc)
+
 
 class ProjectView(ModelView):
     """
@@ -121,6 +133,25 @@ class ProjectView(ModelView):
         """Disable deletion of projects. Projects can be soft deleted instead."""
         return False
 
+    def handle_exception(self, exc: Exception) -> None:
+        """
+        sqlalchemy will raise an IntegrityError if an admin tries to create/edit a project to have either a
+         (1) project name that already exists or
+         (2) bucket name that already exists.
+
+        Handles catching and displaying this to avoid 500 internal server errors.
+        """
+        if isinstance(exc, IntegrityError):
+            orig_message = str(exc.orig).lower() if exc.orig else str(exc).lower()
+
+            # As multiple fields could have raised the integrity error, we need to see which one it was.
+            if "bucket_name" in orig_message:
+                raise FormValidationError(errors={"bucket_name": "A project with this bucket name already exists."})
+            if "name" in orig_message:
+                raise FormValidationError(errors={"name": "A project with this name already exists."})
+
+        return super().handle_exception(exc)
+
 
 class ProjectMembershipView(ModelView):
     """
@@ -135,6 +166,23 @@ class ProjectMembershipView(ModelView):
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
     exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
     exclude_fields_from_detail = []
+
+    def handle_exception(self, exc: Exception) -> None:
+        """
+        sqlalchemy will raise an IntegrityError if an admin tries to create a new projectmembership if one already exists
+        for the given user id + project id combo.
+
+        Handles catching and displaying this to avoid a 500 internal server error.
+        """
+        if isinstance(exc, IntegrityError):
+            raise FormValidationError(
+                errors={
+                    "role": """A project membership table entry with this user id + project id already exists. 
+                    Edit that entry instead or delete the entry first."""
+                }
+            )
+
+        return super().handle_exception(exc)
 
 
 class DivBaseAuthProvider(AuthProvider):
@@ -202,11 +250,7 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
     """
-    admin = Admin(
-        engine=engine,
-        title="DivBase Admin",
-        auth_provider=DivBaseAuthProvider(),
-    )
+    admin = Admin(engine=engine, title="DivBase Admin", auth_provider=DivBaseAuthProvider())
 
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
