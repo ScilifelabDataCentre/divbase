@@ -44,18 +44,18 @@ class UserView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     fields = [
         "id",
-        StringField("name", required=True),
-        EmailField("email", required=True),
-        StringField("password", required=True),
+        StringField("name", required=True, help_text="Full name of the user."),
+        EmailField("email", required=True, help_text="Email address of the user."),
+        StringField("password", required=True, help_text="Password for the user."),
         StringField(
             "hashed_password",
             required=False,
             disabled=True,
             help_text="Hashed password is auto created by the system from password, cannot be edited.",
         ),
-        "is_admin",
-        "is_active",
-        "is_deleted",
+        BooleanField("is_admin", help_text="Is the user an admin?"),
+        BooleanField("is_active", help_text="Is the user active?"),
+        BooleanField("is_deleted", help_text="Is the user deleted?"),
         "project_memberships",
     ]
 
@@ -107,7 +107,9 @@ class ProjectView(ModelView):
             "name", required=True, label="Project Name", help_text="Unique name for the project, no spaces allowed."
         ),
         TextAreaField("description", required=False, label="Description"),
-        StringField("bucket_name", required=True, label="Bucket Name"),
+        StringField(
+            "bucket_name", required=True, label="Bucket Name", help_text="Unique S3 bucket name for the project."
+        ),
         IntegerField(
             "storage_quota_bytes",
             required=True,
