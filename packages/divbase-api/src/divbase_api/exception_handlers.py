@@ -7,15 +7,13 @@ The idea of centralising this is to:
 1. Handle logging of exceptions all in one place.
 2. Control what the users sees (not too much info and no accidental leakage)
 3. Less work/duplication in the routes themselves, just raise the exception and the handler makes it pretty.
-
-# TODO - see if the logging output is good.
-TODO - generic 500 handler?
 """
 
 import logging
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException
 
 from divbase_api.exceptions import (
     AuthenticationError,
@@ -39,7 +37,7 @@ def is_api_request(request: Request) -> bool:
     return request.url.path.startswith("/api/")
 
 
-def render_error_page(request: Request, message: str, status_code: int = 500):
+def render_error_page(request: Request, message: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR):
     """Helper function to render the generic error page for frontend requests."""
     return templates.TemplateResponse(
         request=request,
@@ -53,7 +51,7 @@ def render_error_page(request: Request, message: str, status_code: int = 500):
 
 
 async def authentication_error_handler(request: Request, exc: AuthenticationError):
-    logger.info(f"Authentication failed for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+    logger.info(f"Authentication failed for {request.method} {request.url.path}: {exc.message}", exc_info=False)
 
     if is_api_request(request):
         return JSONResponse(
@@ -66,7 +64,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 
 async def authorization_error_handler(request: Request, exc: AuthorizationError):
-    logger.info(f"Authorization failed for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+    logger.info(f"Authorization failed for {request.method} {request.url.path}: {exc.message}", exc_info=False)
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
@@ -111,7 +109,7 @@ async def user_registration_error_handler(request: Request, exc: UserRegistratio
 
 
 async def project_not_found_error_handler(request: Request, exc: ProjectNotFoundError):
-    logger.warning(f"Project not found for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+    logger.info(f"Project not found for {request.method} {request.url.path}: {exc.message}", exc_info=False)
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
@@ -119,7 +117,7 @@ async def project_not_found_error_handler(request: Request, exc: ProjectNotFound
             headers=exc.headers,
         )
     else:
-        return RedirectResponse(url="/projects", status_code=status.HTTP_302_FOUND)
+        return render_error_page(request, "Project not found or you don't have access.", status_code=exc.status_code)
 
 
 async def project_member_not_found_error_handler(request: Request, exc: ProjectMemberNotFoundError):
@@ -202,7 +200,40 @@ async def bucket_version_not_found_error_handler(request: Request, exc: BucketVe
         return render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-def register_exception_handlers(app: FastAPI):
+async def generic_http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Generic handler for HTTP exceptions not caught by the specific handlers above.
+
+    401 and 403s are handled by custom exceptions above.
+
+    Note that we have to import starlette.exceptions.HTTPException here not FastAPI's HTTPException.
+    """
+    if is_api_request(request):
+        if exc.status_code != 404:
+            logger.error(
+                f"HTTP {exc.status_code} error for {request.method} {request.url.path}: {exc.detail}", exc_info=True
+            )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "type": "http_error"},
+        )
+
+    # (Frontend request)
+    if exc.status_code == 404:
+        return templates.TemplateResponse(
+            request=request,
+            name="404.html",
+            context={"request": request},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    else:
+        logger.error(
+            f"HTTP {exc.status_code} error for {request.method} {request.url.path}: {exc.detail}", exc_info=True
+        )
+        return render_error_page(request, "An unexpected error occurred. Please try again later.", exc.status_code)
+
+
+def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with FastAPI app.
 
@@ -221,3 +252,4 @@ def register_exception_handlers(app: FastAPI):
     )
     app.add_exception_handler(BucketVersionAlreadyExistsError, bucket_version_exists_error_handler)  # type: ignore
     app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
+    app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
