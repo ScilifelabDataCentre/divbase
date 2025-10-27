@@ -82,6 +82,12 @@ class UserView(ModelView):
 
         return await super().create(request, data)
 
+    async def validate(self, request: Request, data: dict[str, Any]) -> None:
+        """Custom validation to ensure a user cannot be both active and deleted at the same time."""
+        if data["is_active"] and data["is_deleted"]:
+            raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
+        return await super().validate(request, data)
+
     def handle_exception(self, exc: Exception) -> None:
         """
         If an admin tries to create a user with an email that already exists, sqlalchemy will raise an IntegrityError.
