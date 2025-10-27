@@ -23,7 +23,13 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     return user
 
 
-async def verify_user_email(db: AsyncSession, id: int) -> UserDB:
+async def check_user_email_verified(db: AsyncSession, id: int) -> bool:
+    """Check if a user's email is verified."""
+    user = await get_user_by_id_or_raise(db=db, id=id)
+    return user.email_verified
+
+
+async def confirm_user_email(db: AsyncSession, id: int) -> UserDB:
     """Update user to set email_verified to True."""
     user = await get_user_by_id_or_raise(db=db, id=id)
     user.email_verified = True

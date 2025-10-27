@@ -98,3 +98,26 @@ def verify_token(token: str, desired_token_type: TokenType) -> int | None:
     if payload.get("type") != desired_token_type.value:
         return None
     return int(payload.get("sub"))
+
+
+def verify_expired_token(token: str, desired_token_type: TokenType) -> int | None:
+    """
+    Verify and decode a (potentially) expired JWT token. If successful return the user id, else None.
+
+    Used e.g. for password reset/email verification flow where we want to inform user that their token has expired,
+    or email is already verified. So for UX reasons.
+    (We're still checking the signature and token type, just not expiration time.)
+    """
+    try:
+        payload = jwt.decode(
+            jwt=token,
+            key=settings.jwt.secret_key.get_secret_value(),
+            algorithms=[settings.jwt.algorithm],
+            options={"verify_exp": False},
+        )
+    except jwt.InvalidTokenError:
+        return None
+
+    if payload.get("type") != desired_token_type.value:
+        return None
+    return int(payload.get("sub"))

@@ -9,14 +9,25 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user, send_user_verification_email, verify_user_email
+from divbase_api.crud.auth import (
+    authenticate_user,
+    check_user_email_verified,
+    confirm_user_email,
+    send_user_verification_email,
+)
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
-from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
+from divbase_api.security import (
+    TokenType,
+    create_access_token,
+    create_refresh_token,
+    verify_expired_token,
+    verify_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,23 +182,81 @@ async def get_verify_email(
 
     To access this endpoint a user recieves an email with link to verify their email.
     The link contains a JWT as query param in the URL.
+
+    For the sake of UX, we render different HTML pages depending on the outcome of the verification:
+    if token invalid
+
     """
-    # TODO - handle if user already verified email
+    expired_token = False
 
     user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
     if not user_id:
-        # TODO - how do we handle this, can user request a new verification email if token expired?
-        # TODO - should redirect to a specific failed page for this with chance to resend verification email?
+        expired_token = True
+        user_id = verify_expired_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+
+    # token is neither valid nor expired
+    if not user_id:
         return templates.TemplateResponse(
             request=request,
-            name="auth_pages/register.html",
-            context={"error": "Invalid or expired email verification link."},
+            name="auth_pages/email_verification.html",
+            context={"error": "Invalid email verification link. Please request a new link below."},
         )
 
-    user = await verify_user_email(db=db, id=user_id)
+    already_verified = await check_user_email_verified(db=db, id=user_id)
 
+    if expired_token and not already_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"error": "Email verification link has expired. Please request a new link below."},
+        )
+
+    if already_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/login.html",
+            context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+        )
+
+    # token is valid and email not verified yet proceed to verify email
+    user = await confirm_user_email(db=db, id=user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/login.html",
         context={"success": f"Thank you for verifying your email '{user.email}', you can now log in to DivBase"},
+    )
+
+
+@fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
+async def resend_verification_email(
+    request: Request,
+    email: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle resending the email verification link.
+    """
+    LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
+
+    user = await get_user_by_email(db=db, email=email)
+    if not user:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"email": email, "success": LINK_SENT_MSG},
+        )
+
+    if user.email_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/login.html",
+            context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+        )
+
+    send_user_verification_email(user=user)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/email_verification.html",
+        context={"email": email, "success": LINK_SENT_MSG},
     )
