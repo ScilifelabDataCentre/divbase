@@ -84,6 +84,12 @@ class UserView(ModelView):
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a user cannot be both active and deleted at the same time."""
+
+        # creation route does not set is_active/is_deleted fields, so we skip this check there
+        # (otherwise keyerror)
+        if "is_active" not in data or "is_deleted" not in data:
+            return await super().validate(request, data)
+
         if data["is_active"] and data["is_deleted"]:
             raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
         return await super().validate(request, data)
