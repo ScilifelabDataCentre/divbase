@@ -9,6 +9,7 @@ from sqlalchemy import BigInteger, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
+from divbase_api.models.vcf_dimensions import VCFMetadataDB
 
 if TYPE_CHECKING:
     from divbase_api.models.users import UserDB
@@ -35,6 +36,7 @@ class ProjectDB(BaseDBModel):
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
 
     memberships: Mapped[list["ProjectMembershipDB"]] = relationship("ProjectMembershipDB", back_populates="project")
+    vcf_metadata: Mapped[list["VCFMetadataDB"]] = relationship("VCFMetadataDB", back_populates="project")
 
     def __repr__(self) -> str:
         return f"<ProjectDB id={self.id}, name={self.name}, bucket_name={self.bucket_name}, is_active={self.is_active}>"
