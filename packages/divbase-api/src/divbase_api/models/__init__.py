@@ -15,4 +15,5 @@ __all__ = [
     "ProjectDB",
     "ProjectRoles",
     "ProjectMembershipDB",
+    "VCFMetadataDB",
 ]
