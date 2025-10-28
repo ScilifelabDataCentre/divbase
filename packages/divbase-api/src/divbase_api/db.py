@@ -93,5 +93,6 @@ async def create_first_admin_user() -> None:
             db=db,
             user_data=user_info,
             is_admin=True,
+            email_verified=True,
         )
     logger.info(f"First admin user created with email: {admin_user.email}")
