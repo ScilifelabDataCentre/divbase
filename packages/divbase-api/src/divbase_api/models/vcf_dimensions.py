@@ -2,12 +2,16 @@
 VCF dimensions (= technical metadata) DB Model.
 """
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
-from divbase_api.models.projects import ProjectDB
+
+if TYPE_CHECKING:
+    from divbase_api.models.projects import ProjectDB
 
 
 class VCFMetadataDB(BaseDBModel):
