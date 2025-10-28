@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.api_config import settings
 from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
@@ -167,6 +168,7 @@ async def post_register(
             "request": request,
             "name": user_data.name,
             "email": user_data.email,
+            "from_email": settings.email.from_email,
         },
     )
 
