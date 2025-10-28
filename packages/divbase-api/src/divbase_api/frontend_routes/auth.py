@@ -19,6 +19,7 @@ from divbase_api.crud.auth import (
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
+from divbase_api.exceptions import AuthenticationError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
@@ -53,15 +54,17 @@ async def post_login(
     request: Request, email: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
 ):
     """Handle login form submission."""
-    user = await authenticate_user(db, email=email, password=password)
-    if not user:
-        logger.info(f"Failed login attempt for email: {email}")
+    try:
+        user = await authenticate_user(db, email=email, password=password)
+    except AuthenticationError as e:
+        logger.info(f"Failed login attempt for email: {email} - {e.message}")
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
-            context={"request": request, "error": "Invalid email or password"},
+            context={"request": request, "error": e.message},
         )
 
+    logger.info(f"User {user.email} logged in successfully via frontend.")
     access_token, access_expires_at = create_access_token(subject=user.id)
     refresh_token, refresh_expires_at = create_refresh_token(subject=user.id)
 

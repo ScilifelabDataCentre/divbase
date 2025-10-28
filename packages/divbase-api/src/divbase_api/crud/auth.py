@@ -6,21 +6,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
+from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.security import create_email_verification_token, verify_password
 from divbase_api.services.email_sender import send_verification_email
 
 
-async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB | None:
-    """Authenticate user by email and password when logging in."""
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
+    """
+    Authenticate user by email and password when logging in and validates user
+    has access to the system (not deleted, active, email verified).
+
+    Raises AuthenticationError if authentication fails.
+    """
+    generic_error_msg = "User not found or invalid credentials"
     user = await get_user_by_email(db, email)
-    if not user or not user.is_active:
-        return None
+
+    if not user:
+        raise AuthenticationError(message=generic_error_msg)
 
     if not verify_password(plain_password=password, hashed_password=user.hashed_password):
-        return None
+        raise AuthenticationError(message=generic_error_msg)
+
+    if user.is_deleted or not user.is_active:
+        raise AuthenticationError(message=generic_error_msg)
+
+    if not user.email_verified:
+        raise AuthenticationError(
+            message="Email address not verified, check your inbox or visit the DivBase website to resend a new verification email."
+        )
 
     return user
+
+
+def user_account_valid(user: UserDB) -> bool:
+    """Check if user account is valid (active, not deleted, email verified)."""
+    return user.is_active and not user.is_deleted and user.email_verified
 
 
 async def check_user_email_verified(db: AsyncSession, id: int) -> bool:

@@ -21,6 +21,7 @@ from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.auth import user_account_valid
 from divbase_api.crud.projects import get_project_id_from_name, get_project_with_user_role
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
@@ -54,7 +55,7 @@ async def _authenticate_frontend_user_from_tokens(
         user_id = verify_token(token=access_token, desired_token_type=TokenType.ACCESS)
         if user_id:
             user = await get_user_by_id(db=db, id=user_id)
-            if not user or not user.is_active:
+            if not user:
                 return None
             return user
 
@@ -66,7 +67,9 @@ async def _authenticate_frontend_user_from_tokens(
     if not user_id:
         return None
     user = await get_user_by_id(db=db, id=user_id)
-    if not user or not user.is_active:
+    if not user:
+        return None
+    if not user_account_valid(user):
         return None
 
     if response:
@@ -156,8 +159,12 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: As
         raise AuthenticationError("Authentication required")
 
     user = await get_user_by_id(db=db, id=user_id)
-    if not user or not user.is_active:
-        raise AuthenticationError("Account does not exist or is inactive")
+    if not user or not user.is_active or user.is_deleted:
+        raise AuthenticationError("Account does not exist or is inactive or is deleted")
+    if not user.email_verified:
+        raise AuthenticationError(
+            "Email address not verified, check your inbox or visit the website to resend a verification email."
+        )
 
     return user
 
