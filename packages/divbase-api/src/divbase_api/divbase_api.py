@@ -30,6 +30,7 @@ from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
 from divbase_api.routes.bucket_versions import bucket_version_router
 from divbase_api.routes.s3 import s3_router
+from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 from divbase_worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
@@ -77,7 +78,7 @@ app.include_router(fr_admin_users_router, prefix="/admin/users", include_in_sche
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
-
+app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
 register_exception_handlers(app)
 
 
