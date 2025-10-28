@@ -49,7 +49,7 @@
           Security Note:
         </mj-text>
         <mj-text font-size="14px" color="#92400e" padding="0">
-          This verification link will expire in 24 hours for security reasons. 
+          This verification link will expire in {{ link_expire_hours }} hours for security reasons.
         </mj-text>
       </mj-column>
     </mj-section>

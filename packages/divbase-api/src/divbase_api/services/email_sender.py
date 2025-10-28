@@ -85,8 +85,11 @@ def send_verification_email(email_to: str, verification_url: str) -> None:
     Send a verification email to the specified email address.
     """
     subject = "DivBase - verify your email address"
+
+    link_expire_hours = settings.email.email_verify_expires_seconds / 3600
+
     html_content = render_email_template(
         template_name="email_verification.html",
-        context={"email": email_to, "verification_url": verification_url},
+        context={"email": email_to, "verification_url": verification_url, "link_expire_hours": link_expire_hours},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
