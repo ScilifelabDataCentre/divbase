@@ -4,7 +4,7 @@ VCF dimensions (= technical metadata) DB Model.
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,14 +19,17 @@ class VCFMetadataDB(BaseDBModel):
     DB model for the technical metadata ("dimensions") for the VCF files in the S3 buckets.
     One entry per VCF file. This table is updated by workers and read by the API.
 
-    id, created_at and updated_at are inherited from BaseDBModel.
+    id (primary key), created_at and updated_at are inherited from BaseDBModel.
+
+    To allow multiple projects to have VCF files with the same S3 key (filename),
+    this model uses a UniqueConstraint (vcf_file_s3_key, project_id).
     """
 
     __tablename__ = "vcf_metadata"
 
-    vcf_file_s3_key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    vcf_file_s3_key: Mapped[str] = mapped_column(String, index=True)
     project_id: Mapped[int] = mapped_column(
-        ForeignKey("project.id", ondelete="CASCADE"),  # Database-level cascade
+        ForeignKey("project.id", ondelete="CASCADE"),
         index=True,
     )
     s3_version_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -37,5 +40,7 @@ class VCFMetadataDB(BaseDBModel):
     scaffolds: Mapped[list[str]] = mapped_column(ARRAY(String))  # Scaffold/chromosome names
     variant_count: Mapped[int] = mapped_column(BigInteger)
     sample_count: Mapped[int] = mapped_column(Integer)
+
+    __table_args__ = (UniqueConstraint("vcf_file_s3_key", "project_id", name="unique_vcf_per_project"),)
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="vcf_metadata")
