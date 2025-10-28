@@ -60,8 +60,19 @@ async def create_or_update_vcf_metadata(db: AsyncSession, vcf_metadata_data: dic
     return dimensions_entry
 
 
+async def get_vcf_metadata_by_project(db: AsyncSession, project_id: int) -> list[VCFMetadataDB]:
+    """
+    Get all VCF metadata entries for a given project ID.
+    """
+    stmt = select(VCFMetadataDB).where(VCFMetadataDB.project_id == project_id)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 # TODO: Delete entry when file is removed
 
 # TODO: Delete all entries for a project
 
 # TODO: get vcf metadata entries by project ID (not vcf_file_s3_key)
+
+# TODO: get skipped VCF results file by keys - should that perhaps be its own table?
