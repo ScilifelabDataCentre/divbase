@@ -1,5 +1,5 @@
 """
-Send email via an SMTP server.
+Send automatic emails for e.g. email verification, password reset, notifications, etc.
 
 In production/deployed we rely on TODO - explain when figured out...
 
@@ -7,7 +7,7 @@ For local development/testing we have an optional Mailpit service that can be ru
 If running, all emails will be caught by Mailpit and can be viewed in the Mailpit web UI at http://localhost:8025
 
 ### Templates:
-Email templates are written using MJML template system and converted to HTML using the MJML CLI tool.
+Email templates are written using MJML template system and converted to HTML.
 The compiled HTML templates are used by Jinja2 to create the emails actual content.
 To compile the templates I used the vscode "MJML Official" extension.
 """
@@ -19,7 +19,7 @@ from typing import Any
 import emails
 from jinja2 import Template
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 
 logger = logging.getLogger(__name__)
 

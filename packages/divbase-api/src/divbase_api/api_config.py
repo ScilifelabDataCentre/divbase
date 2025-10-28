@@ -19,7 +19,7 @@ class APISettings:
     """API configuration settings."""
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
-    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:8000")
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
@@ -86,8 +86,8 @@ class EmailSettings:
     from_email: str = os.getenv("FROM_EMAIL", "noreply-divbase@scilifelab.se")
 
     # token expiration times included in emails
-    email_verify_expires_seconds: int = int(os.getenv("EMAIL_VERIFY_EXPIRES_HOURS", 60 * 60 * 24))  # 24 hours
-    password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_HOURS", 60 * 60))  # 1 hour
+    email_verify_expires_seconds: int = int(os.getenv("EMAIL_VERIFY_EXPIRES_SECONDS", 60 * 60 * 24))  # 24 hours
+    password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_SECONDS", 60 * 60))  # 1 hour
 
     def __post_init__(self):
         """Handle enviroment specific email settings."""
@@ -102,8 +102,11 @@ class EmailSettings:
         else:
             self.smtp_server = os.getenv("SMTP_SERVER", "smtp-relay.gmail.com")
             self.smtp_port = int(os.getenv("SMTP_PORT", 587))
+
             self.smtp_tls = bool(os.getenv("SMTP_TLS", "True") == "True")
-            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "False") == "True")
+            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "True") == "True")
+            if self.smtp_tls and self.smtp_ssl:
+                raise ValueError("SMTP_TLS and SMTP_SSL cannot both be True.")
 
             smtp_password = os.getenv("SMTP_PASSWORD", None)
             if smtp_password:
@@ -130,6 +133,7 @@ class Settings:
         """
         required_fields = {
             "DIVBASE_ENV": self.api.environment,
+            "FRONTEND_BASE_URL": self.api.frontend_base_url,
             "DATABASE_URL": self.database.url,
             "FLOWER_URL": self.flower.url,
             "FLOWER_USER": self.flower.user,

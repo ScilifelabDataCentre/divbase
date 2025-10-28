@@ -14,7 +14,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import SecretStr
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 

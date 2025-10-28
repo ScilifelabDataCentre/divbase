@@ -127,6 +127,7 @@ services:
       retries: 5
     environment:
     - DIVBASE_ENV=local_dev
+    - FRONTEND_BASE_URL=http://localhost:8000
     - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
     - FLOWER_USER=floweradmin
     - FLOWER_PASSWORD=badpassword

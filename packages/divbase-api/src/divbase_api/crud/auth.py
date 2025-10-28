@@ -4,7 +4,7 @@ Authentication-related CRUD operations.
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
 from divbase_api.models.users import UserDB
 from divbase_api.security import create_email_verification_token, verify_password
