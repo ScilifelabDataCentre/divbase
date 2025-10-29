@@ -88,7 +88,7 @@ def show_dimensions_index(
 
     if filename:
         record = None
-        for entry in dimensions_info.get("dimensions", []):
+        for entry in dimensions_info.get("indexed_files", []):
             if entry.get("filename") == filename:
                 record = entry
                 break
@@ -103,7 +103,7 @@ def show_dimensions_index(
 
     if unique_scaffolds:
         unique_scaffold_names = set()
-        for entry in dimensions_info.get("dimensions", []):
+        for entry in dimensions_info.get("indexed_files", []):
             unique_scaffold_names.update(entry.get("dimensions", {}).get("scaffolds", []))
 
         numeric_scaffold_names = []
