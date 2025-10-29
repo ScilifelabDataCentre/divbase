@@ -20,6 +20,7 @@ import emails
 from jinja2 import Template
 
 from divbase_api.api_config import settings
+from divbase_api.security import create_email_verification_token
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +79,16 @@ def send_test_email(email_to: str) -> None:
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
 
 
-def send_verification_email(email_to: str, verification_url: str) -> None:
+def send_verification_email(email_to: str, user_id: int) -> None:
     """
     Send a verification email to the specified email address.
     """
     subject = "DivBase - verify your email address"
 
-    link_expire_hours = settings.email.email_verify_expires_seconds / 3600
+    verification_token, _ = create_email_verification_token(subject=user_id)
+    verification_url = f"{settings.api.frontend_base_url}/auth/verify-email?token={verification_token}"
+
+    link_expire_hours = settings.email.email_verify_expires_seconds // 3600
 
     html_content = render_email_template(
         template_name="email_verification.html",

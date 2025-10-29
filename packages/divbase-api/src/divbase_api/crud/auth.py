@@ -4,12 +4,10 @@ Authentication-related CRUD operations.
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import settings
 from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
-from divbase_api.security import create_email_verification_token, verify_password
-from divbase_api.services.email_sender import send_verification_email
+from divbase_api.security import verify_password
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
@@ -57,15 +55,3 @@ async def confirm_user_email(db: AsyncSession, id: int) -> UserDB:
     await db.commit()
     await db.refresh(user)
     return user
-
-
-def send_user_verification_email(user: UserDB) -> None:
-    """
-    Send a verification email to a user who has just registered to verify their email address.
-
-    TODO: Consider if this should be a background task or sent to celery workers?
-    """
-    verification_token, _ = create_email_verification_token(subject=user.id)
-    verification_url = f"{settings.api.frontend_base_url}/auth/verify-email?token={verification_token}"
-
-    send_verification_email(email_to=user.email, verification_url=verification_url)

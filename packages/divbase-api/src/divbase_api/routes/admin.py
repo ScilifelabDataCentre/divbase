@@ -8,7 +8,7 @@ NOTE: All routes in here should depend on get_current_admin_user.
 
 import logging
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import add_project_member, create_project
@@ -151,9 +151,10 @@ async def add_project_member_endpoint(
 @admin_router.post("/test-email/{email_to}", status_code=status.HTTP_200_OK)
 async def test_email_endpoint(
     email_to: str,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Send a test email"""
-    send_test_email(email_to=email_to)
-    return {"message": f"Test email sent to {email_to}"}
+    background_tasks.add_task(send_test_email, email_to=email_to)
+    return {"message": f"Test email sent to {email_to} in the background."}

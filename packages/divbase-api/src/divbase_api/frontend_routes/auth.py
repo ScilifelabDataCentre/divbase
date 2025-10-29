@@ -4,7 +4,7 @@ Frontend routes for authentication-related pages.
 
 import logging
 
-from fastapi import APIRouter, Depends, Form, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,6 @@ from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
     confirm_user_email,
-    send_user_verification_email,
 )
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
@@ -30,6 +29,7 @@ from divbase_api.security import (
     verify_expired_token,
     verify_token,
 )
+from divbase_api.services.email_sender import send_verification_email
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,7 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
 @fr_auth_router.post("/register", response_class=HTMLResponse)
 async def post_register(
     request: Request,
+    background_tasks: BackgroundTasks,
     name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
@@ -162,7 +163,7 @@ async def post_register(
         logger.error(f"Error creating user: {e}")
         return registration_failed_response("Registration failed, please try again.")
 
-    send_user_verification_email(user=user)
+    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
 
     logger.info(f"New user registered: {user_data.email=}")
     return templates.TemplateResponse(
@@ -236,6 +237,7 @@ async def get_verify_email(
 @fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
 async def resend_verification_email(
     request: Request,
+    background_tasks: BackgroundTasks,
     email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -260,7 +262,7 @@ async def resend_verification_email(
             context={"info": "Your email has already been verified, you can log in to DivBase directly"},
         )
 
-    send_user_verification_email(user=user)
+    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
 
     return templates.TemplateResponse(
         request=request,
