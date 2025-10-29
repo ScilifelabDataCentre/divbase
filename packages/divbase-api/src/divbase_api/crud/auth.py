@@ -19,7 +19,7 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
 
     Raises AuthenticationError if authentication fails.
     """
-    generic_error_msg = "User not found or invalid credentials"
+    generic_error_msg = "Invalid email or password or user account does not exist."
     user = await get_user_by_email(db, email)
 
     if not user:

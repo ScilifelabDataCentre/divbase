@@ -104,7 +104,7 @@ class EmailSettings:
             self.smtp_port = int(os.getenv("SMTP_PORT", 587))
 
             self.smtp_tls = bool(os.getenv("SMTP_TLS", "True") == "True")
-            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "True") == "True")
+            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "False") == "True")
             if self.smtp_tls and self.smtp_ssl:
                 raise ValueError("SMTP_TLS and SMTP_SSL cannot both be True.")
 

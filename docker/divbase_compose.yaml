@@ -166,7 +166,6 @@ services:
       - POSTGRES_DB=divbase_db
       - POSTGRES_PASSWORD=badpassword
   mailpit:
-    profiles: ["emails"]  # Only starts if this profile is specified
     image: axllent/mailpit:v1.27
     ports:
       - "1025:1025"  # SMTP port
@@ -176,6 +175,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    volumes:
+      - mailpit-data:/data
 volumes:
   rabbitmq-data:
   redis-data:
@@ -184,3 +185,4 @@ volumes:
   minio-bitnami-data:
   minio-certs:
   postgres-data:
+  mailpit-data:

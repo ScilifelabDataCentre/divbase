@@ -24,15 +24,13 @@ from divbase_api.api_config import settings
 logger = logging.getLogger(__name__)
 
 
-EMAIL_TEMPLATES = Path(__file__).parent / "email_templates" / "build"
-
-
 def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     """
     Render an email template with Jinja2.
     (Jinja2 relies on the context dict to fill in the variables in the template.)
     """
-    template_str = (EMAIL_TEMPLATES / template_name).read_text()
+    email_templates = Path(__file__).parent / "email_templates" / "build"
+    template_str = (email_templates / template_name).read_text()
     return Template(template_str).render(context)
 
 
