@@ -7,13 +7,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.projects import get_project_id_from_name
 from divbase_api.crud.vcf_dimensions import (
     create_or_update_vcf_metadata,
     get_vcf_metadata_by_keys,
     get_vcf_metadata_by_project,
 )
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_user
+from divbase_api.deps import get_current_service_account, get_current_user
 from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
@@ -146,3 +147,27 @@ async def create_or_update_vcf_metadata_entry(
 
 
 # TODO add Delete entry route
+
+
+@vcf_dimensions_router.get("/by-project/{bucket_name}")
+async def get_project_by_bucket_name(
+    bucket_name: str,
+    db: AsyncSession = Depends(get_db),
+    service_account: UserDB = Depends(get_current_service_account),
+):
+    """
+    Get project ID by bucket name.
+
+    This endpoint is used by worker tasks to look up projects.
+    Requires service account authentication.
+    """
+    # TODO this should probably be in its own projects.py for clarity
+    project_id = await get_project_id_from_name(db, bucket_name)
+
+    if not project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with bucket name '{bucket_name}' not found",
+        )
+
+    return {"project_id": project_id, "bucket_name": bucket_name}
