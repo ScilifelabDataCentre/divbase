@@ -14,6 +14,7 @@ from divbase_api.config import settings
 from divbase_api.db import (
     create_all_tables,
     create_first_admin_user,
+    create_worker_service_account,
     engine,
     health_check_db,
 )
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Database connection healthy.")
     await create_all_tables()
     await create_first_admin_user()
+    await create_worker_service_account()
     logger.info("DivBase API startup events complete.")
 
     yield
@@ -120,7 +122,12 @@ def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str)
         error_details = result_dict.get("error", "Unknown error occurred")
         return {"detail": error_details, "type": error_type}
 
-    return result_dict
+    return {
+        "sample_and_filename_subset": result_dict["sample_and_filename_subset"],
+        "unique_sample_ids": result_dict["unique_sample_ids"],
+        "unique_filenames": result_dict["unique_filenames"],
+        "query_message": result_dict["query_message"],
+    }
 
 
 @app.post("/api/v1/query/bcftools-pipe/")

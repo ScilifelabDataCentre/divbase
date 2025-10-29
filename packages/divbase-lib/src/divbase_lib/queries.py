@@ -22,10 +22,9 @@ from divbase_lib.exceptions import (
     SidecarColumnNotFoundError,
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
-    VCFDimensionsFileMissingOrEmptyError,
 )
-from divbase_lib.s3_client import S3FileManager
-from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
+
+# from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,29 +42,37 @@ class SidecarQueryResult:
 
 
 def run_sidecar_metadata_query(
-    file: Path, filter_string: str = None, bucket_name: str = None, s3_file_manager: S3FileManager = None
+    file: Path,
+    filter_string: str = None,
+    project_id: int = None,
+    vcf_dimensions_data: dict = None,
 ) -> SidecarQueryResult:
     """
-    Run a query on a sidecar metadata TSV file.
-    Call SidecarQueryManager to filter on the metadata, then call VCFDimensionIndexManager to get the
-    sample-file name mapping. Combine the results and return a SidecarQueryResult object.
+    Run a query on a sidecar metadata TSV file and map samples to VCF files.
+
+    Takes vcf_dimensions_data fetched by an API call in the task layer
+
     """
 
     sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
     query_message = sidecar_manager.query_message
     unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
 
-    dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    dimensions_info = dimensions_manager.get_dimensions_info()
+    logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
 
-    if not dimensions_manager.dimensions_info or not dimensions_manager.dimensions_info.get("dimensions"):
-        raise VCFDimensionsFileMissingOrEmptyError(dimensions_manager.bucket_name)
+    if not vcf_dimensions_data or not vcf_dimensions_data.get("vcf_files"):
+        error_msg = f"No VCF dimensions data provided for project {project_id}. "
+        error_msg += "Please run 'divbase-cli dimensions update' first."
+        raise ValueError(error_msg)
 
     sample_and_filename_subset = []
     unique_filenames = set()
-    for entry in dimensions_info.get("dimensions", []):
-        filename = entry["filename"]
-        for sample_id in entry["dimensions"]["sample_names"]:
+
+    for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
+        filename = vcf_entry["vcf_file_s3_key"]
+        sample_names = vcf_entry.get("samples", [])
+
+        for sample_id in sample_names:
             if sample_id in unique_sample_ids:
                 sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
                 unique_filenames.add(filename)
