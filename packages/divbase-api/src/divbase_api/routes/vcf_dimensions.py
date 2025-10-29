@@ -19,7 +19,7 @@ from divbase_api.crud.vcf_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_service_account, get_current_user, get_project_member
+from divbase_api.deps import get_current_service_account, get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
@@ -33,11 +33,12 @@ vcf_dimensions_router = APIRouter()
 async def list_vcf_metadata_for_project(
     project_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user),
+    service_account: UserDB = Depends(get_current_service_account),
 ):
     """
     Get all VCF metadata entries for a project.
-    Returns technical metadata (dimensions) for all VCF files in the project.
+
+    Requires worker service account authentication.
     """
     result = await get_vcf_metadata_by_project(db, project_id)
 
@@ -55,11 +56,12 @@ async def get_vcf_metadata_for_specific_file_in_project(
     project_id: int,
     vcf_file_s3_key: str,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user),
+    service_account: UserDB = Depends(get_current_service_account),
 ):
     """
     Get VCF metadata for a specific file in a project.
-    Returns technical metadata (dimensions) for the specified VCF file.
+
+    Requires worker service account authentication.
     """
     entry = await get_vcf_metadata_by_keys(db, vcf_file_s3_key, project_id)
 
@@ -89,13 +91,12 @@ async def get_vcf_metadata_for_specific_file_in_project(
 async def create_or_update_vcf_metadata_entry(
     vcf_metadata_data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user),
+    service_account: UserDB = Depends(get_current_service_account),
 ):
     """
     Create or update VCF metadata entry.
 
-    This endpoint is typically called by worker tasks after indexing VCF files.
-    Requires authentication.
+    Requires worker service account authentication.
 
     Request body should contain:
     - vcf_file_s3_key: str (required)
@@ -144,7 +145,6 @@ async def delete_vcf_metadata_for_file(
     """
     Delete VCF metadata for a specific file in a project.
 
-    This endpoint is called by worker tasks when a VCF file is removed from a project bucket.
     Requires service account authentication.
     """
     try:
@@ -169,7 +169,11 @@ async def list_skipped_vcfs_for_project(
     db: AsyncSession = Depends(get_db),
     service_account: UserDB = Depends(get_current_service_account),
 ):
-    """Get all skipped VCF entries for a project."""
+    """
+    Get all skipped VCF entries for a project.
+
+    Requires worker service account authentication.
+    """
     entries = await get_skipped_vcfs_by_project(db, project_id)
 
     return {
@@ -191,7 +195,11 @@ async def create_or_update_skipped_vcf_entry(
     db: AsyncSession = Depends(get_db),
     service_account: UserDB = Depends(get_current_service_account),
 ):
-    """Create or update skipped VCF entry. Requires service account."""
+    """
+    Create or update skipped VCF entry. Requires service account.
+
+    Requires worker service account authentication.
+    """
     if "vcf_file_s3_key" not in skipped_vcf_data or "project_id" not in skipped_vcf_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -226,7 +234,11 @@ async def delete_skipped_vcf_entry(
     db: AsyncSession = Depends(get_db),
     service_account: UserDB = Depends(get_current_service_account),
 ):
-    """Delete skipped VCF entry. Requires service account."""
+    """
+    Delete skipped VCF entry. Requires service account.
+
+    Requires worker service account authentication.
+    """
     existing = await get_skipped_vcf_by_keys(db, vcf_file_s3_key, project_id)
     if not existing:
         raise HTTPException(
@@ -261,7 +273,7 @@ async def get_project_by_bucket_name(
     Get project ID by bucket name.
 
     This endpoint is used by worker tasks to look up projects.
-    Requires service account authentication.
+    Requires worker service account authentication.
     """
     # TODO this should probably be in its own projects.py for clarity
     project_id = await get_project_id_from_name(db, bucket_name)
