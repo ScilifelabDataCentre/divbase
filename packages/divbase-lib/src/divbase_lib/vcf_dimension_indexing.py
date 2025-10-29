@@ -3,8 +3,6 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-DIMENSIONS_FILE_NAME = ".vcf_dimensions.yaml"
-
 logger = logging.getLogger(__name__)
 
 
