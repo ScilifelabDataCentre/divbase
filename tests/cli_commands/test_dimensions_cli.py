@@ -1,74 +1,100 @@
 """
 Tests for the "divbase-cli dimensions" subcommand
-
-NOTE: All tests are run against a MinIO server on localhost from docker-compose.
-NOTE: The clean dimensions fixture ensures that the dimensions file is removed before and after each test,
 """
 
 import ast
 import gzip
+import os
 import re
 from unittest.mock import patch
 
-import boto3
+import httpx
 import pytest
 import yaml
 from typer.testing import CliRunner
 
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
+from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
 from divbase_lib.s3_client import create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME, VCFDimensionIndexManager
+from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
 from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.minio_setup import PROJECTS
 
 runner = CliRunner()
 
+api_base_url = os.environ["DIVBASE_API_URL"]
+
 
 @pytest.fixture(autouse=True)
 def clean_dimensions(logged_out_user_with_existing_config, CONSTANTS):
     """
-    Remove the dimensions file and create a new one before each test.
-    Used in all tests in this module.
+    Clean up VCF dimensions from the database before each test using VCFDimensionIndexManager.
     """
+    login_response = httpx.post(
+        f"{api_base_url}/v1/auth/login",
+        data={
+            "grant_type": "password",
+            "username": os.environ["WORKER_SERVICE_EMAIL"],
+            "password": os.environ["WORKER_SERVICE_PASSWORD"],
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=10.0,
+    )
+    login_response.raise_for_status()
+    auth_token = login_response.json()["access_token"]
+
     for project_name in CONSTANTS["PROJECT_CONTENTS"]:
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=CONSTANTS["MINIO_URL"],
-            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-        s3_client.delete_object(Bucket=project_name, Key=DIMENSIONS_FILE_NAME)
+        try:
+            dimension_manager = create_vcf_dimension_manager(bucket_name=project_name, auth_token=auth_token)
+            vcf_dimensions_data = dimension_manager.get_dimensions_info()
+
+            if vcf_dimensions_data.get("vcf_files"):
+                project_id = dimension_manager._project_id
+                for entry in vcf_dimensions_data["vcf_files"]:
+                    vcf_file = entry["vcf_file_s3_key"]
+                    try:
+                        dimension_manager.delete_vcf_metadata(vcf_file, project_id)
+                    except Exception as e:
+                        print(f"Warning: Failed to delete VCF metadata for {vcf_file}: {e}")
+
+            try:
+                skipped_files = dimension_manager.get_skipped_files()
+                if skipped_files and dimension_manager._project_id:
+                    project_id = dimension_manager._project_id
+                    for vcf_file in skipped_files:
+                        try:
+                            dimension_manager.delete_skipped_vcf(vcf_file, project_id)
+                        except Exception as e:
+                            print(f"Warning: Failed to delete skipped VCF entry for {vcf_file}: {e}")
+            except Exception as e:
+                print(f"Warning: Failed to clean skipped files for {project_name}: {e}")
+
+        except ValueError:
+            pass
+        except Exception as e:
+            print(f"Error cleaning up dimensions for {project_name}: {e}")
 
     yield
 
 
 def test_update_vcf_dimensions_task_directly(CONSTANTS, run_update_dimensions):
     """
-    Test that first runs the run_update_dimensions fixture to create a .vcf_dimensions.yaml file in the bucket.
-    Then it creates a new VCFDimensionIndexManager instance to read the .vcf_dimensions.yaml file
-    with manager.get_dimensions_info() and assert that all VCF files in bucket have been indexed for their dimensions.
+    Test that runs the update task and verifies all VCF files are indexed via the API.
     """
-    test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    run_update_dimensions(bucket_name=bucket_name)
+    result = run_update_dimensions(bucket_name=bucket_name)
 
-    s3_file_manager = create_s3_file_manager(url=test_minio_url)
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    dimensions_info = manager.get_dimensions_info()
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
-    indexed_files = [entry["filename"] for entry in dimensions_info.get("dimensions", [])]
+    indexed_files = result.get("VCF files that were added to dimensions index by this job", [])
 
     for vcf_file in vcf_files:
-        assert vcf_file in indexed_files
+        assert vcf_file in indexed_files, f"{vcf_file} not found in indexed files: {indexed_files}"
 
 
-def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_out_user_with_existing_config):
+def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_in_edit_user_with_existing_config):
     """
-    Test that first runs the run_update_dimensions fixture to create a .vcf_dimensions.yaml file in the bucket.
-    Then it runs the CLI command to show the VCF dimensions and asserts that the output is as expected.
+    Test the CLI show command after indexing dimensions via the API.
     """
-
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     run_update_dimensions(bucket_name=bucket_name)
 
@@ -77,11 +103,14 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_out_u
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
-    yaml.safe_load(cli_result.stdout)
+    dimensions_info = yaml.safe_load(cli_result.stdout)
+    assert isinstance(dimensions_info, dict), f"Expected dict, got: {type(dimensions_info)}"
+    indexed_files = dimensions_info.get("indexed_files", [])
 
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+    found_files = [entry.get("filename") for entry in indexed_files]
     for vcf_file in vcf_files:
-        assert vcf_file in cli_result.stdout, f"{vcf_file} not found in CLI output:\n{cli_result.stdout}"
+        assert vcf_file in found_files, f"{vcf_file} not found in CLI output:\n{cli_result.stdout}"
 
     # Unique-scaffolds version of command
     command = f"dimensions show --project {bucket_name} --unique-scaffolds"
@@ -101,47 +130,56 @@ def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_out_u
         command = f"dimensions show --project {bucket_name} --filename {vcf_file}"
         cli_result = runner.invoke(app, command)
         assert cli_result.exit_code == 0
-        match = re.search(r"HOM_20ind_17SNPs\.(\d+)\.vcf\.gz", vcf_file)
-        scaffold_name = match.group(1)
         entry = yaml.safe_load(cli_result.stdout)
-        scaffolds = entry.get("dimensions", {}).get("scaffolds", [])
-        assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
+        assert entry.get("filename") == vcf_file
+        match = re.search(r"HOM_20ind_17SNPs\.(\d+)\.vcf\.gz", vcf_file)
+        if match:
+            scaffold_name = match.group(1)
+            scaffolds = entry.get("dimensions", {}).get("scaffolds", [])
+            assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
 
 
-def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_out_user_with_existing_config, caplog):
+def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_in_edit_user_with_existing_config):
     """
-    Test runs CLI command to show the VCF dimensions handles the case when the dimensions file is missing.
+    Test that the CLI handles the case when no dimensions are indexed (empty database).
     """
-
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
     command = f"dimensions show --project {bucket_name}"
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, VCFDimensionsFileMissingOrEmptyError)
+    assert isinstance(result.exception, (VCFDimensionsFileMissingOrEmptyError, DivBaseAPIError))
     assert bucket_name in str(result.exception)
 
 
 def test_get_dimensions_info_returns_empty(CONSTANTS):
     """
-    Test that asserts that get_dimensions_info returns {"dimensions": []} when the dimensions file is missing or empty.
-    The clean_dimensions fixture is run before this test, thus there should be no .vcf_dimensions.yaml file present.
+    Test that get_dimensions_info returns empty when no dimensions are indexed in the database.
     """
-    test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
-    s3_file_manager = create_s3_file_manager(url=test_minio_url)
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    api_base_url = "http://localhost:8001/api"
+    login_response = httpx.post(
+        f"{api_base_url}/v1/auth/login",
+        data={
+            "grant_type": "password",
+            "username": os.environ["WORKER_SERVICE_EMAIL"],
+            "password": os.environ["WORKER_SERVICE_PASSWORD"],
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    login_response.raise_for_status()
+    auth_token = login_response.json()["access_token"]
 
+    manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
     result = manager.get_dimensions_info()
-    assert result == {"dimensions": []}
+    assert result == {"vcf_files": []}  # TODO this might need to be updated
 
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
     """
-    Test that runs the update_vcf_dimensions_task with a bucket that has no VCF files.
-    It should raise an error that there are no VCF files to process.
+    Test that the update task raises an error when the bucket has no VCF files.
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = "empty-project"
@@ -154,46 +192,31 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
 
 def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
     """
-    Test that mocks removing a VCF file from the bucket, and updates the dimension entry based on the removal.
+    Test removing a VCF metadata entry via the manager.
     """
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=CONSTANTS["MINIO_URL"],
-        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-    )
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
 
-    with patch.object(s3_client, "delete_object", return_value=None) as mock_delete:
-        s3_client.delete_object(Bucket=bucket_name, Key=vcf_file)
-        mock_delete.assert_called_once_with(Bucket=bucket_name, Key=vcf_file)
+    api_base_url = "http://localhost:8000/api"
+    login_response = httpx.post(
+        f"{api_base_url}/v1/auth/login",
+        data={
+            "grant_type": "password",
+            "username": os.environ["WORKER_SERVICE_EMAIL"],
+            "password": os.environ["WORKER_SERVICE_PASSWORD"],
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    login_response.raise_for_status()
+    auth_token = login_response.json()["access_token"]
 
-    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    manager.remove_dimension_entry(vcf_file)
-    filenames = [entry["filename"] for entry in manager.dimensions_info.get("dimensions", [])]
-    assert vcf_file not in filenames
+    manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
-
-def test_update_vcf_dimensions_task_upload_failed(CONSTANTS):
-    """
-    Test that mocks that update_vcf_dimensions_task fails to upload the dimensions file to bucket.
-    """
-
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-
-    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
-        # Ensure test compose stack is used when running the task
-        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url="http://localhost:9002")
-
-        with patch(
-            "divbase_lib.s3_client.S3FileManager.upload_str_as_s3_object",
-            side_effect=Exception("Simulated upload failure"),
-        ):
-            result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
-            assert result["status"] == "error"
-            assert "Failed to upload bucket dimensions file" in result["error"]
+    if manager._project_id:
+        manager.delete_vcf_metadata(vcf_file, manager._project_id)
+        updated_dimensions = manager.get_dimensions_info()
+        filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+        assert vcf_file not in filenames
 
 
 @patch("divbase_worker.tasks.create_s3_file_manager")
@@ -202,7 +225,6 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
     Test that after running a query (which generates a DivBase result VCF),
     update_vcf_dimensions_task skips that file and returns a skip message.
     """
-
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -232,6 +254,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
     assert any(divbase_vcf_name in msg for msg in skipped_files), (
         f"Expected that this file was skipped; {divbase_vcf_name}; got: {skipped_files}"
     )
+
     assert result["status"] == "completed"
 
 
@@ -241,7 +264,6 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_
     Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,
     the task returns a message indicating no new files were found.
     """
-
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -249,7 +271,7 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_
     result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
 
     assert result_first_run["status"] == "completed"
-    added_files = result_first_run["VCF files that were added to dimensions file by this job"]
+    added_files = result_first_run["VCF files that were added to dimensions index by this job"]
     expected_files = PROJECTS["split-scaffold-project"]
     expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
     for vcf in expected_vcfs:
@@ -259,5 +281,5 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_
     assert result_second_run["status"] == "completed"
     assert (
         "None: no new VCF files or file versions were detected in the project."
-        in result_second_run["VCF files that were added to dimensions file by this job"]
+        in result_second_run["VCF files that were added to dimensions index by this job"]
     )

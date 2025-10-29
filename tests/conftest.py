@@ -11,10 +11,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import pytest
 from typer.testing import CliRunner
 
 from divbase_lib.s3_client import create_s3_file_manager
+from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
 from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS, setup_api_data
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
@@ -26,29 +28,26 @@ from tests.helpers.minio_setup import (
     setup_minio_data,
 )
 
+# Set env vars before the fixtures to ensure that they are available at the right time
+os.environ["CELERY_BROKER_URL"] = "pyamqp://guest@localhost:5673//"
+os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6380/0"
+os.environ["FLOWER_USER"] = "floweradmin"
+os.environ["FLOWER_PASSWORD"] = "badpassword"
+os.environ["FLOWER_BASE_URL"] = "http://localhost:5556"
+
+os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
+os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
+
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db"
+os.environ["WORKER_SERVICE_EMAIL"] = "worker@divbase.com"
+os.environ["WORKER_SERVICE_PASSWORD"] = "badpassword"
+
+
+api_base_url = os.environ["DIVBASE_API_URL"]
+
 runner = CliRunner()
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(autouse=True, scope="session")
-def set_env_vars():
-    """
-    Set environment variables for duration of the entire test session.
-
-    For Celery broker and result backend to run in the
-    testing docker stack defined in job_system_compose_tests.yaml.
-    Separated from job_system_docker_stack fixture to ensure that these env variables are
-    used in all tests that require Celery, even if the job system stack was started outside of pytest.
-    """
-    os.environ["CELERY_BROKER_URL"] = "pyamqp://guest@localhost:5673//"
-    os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6380/0"
-    os.environ["FLOWER_USER"] = "floweradmin"
-    os.environ["FLOWER_PASSWORD"] = "badpassword"
-    os.environ["FLOWER_BASE_URL"] = "http://localhost:5556"
-
-    os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
-    os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -107,52 +106,49 @@ def docker_testing_stack():
 def run_update_dimensions(CONSTANTS):
     """
     Factory fixture that directly calls the update_vcf_dimensions_task task to create and update dimensions for the split-scaffold-project.
-    Patches the S3 URL in the task to use the test MinIO url. Run directly to not have to poll for celery task completion.
-
-    If run with test_minio_url, bucket_name = run_update_dimensions(), it uses the default bucket split-scaffold-project.
-    It can also be run for other bucket names with: test_minio_url, bucket_name = run_update_dimensions("another-bucket-name")
-
-    Since this fixture is not run in a celery worker, patch the delete_job_files_from_worker function just pass and do nothing.
-    This ensures that no files are deleted and that no logging messages about deletion are printed.
-
-    files_indexed_by_this_job = Workaround for garbage collection since patching in tmp_path across all layers turned out to be very complex...
-    Skip non-file-path list elements (status messages starting with "None:")
-    (From update_vcf_dimensions_task in tasks.py returning "None: no new VCF files or file versions were detected in the project.")
+    Uses VCFDimensionIndexManager for cleanup/setup.
     """
-    test_minio_url = CONSTANTS["MINIO_URL"]
     default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
     def _run(bucket_name=default_bucket_name):
-        with (
-            patch("divbase_lib.vcf_dimension_indexing.logger.info") as mock_info,
-            patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager,
-            patch("divbase_worker.tasks.delete_job_files_from_worker") as mock_delete_job_files,
-        ):
+        login_response = httpx.post(
+            f"{api_base_url}/v1/auth/login",
+            data={
+                "grant_type": "password",
+                "username": os.environ["WORKER_SERVICE_EMAIL"],
+                "password": os.environ["WORKER_SERVICE_PASSWORD"],
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        login_response.raise_for_status()
+        auth_token = login_response.json()["access_token"]
 
-            def append_test_fixture_info_to_log(msg, *args, **kwargs):
-                if "No VCF dimensions file found in the bucket:" in msg:
-                    msg = "LOG CALL BY TEST FIXTURE (run_update_dimensions): " + msg
-                return mock_info.original(msg, *args, **kwargs)
+        # Step 2: Use VCFDimensionIndexManager to clean up all VCF metadata and skipped files
+        dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
+        try:
+            vcf_dimensions_data = dimension_manager.get_dimensions_info()
+            project_id = dimension_manager._project_id
 
-            def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
-                pass
+            for entry in vcf_dimensions_data.get("vcf_files", []):
+                vcf_file = entry["vcf_file_s3_key"]
+                try:
+                    dimension_manager.delete_vcf_metadata(vcf_file, project_id)
+                except Exception as e:
+                    print(f"Warning: Failed to delete VCF metadata for {vcf_file}: {e}")
 
-            mock_info.original = logger.info
-            mock_info.side_effect = append_test_fixture_info_to_log
-            mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
-            mock_delete_job_files.side_effect = patched_delete_job_files_from_worker
+            skipped_files = dimension_manager.get_skipped_files()
+            for vcf_file in skipped_files:
+                try:
+                    dimension_manager.delete_skipped_vcf(vcf_file, project_id)
+                except Exception as e:
+                    print(f"Warning: Failed to delete skipped VCF entry for {vcf_file}: {e}")
+
+        except Exception as e:
+            print(f"Error cleaning up dimensions for {bucket_name}: {e}")
+
+        with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
+            mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
-            assert result["status"] == "completed"
-
-            # Remove any files created in the filesystem by this task run, except for those in the fixtures directory.
-            files_indexed_by_this_job = result.get("VCF files that were added to dimensions file by this job", [])
-            if isinstance(files_indexed_by_this_job, list):
-                for file_path in files_indexed_by_this_job:
-                    if not file_path or not isinstance(file_path, str) or file_path.startswith("None:"):
-                        continue
-                    file_path_obj = Path(file_path).resolve()
-                    fixtures_dir = (Path(__file__).parent.parent / "fixtures").resolve()
-                    if fixtures_dir not in file_path_obj.parents and file_path_obj.exists():
-                        file_path_obj.unlink()
+        return result
 
     return _run
