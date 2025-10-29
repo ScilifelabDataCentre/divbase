@@ -4,7 +4,7 @@ CRUD operations for VCF dimensions.
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.vcf_dimensions import VCFMetadataDB
@@ -69,10 +69,19 @@ async def get_vcf_metadata_by_project(db: AsyncSession, project_id: int) -> list
     return list(result.scalars().all())
 
 
-# TODO: Delete entry when file is removed
+async def delete_vcf_metadata(db: AsyncSession, vcf_file_s3_key: str, project_id: int) -> None:
+    """
+    Delete a VCF metadata entry by S3 key and project ID.
 
-# TODO: Delete all entries for a project
+    Called when a VCF file is removed from the project bucket.
+    """
+    stmt = delete(VCFMetadataDB).where(
+        VCFMetadataDB.vcf_file_s3_key == vcf_file_s3_key, VCFMetadataDB.project_id == project_id
+    )
+    await db.execute(stmt)
+    await db.commit()
 
-# TODO: get vcf metadata entries by project ID (not vcf_file_s3_key)
+    logger.info(f"Deleted VCF metadata for {vcf_file_s3_key} in project {project_id}.")
+
 
 # TODO: get skipped VCF results file by keys - should that perhaps be its own table?

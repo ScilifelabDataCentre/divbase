@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.crud.projects import get_project_id_from_name
 from divbase_api.crud.vcf_dimensions import (
     create_or_update_vcf_metadata,
+    delete_vcf_metadata,
     get_vcf_metadata_by_keys,
     get_vcf_metadata_by_project,
 )
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get("/projects/{project_id}")
+@vcf_dimensions_router.get("/list/project/{project_id}")
 async def list_vcf_metadata_for_project(
     project_id: int,
     db: AsyncSession = Depends(get_db),
@@ -62,7 +63,7 @@ async def list_vcf_metadata_for_project(
     }
 
 
-@vcf_dimensions_router.get("/projects/{project_id}/files/{vcf_file_s3_key:path}")
+@vcf_dimensions_router.get("/get/project/{project_id}/file/{vcf_file_s3_key:path}")
 async def get_vcf_metadata_for_specific_file_in_project(
     project_id: int,
     vcf_file_s3_key: str,
@@ -97,7 +98,7 @@ async def get_vcf_metadata_for_specific_file_in_project(
     }
 
 
-@vcf_dimensions_router.post("/", status_code=status.HTTP_201_CREATED)
+@vcf_dimensions_router.post("/create", status_code=status.HTTP_201_CREATED)
 async def create_or_update_vcf_metadata_entry(
     vcf_metadata_data: dict,
     db: AsyncSession = Depends(get_db),
@@ -146,10 +147,39 @@ async def create_or_update_vcf_metadata_entry(
         ) from e
 
 
+@vcf_dimensions_router.delete("/delete/project/{project_id}/file/{vcf_file_s3_key:path}")
+async def delete_vcf_metadata_for_file(
+    project_id: int,
+    vcf_file_s3_key: str,
+    db: AsyncSession = Depends(get_db),
+    service_account: UserDB = Depends(get_current_service_account),
+):
+    """
+    Delete VCF metadata for a specific file in a project.
+
+    This endpoint is called by worker tasks when a VCF file is removed from a project bucket.
+    Requires service account authentication.
+    """
+    try:
+        await delete_vcf_metadata(db, vcf_file_s3_key, project_id)
+
+        return {
+            "message": "VCF metadata deleted successfully",
+            "vcf_file_s3_key": vcf_file_s3_key,
+            "project_id": project_id,
+        }
+    except Exception as e:
+        logger.error(f"Error deleting VCF metadata: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete VCF metadata: {str(e)}",
+        ) from e
+
+
 # TODO add Delete entry route
 
 
-@vcf_dimensions_router.get("/by-project/{bucket_name}")
+@vcf_dimensions_router.get("/lookup/project-by-bucket/{bucket_name}")
 async def get_project_by_bucket_name(
     bucket_name: str,
     db: AsyncSession = Depends(get_db),
