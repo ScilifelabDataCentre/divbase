@@ -108,6 +108,9 @@ def verify_expired_token(token: str, desired_token_type: TokenType) -> int | Non
     or email is already verified. So for UX reasons.
     (We're still checking the signature and token type, just not expiration time.)
     """
+    if desired_token_type not in (TokenType.EMAIL_VERIFICATION, TokenType.PASSWORD_RESET):
+        raise ValueError("Can only verify expired tokens for email verification or password reset.")
+
     try:
         payload = jwt.decode(
             jwt=token,
