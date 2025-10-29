@@ -29,7 +29,7 @@ from divbase_api.security import (
     verify_expired_token,
     verify_token,
 )
-from divbase_api.services.email_sender import send_verification_email
+from divbase_api.services.email_sender import send_email_already_verified_email, send_verification_email
 
 logger = logging.getLogger(__name__)
 
@@ -190,9 +190,7 @@ async def get_verify_email(
     To access this endpoint a user recieves an email with link to verify their email.
     The link contains a JWT as query param in the URL.
 
-    For the sake of UX, we render different HTML pages depending on the outcome of the verification:
-    if token invalid
-
+    For the sake of UX, we return different HTML pages depending on the outcome of the verification,
     """
     expired_token = False
 
@@ -201,8 +199,7 @@ async def get_verify_email(
         expired_token = True
         user_id = verify_expired_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
 
-    # token is neither valid nor expired
-    if not user_id:
+    if not user_id:  # token is invalid and always was
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
@@ -211,18 +208,18 @@ async def get_verify_email(
 
     already_verified = await check_user_email_verified(db=db, id=user_id)
 
-    if expired_token and not already_verified:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/email_verification.html",
-            context={"error": "Email verification link has expired. Please request a new link below."},
-        )
-
     if already_verified:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
             context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+        )
+
+    if expired_token and not already_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"error": "Email verification link has expired. Please request a new link below."},
         )
 
     # token is valid and email not verified yet proceed to verify email
@@ -256,14 +253,18 @@ async def resend_verification_email(
         )
 
     if user.email_verified:
+        # User is already verified, inform them by email
+        # To prevent information leakage (which accounts exist and don't exists),
+        # we show the same success message on the frontend, but email them to inform them they can already login.
+
+        background_tasks.add_task(send_email_already_verified_email, email_to=user.email)
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
-            context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+            context={"success": LINK_SENT_MSG},
         )
 
     background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
-
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/email_verification.html",

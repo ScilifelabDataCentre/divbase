@@ -95,3 +95,17 @@ def send_verification_email(email_to: str, user_id: int) -> None:
         context={"email": email_to, "verification_url": verification_url, "link_expire_hours": link_expire_hours},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_email_already_verified_email(email_to: str) -> None:
+    """
+    Send an email informing the user that their email is already verified.
+
+    Hit if user requests a new verification email but their email is already verified.
+    """
+    subject = "DivBase - Your email is already verified"
+    html_content = render_email_template(
+        template_name="email_already_verified.html",
+        context={"email": email_to},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
