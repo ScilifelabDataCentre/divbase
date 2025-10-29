@@ -86,7 +86,18 @@ def sample_metadata_query(
 
     params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
     response = httpx.post(f"{project_config.divbase_url}/v1/query/sample-metadata/", params=params)
-    response.raise_for_status()
+
+    data = response.json()
+
+    if "detail" in data or "error" in data:
+        error_msg = data.get("detail") or data.get("error")
+        error_type = data.get("type", "").lower()
+        print(f"Error: {error_msg}")
+        if "objectdoesnotexist" in error_type:
+            print("Hint: Upload the metadata file with:")
+            print(f"divbase-cli files upload {metadata_tsv_name} --project {project}")
+        # Note: VCFDimensionsFileMissingOrEmptyError already contains a hint in the detail, so no need for custom hint here.
+        return
 
     results = SidecarQueryResult(**response.json())
 

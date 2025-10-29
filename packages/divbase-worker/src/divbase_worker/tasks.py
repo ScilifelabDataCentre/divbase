@@ -65,18 +65,24 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
     """
     Run a sample metadata query task as a Celery task.
     """
-    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    try:
+        s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    metadata_path = download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-    )
+        metadata_path = download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
 
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-    )
-    # celery serializes the return value, hence conversion to dict.
-    return dataclasses.asdict(metadata_result)
+        metadata_result = run_sidecar_metadata_query(
+            file=metadata_path,
+            filter_string=tsv_filter,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
+        )
+        # celery serializes the return value, hence conversion to dict.
+        return dataclasses.asdict(metadata_result)
+    except Exception as e:
+        # bring error back up to API level
+        return {"error": str(e), "type": type(e).__name__, "status": "error"}
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
@@ -107,6 +113,8 @@ def bcftools_pipe_task(
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
     )
 
     check_that_file_versions_match_dimensions_index(
@@ -179,12 +187,18 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     already_indexed_vcfs = manager.get_indexed_filenames()
+    already_skipped_files = manager.get_skipped_divbase_results()
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     non_indexed_vcfs = [
         file
         for file in vcf_files
-        if (file not in already_indexed_vcfs or already_indexed_vcfs[file] != latest_versions_of_bucket_files.get(file))
+        if not (
+            (file in already_skipped_files and already_skipped_files[file] == latest_versions_of_bucket_files.get(file))
+            or (
+                file in already_indexed_vcfs and already_indexed_vcfs[file] == latest_versions_of_bucket_files.get(file)
+            )
+        )
     ]
 
     _ = download_vcf_files(
@@ -194,19 +208,29 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     )
 
     files_indexed_by_this_job = []
+    divbase_results_files_skipped_by_this_job = []
     for file in non_indexed_vcfs:
         try:
-            manager.add_dimension_entry(vcf_filename=file)
-            files_indexed_by_this_job.append(file)
+            result_msg = manager.add_dimension_entry(vcf_filename=file)
+            if "Added" in result_msg or "Updated" in result_msg:
+                files_indexed_by_this_job.append(file)
+            elif "Skipping" in result_msg:
+                manager.add_skipped_divbase_result_entry(vcf_filename=file)
+                divbase_results_files_skipped_by_this_job.append(file)
         except Exception as e:
             logger.error(f"Error in dimensions indexing task: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
 
     vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
+    skipped_deleted_from_bucket = list(set(already_skipped_files) - set(vcf_files))
 
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             manager.remove_dimension_entry(vcf_filename=file)
+
+    if skipped_deleted_from_bucket:
+        for file in skipped_deleted_from_bucket:
+            manager.remove_skipped_divbase_result_entry(vcf_filename=file)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
@@ -220,10 +244,15 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             "task_id": task_id,
         }
 
+    if files_indexed_by_this_job == []:
+        files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
+    if divbase_results_files_skipped_by_this_job == []:
+        divbase_results_files_skipped_by_this_job = ["None: no DivBase-generated results were detected in the project."]
     return {
         "status": "completed",
         "submitter": user_name,
         "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
+        "VCF files skipped by this job (previous DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
     }
 
 
@@ -242,12 +271,18 @@ def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_m
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
+    logger.debug(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
+
     objects = {file_name: None for file_name in files_to_download}
-    return s3_file_manager.download_files(
+    downloaded_files = s3_file_manager.download_files(
         objects=objects,
         download_dir=Path.cwd(),
         bucket_name=bucket_name,
     )
+
+    logger.info(f"Downloaded VCF files: {[f.name for f in downloaded_files]}")
+
+    return downloaded_files
 
 
 def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:

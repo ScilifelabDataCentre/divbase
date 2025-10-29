@@ -49,7 +49,6 @@ def sample_tsv_file(tmp_path: Path) -> Path:
         "Sample_ID": ["S1", "S2", "S3", "S4", "S5"],
         "Population": ["Pop1", "Pop1", "Pop2", "Pop2", "Pop3"],
         "Sex": ["M", "F", "M", "F", "M"],
-        "Filename": ["file1.vcf.gz", "file1.vcf.gz", "file2.vcf.gz", "file2.vcf.gz", "file3.vcf.gz"],
     }
 
     df = pd.DataFrame(data)

@@ -6,6 +6,7 @@ NOTE: The clean dimensions fixture ensures that the dimensions file is removed b
 """
 
 import ast
+import gzip
 import re
 from unittest.mock import patch
 
@@ -193,3 +194,70 @@ def test_update_vcf_dimensions_task_upload_failed(CONSTANTS):
             result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
             assert result["status"] == "error"
             assert "Failed to upload bucket dimensions file" in result["error"]
+
+
+@patch("divbase_worker.tasks.create_s3_file_manager")
+def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, CONSTANTS, tmp_path):
+    """
+    Test that after running a query (which generates a DivBase result VCF),
+    update_vcf_dimensions_task skips that file and returns a skip message.
+    """
+
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    divbase_vcf_name = "merged_test_divbase_result.vcf.gz"
+    vcf_path = tmp_path / divbase_vcf_name
+    divbase_vcf_content = (
+        "##fileformat=VCFv4.2\n"
+        '##DivBase_created="This is a results file created by a DivBase query; Date=Mon Oct 20 12:00:00 2025"\n'
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1\n"
+        "1\t1000\t.\tA\tG\t.\tPASS\t.\tGT\t0/1\n"
+    )
+
+    with gzip.open(vcf_path, "wt") as f:
+        f.write(divbase_vcf_content)
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    s3_file_manager.upload_files(
+        to_upload={divbase_vcf_name: vcf_path},
+        bucket_name=bucket_name,
+    )
+
+    result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+
+    skipped_files = result.get("VCF files skipped by this job (previous DivBase-generated result VCFs)", [])
+    assert any(divbase_vcf_name in msg for msg in skipped_files), (
+        f"Expected that this file was skipped; {divbase_vcf_name}; got: {skipped_files}"
+    )
+    assert result["status"] == "completed"
+
+
+@patch("divbase_worker.tasks.create_s3_file_manager")
+def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_manager, CONSTANTS, tmp_path):
+    """
+    Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,
+    the task returns a message indicating no new files were found.
+    """
+
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+
+    assert result_first_run["status"] == "completed"
+    added_files = result_first_run["VCF files that were added to dimensions file by this job"]
+    expected_files = PROJECTS["split-scaffold-project"]
+    expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
+    for vcf in expected_vcfs:
+        assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
+
+    result_second_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+    assert result_second_run["status"] == "completed"
+    assert (
+        "None: no new VCF files or file versions were detected in the project."
+        in result_second_run["VCF files that were added to dimensions file by this job"]
+    )

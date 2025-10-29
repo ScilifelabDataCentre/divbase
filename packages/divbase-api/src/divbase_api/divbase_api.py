@@ -100,9 +100,6 @@ def get_task_by_id(task_id: str):
 
 @app.post("/api/v1/query/sample-metadata/")
 def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str):
-    """
-    Create a new bcftools query job for the specified project.
-    """
     bucket_name = project
     task_kwargs = {
         "tsv_filter": tsv_filter,
@@ -112,6 +109,12 @@ def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str)
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
     result_dict = results.get(timeout=10)
+
+    if "error" in result_dict:
+        error_type = result_dict.get("type", "ServerError")
+        error_details = result_dict.get("error", "Unknown error occurred")
+        return {"detail": error_details, "type": error_type}
+
     return result_dict
 
 

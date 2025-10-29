@@ -140,11 +140,39 @@ pytest # you may want to append the -s flag to print standard output.
 
 ## Queries
 
-The data and metadata stored in a DivBase project can be queried two main ways:
+The data and metadata stored in a DivBase project can be queried two main ways: by a user-submitted sample metadata file, and by the VCF files. The examples in this section intend to show how a few of the commands in `divbase-cli query` can be used. Please add the `--help` flag to any of the commands for more documentation on their usage and options.
 
-### 1. Query sidecar metadata file for sample IDs and VCF filenames
+### 1. Before performing any queries: update the VCF dimensions file
 
-Attributes of the samples that are typically not part of the data in the VCF file can be stored in a tabular sidecar file where each row describe a sample. The file need to start with a header row that contains two mandatory columns: `Sample_ID` and `Filename`. Other columns can be added based on the needs of the project. To accomodate queries of user-defined columns, the following query syntax is used:
+To improve the speed and robustness of the queries in DivBase, technical metadata from the VCF files in the buckets are stored in the backend in a so-called "VCF dimensions" file. At the moment, users need to run the following command to ensure that the dimensions file is up-to-date with the current VCF files contained in the S3 Object Store of the project:
+
+```bash
+divbase-cli dimensions update --project <PROJECT_NAME>
+```
+
+To display the current status of the dimensions file:
+
+```bash
+divbase-cli dimensions show --project <PROJECT_NAME>
+```
+
+For each of the VCF files in the project's S3 Object Store, the dimensions file contains the following metadata:
+
+- VCF filename
+- timestamp from when the dimensions of this VCF file was last updated
+- the version ID of the latest version of this VCF file in the S3 Object Store
+- the number of variants in this VCF file
+- the number of samples in this VCF file
+- The name of all scaffolds/chromosomes/contigs in this VCF file
+- The name of all samples in this VCF file
+
+This information is used by the backend to for the queries. By storing this in a separate VCF dimensions file, the backend does not need to transfer and parse large VCF files every time it needs to fetch any of the above information.
+
+### 2. Query sidecar metadata file for sample IDs and VCF filenames
+
+Attributes of the samples that are typically not part of the data in the VCF file can be stored in a tabular sidecar file where each row describe a sample. The file need to start with a header row that contains one mandatory column: `Sample_ID`. Other columns can be added based on the needs of the project. The mapping between Sample IDs and the VCF file they are contained in is handled by the VCF dimensions file in the backend, so filenames should not be included in the sample metadata file. Since the VCF dimensions file is needed for the queries, the below assumes that the user has run `divbase-cli dimensions update` (as described above) since last time a VCF file was uploaded to the project.
+
+To accomodate queries of user-defined columns, the following query syntax is used:
 
 ```bash
 divbase-cli query tsv [...] --filter “key1: value1, value2; key2: value3, value4 […]”
@@ -152,45 +180,62 @@ divbase-cli query tsv [...] --filter “key1: value1, value2; key2: value3, valu
 
 where `key` is the column name and “value” is the column value to filter on. Values can be stacked by commas, and (intersect) queries across multiple keys can be done by adding a semicolon.
 
-Example:
+Example: If the test files in `.tests/fixtures/` are uploaded to a project, the command
 
 ```bash
-query tsv --file sample_metadata.tsv --filter "Area:West of Ireland,Northern Portugal;Sex:F"
+divbase-cli query tsv "Area:West of Ireland,Northern Portugal;Sex:F" --metadata-tsv-name sample_metadata.tsv
 ```
 
-### 2. Query the data in the VCF files
+will return the following to the terminal:
 
-DivBase uses bcftools to query data contained in the VCF files. One of the idea of DivBase is that data in a project can split over multiple VCF files. If the VCF file query is combined with a sidecar metadata query (using `--tsv-filter` which accepts the same the query syntax the sidecar queries described above), DivBase will perform the query on all VCF files identified by the sidecar query, apply any chain bcftools subset/filter operation given by the user, and return a single merged VCF file with the results.
+```
+The results for the query (Area:Northern Portugal):
+Unique Sample IDs: ['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7']
+Unique filenames: ['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']
+```
 
-Bcftools subset/filters are set by the `--command` option. The syntax is experimental: it uses existing bcftools commands as defined in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html) but automatically handles the filenames based on the sidecar metadata query results. It is possible to create pipes of bcftools operations by semicolon separation:
+The flag `--show-sample-results` can be added to also display the Sample ID - filename mapping:
 
 ```bash
---command "view -s SAMPLES; view -r 21:15000000-25000000"
+divbase-cli query tsv "Area:Northern Portugal" --metadata-tsv-name sample_metadata.tsv --show-sample-results
 ```
 
-Example of a full command that queries the sidecar metadata file and uses the results to perform bcftools subsets:
+which, for this example, will return:
 
-```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F" \
---command "view -s SAMPLES; view -r 21:15000000-25000000"
+```
+Name and file for each sample in query results:
+Sample ID: '5a_HOM-I7', Filename: 'HOM_20ind_17SNPs_first_10_samples.vcf.gz'
+Sample ID: '5a_HOM-I13', Filename: 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'
+Sample ID: '5a_HOM-I14', Filename: 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'
+Sample ID: '5a_HOM-I20', Filename: 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'
+Sample ID: '5a_HOM-I21', Filename: 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'
+The results for the query (Area:Northern Portugal):
+Unique Sample IDs: ['5a_HOM-I13', '5a_HOM-I14', '5a_HOM-I20', '5a_HOM-I21', '5a_HOM-I7']
+Unique filenames: ['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_first_10_samples.vcf.gz']
 ```
 
-## Running query jobs asynchronously using Celery
+### 3. Query the data in the VCF files based on sample metadata
 
-Queries that require bcftools operations can potentially take long time to complete. Therefore, these queries are submitted to job manager based on Celery.
-
-Unless specified, the bcftools query jobs are run synchronously in the job manager, meaning that they will be executed directly.
-
-It is also possible to submit asyncronous jobs to Celery from the CLI by adding the `--async` flag to `query bcftools-pipe` commands.
-For instance, to query of the toy data found in `./tests/fixtures/`:
-
-```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:West of Ireland,Northern Portugal;Sex:F" \
---command "view -s SAMPLES; view -r 21:15000000-25000000" --async
-```
-
-This will return a Celery task-id to `stdout`. To check the status of the task:
+DivBase uses bcftools to query data contained in the VCF files. One of the main ideas of DivBase is that data in a project can split over multiple VCF files. Queries that require bcftools operations can potentially take long time to complete. Therefore, these queries are submitted to a queue in the DivBase job manager system which is based on Celery. Running `divbase-cli query bcftools-pipe` commands will therefor return a Celery task-id to `stdout`. To check the status of a task:
 
 ```bash
 divbase-cli query task-status --task-id <ID>
+```
+
+If the VCF file query is combined with a sidecar metadata query using `--tsv-filter` which accepts the same the query syntax the sidecar queries described above, DivBase will perform the query on all VCF files identified by the sidecar query, apply any chain bcftools subset/filter operation given by the user, and return a single merged VCF file with the results.
+
+Bcftools subset/filters are set by the `--command` option. The syntax is experimental: it uses existing bcftools commands as defined in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html) but automatically handles the filenames based on the sidecar metadata query results. At the moment, `view` is the only bcftools command that can be used with `--command`.
+
+At the moment, the sample metadata query needs to be included in the query. To subset on the samples identified in the sample metadata query, use `--command view -s SAMPLES`:
+
+```bash
+divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES" --metadata-tsv-name sample_metadata.tsv
+```
+
+When several VCF files are part of the query, the DivBase backend ensure that they each are subset on their own and that all subsets are combined into a single results file using `bcftools merge` or `bcftools concat`, depending on the combinations of samples in each VCF file (see the bcftools manual for more information on the requirements for the `merge` and `concat` commands). Please note that the user do not need to specify `merge` and `concat` or concat in `--command`!
+
+It is possible to create pipes of bcftools operations by semicolon separation. This example first subsets each VCF files on the samples from the metadata queries, and then pipes each results of that subset to a new subset that filters based on scaffold `21` at coordinates `15000000-25000000`:
+
+```bash
+divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000" --metadata-tsv-name sample_metadata.tsv
 ```

@@ -114,6 +114,10 @@ def run_update_dimensions(CONSTANTS):
 
     Since this fixture is not run in a celery worker, patch the delete_job_files_from_worker function just pass and do nothing.
     This ensures that no files are deleted and that no logging messages about deletion are printed.
+
+    files_indexed_by_this_job = Workaround for garbage collection since patching in tmp_path across all layers turned out to be very complex...
+    Skip non-file-path list elements (status messages starting with "None:")
+    (From update_vcf_dimensions_task in tasks.py returning "None: no new VCF files or file versions were detected in the project.")
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
     default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -140,12 +144,15 @@ def run_update_dimensions(CONSTANTS):
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
             assert result["status"] == "completed"
 
-            # Workaround for garbage collection since patching in tmp_path across all layers turned out to be very complex...
+            # Remove any files created in the filesystem by this task run, except for those in the fixtures directory.
             files_indexed_by_this_job = result.get("VCF files that were added to dimensions file by this job", [])
-            for file_path in files_indexed_by_this_job:
-                file_path_obj = Path(file_path).resolve()
-                fixtures_dir = (Path(__file__).parent.parent / "fixtures").resolve()
-                if fixtures_dir not in file_path_obj.parents:
-                    file_path_obj.unlink()
+            if isinstance(files_indexed_by_this_job, list):
+                for file_path in files_indexed_by_this_job:
+                    if not file_path or not isinstance(file_path, str) or file_path.startswith("None:"):
+                        continue
+                    file_path_obj = Path(file_path).resolve()
+                    fixtures_dir = (Path(__file__).parent.parent / "fixtures").resolve()
+                    if fixtures_dir not in file_path_obj.parents and file_path_obj.exists():
+                        file_path_obj.unlink()
 
     return _run
