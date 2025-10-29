@@ -21,11 +21,6 @@ logger = logging.getLogger(__name__)
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
-# Worker service account credentials
-WORKER_SERVICE_EMAIL = os.environ.get("WORKER_SERVICE_EMAIL", "NOT_SET")
-WORKER_SERVICE_PASSWORD = os.environ.get("WORKER_SERVICE_PASSWORD", "NOT_SET")
-DIVBASE_API_URL = os.environ.get("DIVBASE_API_URL", "http://fastapi:8000")
-
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Redis-specific config
@@ -76,6 +71,11 @@ def _get_worker_access_token() -> str:
     This follows the same pattern as the CLI login in user_auth.py.
     Token is fetched fresh for each task to avoid expiration issues.
     """
+    # TODO these are set here for now since there were issues with module level imports for the tests
+    WORKER_SERVICE_EMAIL = os.environ.get("WORKER_SERVICE_EMAIL", "NOT_SET")
+    WORKER_SERVICE_PASSWORD = os.environ.get("WORKER_SERVICE_PASSWORD", "NOT_SET")
+    DIVBASE_API_URL = os.environ.get("DIVBASE_API_URL", "http://fastapi:8000/api")
+
     if WORKER_SERVICE_EMAIL == "NOT_SET" or WORKER_SERVICE_PASSWORD == "NOT_SET":
         raise ValueError(
             "Worker service account credentials not set. "
@@ -84,7 +84,7 @@ def _get_worker_access_token() -> str:
 
     try:
         response = httpx.post(
-            f"{DIVBASE_API_URL}/api/v1/auth/login",
+            f"{DIVBASE_API_URL}/v1/auth/login",
             data={
                 "grant_type": "password",
                 "username": WORKER_SERVICE_EMAIL,
@@ -100,36 +100,6 @@ def _get_worker_access_token() -> str:
 
     except httpx.HTTPError as e:
         logger.error(f"Failed to authenticate worker service account: {e}")
-        raise
-
-
-def _make_authenticated_api_request(method: str, endpoint: str, **kwargs) -> httpx.Response:
-    """
-    Make an authenticated request to the DivBase API.
-
-    This follows the same pattern as CLI's make_authenticated_request in user_auth.py.
-
-    Args:
-        method: HTTP method (GET, POST, DELETE, etc.)
-        endpoint: API endpoint path (e.g., "/api/v1/vcf-dimensions/projects/1")
-        **kwargs: Additional arguments passed to httpx.request()
-
-    Returns:
-        httpx.Response: API response
-    """
-    access_token = _get_worker_access_token()
-
-    headers = kwargs.pop("headers", {})
-    headers["Authorization"] = f"Bearer {access_token}"
-
-    url = f"{DIVBASE_API_URL}{endpoint}"
-
-    try:
-        response = httpx.request(method, url, headers=headers, timeout=30.0, **kwargs)
-        response.raise_for_status()
-        return response
-    except httpx.HTTPError as e:
-        logger.error(f"API request failed: {method} {endpoint} - {e}")
         raise
 
 

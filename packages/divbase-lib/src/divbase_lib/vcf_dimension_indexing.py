@@ -1,5 +1,6 @@
 import gzip
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,7 +76,9 @@ class VCFDimensionIndexManager:
 
     def __init__(self, bucket_name: str, api_base_url: str = None, auth_token: str = None):
         self.bucket_name = bucket_name
-        self.api_base_url = api_base_url or "http://fastapi:8000/api"
+        self.api_base_url = os.environ.get(
+            "DIVBASE_API_URL", "http://fastapi:8000/api"
+        )  # TODO there might be a better way of passing this. this works with the tests but will run once for every instance
         self.auth_token = auth_token
         self._project_id = None  # init to None to avoid API call in init method
 
