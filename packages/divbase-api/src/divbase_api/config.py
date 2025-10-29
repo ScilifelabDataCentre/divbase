@@ -21,6 +21,8 @@ class APISettings:
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
+    worker_service_email: str = os.getenv("WORKER_SERVICE_EMAIL", "NOT_SET")
+    worker_service_password: SecretStr = SecretStr(os.getenv("WORKER_SERVICE_PASSWORD", "NOT_SET"))
 
 
 @dataclass

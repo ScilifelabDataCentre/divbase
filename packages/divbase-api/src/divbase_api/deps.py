@@ -21,6 +21,7 @@ from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.config import settings
 from divbase_api.crud.projects import get_project_id_from_name, get_project_with_user_role
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
@@ -188,3 +189,26 @@ async def get_project_member(
         raise AuthorizationError("You don't have permission to access this project.")
 
     return project, current_user, user_role
+
+
+async def get_current_service_account(
+    current_user: Annotated[UserDB, Depends(get_current_user)],
+) -> UserDB:
+    """
+    Verify current user is the worker service account.
+
+    This dependency ensures only the worker service account can access certain endpoints.
+    Uses sub-dependency pattern like get_current_admin_user.
+    """
+    service_email = settings.api.worker_service_email
+
+    if service_email == "NOT_SET":
+        raise AuthorizationError("Worker service account is not configured")
+
+    if current_user.email != service_email:
+        raise AuthorizationError("This endpoint requires service account credentials")
+
+    if not current_user.is_active:
+        raise AuthenticationError("Service account is not active")
+
+    return current_user

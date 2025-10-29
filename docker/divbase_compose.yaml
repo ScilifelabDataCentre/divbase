@@ -43,6 +43,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_S3_ACCESS_KEY=minioadmin
       - DIVBASE_S3_SECRET_KEY=badpassword
+      - WORKER_SERVICE_EMAIL=worker@divbase.com
+      - WORKER_SERVICE_PASSWORD=badpassword
     develop: &watch-celery-src
       watch:
         - action: sync+restart
@@ -138,6 +140,8 @@ services:
     - FIRST_ADMIN_PASSWORD=badpassword
     - S3_ACCESS_KEY=minioadmin
     - S3_SECRET_KEY=badpassword
+    - WORKER_SERVICE_EMAIL=worker@divbase.com
+    - WORKER_SERVICE_PASSWORD=badpassword
     depends_on:
       rabbitmq:
         condition: service_healthy
