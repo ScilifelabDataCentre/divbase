@@ -43,9 +43,7 @@ def test_send_test_email(mock_send_email):
 
 @patch("divbase_api.services.email_sender._send_email")
 def test_send_verification_email(mock_send_email):
-    verification_url = "http://divbase.se/verify?token=abc123"
-
-    send_verification_email(email_to="test@example.com", verification_url=verification_url)
+    send_verification_email(email_to="test@example.com", user_id=123)
 
     mock_send_email.assert_called_once_with(
         email_to="test@example.com",
