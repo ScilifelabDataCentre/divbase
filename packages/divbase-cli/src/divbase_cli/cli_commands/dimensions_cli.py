@@ -144,4 +144,16 @@ def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
         }
         dimensions_list.append(dimensions_entry)
 
-    return {"dimensions": dimensions_list}
+    skipped_list = []
+    for entry in api_response.get("skipped_files", []):
+        skipped_entry = {
+            "filename": entry["vcf_file_s3_key"],
+            "file_version_ID_in_bucket": entry["s3_version_id"],
+            "skip_reason": entry.get("skip_reason", "unknown"),
+        }
+        skipped_list.append(skipped_entry)
+
+    return {
+        "indexed_files": dimensions_list,
+        "skipped_files": skipped_list,
+    }

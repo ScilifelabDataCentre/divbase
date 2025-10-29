@@ -293,11 +293,29 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
         raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
 
     result = await get_vcf_metadata_by_project(db, project.id)
+    vcf_files = result.get("vcf_files", [])
 
-    if not result["vcf_files"]:
+    skipped_entries = await get_skipped_vcfs_by_project(db, project.id)
+    skipped_files = [
+        {
+            "vcf_file_s3_key": entry.vcf_file_s3_key,
+            "s3_version_id": entry.s3_version_id,
+            "skip_reason": entry.skip_reason,
+        }
+        for entry in skipped_entries
+    ]
+
+    if not vcf_files and not skipped_files:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No VCF metadata found for project '{project_name}'",
+            detail=f"No VCF metadata or skipped files found for project '{project_name}'",
         )
 
-    return result
+    return {
+        "project_id": project.id,
+        "project_name": project.name,
+        "vcf_file_count": len(vcf_files),
+        "vcf_files": vcf_files,
+        "skipped_file_count": len(skipped_files),
+        "skipped_files": skipped_files,
+    }
