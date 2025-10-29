@@ -1,4 +1,3 @@
-import asyncio
 import dataclasses
 import logging
 import os
@@ -12,7 +11,10 @@ from celery import Celery
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import VCFDimensionCalculator
+from divbase_lib.vcf_dimension_indexing import (
+    VCFDimensionCalculator,
+    create_vcf_dimension_manager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,44 +135,30 @@ def _make_authenticated_api_request(method: str, endpoint: str, **kwargs) -> htt
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
 def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_name: str) -> dict:
-    """
-    Run a sample metadata query task as a Celery task.
-    """
-
+    """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
 
     try:
         s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+        auth_token = _get_worker_access_token()
 
-        try:
-            response = _make_authenticated_api_request(
-                "GET", f"/api/v1/vcf-dimensions/lookup/project-by-bucket/{bucket_name}"
-            )
-            project_data = response.json()
-            project_id = project_data["project_id"]
-        except Exception as e:
-            logger.error(f"Failed to get project info for bucket '{bucket_name}': {e}")
-            return {"status": "error", "error": str(e), "type": "ProjectLookupError", "task_id": task_id}
+        dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
         metadata_path = download_sample_metadata(
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
 
-        try:
-            response = _make_authenticated_api_request("GET", f"/api/v1/vcf-dimensions/list/project/{project_id}")
-            vcf_dimensions_data = response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.error(f"No VCF metadata found for project {project_id}")
-                return {
-                    "status": "error",
-                    "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
-                    "type": "VCFDimensionsMissingError",
-                    "task_id": task_id,
-                }
-            else:
-                logger.error(f"Failed to get VCF dimensions: {e}")
-                return {"status": "error", "error": str(e), "type": "VCFDimensionsAPIError", "task_id": task_id}
+        vcf_dimensions_data = dimension_manager.get_dimensions_info()
+
+        if not vcf_dimensions_data.get("vcf_files"):
+            return {
+                "status": "error",
+                "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
+                "type": "VCFDimensionsMissingError",
+                "task_id": task_id,
+            }
+
+        project_id = dimension_manager._project_id
 
         metadata_result = run_sidecar_metadata_query(
             file=metadata_path,
@@ -185,7 +173,6 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
         except Exception as e:
             logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
 
-        # Return results (dataclass converted to dict for Celery serialization)
         result = dataclasses.asdict(metadata_result)
         result["status"] = "completed"
         result["task_id"] = task_id
@@ -213,43 +200,27 @@ def bcftools_pipe_task(
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
-
-    TODO - how MinIO URL is handled needs a lot of thought here.
-    Unlike rest of API, might not be in same "local network"
     """
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    auth_token = _get_worker_access_token()
+
+    dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
     try:
-        response = _make_authenticated_api_request(
-            "GET", f"/api/v1/vcf-dimensions/lookup/project-by-bucket/{bucket_name}"
-        )
-        project_data = response.json()
-        project_id = project_data["project_id"]
-    except Exception as e:
+        vcf_dimensions_data = dimension_manager.get_dimensions_info()
+    except ValueError as e:
         logger.error(f"Failed to get project info for bucket '{bucket_name}': {e}")
         return {"status": "error", "error": str(e), "task_id": task_id}
 
-    try:
-        response = _make_authenticated_api_request("GET", f"/api/v1/vcf-dimensions/list/project/{project_id}")
-        vcf_dimensions_data = response.json()
+    if not vcf_dimensions_data.get("vcf_files"):
+        error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
+        logger.error(error_msg)
+        return {"status": "error", "error": error_msg, "type": "VCFDimensionsMissingError", "task_id": task_id}
 
-        if not vcf_dimensions_data.get("vcf_files"):
-            error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
-            logger.error(error_msg)
-            return {"status": "error", "error": error_msg, "type": "VCFDimensionsMissingError", "task_id": task_id}
-
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
-            logger.error(error_msg)
-            return {"status": "error", "error": error_msg, "type": "VCFDimensionsMissingError", "task_id": task_id}
-        else:
-            logger.error(f"Failed to get VCF dimensions: {e}")
-            return {"status": "error", "error": str(e), "type": "VCFDimensionsAPIError", "task_id": task_id}
-
+    project_id = dimension_manager._project_id
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     metadata_path = download_sample_metadata(
@@ -318,66 +289,39 @@ def bcftools_pipe_task(
 def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"):
     """
     Update VCF dimensions in the database for the specified bucket.
-
-    This is a sync Celery task that wraps async operations via asyncio.run().
     """
     task_id = update_vcf_dimensions_task.request.id
-    return asyncio.run(_update_vcf_dimensions_async(bucket_name, user_name, task_id))
 
-
-async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id: str):
-    """Async implementation - all database operations are async.
-
-    Update the VCF dimensions file for the specified bucket. Ensures that the index only covers files in the bucket at the time of task execution.
-
-    Re: vcfs_deleted_from_bucket_since_last_indexing: since both lists it is dependent on are already calculated,
-    set difference is a faster operation than a new list comp.
-    """
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    auth_token = _get_worker_access_token()
+
+    dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
 
     if not vcf_files:
         raise NoVCFFilesFoundError(
-            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. Please upload at least one VCF file and run this command again."
+            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. "
+            "Please upload at least one VCF file and run this command again."
         )
 
     try:
-        response = _make_authenticated_api_request(
-            "GET", f"/api/v1/vcf-dimensions/lookup/project-by-bucket/{bucket_name}"
-        )
-        project_data = response.json()
-        project_id = project_data["project_id"]
-    except Exception as e:
+        vcf_dimensions_data = dimension_manager.get_dimensions_info()
+        project_id = dimension_manager._project_id
+
+        already_indexed_vcfs = {
+            entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+        }
+    except ValueError as e:
         logger.error(f"Failed to get project info for bucket '{bucket_name}': {e}")
         return {"status": "error", "error": str(e), "task_id": task_id}
 
     try:
-        response = _make_authenticated_api_request("GET", f"/api/v1/vcf-dimensions/list/project/{project_id}")
-        existing_metadata = response.json()
-        already_indexed_vcfs = {
-            entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in existing_metadata.get("vcf_files", [])
-        }
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            already_indexed_vcfs = {}
-        else:
-            logger.error(f"Failed to get existing VCF metadata: {e}")
-            return {"status": "error", "error": str(e), "task_id": task_id}
-
-    try:
-        response = _make_authenticated_api_request("GET", f"/api/v1/vcf-dimensions/list-skipped/project/{project_id}")
-        skipped_data = response.json()
-        already_skipped_vcfs = {
-            entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in skipped_data.get("skipped_files", [])
-        }
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            already_skipped_vcfs = {}
-        else:
-            logger.error(f"Failed to get skipped VCFs: {e}")
-            already_skipped_vcfs = {}
+        already_skipped_vcfs = dimension_manager.get_skipped_files()
+    except Exception as e:
+        logger.warning(f"Failed to get skipped VCFs: {e}")
+        already_skipped_vcfs = {}
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -402,6 +346,7 @@ async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id
 
     files_indexed_by_this_job = []
     divbase_results_files_skipped_by_this_job = []
+
     for file in non_indexed_vcfs:
         try:
             vcf_dims = calculator.calculate_dimensions(Path(file))
@@ -413,11 +358,7 @@ async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id
                     "s3_version_id": latest_versions_of_bucket_files.get(file),
                     "skip_reason": "divbase_generated",
                 }
-
-                response = _make_authenticated_api_request(
-                    "POST", "/api/v1/vcf-dimensions/create-skipped", json=skipped_vcf_data
-                )
-
+                dimension_manager.create_or_update_skipped_vcf(skipped_vcf_data)
                 divbase_results_files_skipped_by_this_job.append(file)
                 logger.info(f"Skipping DivBase-generated result file: {file}")
                 continue
@@ -432,9 +373,7 @@ async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id
                 "sample_count": vcf_dims["sample_count"],
                 "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
             }
-
-            response = _make_authenticated_api_request("POST", "/api/v1/vcf-dimensions/create", json=vcf_metadata_data)
-
+            dimension_manager.create_or_update_vcf_metadata(vcf_metadata_data)
             files_indexed_by_this_job.append(file)
             logger.info(f"Indexed VCF metadata for: {file}")
 
@@ -448,9 +387,7 @@ async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             try:
-                response = _make_authenticated_api_request(
-                    "DELETE", f"/api/v1/vcf-dimensions/delete/project/{project_id}/file/{file}"
-                )
+                dimension_manager.delete_vcf_metadata(file, project_id)
                 logger.info(f"Deleted VCF metadata for removed file: {file}")
             except Exception as e:
                 logger.error(f"Failed to delete VCF metadata for {file}: {e}")
@@ -458,19 +395,18 @@ async def _update_vcf_dimensions_async(bucket_name: str, user_name: str, task_id
     if skipped_deleted_from_bucket:
         for file in skipped_deleted_from_bucket:
             try:
-                _make_authenticated_api_request(
-                    "DELETE", f"/api/v1/vcf-dimensions/delete-skipped/project/{project_id}/file/{file}"
-                )
+                dimension_manager.delete_skipped_vcf(file, project_id)
                 logger.info(f"Deleted skipped VCF entry for removed file: {file}")
             except Exception as e:
                 logger.error(f"Failed to delete skipped VCF entry for {file}: {e}")
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
-    if files_indexed_by_this_job == []:
+    if not files_indexed_by_this_job:
         files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
-    if divbase_results_files_skipped_by_this_job == []:
+    if not divbase_results_files_skipped_by_this_job:
         divbase_results_files_skipped_by_this_job = ["None: no DivBase-generated results were detected in the project."]
+
     return {
         "status": "completed",
         "submitter": user_name,
@@ -623,7 +559,7 @@ def check_if_samples_can_be_combined_with_bcftools(
         if file not in vcf_lookup:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
 
-        sample_names = vcf_lookup[file].get("samples")
+        sample_names = vcf_lookup[file].get("sample_names")
         if not sample_names:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
 
