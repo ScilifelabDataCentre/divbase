@@ -58,6 +58,7 @@ async def post_login(
         user = await authenticate_user(db, email=email, password=password)
     except AuthenticationError as e:
         logger.info(f"Failed login attempt for email: {email} - {e.message}")
+
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
@@ -245,6 +246,7 @@ async def resend_verification_email(
 
     user = await get_user_by_email(db=db, email=email)
     if not user:
+        # Do not differentiate between existing and non-existing users for security reasons
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
@@ -265,3 +267,14 @@ async def resend_verification_email(
         name="auth_pages/email_verification.html",
         context={"email": email, "success": LINK_SENT_MSG},
     )
+
+
+@fr_auth_router.get("/resend-verification-email", response_class=HTMLResponse)
+async def get_resend_verification_email(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Display the resend verification email page.
+    """
+    return templates.TemplateResponse(request=request, name="auth_pages/email_verification.html")

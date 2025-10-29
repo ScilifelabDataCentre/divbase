@@ -1,12 +1,10 @@
-{# Hit by user if the verification email link is invalid or expired #}
+{# Hit by user if the verification email link is invalid or expired or manually request to make a new one #}
 
 {% extends "base.html" %}
 {% block content %}
 <div class="container">
-    <div class="verification-failed">
-        <h2>Email verification failed</h2>
-        <p>The verification link is invalid or has expired. Please generate a new link below.</p>
-
+    <div class="email-verification">
+        <h2>Resend Verification Email</h2>
         {% include "components/resend_verification_form.html" %}
     
         <div class="mt-4">
