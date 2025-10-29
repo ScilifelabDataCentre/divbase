@@ -14,6 +14,7 @@ To compile the templates I used the vscode "MJML Official" extension.
 
 import logging
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 import emails
@@ -35,11 +36,10 @@ def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     return Template(template_str).render(context)
 
 
-def _send_email(email_to: str, subject: str, html_content: str) -> None:
+def _send_email(email_to: str, subject: str, html_content: str, retries: int = 3, retry_delay: int = 10) -> None:
     """
     Helper function to send any type of email,
     use one of the specific email functions below instead.
-    TODO: Some kind of guard clause if emails are disabled in settings?
     """
     message = emails.Message(
         subject=subject,
@@ -58,13 +58,20 @@ def _send_email(email_to: str, subject: str, html_content: str) -> None:
     if settings.email.smtp_password:
         smtp_options["password"] = settings.email.smtp_password.get_secret_value()
 
-    response = message.send(to=email_to, smtp=smtp_options)
+    for attempt in range(1, retries + 1):
+        response = message.send(to=email_to, smtp=smtp_options)
 
-    if response.status_code != 250:
-        # TODO - need to raise custom error and probably have some retries.
-        logger.error(f"Failed to send email to {email_to}. Response: {response}")
-    else:
-        logger.info(f"Email sent successfully to {email_to}")
+        if response.status_code == 250:
+            logger.info(f"Email to {email_to} with subject '{subject}' sent successfully.")
+            return
+        else:
+            logger.warning(f"Failed to send email to {email_to} with subject '{subject}'. Response: {response}")
+
+        if attempt < retries:
+            sleep(retry_delay)
+
+        logger.error(f"All {retries} attempts to send email to {email_to} with subject '{subject}', failed.")
+        return
 
 
 def send_test_email(email_to: str) -> None:
