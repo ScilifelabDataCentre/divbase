@@ -46,3 +46,24 @@ class VCFMetadataDB(BaseDBModel):
     __table_args__ = (UniqueConstraint("vcf_file_s3_key", "project_id", name="unique_vcf_per_project"),)
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="vcf_metadata")
+
+
+class SkippedVCFDB(BaseDBModel):
+    """
+    DB model to track DivBase-generated result VCFs.
+    These should ignored by queries since they contain duplicated data compared to the source VCFs.
+    """
+
+    __tablename__ = "skipped_vcf_files"
+
+    vcf_file_s3_key: Mapped[str] = mapped_column(String, index=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("project.id", ondelete="CASCADE"),
+        index=True,
+    )
+    s3_version_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("vcf_file_s3_key", "project_id", name="unique_skipped_vcf_per_project"),)
+
+    project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="skipped_vcf_files")

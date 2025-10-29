@@ -9,8 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import get_project_id_from_name
 from divbase_api.crud.vcf_dimensions import (
+    create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
+    delete_skipped_vcf,
     delete_vcf_metadata,
+    get_skipped_vcf_by_keys,
+    get_skipped_vcfs_by_project,
     get_vcf_metadata_by_keys,
     get_vcf_metadata_by_project,
 )
@@ -176,7 +180,92 @@ async def delete_vcf_metadata_for_file(
         ) from e
 
 
-# TODO add Delete entry route
+@vcf_dimensions_router.get("/list-skipped/project/{project_id}")
+async def list_skipped_vcfs_for_project(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    service_account: UserDB = Depends(get_current_service_account),
+):
+    """Get all skipped VCF entries for a project."""
+    entries = await get_skipped_vcfs_by_project(db, project_id)
+
+    return {
+        "project_id": project_id,
+        "skipped_file_count": len(entries),
+        "skipped_files": [
+            {
+                "vcf_file_s3_key": entry.vcf_file_s3_key,
+                "s3_version_id": entry.s3_version_id,
+            }
+            for entry in entries
+        ],
+    }
+
+
+@vcf_dimensions_router.post("/create-skipped", status_code=status.HTTP_201_CREATED)
+async def create_or_update_skipped_vcf_entry(
+    skipped_vcf_data: dict,
+    db: AsyncSession = Depends(get_db),
+    service_account: UserDB = Depends(get_current_service_account),
+):
+    """Create or update skipped VCF entry. Requires service account."""
+    if "vcf_file_s3_key" not in skipped_vcf_data or "project_id" not in skipped_vcf_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="vcf_file_s3_key and project_id are required",
+        )
+
+    try:
+        skipped_entry = await create_or_update_skipped_vcf(db, skipped_vcf_data)
+
+        logger.info(
+            f"Service account '{service_account.email}' created/updated skipped VCF entry for "
+            f"{skipped_vcf_data['vcf_file_s3_key']} in project {skipped_vcf_data['project_id']}"
+        )
+
+        return {
+            "message": "Skipped VCF entry created/updated successfully",
+            "vcf_file_s3_key": skipped_entry.vcf_file_s3_key,
+            "project_id": skipped_entry.project_id,
+        }
+    except Exception as e:
+        logger.error(f"Error upserting skipped VCF entry: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create/update skipped VCF entry: {str(e)}",
+        ) from e
+
+
+@vcf_dimensions_router.delete("/delete-skipped/project/{project_id}/file/{vcf_file_s3_key:path}")
+async def delete_skipped_vcf_entry(
+    project_id: int,
+    vcf_file_s3_key: str,
+    db: AsyncSession = Depends(get_db),
+    service_account: UserDB = Depends(get_current_service_account),
+):
+    """Delete skipped VCF entry. Requires service account."""
+    existing = await get_skipped_vcf_by_keys(db, vcf_file_s3_key, project_id)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Skipped VCF entry not found for file '{vcf_file_s3_key}' in project {project_id}",
+        )
+
+    try:
+        await delete_skipped_vcf(db, vcf_file_s3_key, project_id)
+
+        logger.info(
+            f"Service account '{service_account.email}' deleted skipped VCF entry for "
+            f"{vcf_file_s3_key} in project {project_id}"
+        )
+
+        return {"message": "Skipped VCF entry deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting skipped VCF entry: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete skipped VCF entry: {str(e)}",
+        ) from e
 
 
 @vcf_dimensions_router.get("/lookup/project-by-bucket/{bucket_name}")
