@@ -96,7 +96,8 @@ def login_to_divbase(
         raise DivBaseAPIConnectionError() from None
 
     if response.status_code == 401:
-        raise AuthenticationError("Invalid email or password. Please try again.")
+        error_message = response.json().get("detail", "Invalid email or password.")
+        raise AuthenticationError(error_message)
 
     response.raise_for_status()
 

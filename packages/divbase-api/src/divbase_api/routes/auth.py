@@ -10,14 +10,15 @@ TODO:
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user
+from divbase_api.crud.auth import authenticate_user, user_account_valid
 from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user
+from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.auth import (
     CLILoginResponse,
@@ -42,19 +43,6 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
     """
     # (form_data.username is defined by OAuth2PasswordRequestForm, but using email for this is fine)
     user = await authenticate_user(db, email=form_data.username, password=form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not user.is_active:
-        logger.warning(f"Inactive user {user.email} attempted to log in.")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user",
-        )
-
     logger.info(f"User {user.email} logged in successfully.")
 
     access_token, exp_access = create_access_token(subject=user.id)
@@ -75,26 +63,21 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
     Refresh token endpoint.
 
     Creates a new access token using the refresh token.
-    Unlike access token pathway, refresh token validates a user still exists and is still active.
-
-    TODO: Decided if refresh token should also be refreshed here.
+    Unlike the access token pathway, refresh token validates a user account is still valid (active, not deleted, email verified).
     """
-
     user_id = verify_token(token=refresh_token.refresh_token, desired_token_type=TokenType.REFRESH)
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token, please log in again",
-            headers={"WWW-Authenticate": "Bearer"},
+        raise AuthenticationError(
+            message="Invalid refresh token, please log in again",
         )
 
     user = await get_user_by_id(db=db, id=user_id)
-    if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if not user:
+        logger.warning(f"Attempt to use refresh token for a non-existent user id: {user_id}")
+        raise AuthenticationError(message="User not found or inactive or deleted")
+    if not user_account_valid(user):
+        logger.warning(f"Attempt to refresh token for invalid user account: {user.email} (id: {user.id})")
+        raise AuthenticationError(message="User not found or inactive or deleted")
 
     access_token, expires_at = create_access_token(subject=user.id)
     return RefreshTokenResponse(access_token=access_token, expires_at=expires_at)

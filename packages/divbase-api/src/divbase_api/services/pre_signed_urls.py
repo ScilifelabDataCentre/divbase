@@ -13,7 +13,7 @@ from functools import lru_cache
 
 import boto3
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 
 logger = logging.getLogger(__name__)

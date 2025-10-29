@@ -42,7 +42,9 @@ async def get_all_users(db: AsyncSession, limit: int = 1000, admins_only: bool =
     return list(result.scalars().all())
 
 
-async def create_user(db: AsyncSession, user_data: UserCreate, is_admin: bool = False) -> UserDB:
+async def create_user(
+    db: AsyncSession, user_data: UserCreate, is_admin: bool = False, email_verified: bool = False
+) -> UserDB:
     """Create a new user"""
     proposed_email = user_data.email.lower()
     current_user = await get_user_by_email(db=db, email=proposed_email)
@@ -54,7 +56,7 @@ async def create_user(db: AsyncSession, user_data: UserCreate, is_admin: bool = 
     user_dict = user_data.model_dump(exclude={"password"})
     hashed_password = get_password_hash(user_data.password)
 
-    user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin)
+    user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin, email_verified=email_verified)
     db.add(user)
     await db.commit()
     await db.refresh(user)

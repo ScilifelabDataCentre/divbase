@@ -4,19 +4,32 @@ Frontend routes for authentication-related pages.
 
 import logging
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user
+from divbase_api.api_config import settings
+from divbase_api.crud.auth import (
+    authenticate_user,
+    check_user_email_verified,
+    confirm_user_email,
+)
 from divbase_api.crud.users import create_user, get_user_by_email
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
+from divbase_api.exceptions import AuthenticationError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
-from divbase_api.security import TokenType, create_access_token, create_refresh_token
+from divbase_api.security import (
+    TokenType,
+    create_access_token,
+    create_refresh_token,
+    verify_expired_token,
+    verify_token,
+)
+from divbase_api.services.email_sender import send_email_already_verified_email, send_verification_email
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +54,18 @@ async def post_login(
     request: Request, email: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
 ):
     """Handle login form submission."""
-    user = await authenticate_user(db, email=email, password=password)
-    if not user:
-        logger.info(f"Failed login attempt for email: {email}")
+    try:
+        user = await authenticate_user(db, email=email, password=password)
+    except AuthenticationError as e:
+        logger.info(f"Failed login attempt for email: {email} - {e.message}")
+
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
-            context={"request": request, "error": "Invalid email or password"},
+            context={"request": request, "error": e.message},
         )
 
+    logger.info(f"User {user.email} logged in successfully via frontend.")
     access_token, access_expires_at = create_access_token(subject=user.id)
     refresh_token, refresh_expires_at = create_refresh_token(subject=user.id)
 
@@ -111,6 +127,7 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
 @fr_auth_router.post("/register", response_class=HTMLResponse)
 async def post_register(
     request: Request,
+    background_tasks: BackgroundTasks,
     name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
@@ -141,10 +158,12 @@ async def post_register(
 
     try:
         user_data = UserCreate(name=name, email=email, password=SecretStr(password))
-        await create_user(db=db, user_data=user_data, is_admin=False)
+        user = await create_user(db=db, user_data=user_data, is_admin=False)
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         return registration_failed_response("Registration failed, please try again.")
+
+    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
 
     logger.info(f"New user registered: {user_data.email=}")
     return templates.TemplateResponse(
@@ -154,5 +173,111 @@ async def post_register(
             "request": request,
             "name": user_data.name,
             "email": user_data.email,
+            "from_email": settings.email.from_email,
         },
     )
+
+
+@fr_auth_router.get("/verify-email", response_class=HTMLResponse)
+async def get_verify_email(
+    request: Request,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle email verification.
+
+    To access this endpoint a user recieves an email with link to verify their email.
+    The link contains a JWT as query param in the URL.
+
+    For the sake of UX, we return different HTML pages depending on the outcome of the verification,
+    """
+    expired_token = False
+
+    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not user_id:
+        expired_token = True
+        user_id = verify_expired_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+
+    if not user_id:  # token is invalid and always was
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"error": "Invalid email verification link. Please request a new link below."},
+        )
+
+    already_verified = await check_user_email_verified(db=db, id=user_id)
+
+    if already_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/login.html",
+            context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+        )
+
+    if expired_token and not already_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"error": "Email verification link has expired. Please request a new link below."},
+        )
+
+    # token is valid and email not verified yet proceed to verify email
+    user = await confirm_user_email(db=db, id=user_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/login.html",
+        context={"success": f"Thank you for verifying your email '{user.email}', you can now log in to DivBase"},
+    )
+
+
+@fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
+async def resend_verification_email(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    email: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle resending the email verification link.
+    """
+    LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
+
+    user = await get_user_by_email(db=db, email=email)
+    if not user:
+        # Do not differentiate between existing and non-existing users for security reasons
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"email": email, "success": LINK_SENT_MSG},
+        )
+
+    if user.email_verified:
+        # User is already verified, inform them by email
+        # To prevent information leakage (which accounts exist and don't exists),
+        # we show the same success message on the frontend, but email them to inform them they can already login.
+
+        background_tasks.add_task(send_email_already_verified_email, email_to=user.email)
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/login.html",
+            context={"success": LINK_SENT_MSG},
+        )
+
+    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/email_verification.html",
+        context={"email": email, "success": LINK_SENT_MSG},
+    )
+
+
+@fr_auth_router.get("/resend-verification-email", response_class=HTMLResponse)
+async def get_resend_verification_email(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Display the resend verification email page.
+    """
+    return templates.TemplateResponse(request=request, name="auth_pages/email_verification.html")

@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError

@@ -212,6 +212,7 @@ def create_users(token: str) -> dict[str, int]:
             f"{BASE_URL}/v1/admin/users/",
             token,
             json={"name": user_data["name"], "email": user_data["email"], "password": user_data["password"]},
+            params={"email_verified": True},
         )
 
         user = response.json()

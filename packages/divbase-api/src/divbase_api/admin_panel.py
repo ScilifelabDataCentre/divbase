@@ -56,6 +56,7 @@ class UserView(ModelView):
         BooleanField("is_admin", help_text="Is the user an admin?"),
         BooleanField("is_active", help_text="Is the user active?"),
         BooleanField("is_deleted", help_text="Is the user deleted?"),
+        BooleanField("email_verified", help_text="Has the user verified their email address?"),
         "project_memberships",
     ]
 

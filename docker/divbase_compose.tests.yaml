@@ -44,3 +44,10 @@ services:
     volumes: !reset []
     tmpfs:
       - /var/lib/postgresql/data/pgdata
+  mailpit:
+    ports: !override
+      - "1026:1025"
+      - "8026:8025"
+    volumes: !reset []
+    tmpfs:
+      - /data/

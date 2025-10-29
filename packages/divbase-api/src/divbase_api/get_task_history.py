@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 
 logger = logging.getLogger(__name__)
 
