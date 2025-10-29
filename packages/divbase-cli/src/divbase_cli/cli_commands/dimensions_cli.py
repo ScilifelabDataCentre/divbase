@@ -8,7 +8,7 @@ import yaml
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.services import show_dimensions_command
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.exceptions import VCFDimensionsFileMissingOrEmptyError
 
 logger = logging.getLogger(__name__)
@@ -62,9 +62,29 @@ def show_dimensions_index(
     """
 
     project_config = resolve_project(project_name=project, config_path=config_file)
-    dimensions_info = show_dimensions_command(project_config=project_config)
-    if not dimensions_info.get("dimensions"):
-        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.bucket_name)
+
+    try:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/list/user-project-name/{project_config.name}",
+        )
+        vcf_dimensions_data = response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name) from e
+        elif e.response.status_code == 403:
+            print(f"Error: You don't have access to project '{project_config.name}'")
+            raise typer.Exit(1) from None
+        raise
+
+    if not vcf_dimensions_data.get("vcf_files"):
+        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name)
+
+    if not vcf_dimensions_data.get("vcf_files"):
+        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name)
+
+    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
 
     if filename:
         record = None
@@ -102,3 +122,26 @@ def show_dimensions_index(
         return
 
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
+
+
+def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
+    """
+    Convert the new API response format to a YAML-like format.
+    """
+    dimensions_list = []
+
+    for entry in api_response.get("vcf_files", []):
+        dimensions_entry = {
+            "filename": entry["vcf_file_s3_key"],
+            "file_version_ID_in_bucket": entry["s3_version_id"],
+            "last_updated": entry.get("indexed_at") or entry.get("updated_at"),
+            "dimensions": {
+                "scaffolds": entry.get("scaffolds", []),
+                "sample_count": entry.get("sample_count", 0),
+                "sample_names": entry.get("samples", []),
+                "variants": entry.get("variant_count", 0),
+            },
+        }
+        dimensions_list.append(dimensions_entry)
+
+    return {"dimensions": dimensions_list}

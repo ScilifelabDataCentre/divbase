@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.projects import get_project_id_from_name
+from divbase_api.crud.projects import get_project_id_from_name, has_required_role
 from divbase_api.crud.vcf_dimensions import (
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
@@ -19,7 +19,9 @@ from divbase_api.crud.vcf_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_service_account, get_current_user
+from divbase_api.deps import get_current_service_account, get_current_user, get_project_member
+from divbase_api.exceptions import AuthorizationError
+from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
@@ -37,34 +39,15 @@ async def list_vcf_metadata_for_project(
     Get all VCF metadata entries for a project.
     Returns technical metadata (dimensions) for all VCF files in the project.
     """
-    entries = await get_vcf_metadata_by_project(db, project_id)
+    result = await get_vcf_metadata_by_project(db, project_id)
 
-    if not entries:
+    if not result["vcf_files"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"VCF metadata not found for project {project_id}",
+            detail=f"No VCF metadata found for project {project_id}",
         )
-    # TODO: is the detail giving away too much information?
 
-    return {
-        "project_id": project_id,
-        "vcf_file_count": len(entries),
-        "vcf_files": [
-            {
-                "vcf_file_s3_key": entry.vcf_file_s3_key,
-                "s3_version_id": entry.s3_version_id,
-                "samples": entry.samples,
-                "scaffolds": entry.scaffolds,
-                "variant_count": entry.variant_count,
-                "sample_count": entry.sample_count,
-                "file_size_bytes": entry.file_size_bytes,
-                "indexed_at": entry.indexed_at.isoformat() if entry.indexed_at else None,
-                "created_at": entry.created_at.isoformat() if entry.created_at else None,
-                "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
-            }
-            for entry in entries
-        ],
-    }
+    return result
 
 
 @vcf_dimensions_router.get("/get/project/{project_id}/file/{vcf_file_s3_key:path}")
@@ -290,3 +273,31 @@ async def get_project_by_bucket_name(
         )
 
     return {"project_id": project_id, "bucket_name": bucket_name}
+
+
+@vcf_dimensions_router.get("/list/user-project-name/{project_name}")
+async def list_vcf_metadata_by_project_name_user_endpoint(
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all VCF metadata entries for a project by project name.
+
+    This endpoint is for regular users (CLI/frontend) and uses the standard
+    project member authorization pattern.
+    """
+    project, current_user, role = project_and_user_and_role
+
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
+
+    result = await get_vcf_metadata_by_project(db, project.id)
+
+    if not result["vcf_files"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No VCF metadata found for project '{project_name}'",
+        )
+
+    return result
