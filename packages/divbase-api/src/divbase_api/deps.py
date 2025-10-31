@@ -28,7 +28,7 @@ from divbase_api.db import get_db
 from divbase_api.exceptions import AuthenticationError, AuthorizationError, ProjectNotFoundError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.security import TokenType, create_access_token, verify_token
+from divbase_api.security import TokenType, create_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ async def _authenticate_frontend_user_from_tokens(
         return None
 
     if response:
-        new_access_token, expires_at = create_access_token(subject=user.id)
+        new_access_token, expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
         response.set_cookie(
             key=TokenType.ACCESS.value,
             value=new_access_token,

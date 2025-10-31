@@ -24,8 +24,7 @@ from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserCreate, UserResponse
 from divbase_api.security import (
     TokenType,
-    create_access_token,
-    create_refresh_token,
+    create_token,
     verify_expired_token,
     verify_token,
 )
@@ -66,8 +65,8 @@ async def post_login(
         )
 
     logger.info(f"User {user.email} logged in successfully via frontend.")
-    access_token, access_expires_at = create_access_token(subject=user.id)
-    refresh_token, refresh_expires_at = create_refresh_token(subject=user.id)
+    access_token, access_expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    refresh_token, refresh_expires_at = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
     response = templates.TemplateResponse(
         request=request,

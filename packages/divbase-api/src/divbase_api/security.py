@@ -36,46 +36,25 @@ class TokenType(str, Enum):
     PASSWORD_RESET = "password_reset"
 
 
-def create_access_token(subject: str | Any) -> tuple[str, int]:
-    """
-    Create a new access token for a user. Return token + expiration timestamp.
-
-    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
-    """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.access_token_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.ACCESS.value}
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt, int(expire.timestamp())
+token_expires_delta: dict[TokenType, timedelta] = {
+    TokenType.ACCESS: timedelta(seconds=settings.jwt.access_token_expires_seconds),
+    TokenType.REFRESH: timedelta(seconds=settings.jwt.refresh_token_expires_seconds),
+    TokenType.EMAIL_VERIFICATION: timedelta(seconds=settings.email.email_verify_expires_seconds),
+    TokenType.PASSWORD_RESET: timedelta(seconds=settings.email.password_reset_expires_seconds),
+}
 
 
-def create_refresh_token(subject: str | Any) -> tuple[str, int]:
+def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
     """
-    Create a new refresh token for a user. Return token + expiration timestamp.
+    Create a JWT token for access, refresh, email verificaion or password reset.
 
-    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
-    """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.refresh_token_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.REFRESH.value}
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt, int(expire.timestamp())
+    Returns a tuple of the JWT and expiry UNIX time stamp for the token.
 
-
-def create_email_verification_token(subject: str | Any) -> tuple[str, int]:
+    Tokens specify the "type" field in the payload,
+    so we can validate an access token is not used for e.g. password reset.
     """
-    Create a new email verification token for a user. Return token + expiration timestamp.
-    """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.email.email_verify_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.EMAIL_VERIFICATION.value}
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt, int(expire.timestamp())
-
-
-def create_password_reset_token(subject: str | Any) -> tuple[str, int]:
-    """
-    Create a new password reset token for a user. Return token + expiration timestamp.
-    """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.email.password_reset_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.PASSWORD_RESET.value}
+    expire = datetime.now(timezone.utc) + token_expires_delta[token_type]
+    to_encode = {"exp": expire, "sub": str(subject), "type": token_type.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
     return encoded_jwt, int(expire.timestamp())
 

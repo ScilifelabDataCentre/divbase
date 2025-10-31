@@ -26,7 +26,7 @@ from divbase_api.schemas.auth import (
     RefreshTokenResponse,
 )
 from divbase_api.schemas.users import UserResponse
-from divbase_api.security import TokenType, create_access_token, create_refresh_token, verify_token
+from divbase_api.security import TokenType, create_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
     user = await authenticate_user(db, email=form_data.username, password=form_data.password)
     logger.info(f"User {user.email} logged in successfully.")
 
-    access_token, exp_access = create_access_token(subject=user.id)
-    refresh_token, exp_refresh = create_refresh_token(subject=user.id)
+    access_token, exp_access = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    refresh_token, exp_refresh = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
     return CLILoginResponse(
         access_token=access_token,
@@ -79,7 +79,7 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
         logger.warning(f"Attempt to refresh token for invalid user account: {user.email} (id: {user.id})")
         raise AuthenticationError(message="User not found or inactive or deleted")
 
-    access_token, expires_at = create_access_token(subject=user.id)
+    access_token, expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
     return RefreshTokenResponse(access_token=access_token, expires_at=expires_at)
 
 
