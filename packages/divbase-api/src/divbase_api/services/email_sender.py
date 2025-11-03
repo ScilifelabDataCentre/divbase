@@ -70,8 +70,7 @@ def _send_email(email_to: str, subject: str, html_content: str, retries: int = 3
         if attempt < retries:
             sleep(retry_delay)
 
-        logger.error(f"All {retries} attempts to send email to {email_to} with subject '{subject}', failed.")
-        return
+    logger.error(f"All {retries} attempts to send email to {email_to} with subject '{subject}', failed.")
 
 
 def send_test_email(email_to: str) -> None:
