@@ -182,6 +182,7 @@ async def get_verify_email(
     request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """
     Handle email verification.
@@ -191,6 +192,10 @@ async def get_verify_email(
 
     For the sake of UX, we return different HTML pages depending on the outcome of the verification,
     """
+    # redirect to home if already logged in.
+    if current_user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
     expired_token = False
 
     user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
@@ -275,8 +280,13 @@ async def resend_verification_email(
 async def get_resend_verification_email(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """
     Display the resend verification email page.
     """
+    # redirect to home if already logged in.
+    if current_user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
     return templates.TemplateResponse(request=request, name="auth_pages/email_verification.html")
