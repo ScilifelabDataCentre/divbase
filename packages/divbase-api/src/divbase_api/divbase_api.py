@@ -112,6 +112,7 @@ def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str)
         "tsv_filter": tsv_filter,
         "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": bucket_name,
+        "project_id": 1,  # hardcoded for now
     }
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)

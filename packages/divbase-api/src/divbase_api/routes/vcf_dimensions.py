@@ -29,28 +29,6 @@ logger = logging.getLogger(__name__)
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get("/list/project/{project_id}")
-async def list_vcf_metadata_for_project(
-    project_id: int,
-    db: AsyncSession = Depends(get_db),
-    service_account: UserDB = Depends(get_current_service_account),
-):
-    """
-    Get all VCF metadata entries for a project.
-
-    Requires worker service account authentication.
-    """
-    result = await get_vcf_metadata_by_project(db, project_id)
-
-    if not result["vcf_files"]:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No VCF metadata found for project {project_id}",
-        )
-
-    return result
-
-
 @vcf_dimensions_router.get("/get/project/{project_id}/file/{vcf_file_s3_key:path}")
 async def get_vcf_metadata_for_specific_file_in_project(
     project_id: int,

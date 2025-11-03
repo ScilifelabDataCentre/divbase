@@ -68,7 +68,7 @@ def run_sidecar_metadata_query(
 
     for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
         filename = vcf_entry["vcf_file_s3_key"]
-        sample_names = vcf_entry.get("sample_names", [])
+        sample_names = vcf_entry.get("samples", [])
 
         for sample_id in sample_names:
             if sample_id in unique_sample_ids:
