@@ -14,6 +14,7 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import (
+    bcftools_pipe_task,
     sample_metadata_query_task,
 )
 
@@ -22,6 +23,9 @@ logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandle
 logger = logging.getLogger(__name__)
 
 query_router = APIRouter()
+
+# TODO harmonize function names
+# TODO response_model like in the versioning routes
 
 
 @query_router.post("/sample-metadata/", status_code=status.HTTP_200_OK)
@@ -60,3 +64,32 @@ def sample_metadata_query(
         "unique_filenames": result_dict["unique_filenames"],
         "query_message": result_dict["query_message"],
     }
+
+
+@query_router.post("/bcftools-pipe/", status_code=status.HTTP_200_OK)
+def create_bcftools_jobs(
+    tsv_filter: str,
+    metadata_tsv_name: str,
+    command: str,
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    Create a new bcftools query job for the specified project.
+    """
+    project, current_user, role = project_and_user_and_role
+
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to query this project.")
+
+    task_kwargs = {
+        "tsv_filter": tsv_filter,
+        "command": command,
+        "metadata_tsv_name": metadata_tsv_name,
+        "bucket_name": project.bucket_name,
+        "project_id": project.id,
+        "user_name": current_user.email,
+    }
+
+    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
+    return results.id

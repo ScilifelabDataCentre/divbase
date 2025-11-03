@@ -142,9 +142,14 @@ def pipe_query(
         "tsv_filter": tsv_filter,
         "command": command,
         "metadata_tsv_name": metadata_tsv_name,
-        "project": project_config.name,
+        "project_name": project_config.name,
     }
-    response = httpx.post(f"{project_config.divbase_url}/v1/query/bcftools-pipe/", params=params)
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route="v1/query/bcftools-pipe/",
+        params=params,
+    )
     response.raise_for_status()
 
     task_id = response.json()

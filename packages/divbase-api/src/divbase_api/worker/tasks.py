@@ -108,12 +108,14 @@ def _get_worker_access_token() -> str:
 
 async def get_vcf_dimensions_for_project_async(project_id: int) -> dict:
     """
-    Fetch VCF dimensions from database for a project.
-
-    Returns dict with 'vcf_files' key containing list of VCF metadata entries.
+    Fetch async vcf dimensions entry from db.
     """
     async with AsyncSessionLocal() as db:
         return await list_vcf_metadata_for_project(project_id=project_id, db=db)
+
+
+# TODO this is a wrapper that creates a db instance. for tasks that need more IO to the dimensions table,
+# it should create a db at the top of the task and run asyncio.run(list_vcf_metadata_for_project(project_id=project_id, db=db)) instead of this
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
@@ -174,7 +176,12 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
 def bcftools_pipe_task(
-    tsv_filter: str, command: str, metadata_tsv_name: str, bucket_name: str, user_name: str = "Default User"
+    tsv_filter: str,
+    command: str,
+    metadata_tsv_name: str,
+    bucket_name: str,
+    project_id: int,
+    user_name: str,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -183,22 +190,14 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
-    auth_token = _get_worker_access_token()
 
-    dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
-
-    try:
-        vcf_dimensions_data = dimension_manager.get_dimensions_info()
-    except ValueError as e:
-        logger.error(f"Failed to get project info for bucket '{bucket_name}': {e}")
-        return {"status": "error", "error": str(e), "task_id": task_id}
+    vcf_dimensions_data = asyncio.run(get_vcf_dimensions_for_project_async(project_id))
 
     if not vcf_dimensions_data.get("vcf_files"):
         error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
         logger.error(error_msg)
         return {"status": "error", "error": error_msg, "type": "VCFDimensionsMissingError", "task_id": task_id}
 
-    project_id = dimension_manager._project_id
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     metadata_path = download_sample_metadata(
@@ -537,7 +536,7 @@ def check_if_samples_can_be_combined_with_bcftools(
         if file not in vcf_lookup:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
 
-        sample_names = vcf_lookup[file].get("sample_names")
+        sample_names = vcf_lookup[file].get("samples")
         if not sample_names:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
 

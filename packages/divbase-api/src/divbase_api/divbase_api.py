@@ -34,7 +34,6 @@ from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 from divbase_api.worker.tasks import (
-    bcftools_pipe_task,
     update_vcf_dimensions_task,
 )
 
@@ -108,30 +107,6 @@ def get_jobs_by_user(user_name: str = "Default User"):
 def get_task_by_id(task_id: str):
     task_items = get_task_history(task_id=task_id)
     return task_items
-
-
-@app.post("/api/v1/query/bcftools-pipe/")
-def create_bcftools_jobs(
-    tsv_filter: str,
-    metadata_tsv_name: str,
-    command: str,
-    project: str,
-    user_name: str = "Default User",
-):
-    """
-    Create a new bcftools query job for the specified project.
-    """
-    bucket_name = project
-    task_kwargs = {
-        "tsv_filter": tsv_filter,
-        "command": command,
-        "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": bucket_name,
-        "user_name": user_name,
-    }
-
-    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
-    return results.id
 
 
 @app.post("/api/v1/dimensions/update/")
