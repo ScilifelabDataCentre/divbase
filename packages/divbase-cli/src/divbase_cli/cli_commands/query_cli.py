@@ -28,6 +28,7 @@ from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_divbase_api_url, resolve_project
 from divbase_cli.display_task_history import TaskHistoryManager
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.queries import SidecarQueryResult
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,13 @@ def sample_metadata_query(
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
-    response = httpx.post(f"{project_config.divbase_url}/v1/query/sample-metadata/", params=params)
+    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project_name": project_config.name}
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route="v1/query/sample-metadata/",
+        params=params,
+    )
 
     data = response.json()
 
