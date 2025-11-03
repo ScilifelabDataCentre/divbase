@@ -8,7 +8,7 @@ Inspiration for the approach was taken heavily from the <https://github.com/fast
 
 - The UserDB Model contains an `email_verified` field and this is checked on login and on refresh token usage.
 
-- The FIRST_ADMIN_USER, test users created by local_dev_setup.py (and equivalent for testing) automatically have there email verified for convenience.
+- The FIRST_ADMIN_USER, test users created by local_dev_setup.py (and equivalent for testing) automatically have their email verified for convenience.
 
 - The admin only api route to create a user can set email_verified to true on creation for convenience.
 
@@ -18,7 +18,7 @@ Inspiration for the approach was taken heavily from the <https://github.com/fast
 
 - The service email_sender.py handles sending the different types of emails with emails written using the language: <https://mjml.io/> These are manually converted to Jinja2 templates for actual use in the code.
 
-- Email verification uses JWTs which are included as a link in the sent email. Clicking the link in the recived email will an endpoint with the JWT included as a query param. If token fine, userDB model updated and user can now login.
+- Email verification uses JWTs which are included as a link in the sent email. Clicking the link in the received email will call an endpoint with the JWT included as a query param. If token fine, userDB model updated and user can now login.
 
 ## MailPit
 

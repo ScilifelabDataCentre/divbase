@@ -187,7 +187,7 @@ async def get_verify_email(
     """
     Handle email verification.
 
-    To access this endpoint a user recieves an email with link to verify their email.
+    To access this endpoint a user receives an email with link to verify their email.
     The link contains a JWT as query param in the URL.
 
     For the sake of UX, we return different HTML pages depending on the outcome of the verification,

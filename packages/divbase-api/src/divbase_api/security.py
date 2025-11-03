@@ -47,7 +47,7 @@ token_expires_delta: dict[TokenType, timedelta] = {
 
 def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
     """
-    Create a JWT token for access, refresh, email verificaion or password reset.
+    Create a JWT token for access, refresh, email verification or password reset.
 
     Returns a tuple of the JWT and expiry UNIX time stamp for the token.
 
