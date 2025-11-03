@@ -5,12 +5,12 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
-from divbase_worker.tasks import (
+from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     calculate_pairwise_overlap_types_for_sample_sets,
     check_if_samples_can_be_combined_with_bcftools,
 )
+from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 
 @pytest.mark.integration

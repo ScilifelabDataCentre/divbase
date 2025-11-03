@@ -21,12 +21,12 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
 from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
-from divbase_worker.tasks import bcftools_pipe_task
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -535,7 +535,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """
 
-        logger = logging.getLogger("divbase_worker.tasks")
+        logger = logging.getLogger("divbase_api.worker.tasks")
 
         if output_file is not None:
             output_file = ensure_fixture_path(str(output_file))
@@ -568,17 +568,17 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
         with (
             patch("boto3.client", side_effect=patched_boto3_client),
-            patch("divbase_worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+            patch("divbase_api.worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
             patch("divbase_lib.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
-            patch("divbase_worker.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
+            patch("divbase_api.worker.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
             patch("divbase_lib.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
             patch("divbase_lib.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
             patch(
                 "divbase_lib.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
-            patch("divbase_worker.tasks.upload_results_file", new=patched_upload_results_file),
-            patch("divbase_worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
+            patch("divbase_api.worker.tasks.upload_results_file", new=patched_upload_results_file),
+            patch("divbase_api.worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
             patch(
                 "divbase_lib.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
@@ -603,7 +603,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
 
 @patch(
-    "divbase_worker.tasks.create_s3_file_manager",
+    "divbase_api.worker.tasks.create_s3_file_manager",
     side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
 )
 def test_query_exits_when_vcf_file_version_is_outdated(
@@ -639,8 +639,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
         pass
 
     with (
-        patch("divbase_worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
-        patch("divbase_worker.tasks.download_vcf_files", new=patched_download_vcf_files),
+        patch("divbase_api.worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+        patch("divbase_api.worker.tasks.download_vcf_files", new=patched_download_vcf_files),
     ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 

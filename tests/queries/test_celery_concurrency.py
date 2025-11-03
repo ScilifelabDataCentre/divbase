@@ -7,7 +7,7 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
+from divbase_api.worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
 
 
 @pytest.mark.integration

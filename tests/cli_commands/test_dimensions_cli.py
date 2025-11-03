@@ -13,11 +13,11 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
-from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.minio_setup import PROJECTS
 
 runner = CliRunner()
@@ -184,7 +184,7 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
     test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = "empty-project"
 
-    with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
+    with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
             update_vcf_dimensions_task(bucket_name=bucket_name)
@@ -219,7 +219,7 @@ def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
         assert vcf_file not in filenames
 
 
-@patch("divbase_worker.tasks.create_s3_file_manager")
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, CONSTANTS, tmp_path):
     """
     Test that after running a query (which generates a DivBase result VCF),
@@ -258,7 +258,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
     assert result["status"] == "completed"
 
 
-@patch("divbase_worker.tasks.create_s3_file_manager")
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_manager, CONSTANTS, tmp_path):
     """
     Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,

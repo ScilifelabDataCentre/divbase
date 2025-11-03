@@ -45,11 +45,20 @@ services:
       - DIVBASE_S3_SECRET_KEY=badpassword
       - WORKER_SERVICE_EMAIL=worker@divbase.com
       - WORKER_SERVICE_PASSWORD=badpassword
+      - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+      - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
+      - FLOWER_USER=floweradmin
+      - FLOWER_PASSWORD=badpassword
+      - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+      - FIRST_ADMIN_EMAIL=admin@divbase.com
+      - FIRST_ADMIN_PASSWORD=badpassword
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=badpassword
     develop: &watch-celery-src
       watch:
         - action: sync+restart
-          path: ../packages/divbase-worker/src/divbase_worker/
-          target: /usr/local/lib/python3.12/site-packages/divbase_worker/
+          path: ../packages/divbase-api/src/divbase_api/
+          target: /usr/local/lib/python3.12/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
@@ -79,6 +88,18 @@ services:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - FLOWER_BASIC_AUTH=floweradmin:badpassword
+      - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+      - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
+      - FLOWER_USER=floweradmin
+      - FLOWER_PASSWORD=badpassword
+      - DIVBASE_USER=divbase_user_set_in_compose_file
+      - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+      - FIRST_ADMIN_EMAIL=admin@divbase.com
+      - FIRST_ADMIN_PASSWORD=badpassword
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=badpassword
+      - WORKER_SERVICE_EMAIL=worker@divbase.com
+      - WORKER_SERVICE_PASSWORD=badpassword
     develop: *watch-celery-src
     command: ["flower", "--persistent=True", "--db=/data/flower.db"]
     volumes:
@@ -114,9 +135,6 @@ services:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
           target: /usr/local/lib/python3.12/site-packages/divbase_api/
-        - action: sync+restart
-          path: ../packages/divbase-worker/src/divbase_worker/
-          target: /usr/local/lib/python3.12/site-packages/divbase_worker/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/

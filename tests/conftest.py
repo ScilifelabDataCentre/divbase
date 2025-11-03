@@ -15,9 +15,9 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
-from divbase_worker.tasks import update_vcf_dimensions_task
 from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS, setup_api_data
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.helpers.minio_setup import (
@@ -146,7 +146,7 @@ def run_update_dimensions(CONSTANTS):
         except Exception as e:
             print(f"Error cleaning up dimensions for {bucket_name}: {e}")
 
-        with patch("divbase_worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
+        with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
             result = update_vcf_dimensions_task(bucket_name=bucket_name)
         return result

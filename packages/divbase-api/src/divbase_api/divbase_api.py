@@ -32,7 +32,7 @@ from divbase_api.routes.auth import auth_router
 from divbase_api.routes.bucket_versions import bucket_version_router
 from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
-from divbase_worker.tasks import (
+from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
     update_vcf_dimensions_task,

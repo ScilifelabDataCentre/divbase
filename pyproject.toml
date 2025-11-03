@@ -2,7 +2,6 @@
 members = [
     "packages/divbase-cli",
     "packages/divbase-lib",
-    "packages/divbase-worker",
     "packages/divbase-api",
 ]
 

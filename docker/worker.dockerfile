@@ -35,8 +35,8 @@ COPY README.md ./
 # Copy all package sources and install in dependency order
 COPY packages/divbase-lib/ ./packages/divbase-lib/
 RUN pip install ./packages/divbase-lib/
-COPY packages/divbase-worker/ ./packages/divbase-worker/
-RUN pip install ./packages/divbase-worker/
+COPY packages/divbase-api/ ./packages/divbase-api/
+RUN pip install ./packages/divbase-api/
 
 
 ## Stage 2: Final image
@@ -65,4 +65,4 @@ RUN addgroup -g 1000 appuser && \
 
 USER appuser
 
-ENTRYPOINT ["celery", "-A", "divbase_worker.tasks", "worker", "--loglevel=info"]
+ENTRYPOINT ["celery", "-A", "divbase_api.worker.tasks", "worker", "--loglevel=info"]
