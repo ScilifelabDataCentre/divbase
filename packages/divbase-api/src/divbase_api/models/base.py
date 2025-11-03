@@ -1,7 +1,5 @@
 """
 Base DB Model inherited by all other models.
-
-TODO: Consider supporting soft delete.
 """
 
 from datetime import datetime

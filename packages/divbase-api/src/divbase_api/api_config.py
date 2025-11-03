@@ -141,7 +141,6 @@ class Settings:
             "JWT_SECRET_KEY": self.jwt.secret_key,
             "S3_ACCESS_KEY": self.s3.access_key,
             "S3_SECRET_KEY": self.s3.secret_key,
-            "SMTP_SERVER": self.email.smtp_server,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":

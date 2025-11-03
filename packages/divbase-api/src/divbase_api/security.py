@@ -1,7 +1,8 @@
 """
-Security utilities for handling passwords and (TODO) JWT tokens.
+Security utilities for handling passwords and JSON Web Tokens (JWTs).
 
-bcrypt recommended by FastAPI docs: https://fastapi.tiangolo.com/yo/tutorial/security/oauth2-jwt/
+FastAPI recommend using pwdlib and argon2 for password hashing (https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
+
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 

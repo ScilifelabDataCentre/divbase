@@ -1,10 +1,10 @@
 """
 Send automatic emails for e.g. email verification, password reset, notifications, etc.
 
-In production/deployed we rely on TODO - explain when figured out...
+In production/when deployed we rely on using smtp-relay.gmail.com
 
-For local development/testing we have an optional Mailpit service that can be run as part of the docker compose stack.
-If running, all emails will be caught by Mailpit and can be viewed in the Mailpit web UI at http://localhost:8025
+For local development/testing we have a Mailpit service that is ran as part of the docker compose stack.
+All email sent by the API will be caught by Mailpit and can be viewed in the Mailpit web UI at http://localhost:8025
 
 ### Templates:
 Email templates are written using MJML template system and converted to HTML.
