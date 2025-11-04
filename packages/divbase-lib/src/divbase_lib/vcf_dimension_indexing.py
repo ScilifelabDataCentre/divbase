@@ -101,61 +101,63 @@ class VCFDimensionIndexManager:
         self._project_id = response.json()["project_id"]
         return self._project_id
 
-    def create_or_update_vcf_metadata(self, vcf_metadata: dict) -> dict:
-        """
-        Create or update VCF metadata entry via API.
+    # def create_or_update_vcf_metadata(self, db: Session, vcf_metadata: dict) -> None:
+    #     """
+    #     Create or update VCF metadata entry via API.
 
-        Note: vcf_metadata dict must include "project_id" key.
-        """
-        response = httpx.post(
-            f"{self.api_base_url}/v1/vcf-dimensions/create",
-            json=vcf_metadata,
-            headers=self._auth_headers(),
-        )
-        response.raise_for_status()
-        return response.json()
+    #     Note: vcf_metadata dict must include "project_id" key.
+    #     """
+    #     entry = create_or_update_vcf_metadata(db, vcf_metadata)
 
-    def create_or_update_skipped_vcf(self, skipped_data: dict) -> dict:
-        """Mark a VCF as skipped via API."""
-        response = httpx.post(
-            f"{self.api_base_url}/v1/vcf-dimensions/create-skipped",
-            json=skipped_data,
-            headers=self._auth_headers(),
-        )
-        response.raise_for_status()
-        return response.json()
+    #     logger.info(f"VCF metadata created/updated for {entry.vcf_file_s3_key} in project {entry.project_id}")
 
-    def get_dimensions_info(self) -> dict:
-        """Get all dimensions for this project."""
-        project_id = self._ensure_project_id()
+    # def create_or_update_skipped_vcf(self, skipped_data: dict) -> dict:
+    #     """Mark a VCF as skipped via API."""
+    #     response = httpx.post(
+    #         f"{self.api_base_url}/v1/vcf-dimensions/create-skipped",
+    #         json=skipped_data,
+    #         headers=self._auth_headers(),
+    #     )
+    #     response.raise_for_status()
+    #     return response.json()
 
-        response = httpx.get(
-            f"{self.api_base_url}/v1/vcf-dimensions/list/project/{project_id}",
-            headers=self._auth_headers(),
-        )
-        if response.status_code == 404:
-            return {"vcf_files": []}
-        response.raise_for_status()
+    # def get_dimensions_info(self) -> dict:
+    #     """Get all dimensions for this project."""
+    #     project_id = self._ensure_project_id()
 
-        return self._format_for_compatibility(response.json())
+    #     response = httpx.get(
+    #         f"{self.api_base_url}/v1/vcf-dimensions/list/project/{project_id}",
+    #         headers=self._auth_headers(),
+    #     )
+    #     if response.status_code == 404:
+    #         return {"vcf_files": []}
+    #     response.raise_for_status()
 
-    def get_skipped_files(self) -> dict:
-        """Get all skipped VCF files for this project."""
-        try:
-            project_id = self._ensure_project_id()
-        except ValueError:
-            return {}
+    #     return self._format_for_compatibility(response.json())
 
-        response = httpx.get(
-            f"{self.api_base_url}/v1/vcf-dimensions/list-skipped/project/{project_id}",
-            headers=self._auth_headers(),
-        )
-        if response.status_code == 404:
-            return {}
-        response.raise_for_status()
+    # def get_skipped_files(self) -> dict:
+    #     """Get all skipped VCF files for this project."""
+    #     try:
+    #         project_id = self._ensure_project_id()
+    #     except ValueError:
+    #         return {}
 
-        skipped_data = response.json()
-        return {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in skipped_data.get("skipped_files", [])}
+    #     with SyncSessionLocal() as db:
+    #         entries = get_skipped_vcfs_by_project_worker(db, project_id)
+
+    # skipped_data = {
+    #     "project_id": project_id,
+    #     "skipped_file_count": len(entries),
+    #     "skipped_files": [
+    #         {
+    #             "vcf_file_s3_key": entry.vcf_file_s3_key,
+    #             "s3_version_id": entry.s3_version_id,
+    #         }
+    #         for entry in entries
+    #     ],
+    # }
+
+    # return {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in skipped_data.get("skipped_files", [])}
 
     def delete_vcf_metadata(self, vcf_file_s3_key: str, project_id: int) -> None:
         """Delete VCF metadata entry."""

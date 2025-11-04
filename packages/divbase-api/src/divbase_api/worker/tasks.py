@@ -8,7 +8,12 @@ from pathlib import Path
 import httpx
 from celery import Celery
 
-from divbase_api.worker.crud_dimensions import get_vcf_metadata_by_project
+from divbase_api.worker.crud_dimensions import (
+    create_or_update_skipped_vcf,
+    create_or_update_vcf_metadata,
+    get_skipped_vcfs_by_project_worker,
+    get_vcf_metadata_by_project,
+)
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
@@ -105,14 +110,6 @@ def _get_worker_access_token() -> str:
         raise
 
 
-def get_vcf_dimensions_for_project(project_id: int) -> dict:
-    """
-    Fetch vcf dimensions entry from db.
-    """
-    with SyncSessionLocal() as db:
-        return get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
 def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_name: str, project_id: int) -> dict:
     """Run a sample metadata query task as a Celery task."""
@@ -125,7 +122,8 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
 
-        vcf_dimensions_data = get_vcf_dimensions_for_project(project_id)
+        with SyncSessionLocal() as db:
+            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
         if not vcf_dimensions_data.get("vcf_files"):
             return {
@@ -186,7 +184,8 @@ def bcftools_pipe_task(
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    vcf_dimensions_data = get_vcf_dimensions_for_project(project_id)
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
         error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
@@ -258,7 +257,7 @@ def bcftools_pipe_task(
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"):
+def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str = "Default User"):
     """
     Update VCF dimensions in the database for the specified bucket.
     """
@@ -278,22 +277,15 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
             "Please upload at least one VCF file and run this command again."
         )
 
-    try:
-        vcf_dimensions_data = dimension_manager.get_dimensions_info()  # TODO update as before
-        project_id = dimension_manager._project_id
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-        already_indexed_vcfs = {
-            entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
-        }
-    except ValueError as e:
-        logger.error(f"Failed to get project info for bucket '{bucket_name}': {e}")
-        return {"status": "error", "error": str(e), "task_id": task_id}
+    already_indexed_vcfs = {
+        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+    }
 
-    try:
-        already_skipped_vcfs = dimension_manager.get_skipped_files()
-    except Exception as e:
-        logger.warning(f"Failed to get skipped VCFs: {e}")
-        already_skipped_vcfs = {}
+    with SyncSessionLocal() as db:
+        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -330,9 +322,10 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
                     "s3_version_id": latest_versions_of_bucket_files.get(file),
                     "skip_reason": "divbase_generated",
                 }
-                dimension_manager.create_or_update_skipped_vcf(
-                    skipped_vcf_data
-                )  # TODO sync db call to upsert ignore VCF table
+
+                with SyncSessionLocal() as db:
+                    create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
+
                 divbase_results_files_skipped_by_this_job.append(file)
                 logger.info(f"Skipping DivBase-generated result file: {file}")
                 continue
@@ -347,9 +340,9 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
                 "sample_count": vcf_dims["sample_count"],
                 "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
             }
-            dimension_manager.create_or_update_vcf_metadata(
-                vcf_metadata_data
-            )  # TODO sync db call to upsert source VCF table
+
+            with SyncSessionLocal() as db:
+                create_or_update_vcf_metadata(db=db, vcf_metadata_data=vcf_metadata_data)
             files_indexed_by_this_job.append(file)
             logger.info(f"Indexed VCF metadata for: {file}")
 
@@ -364,6 +357,8 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             try:
+                # with SyncSessionLocal() as db:
+                #    delete_vcf_metadata(db, vcf_file_s3_key=file, project_id=project_id)
                 dimension_manager.delete_vcf_metadata(
                     file, project_id
                 )  # TODO sync db call to delete from ignore VCF table
