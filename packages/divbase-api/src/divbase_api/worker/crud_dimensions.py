@@ -37,9 +37,6 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
         ],
     }
 
-    if not result["vcf_files"]:
-        raise FileNotFoundError("No VCF metadata found for project {project_id}")
-
     return result
 
 
@@ -114,10 +111,10 @@ def delete_vcf_metadata(db: Session, vcf_file_s3_key: str, project_id: int) -> N
     stmt = delete(VCFMetadataDB).where(
         VCFMetadataDB.vcf_file_s3_key == vcf_file_s3_key, VCFMetadataDB.project_id == project_id
     )
-    db.execute(stmt)
+    result = db.execute(stmt)
     db.commit()
 
-    logger.info(f"Deleted VCF metadata for {vcf_file_s3_key} in project {project_id}.")
+    logger.info(f"Deleted VCF metadata for {vcf_file_s3_key} in project {project_id}. Rows affected: {result.rowcount}")
 
 
 def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) -> SkippedVCFDB | None:
@@ -164,6 +161,7 @@ def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> Skipped
 
 def delete_skipped_vcf(db: Session, vcf_file_s3_key: str, project_id: int) -> None:
     """Delete a skipped VCF entry by S3 key and project ID."""
+    # TODO - add test for deleting a non existant entry, does it raise an error?
     stmt = delete(SkippedVCFDB).where(
         SkippedVCFDB.vcf_file_s3_key == vcf_file_s3_key, SkippedVCFDB.project_id == project_id
     )

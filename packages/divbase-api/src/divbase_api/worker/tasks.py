@@ -11,6 +11,8 @@ from celery import Celery
 from divbase_api.worker.crud_dimensions import (
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
+    delete_skipped_vcf,
+    delete_vcf_metadata,
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
@@ -20,7 +22,6 @@ from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
 from divbase_lib.vcf_dimension_indexing import (
     VCFDimensionCalculator,
-    create_vcf_dimension_manager,
 )
 
 logger = logging.getLogger(__name__)
@@ -264,9 +265,6 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     task_id = update_vcf_dimensions_task.request.id
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
-    auth_token = _get_worker_access_token()
-
-    dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
@@ -357,24 +355,16 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             try:
-                # with SyncSessionLocal() as db:
-                #    delete_vcf_metadata(db, vcf_file_s3_key=file, project_id=project_id)
-                dimension_manager.delete_vcf_metadata(
-                    file, project_id
-                )  # TODO sync db call to delete from ignore VCF table
+                with SyncSessionLocal() as db:
+                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
                 logger.info(f"Deleted VCF metadata for removed file: {file}")
             except Exception as e:
                 logger.error(f"Failed to delete VCF metadata for {file}: {e}")
 
     if skipped_deleted_from_bucket:
         for file in skipped_deleted_from_bucket:
-            try:
-                dimension_manager.delete_skipped_vcf(
-                    file, project_id
-                )  # TODO sync db call to delete from source VCF table
-                logger.info(f"Deleted skipped VCF entry for removed file: {file}")
-            except Exception as e:
-                logger.error(f"Failed to delete skipped VCF entry for {file}: {e}")
+            with SyncSessionLocal() as db:
+                delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
 
     delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 

@@ -33,9 +33,6 @@ from divbase_api.routes.bucket_versions import bucket_version_router
 from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
-from divbase_api.worker.tasks import (
-    update_vcf_dimensions_task,
-)
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
 
@@ -107,21 +104,6 @@ def get_jobs_by_user(user_name: str = "Default User"):
 def get_task_by_id(task_id: str):
     task_items = get_task_history(task_id=task_id)
     return task_items
-
-
-@app.post("/api/v1/dimensions/update/")
-def update_vcf_dimensions_for_a_project(project: str, user_name: str = "Default User"):
-    """
-    Update the VCF dimensions files for the specified project
-    """
-    bucket_name = project
-    task_kwargs = {
-        "bucket_name": bucket_name,
-        "user_name": user_name,
-    }
-
-    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
-    return results.id
 
 
 def main():

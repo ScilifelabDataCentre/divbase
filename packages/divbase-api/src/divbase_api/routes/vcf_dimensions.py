@@ -17,6 +17,7 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.worker.tasks import update_vcf_dimensions_task
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,26 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
         "skipped_file_count": len(skipped_files),
         "skipped_files": skipped_files,
     }
+
+
+@vcf_dimensions_router.post("/update/{project_name}", status_code=status.HTTP_202_ACCEPTED)
+def update_vcf_dimensions_endpoint(
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update the VCF dimensions files for the specified project
+    """
+    project, current_user, role = project_and_user_and_role
+
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
+
+    task_kwargs = {"bucket_name": project.bucket_name, "user_name": current_user.name, "project_id": project.id}
+
+    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
+    return results.id
 
 
 ### TODO - refactor out below parts

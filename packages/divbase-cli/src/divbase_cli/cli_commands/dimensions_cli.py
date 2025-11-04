@@ -29,11 +29,11 @@ def update_dimensions_index(
 
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {
-        "project": project_config.name,
-    }
-    response = httpx.post(f"{project_config.divbase_url}/v1/dimensions/update/", params=params)
-    response.raise_for_status()
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/update/{project_config.name}",
+    )
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
