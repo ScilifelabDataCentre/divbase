@@ -1,4 +1,3 @@
-import asyncio
 import dataclasses
 import logging
 import os
@@ -9,8 +8,8 @@ from pathlib import Path
 import httpx
 from celery import Celery
 
-from divbase_api.db import AsyncSessionLocal
-from divbase_api.worker.vcf_dimensions import list_vcf_metadata_for_project
+from divbase_api.worker.crud_dimensions import get_vcf_metadata_by_project
+from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
@@ -106,16 +105,12 @@ def _get_worker_access_token() -> str:
         raise
 
 
-async def get_vcf_dimensions_for_project_async(project_id: int) -> dict:
+def get_vcf_dimensions_for_project(project_id: int) -> dict:
     """
-    Fetch async vcf dimensions entry from db.
+    Fetch vcf dimensions entry from db.
     """
-    async with AsyncSessionLocal() as db:
-        return await list_vcf_metadata_for_project(project_id=project_id, db=db)
-
-
-# TODO this is a wrapper that creates a db instance. for tasks that need more IO to the dimensions table,
-# it should create a db at the top of the task and run asyncio.run(list_vcf_metadata_for_project(project_id=project_id, db=db)) instead of this
+    with SyncSessionLocal() as db:
+        return get_vcf_metadata_by_project(project_id=project_id, db=db)
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
@@ -130,7 +125,7 @@ def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_n
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
 
-        vcf_dimensions_data = asyncio.run(get_vcf_dimensions_for_project_async(project_id))
+        vcf_dimensions_data = get_vcf_dimensions_for_project(project_id)
 
         if not vcf_dimensions_data.get("vcf_files"):
             return {
@@ -191,7 +186,7 @@ def bcftools_pipe_task(
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    vcf_dimensions_data = asyncio.run(get_vcf_dimensions_for_project_async(project_id))
+    vcf_dimensions_data = get_vcf_dimensions_for_project(project_id)
 
     if not vcf_dimensions_data.get("vcf_files"):
         error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
@@ -284,7 +279,7 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
         )
 
     try:
-        vcf_dimensions_data = dimension_manager.get_dimensions_info()
+        vcf_dimensions_data = dimension_manager.get_dimensions_info()  # TODO update as before
         project_id = dimension_manager._project_id
 
         already_indexed_vcfs = {
@@ -335,7 +330,9 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
                     "s3_version_id": latest_versions_of_bucket_files.get(file),
                     "skip_reason": "divbase_generated",
                 }
-                dimension_manager.create_or_update_skipped_vcf(skipped_vcf_data)
+                dimension_manager.create_or_update_skipped_vcf(
+                    skipped_vcf_data
+                )  # TODO sync db call to upsert ignore VCF table
                 divbase_results_files_skipped_by_this_job.append(file)
                 logger.info(f"Skipping DivBase-generated result file: {file}")
                 continue
@@ -350,7 +347,9 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
                 "sample_count": vcf_dims["sample_count"],
                 "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
             }
-            dimension_manager.create_or_update_vcf_metadata(vcf_metadata_data)
+            dimension_manager.create_or_update_vcf_metadata(
+                vcf_metadata_data
+            )  # TODO sync db call to upsert source VCF table
             files_indexed_by_this_job.append(file)
             logger.info(f"Indexed VCF metadata for: {file}")
 
@@ -361,10 +360,13 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
     skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
 
+    # TODO this block could be done in one go for calling db once with a list
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
             try:
-                dimension_manager.delete_vcf_metadata(file, project_id)
+                dimension_manager.delete_vcf_metadata(
+                    file, project_id
+                )  # TODO sync db call to delete from ignore VCF table
                 logger.info(f"Deleted VCF metadata for removed file: {file}")
             except Exception as e:
                 logger.error(f"Failed to delete VCF metadata for {file}: {e}")
@@ -372,7 +374,9 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
     if skipped_deleted_from_bucket:
         for file in skipped_deleted_from_bucket:
             try:
-                dimension_manager.delete_skipped_vcf(file, project_id)
+                dimension_manager.delete_skipped_vcf(
+                    file, project_id
+                )  # TODO sync db call to delete from source VCF table
                 logger.info(f"Deleted skipped VCF entry for removed file: {file}")
             except Exception as e:
                 logger.error(f"Failed to delete skipped VCF entry for {file}: {e}")

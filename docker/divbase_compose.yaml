@@ -43,9 +43,10 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DIVBASE_S3_ACCESS_KEY=minioadmin
       - DIVBASE_S3_SECRET_KEY=badpassword
-      - WORKER_SERVICE_EMAIL=worker@divbase.com
+      - WORKER_SERVICE_EMAIL=worker@divbase.com # TODO remove once refactoring is complete
       - WORKER_SERVICE_PASSWORD=badpassword
       - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+      - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
       - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
       - FLOWER_USER=floweradmin
       - FLOWER_PASSWORD=badpassword

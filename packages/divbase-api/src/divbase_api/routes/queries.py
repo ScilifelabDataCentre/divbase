@@ -51,7 +51,7 @@ def sample_metadata_query(
     }
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
-    result_dict = results.get(timeout=10)
+    result_dict = results.get(timeout=10)  # TODO think about what happens if this timeout is reached
 
     if "error" in result_dict:
         error_type = result_dict.get("type", "ServerError")
