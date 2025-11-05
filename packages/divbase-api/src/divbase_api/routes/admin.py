@@ -8,7 +8,7 @@ NOTE: All routes in here should depend on get_current_admin_user.
 
 import logging
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import add_project_member, create_project
@@ -27,6 +27,7 @@ from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 from divbase_api.schemas.users import UserCreate, UserResponse
+from divbase_api.services.email_sender import send_test_email
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,12 @@ admin_router = APIRouter()
 async def create_user_endpoint(
     user_data: UserCreate,
     is_admin: bool = Query(False, description="Set to true to create an admin user"),
+    email_verified: bool = Query(False, description="Set to true to skip the email verification process"),
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
     """Create a new regular or admin user."""
-    new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin)
+    new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin, email_verified=email_verified)
     logger.info(f"Admin user: {current_admin.email} created a new user: {new_user.email}")
     return new_user
 
@@ -144,3 +146,15 @@ async def add_project_member_endpoint(
         user_id=membership.user_id,
         role=membership.role,
     )
+
+
+@admin_router.post("/test-email/{email_to}", status_code=status.HTTP_200_OK)
+async def test_email_endpoint(
+    email_to: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_admin: UserDB = Depends(get_current_admin_user),
+):
+    """Send a test email"""
+    background_tasks.add_task(send_test_email, email_to=email_to)
+    return {"message": f"Test email sent to {email_to} in the background."}

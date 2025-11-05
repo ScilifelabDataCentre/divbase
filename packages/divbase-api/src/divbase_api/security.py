@@ -1,7 +1,8 @@
 """
-Security utilities for handling passwords and (TODO) JWT tokens.
+Security utilities for handling passwords and JSON Web Tokens (JWTs).
 
-bcrypt recommended by FastAPI docs: https://fastapi.tiangolo.com/yo/tutorial/security/oauth2-jwt/
+FastAPI recommend using pwdlib and argon2 for password hashing (https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
+
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 
@@ -14,7 +15,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import SecretStr
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 
@@ -28,32 +29,33 @@ def get_password_hash(password: SecretStr) -> str:
 
 
 class TokenType(str, Enum):
-    """Types of JWT tokens used for auth"""
+    """Types of JWT tokens used for e.g. auth or email verification/password reset."""
 
     ACCESS = "access_token"
     REFRESH = "refresh_token"
+    EMAIL_VERIFICATION = "email_verification"
+    PASSWORD_RESET = "password_reset"
 
 
-def create_access_token(subject: str | Any) -> tuple[str, int]:
+token_expires_delta: dict[TokenType, timedelta] = {
+    TokenType.ACCESS: timedelta(seconds=settings.jwt.access_token_expires_seconds),
+    TokenType.REFRESH: timedelta(seconds=settings.jwt.refresh_token_expires_seconds),
+    TokenType.EMAIL_VERIFICATION: timedelta(seconds=settings.email.email_verify_expires_seconds),
+    TokenType.PASSWORD_RESET: timedelta(seconds=settings.email.password_reset_expires_seconds),
+}
+
+
+def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
     """
-    Create a new access token for a user. Return token + expiration timestamp.
+    Create a JWT token for access, refresh, email verification or password reset.
 
-    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
+    Returns a tuple of the JWT and expiry UNIX time stamp for the token.
+
+    Tokens specify the "type" field in the payload,
+    so we can validate an access token is not used for e.g. password reset.
     """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.access_token_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.ACCESS.value}
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt, int(expire.timestamp())
-
-
-def create_refresh_token(subject: str | Any) -> tuple[str, int]:
-    """
-    Create a new refresh token for a user. Return token + expiration timestamp.
-
-    Token types differ by the "type" field in the payload, which is either "access" or "refresh".
-    """
-    expire = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt.refresh_token_expires_seconds)
-    to_encode = {"exp": expire, "sub": str(subject), "type": TokenType.REFRESH.value}
+    expire = datetime.now(timezone.utc) + token_expires_delta[token_type]
+    to_encode = {"exp": expire, "sub": str(subject), "type": token_type.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
     return encoded_jwt, int(expire.timestamp())
 
@@ -71,6 +73,32 @@ def verify_token(token: str, desired_token_type: TokenType) -> int | None:
             jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+    if payload.get("type") != desired_token_type.value:
+        return None
+    return int(payload.get("sub"))
+
+
+def verify_expired_token(token: str, desired_token_type: TokenType) -> int | None:
+    """
+    Verify and decode a (potentially) expired JWT token. If successful return the user id, else None.
+
+    Used e.g. for password reset/email verification flow where we want to inform user that their token has expired,
+    or email is already verified. So for UX reasons.
+    (We're still checking the signature and token type, just not expiration time.)
+    """
+    if desired_token_type not in (TokenType.EMAIL_VERIFICATION, TokenType.PASSWORD_RESET):
+        raise ValueError("Can only verify expired tokens for email verification or password reset.")
+
+    try:
+        payload = jwt.decode(
+            jwt=token,
+            key=settings.jwt.secret_key.get_secret_value(),
+            algorithms=[settings.jwt.algorithm],
+            options={"verify_exp": False},
+        )
+    except jwt.InvalidTokenError:
         return None
 
     if payload.get("type") != desired_token_type.value:

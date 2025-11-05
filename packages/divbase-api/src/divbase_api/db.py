@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.crud.users import create_user, get_all_users
 from divbase_api.models.base import Base
 from divbase_api.schemas.users import UserCreate
@@ -93,5 +93,6 @@ async def create_first_admin_user() -> None:
             db=db,
             user_data=user_info,
             is_admin=True,
+            email_verified=True,
         )
     logger.info(f"First admin user created with email: {admin_user.email}")

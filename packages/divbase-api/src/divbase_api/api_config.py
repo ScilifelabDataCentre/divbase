@@ -18,6 +18,8 @@ from pydantic import SecretStr
 class APISettings:
     """API configuration settings."""
 
+    environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
@@ -67,6 +69,53 @@ class JWTSettings:
 
 
 @dataclass
+class EmailSettings:
+    """
+    Email configuration settings.
+    Currently only working for local development with Mailpit
+    """
+
+    smtp_server: str = field(init=False)
+    smtp_port: int = field(init=False)
+    smtp_tls: bool = field(init=False)
+    smtp_ssl: bool = field(init=False)
+
+    smtp_user: str | None = os.getenv("SMTP_USER", None)
+    smtp_password: SecretStr | None = field(init=False)
+
+    from_email: str = os.getenv("FROM_EMAIL", "noreply-divbase@scilifelab.se")
+
+    # token expiration times included in emails
+    email_verify_expires_seconds: int = int(os.getenv("EMAIL_VERIFY_EXPIRES_SECONDS", 60 * 60 * 24))  # 24 hours
+    password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_SECONDS", 60 * 60))  # 1 hour
+
+    def __post_init__(self):
+        """Handle enviroment specific email settings."""
+        if os.getenv("DIVBASE_ENV") in ["local_dev", "test"]:
+            # using mailpit in docker stack
+            self.smtp_server = "mailpit"
+            self.smtp_port = 1025
+            self.smtp_password = None
+            self.smtp_tls = False
+            self.smtp_ssl = False
+
+        else:
+            self.smtp_server = os.getenv("SMTP_SERVER", "smtp-relay.gmail.com")
+            self.smtp_port = int(os.getenv("SMTP_PORT", 587))
+
+            self.smtp_tls = bool(os.getenv("SMTP_TLS", "True") == "True")
+            self.smtp_ssl = bool(os.getenv("SMTP_SSL", "False") == "True")
+            if self.smtp_tls and self.smtp_ssl:
+                raise ValueError("SMTP_TLS and SMTP_SSL cannot both be True.")
+
+            smtp_password = os.getenv("SMTP_PASSWORD", None)
+            if smtp_password:
+                self.smtp_password = SecretStr(smtp_password)
+            else:
+                self.smtp_password = None
+
+
+@dataclass
 class Settings:
     """Configuration settings for DivBase API."""
 
@@ -75,6 +124,7 @@ class Settings:
     flower: FlowerSettings = field(default_factory=FlowerSettings)
     s3: S3Settings = field(default_factory=S3Settings)
     jwt: JWTSettings = field(default_factory=JWTSettings)
+    email: EmailSettings = field(default_factory=EmailSettings)
 
     def __post_init__(self):
         """
@@ -82,6 +132,8 @@ class Settings:
         This means that later on in the codebase we don't have to check for any non set values, we can just assume they are set.
         """
         required_fields = {
+            "DIVBASE_ENV": self.api.environment,
+            "FRONTEND_BASE_URL": self.api.frontend_base_url,
             "DATABASE_URL": self.database.url,
             "FLOWER_URL": self.flower.url,
             "FLOWER_USER": self.flower.user,

@@ -11,7 +11,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.db import (
     create_all_tables,
     create_first_admin_user,
