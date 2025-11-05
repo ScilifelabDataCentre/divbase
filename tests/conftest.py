@@ -11,14 +11,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
-import pytest
-from typer.testing import CliRunner
-
-from divbase_api.worker.tasks import update_vcf_dimensions_task
-from divbase_lib.s3_client import create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
-from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS, setup_api_data
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.helpers.minio_setup import (
     MINIO_FAKE_ACCESS_KEY,
@@ -28,7 +20,7 @@ from tests.helpers.minio_setup import (
     setup_minio_data,
 )
 
-# Set env vars before the fixtures to ensure that they are available at the right time
+# Set env vars BEFORE any imports that use them
 os.environ["CELERY_BROKER_URL"] = "pyamqp://guest@localhost:5673//"
 os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6380/0"
 os.environ["FLOWER_USER"] = "floweradmin"
@@ -38,10 +30,29 @@ os.environ["FLOWER_BASE_URL"] = "http://localhost:5556"
 os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
 os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db"
-os.environ["WORKER_SERVICE_EMAIL"] = "worker@divbase.com"
-os.environ["WORKER_SERVICE_PASSWORD"] = "badpassword"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://divbase_user:badpassword@localhost:5433/divbase_db"
+os.environ["WORKER_DATABASE_URL"] = "postgresql+psycopg://divbase_user:badpassword@localhost:5433/divbase_db"
+os.environ["WORKER_SERVICE_EMAIL"] = "worker@divbase.com"  # TODO remove after tests have been refactored
+os.environ["WORKER_SERVICE_PASSWORD"] = "badpassword"  # TODO remove after tests have been refactored
 
+import pytest
+from typer.testing import CliRunner
+
+from divbase_api.worker.crud_dimensions import (
+    delete_skipped_vcf,
+    delete_vcf_metadata,
+    get_skipped_vcfs_by_project_worker,
+    get_vcf_metadata_by_project,
+)
+from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_lib.s3_client import create_s3_file_manager
+from tests.helpers.api_setup import (
+    ADMIN_CREDENTIALS,
+    TEST_USERS,
+    get_project_map,
+    setup_api_data,
+)
 
 api_base_url = os.environ["DIVBASE_API_URL"]
 
@@ -102,53 +113,60 @@ def docker_testing_stack():
         stop_compose_stack()
 
 
+@pytest.fixture(scope="session")
+def project_map(docker_testing_stack):
+    """Get project_map after API setup."""
+    return get_project_map()
+
+
 @pytest.fixture
-def run_update_dimensions(CONSTANTS):
-    """
-    Factory fixture that directly calls the update_vcf_dimensions_task task to create and update dimensions for the split-scaffold-project.
-    Uses VCFDimensionIndexManager for cleanup/setup.
-    """
-    default_bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+def db_session_sync():
+    with SyncSessionLocal() as db:
+        yield db
 
-    def _run(bucket_name=default_bucket_name):
-        login_response = httpx.post(
-            f"{api_base_url}/v1/auth/login",
-            data={
-                "grant_type": "password",
-                "username": os.environ["WORKER_SERVICE_EMAIL"],
-                "password": os.environ["WORKER_SERVICE_PASSWORD"],
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        login_response.raise_for_status()
-        auth_token = login_response.json()["access_token"]
 
-        # Step 2: Use VCFDimensionIndexManager to clean up all VCF metadata and skipped files
-        dimension_manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
+@pytest.fixture
+def clean_vcf_dimensions():
+    """
+    Factory fixture to clean VCF dimensions for a specific project.
+    Usage: clean_vcf_dimensions(db_session_sync, project_id)
+    """
+
+    def _clean(db, project_id):
         try:
-            vcf_dimensions_data = dimension_manager.get_dimensions_info()
-            project_id = dimension_manager._project_id
+            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
             for entry in vcf_dimensions_data.get("vcf_files", []):
                 vcf_file = entry["vcf_file_s3_key"]
                 try:
-                    dimension_manager.delete_vcf_metadata(vcf_file, project_id)
+                    delete_vcf_metadata(db=db, vcf_file_s3_key=vcf_file, project_id=project_id)
                 except Exception as e:
                     print(f"Warning: Failed to delete VCF metadata for {vcf_file}: {e}")
 
-            skipped_files = dimension_manager.get_skipped_files()
+            skipped_files = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
             for vcf_file in skipped_files:
                 try:
-                    dimension_manager.delete_skipped_vcf(vcf_file, project_id)
+                    delete_skipped_vcf(db=db, vcf_file_s3_key=vcf_file, project_id=project_id)
                 except Exception as e:
                     print(f"Warning: Failed to delete skipped VCF entry for {vcf_file}: {e}")
 
         except Exception as e:
-            print(f"Error cleaning up dimensions for {bucket_name}: {e}")
+            print(f"Error cleaning up dimensions for project {project_id}: {e}")
 
+    return _clean
+
+
+@pytest.fixture
+def run_update_dimensions(CONSTANTS):
+    """
+    Factory fixture that runs update_vcf_dimensions_task.
+    Usage: run_update_dimensions(bucket_name)
+    """
+
+    def _update(bucket_name="split-scaffold-project", project_id=None, user_name="Test User"):
         with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
-            result = update_vcf_dimensions_task(bucket_name=bucket_name)
+            result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name=user_name)
         return result
 
-    return _run
+    return _update

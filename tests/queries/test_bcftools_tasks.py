@@ -6,16 +6,16 @@ from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
 from divbase_api.worker.tasks import (
+    _calculate_pairwise_overlap_types_for_sample_sets,
+    _check_if_samples_can_be_combined_with_bcftools,
     bcftools_pipe_task,
-    calculate_pairwise_overlap_types_for_sample_sets,
-    check_if_samples_can_be_combined_with_bcftools,
 )
-from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
+from divbase_api.worker.vcf_dimension_indexing import VCFDimensionIndexManager
 
 
 @pytest.mark.integration
 def test_bcftools_pipe_task_with_real_worker(
-    wait_for_celery_task_completion, bcftools_pipe_kwargs_fixture, run_update_dimensions
+    wait_for_celery_task_completion, bcftools_pipe_kwargs_fixture, run_update_dimensions, db_session_sync
 ):
     """
     Integration test in which bcftools_pipe_task is run with a real Celery worker.
@@ -30,7 +30,7 @@ def test_bcftools_pipe_task_with_real_worker(
     """
 
     bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
-    run_update_dimensions(bucket_name=bucket_name)
+    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
 
     broker_url = current_app.conf.broker_url
     with Connection(broker_url) as conn:
@@ -97,7 +97,7 @@ def test_calculate_pairwise_overlap_types_for_sample_sets(
     Test to assert that different combinations of sample sets are correctly classified by the
     calculate_pairwise_overlap_types_for_sample_sets function.
     """
-    result = calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict)
+    result = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict)
 
     print(result)
 
@@ -181,9 +181,9 @@ def test_check_if_samples_can_be_combined_with_bcftools_param(
 
     if should_raise_error:
         with pytest.raises(ValueError) as excinfo:
-            check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_manager)
+            _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_manager)
         assert expected_message_part in str(excinfo.value)
     else:
         with caplog.at_level("INFO"):
-            check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_manager)
+            _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_manager)
         assert expected_message_part in caplog.text

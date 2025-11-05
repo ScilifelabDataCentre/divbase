@@ -21,12 +21,12 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.worker.queries import BcftoolsQueryManager
 from divbase_api.worker.tasks import bcftools_pipe_task
+from divbase_api.worker.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
-from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -103,10 +103,12 @@ def reset_query_projects_bucket(CONSTANTS):
     yield
 
 
-def test_sample_metadata_query(CONSTANTS, logged_in_edit_user_with_existing_config, run_update_dimensions):
+def test_sample_metadata_query(
+    CONSTANTS, logged_in_edit_user_with_existing_config, run_update_dimensions, db_session_sync
+):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
-    run_update_dimensions(bucket_name=project_name)
+    run_update_dimensions(db_session_sync, bucket_name=project_name)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -123,12 +125,14 @@ def test_sample_metadata_query(CONSTANTS, logged_in_edit_user_with_existing_conf
         assert filename in result.stdout
 
 
-def test_bcftools_pipe_query(run_update_dimensions, logged_in_edit_user_with_existing_config, CONSTANTS):
+def test_bcftools_pipe_query(
+    run_update_dimensions, db_session_sync, logged_in_edit_user_with_existing_config, CONSTANTS
+):
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
-    run_update_dimensions(bucket_name=project_name)
+    run_update_dimensions(db_session_sync, bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -170,6 +174,7 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
 )
 def test_bcftools_pipe_query_errors(
     run_update_dimensions,
+    db_session_sync,
     project_name,
     tsv_filter,
     command,
@@ -189,7 +194,7 @@ def test_bcftools_pipe_query_errors(
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
-    run_update_dimensions(bucket_name=project_name)
+    run_update_dimensions(db_session_sync, bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -415,6 +420,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     expected_logs,
     expected_error_msgs,
     run_update_dimensions,
+    db_session_sync,
 ):
     """
     This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
@@ -558,7 +564,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
 
     if ensure_dimensions_file:
-        run_update_dimensions(bucket_name=params["bucket_name"])
+        run_update_dimensions(db_session_sync, bucket_name=params["bucket_name"])
 
     try:
         current_app.conf.update(
@@ -612,6 +618,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     logged_in_edit_user_with_existing_config,
     fixtures_dir,
     run_update_dimensions,
+    db_session_sync,
 ):
     """
     Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
@@ -619,7 +626,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     # this factory fixture needs to be run before the with patch below since otherwise the patfch will also affect the fixture
-    run_update_dimensions(bucket_name=bucket_name)
+    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):

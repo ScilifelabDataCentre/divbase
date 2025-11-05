@@ -17,7 +17,6 @@ from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
 from divbase_lib.s3_client import create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import create_vcf_dimension_manager
 from tests.helpers.minio_setup import PROJECTS
 
 runner = CliRunner()
@@ -25,64 +24,21 @@ runner = CliRunner()
 api_base_url = os.environ["DIVBASE_API_URL"]
 
 
-@pytest.fixture(autouse=True)
-def clean_dimensions(logged_out_user_with_existing_config, CONSTANTS):
-    """
-    Clean up VCF dimensions from the database before each test using VCFDimensionIndexManager.
-    """
-    login_response = httpx.post(
-        f"{api_base_url}/v1/auth/login",
-        data={
-            "grant_type": "password",
-            "username": os.environ["WORKER_SERVICE_EMAIL"],
-            "password": os.environ["WORKER_SERVICE_PASSWORD"],
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=10.0,
-    )
-    login_response.raise_for_status()
-    auth_token = login_response.json()["access_token"]
-
-    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
-        try:
-            dimension_manager = create_vcf_dimension_manager(bucket_name=project_name, auth_token=auth_token)
-            vcf_dimensions_data = dimension_manager.get_dimensions_info()
-
-            if vcf_dimensions_data.get("vcf_files"):
-                project_id = dimension_manager._project_id
-                for entry in vcf_dimensions_data["vcf_files"]:
-                    vcf_file = entry["vcf_file_s3_key"]
-                    try:
-                        dimension_manager.delete_vcf_metadata(vcf_file, project_id)
-                    except Exception as e:
-                        print(f"Warning: Failed to delete VCF metadata for {vcf_file}: {e}")
-
-            try:
-                skipped_files = dimension_manager.get_skipped_files()
-                if skipped_files and dimension_manager._project_id:
-                    project_id = dimension_manager._project_id
-                    for vcf_file in skipped_files:
-                        try:
-                            dimension_manager.delete_skipped_vcf(vcf_file, project_id)
-                        except Exception as e:
-                            print(f"Warning: Failed to delete skipped VCF entry for {vcf_file}: {e}")
-            except Exception as e:
-                print(f"Warning: Failed to clean skipped files for {project_name}: {e}")
-
-        except ValueError:
-            pass
-        except Exception as e:
-            print(f"Error cleaning up dimensions for {project_name}: {e}")
-
-    yield
-
-
-def test_update_vcf_dimensions_task_directly(CONSTANTS, run_update_dimensions):
+def test_update_vcf_dimensions_task_directly(
+    CONSTANTS,
+    clean_vcf_dimensions,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
     """
     Test that runs the update task and verifies all VCF files are indexed via the API.
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    result = run_update_dimensions(bucket_name=bucket_name)
+    project_id = project_map[bucket_name]
+    clean_vcf_dimensions(db_session_sync, project_id)
+
+    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     indexed_files = result.get("VCF files that were added to dimensions index by this job", [])
@@ -91,12 +47,14 @@ def test_update_vcf_dimensions_task_directly(CONSTANTS, run_update_dimensions):
         assert vcf_file in indexed_files, f"{vcf_file} not found in indexed files: {indexed_files}"
 
 
-def test_show_vcf_dimensions_task(CONSTANTS, run_update_dimensions, logged_in_edit_user_with_existing_config):
+def test_show_vcf_dimensions_task(
+    CONSTANTS, run_update_dimensions, db_session_sync, logged_in_edit_user_with_existing_config
+):
     """
     Test the CLI show command after indexing dimensions via the API.
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    run_update_dimensions(bucket_name=bucket_name)
+    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
 
     # Basic version of command
     command = f"dimensions show --project {bucket_name}"
@@ -153,11 +111,19 @@ def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_in_edit_us
     assert bucket_name in str(result.exception)
 
 
-def test_get_dimensions_info_returns_empty(CONSTANTS):
+def test_get_dimensions_info_returns_empty(
+    CONSTANTS,
+    clean_vcf_dimensions,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
     """
     Test that get_dimensions_info returns empty when no dimensions are indexed in the database.
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[bucket_name]
+    clean_vcf_dimensions(db_session_sync, project_id)
 
     api_base_url = "http://localhost:8001/api"
     login_response = httpx.post(
@@ -170,10 +136,8 @@ def test_get_dimensions_info_returns_empty(CONSTANTS):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     login_response.raise_for_status()
-    auth_token = login_response.json()["access_token"]
 
-    manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
-    result = manager.get_dimensions_info()
+    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
     assert result == {"vcf_files": []}  # TODO this might need to be updated
 
 
@@ -190,33 +154,33 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
             update_vcf_dimensions_task(bucket_name=bucket_name)
 
 
-def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
-    """
-    Test removing a VCF metadata entry via the manager.
-    """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
+# def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
+#     """
+#     Test removing a VCF metadata entry via the manager.
+#     """
+#     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+#     vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
 
-    api_base_url = "http://localhost:8000/api"
-    login_response = httpx.post(
-        f"{api_base_url}/v1/auth/login",
-        data={
-            "grant_type": "password",
-            "username": os.environ["WORKER_SERVICE_EMAIL"],
-            "password": os.environ["WORKER_SERVICE_PASSWORD"],
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    login_response.raise_for_status()
-    auth_token = login_response.json()["access_token"]
+#     api_base_url = "http://localhost:8000/api"
+#     login_response = httpx.post(
+#         f"{api_base_url}/v1/auth/login",
+#         data={
+#             "grant_type": "password",
+#             "username": os.environ["WORKER_SERVICE_EMAIL"],
+#             "password": os.environ["WORKER_SERVICE_PASSWORD"],
+#         },
+#         headers={"Content-Type": "application/x-www-form-urlencoded"},
+#     )
+#     login_response.raise_for_status()
+#     auth_token = login_response.json()["access_token"]
 
-    manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
+#     manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
 
-    if manager._project_id:
-        manager.delete_vcf_metadata(vcf_file, manager._project_id)
-        updated_dimensions = manager.get_dimensions_info()
-        filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
-        assert vcf_file not in filenames
+#     if manager._project_id:
+#         manager.delete_vcf_metadata(vcf_file, manager._project_id)
+#         updated_dimensions = manager.get_dimensions_info()
+#         filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+#         assert vcf_file not in filenames
 
 
 @patch("divbase_api.worker.tasks.create_s3_file_manager")

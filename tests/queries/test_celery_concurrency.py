@@ -16,6 +16,7 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     concurrency_of_default_queue,
     bcftools_pipe_kwargs_fixture,
     run_update_dimensions,
+    db_session_sync,
 ):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
@@ -35,7 +36,7 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     """
 
     bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
-    run_update_dimensions(bucket_name=bucket_name)
+    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
 
     broker_url = app.conf.broker_url
     with Connection(broker_url) as conn:
@@ -87,7 +88,13 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     ],
 )
 def test_task_routing(
-    wait_for_celery_task_completion, tasks_to_test, kwargs_fixture, expected_queue, request, run_update_dimensions
+    wait_for_celery_task_completion,
+    tasks_to_test,
+    kwargs_fixture,
+    expected_queue,
+    request,
+    run_update_dimensions,
+    db_session_sync,
 ):
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
@@ -119,7 +126,7 @@ def test_task_routing(
     """
     task_kwargs = request.getfixturevalue(kwargs_fixture)
     bucket_name = task_kwargs["bucket_name"]
-    run_update_dimensions(bucket_name=bucket_name)
+    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
 
     broker_url = app.conf.broker_url
     with Connection(broker_url) as conn:

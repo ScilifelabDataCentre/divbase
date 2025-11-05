@@ -72,6 +72,8 @@ USER_ROLES = {
 
 ROLE_ASSIGNMENTS = {project["name"]: [(email, role) for email, role in USER_ROLES.items()] for project in TEST_PROJECTS}
 
+_PROJECT_MAP_CACHE: dict[str, int] | None = None
+
 
 def get_admin_access_token() -> str:
     """Get admin access token for authenticated requests."""
@@ -146,10 +148,19 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
             )
 
 
+def get_project_map() -> dict[str, int]:
+    """Get the cached project map created during setup."""
+    if _PROJECT_MAP_CACHE is None:
+        raise RuntimeError("Project map not available. API setup has not been run yet.")
+    return _PROJECT_MAP_CACHE
+
+
 def setup_api_data() -> None:
     """Create test users and projects in the API."""
     admin_token = get_admin_access_token()
     user_map = create_users(admin_token)
     project_map = create_projects(admin_token)
     assign_project_roles(admin_token, user_map, project_map)
+    global _PROJECT_MAP_CACHE
+    _PROJECT_MAP_CACHE = project_map
     print("Test users and projects created successfully.")
