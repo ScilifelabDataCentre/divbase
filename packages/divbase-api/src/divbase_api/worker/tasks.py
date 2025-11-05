@@ -5,7 +5,6 @@ import re
 from itertools import combinations
 from pathlib import Path
 
-import httpx
 from celery import Celery
 
 from divbase_api.worker.crud_dimensions import (
@@ -70,45 +69,6 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 
 
 app.conf.task_routes = (dynamic_router,)
-
-
-def _get_worker_access_token() -> str:
-    """
-    Get access token for worker service account.
-
-    This follows the same pattern as the CLI login in user_auth.py.
-    Token is fetched fresh for each task to avoid expiration issues.
-    """
-    # TODO these are set here for now since there were issues with module level imports for the tests
-    WORKER_SERVICE_EMAIL = os.environ.get("WORKER_SERVICE_EMAIL", "NOT_SET")
-    WORKER_SERVICE_PASSWORD = os.environ.get("WORKER_SERVICE_PASSWORD", "NOT_SET")
-    DIVBASE_API_URL = os.environ.get("DIVBASE_API_URL", "http://fastapi:8000/api")
-
-    if WORKER_SERVICE_EMAIL == "NOT_SET" or WORKER_SERVICE_PASSWORD == "NOT_SET":
-        raise ValueError(
-            "Worker service account credentials not set. "
-            "Please set WORKER_SERVICE_EMAIL and WORKER_SERVICE_PASSWORD environment variables."
-        )
-
-    try:
-        response = httpx.post(
-            f"{DIVBASE_API_URL}/v1/auth/login",
-            data={
-                "grant_type": "password",
-                "username": WORKER_SERVICE_EMAIL,
-                "password": WORKER_SERVICE_PASSWORD,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        return data["access_token"]
-
-    except httpx.HTTPError as e:
-        logger.error(f"Failed to authenticate worker service account: {e}")
-        raise
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
