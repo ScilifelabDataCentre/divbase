@@ -85,7 +85,7 @@ def sample_metadata_query_task(
     try:
         s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-        metadata_path = download_sample_metadata(
+        metadata_path = _download_sample_metadata(
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
 
@@ -161,7 +161,7 @@ def bcftools_pipe_task(
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
-    metadata_path = download_sample_metadata(
+    metadata_path = _download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
@@ -172,7 +172,7 @@ def bcftools_pipe_task(
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
-    check_that_file_versions_match_dimensions_index(
+    _check_that_file_versions_match_dimensions_index(
         vcf_dimensions_data=vcf_dimensions_data,
         latest_versions_of_bucket_files=latest_versions_of_bucket_files,
         metadata_result=metadata_result,
@@ -182,7 +182,7 @@ def bcftools_pipe_task(
     sample_and_filename_subset = metadata_result.sample_and_filename_subset
 
     if "view -r" in command:
-        files_to_download = check_for_unnecessary_files_for_region_query(
+        files_to_download = _check_for_unnecessary_files_for_region_query(
             command=command,
             files_to_download=metadata_result.unique_filenames,
             vcf_dimensions_data=vcf_dimensions_data,
@@ -192,12 +192,12 @@ def bcftools_pipe_task(
             entry for entry in metadata_result.sample_and_filename_subset if entry["Filename"] in files_to_download
         ]
 
-    check_if_samples_can_be_combined_with_bcftools(
+    _check_if_samples_can_be_combined_with_bcftools(
         files_to_download=files_to_download,
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
-    _ = download_vcf_files(
+    _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
@@ -217,8 +217,8 @@ def bcftools_pipe_task(
         logger.error(f"Error in bcftools task: {str(e)}")
         return {"status": "error", "error": str(e), "task_id": task_id}
 
-    upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+    _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
@@ -264,7 +264,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
         )
     ]
 
-    _ = download_vcf_files(
+    _ = _download_vcf_files(
         files_to_download=non_indexed_vcfs,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
@@ -332,7 +332,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
             with SyncSessionLocal() as db:
                 delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
 
-    delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+    _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
     if not files_indexed_by_this_job:
         files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
@@ -348,7 +348,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     }
 
 
-def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
+def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
     """
@@ -359,7 +359,7 @@ def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_m
     )[0]
 
 
-def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
+def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
@@ -377,7 +377,7 @@ def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_m
     return downloaded_files
 
 
-def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
+def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
     Upon completion of the task, upload the results file to the specified bucket.
     """
@@ -387,7 +387,7 @@ def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3
     )
 
 
-def check_for_unnecessary_files_for_region_query(
+def _check_for_unnecessary_files_for_region_query(
     command: str,
     files_to_download: list[str],
     vcf_dimensions_data: dict,
@@ -447,7 +447,7 @@ def check_for_unnecessary_files_for_region_query(
     return files_to_download_updated
 
 
-def delete_job_files_from_worker(
+def _delete_job_files_from_worker(
     vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
 ) -> None:
     """
@@ -473,7 +473,7 @@ def delete_job_files_from_worker(
             logger.warning(f"Could not delete output file from worker {output_file}: {e}")
 
 
-def check_if_samples_can_be_combined_with_bcftools(
+def _check_if_samples_can_be_combined_with_bcftools(
     files_to_download: list[str],
     vcf_dimensions_data: dict,
 ) -> None:
@@ -501,7 +501,7 @@ def check_if_samples_can_be_combined_with_bcftools(
     sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
     logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
 
-    sample_set_overlap_results = calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
+    sample_set_overlap_results = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
     logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
 
     if (
@@ -532,7 +532,7 @@ def check_if_samples_can_be_combined_with_bcftools(
         return
 
 
-def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
     """
     Analyze all pairwise overlap types between sample sets.
     Catches the case where two sets have the same elements but different order.
@@ -561,7 +561,7 @@ def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tupl
     return sample_set_overlap_results
 
 
-def check_that_file_versions_match_dimensions_index(
+def _check_that_file_versions_match_dimensions_index(
     vcf_dimensions_data: dict,
     latest_versions_of_bucket_files: dict[str, str],
     metadata_result,
