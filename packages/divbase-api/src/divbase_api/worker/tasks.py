@@ -15,13 +15,13 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
+from divbase_api.worker.vcf_dimension_indexing import (
+    VCFDimensionCalculator,
+)
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import (
-    VCFDimensionCalculator,
-)
 
 logger = logging.getLogger(__name__)
 
