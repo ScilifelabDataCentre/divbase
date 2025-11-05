@@ -148,6 +148,19 @@ class ProjectView(ModelView):
         """Disable deletion of projects. Projects can be soft deleted instead."""
         return False
 
+    async def validate(self, request: Request, data: dict[str, Any]) -> None:
+        """Custom validation to ensure a project name cannot have spaces and bucket name follows S3 bucket name rules."""
+
+        if " " in data["name"]:
+            raise FormValidationError(errors={"name": "Project name cannot contain spaces."})
+        if " " in data["bucket_name"]:
+            raise FormValidationError(errors={"bucket_name": "Bucket name cannot contain spaces."})
+
+        if len(data["bucket_name"]) < 3 or len(data["bucket_name"]) > 63:
+            raise FormValidationError(errors={"bucket_name": "Bucket name must be between 3 and 63 characters long."})
+
+        return await super().validate(request, data)
+
     def handle_exception(self, exc: Exception) -> None:
         """
         sqlalchemy will raise an IntegrityError if an admin tries to create/edit a project to have either a
