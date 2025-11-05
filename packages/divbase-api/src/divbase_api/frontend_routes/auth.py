@@ -15,7 +15,7 @@ from divbase_api.crud.auth import (
     check_user_email_verified,
     confirm_user_email,
 )
-from divbase_api.crud.users import create_user, get_user_by_email
+from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.exceptions import AuthenticationError
@@ -25,7 +25,6 @@ from divbase_api.schemas.users import UserCreate, UserResponse
 from divbase_api.security import (
     TokenType,
     create_token,
-    verify_expired_token,
     verify_token,
 )
 from divbase_api.services.email_sender import send_email_already_verified_email, send_verification_email
@@ -185,53 +184,63 @@ async def get_verify_email(
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """
-    Handle email verification.
+    Handle email verification and redirect to confirmation page.
 
     To access this endpoint a user receives an email with link to verify their email.
     The link contains a JWT as query param in the URL.
 
-    For the sake of UX, we return different HTML pages depending on the outcome of the verification,
+    We don't verify email on clicking the link as some mailboxes may click all links automatically for security scanning.
+    Instead, we show a confirmation page where a user has to click a button to confirm verification of their email.
     """
-    # redirect to home if already logged in.
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-    expired_token = False
-
     user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
     if not user_id:
-        expired_token = True
-        user_id = verify_expired_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
-
-    if not user_id:  # token is invalid and always was
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
-            context={"error": "Invalid email verification link. Please request a new link below."},
+            context={"error": "Invalid or expired email verification link. Please request a new link below."},
+        )
+
+    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/email_verification_confirm.html",
+        context={"token": token, "email": user.email},
+    )
+
+
+@fr_auth_router.post("/confirm-email-verification", response_class=HTMLResponse)
+async def confirm_email_verification(
+    request: Request,
+    token: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Confirm email verification after user explicitly clicks a button.
+    """
+    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not user_id:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"error": "Invalid or expired email verification link. Please request a new link below."},
         )
 
     already_verified = await check_user_email_verified(db=db, id=user_id)
-
     if already_verified:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
-            context={"info": "Your email has already been verified, you can log in to DivBase directly"},
+            context={"info": "Your email has already been verified, you can log in to DivBase directly."},
         )
 
-    if expired_token and not already_verified:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/email_verification.html",
-            context={"error": "Email verification link has expired. Please request a new link below."},
-        )
-
-    # token is valid and email not verified yet proceed to verify email
     user = await confirm_user_email(db=db, id=user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/login.html",
-        context={"success": f"Thank you for verifying your email '{user.email}', you can now log in to DivBase"},
+        context={"success": f"Thank you for verifying your email '{user.email}', you can now log in to DivBase."},
     )
 
 
