@@ -72,7 +72,13 @@ app.conf.task_routes = (dynamic_router,)
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
-def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_name: str, project_id: int) -> dict:
+def sample_metadata_query_task(
+    tsv_filter: str,
+    metadata_tsv_name: str,
+    bucket_name: str,
+    project_id: int,
+    user_name: str,
+) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
 
@@ -218,7 +224,7 @@ def bcftools_pipe_task(
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str = "Default User"):
+def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str):
     """
     Update VCF dimensions in the database for the specified bucket.
     """

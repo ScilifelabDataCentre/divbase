@@ -84,7 +84,7 @@ def update_vcf_dimensions_endpoint(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
 
-    task_kwargs = {"bucket_name": project.bucket_name, "user_name": current_user.name, "project_id": project.id}
+    task_kwargs = {"bucket_name": project.bucket_name, "project_id": project.id, "user_name": current_user.email}
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
     return results.id

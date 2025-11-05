@@ -48,6 +48,7 @@ def sample_metadata_query(
         "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": project.bucket_name,
         "project_id": project.id,
+        "user_name": current_user.email,
     }
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
