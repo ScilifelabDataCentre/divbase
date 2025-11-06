@@ -11,30 +11,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
-from tests.helpers.minio_setup import (
-    MINIO_FAKE_ACCESS_KEY,
-    MINIO_FAKE_SECRET_KEY,
-    MINIO_URL,
-    PROJECTS,
-    setup_minio_data,
-)
-
-# Set env vars BEFORE any imports that use them
-os.environ["CELERY_BROKER_URL"] = "pyamqp://guest@localhost:5673//"
-os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6380/0"
-os.environ["FLOWER_USER"] = "floweradmin"
-os.environ["FLOWER_PASSWORD"] = "badpassword"
-os.environ["FLOWER_BASE_URL"] = "http://localhost:5556"
-
-os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
-os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
-
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://divbase_user:badpassword@localhost:5433/divbase_db"
-os.environ["WORKER_DATABASE_URL"] = "postgresql+psycopg://divbase_user:badpassword@localhost:5433/divbase_db"
-os.environ["WORKER_SERVICE_EMAIL"] = "worker@divbase.com"  # TODO remove after tests have been refactored
-os.environ["WORKER_SERVICE_PASSWORD"] = "badpassword"  # TODO remove after tests have been refactored
-
 import pytest
 from typer.testing import CliRunner
 
@@ -53,6 +29,17 @@ from tests.helpers.api_setup import (
     get_project_map,
     setup_api_data,
 )
+from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
+from tests.helpers.minio_setup import (
+    MINIO_FAKE_ACCESS_KEY,
+    MINIO_FAKE_SECRET_KEY,
+    MINIO_URL,
+    PROJECTS,
+    setup_minio_data,
+)
+
+os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
+os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
 
 api_base_url = os.environ["DIVBASE_API_URL"]
 
@@ -132,6 +119,7 @@ def clean_vcf_dimensions():
     Usage: clean_vcf_dimensions(db_session_sync, project_id)
     """
 
+    # TODO perhaps there could be a a delete all per project function in the crud_dimensions module?
     def _clean(db, project_id):
         try:
             vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
