@@ -102,7 +102,7 @@ def sample_metadata_query(
         if "objectdoesnotexist" in error_type:
             print("Hint: Upload the metadata file with:")
             print(f"divbase-cli files upload {metadata_tsv_name} --project {project}")
-        # Note: VCFDimensionsFileMissingOrEmptyError already contains a hint in the detail, so no need for custom hint here.
+        # Note: VCFDimensionsEntryMissingError already contains a hint in the detail, so no need for custom hint here.
         return
 
     results = SidecarQueryResult(**response.json())

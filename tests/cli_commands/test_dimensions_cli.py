@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
+from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsEntryMissingError
 from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import PROJECTS
 
@@ -25,13 +25,8 @@ api_base_url = os.environ["DIVBASE_API_URL"]
 
 
 @pytest.fixture(autouse=True, scope="function")
-def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project_map):
-    """
-    Clean all the VCF dimensions entries for all projects before each test in this file.
-    """
-    # TODO it would probably be more efficient to have a worker db crud that can take a list of files or a list of project and do this in a single db call. But for the testing stack, this is fine.
-    for project_id in project_map.values():
-        clean_vcf_dimensions(db_session_sync, project_id)
+def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
+    """Enable auto-cleanup of dimensions entries for all tests in this test file."""
     yield
 
 
@@ -127,7 +122,7 @@ def test_show_vcf_dimensions_task_when_file_missing(
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, (VCFDimensionsFileMissingOrEmptyError, DivBaseAPIError))
+    assert isinstance(result.exception, (VCFDimensionsEntryMissingError, DivBaseAPIError))
     assert bucket_name in str(result.exception)
 
 

@@ -19,7 +19,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
-from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsEntryMissingError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
 
@@ -155,9 +155,7 @@ def bcftools_pipe_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        error_msg = f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first."
-        logger.error(error_msg)
-        return {"status": "error", "error": error_msg, "type": "VCFDimensionsMissingError", "task_id": task_id}
+        raise VCFDimensionsEntryMissingError(bucket_name=bucket_name)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -481,8 +479,6 @@ def _check_if_samples_can_be_combined_with_bcftools(
     Check if samples in VCF files can be combined with bcftools merge/concat.
     Raises ValueError if samples have incompatible overlaps.
     """
-    if not vcf_dimensions_data.get("vcf_files"):
-        raise ValueError("VCF dimensions data is missing or empty. Cannot check if samples can be combined.")
 
     vcf_lookup = {entry["vcf_file_s3_key"]: entry for entry in vcf_dimensions_data["vcf_files"]}
 

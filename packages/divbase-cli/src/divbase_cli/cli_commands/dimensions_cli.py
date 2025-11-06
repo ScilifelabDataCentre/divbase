@@ -9,7 +9,7 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.exceptions import VCFDimensionsFileMissingOrEmptyError
+from divbase_lib.exceptions import VCFDimensionsEntryMissingError
 
 logger = logging.getLogger(__name__)
 
@@ -72,17 +72,17 @@ def show_dimensions_index(
         vcf_dimensions_data = response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name) from e
+            raise VCFDimensionsEntryMissingError(bucket_name=project_config.name) from e
         elif e.response.status_code == 403:
             print(f"Error: You don't have access to project '{project_config.name}'")
             raise typer.Exit(1) from None
         raise
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name)
+        raise VCFDimensionsEntryMissingError(bucket_name=project_config.name)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.name)
+        raise VCFDimensionsEntryMissingError(bucket_name=project_config.name)
 
     dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
 

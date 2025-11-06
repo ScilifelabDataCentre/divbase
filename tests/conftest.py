@@ -158,3 +158,24 @@ def run_update_dimensions(CONSTANTS):
         return result
 
     return _update
+
+
+@pytest.fixture(autouse=True, scope="function")
+def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project_map):
+    """
+    Clean all the VCF dimensions entries for all projects before each test in this file.
+
+    This fixture is available to all tests, but far from all test files  need it. Therefore, it must be explicitly included in test files that need it by creating
+    a local autouse fixture that depends on it. This pattern will also keep the cleanup DRY.
+
+    Example: add this to the top of e.g. test_dimensions_cli.py
+
+    @pytest.fixture(autouse=True, scope="function")
+    def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
+    yield
+
+    """
+    # TODO it would probably be more efficient to have a worker db crud that can take a list of files or a list of project and do this in a single db call. But for the testing stack, this is fine.
+    for project_id in project_map.values():
+        clean_vcf_dimensions(db_session_sync, project_id)
+    yield

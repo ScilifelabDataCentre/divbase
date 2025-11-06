@@ -21,46 +21,21 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
-from divbase_api.worker.queries import BcftoolsQueryManager
 from divbase_api.worker.tasks import bcftools_pipe_task
-from divbase_api.worker.vcf_dimension_indexing import DIMENSIONS_FILE_NAME
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
+from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
 
+api_base_url = os.environ["DIVBASE_API_URL"]
 
-@pytest.fixture(autouse=True)
-def clean_dimensions(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """
-    Remove the dimensions file and any merged output files before each test.
-    Used in all tests in this module.
-    """
-    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=CONSTANTS["MINIO_URL"],
-            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-        s3_client.delete_object(Bucket=project_name, Key=DIMENSIONS_FILE_NAME)
 
-        try:
-            # List all objects and delete any that match merged*.vcf.gz pattern, which caused contamination issues in parameterized tests)
-            # Note: This is a symptom of a logic flaw in the dimensions Sample-Filename mapping and neeeds to be implemented in the core logic!
-            response = s3_client.list_objects_v2(Bucket=project_name)
-            if "Contents" in response:
-                for obj in response["Contents"]:
-                    if obj["Key"].startswith("merged_") and obj["Key"].endswith(".vcf.gz"):
-                        s3_client.delete_object(Bucket=project_name, Key=obj["Key"])
-                        print(f"Deleted lingering merged file: {obj['Key']} from {project_name}")
-        except Exception as e:
-            print(f"Error cleaning up merged files: {e}")
-
-        time.sleep(1)  # Give MinIO/S3 time to propagate deletion
-
+@pytest.fixture(autouse=True, scope="function")
+def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
+    """Enable auto-cleanup of dimensions entries for all tests in this test file."""
     yield
 
 
@@ -104,11 +79,16 @@ def reset_query_projects_bucket(CONSTANTS):
 
 
 def test_sample_metadata_query(
-    CONSTANTS, logged_in_edit_user_with_existing_config, run_update_dimensions, db_session_sync
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
 ):
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
-    run_update_dimensions(db_session_sync, bucket_name=project_name)
+    project_id = project_map[project_name]
+    run_update_dimensions(bucket_name=project_name, project_id=project_id)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -126,13 +106,18 @@ def test_sample_metadata_query(
 
 
 def test_bcftools_pipe_query(
-    run_update_dimensions, db_session_sync, logged_in_edit_user_with_existing_config, CONSTANTS
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
 ):
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    run_update_dimensions(bucket_name=project_name, project_id=project_id)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
-    run_update_dimensions(db_session_sync, bucket_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -175,6 +160,7 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
 def test_bcftools_pipe_query_errors(
     run_update_dimensions,
     db_session_sync,
+    project_map,
     project_name,
     tsv_filter,
     command,
@@ -194,7 +180,8 @@ def test_bcftools_pipe_query_errors(
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
-    run_update_dimensions(db_session_sync, bucket_name=project_name)
+    project_id = project_map[project_name]
+    run_update_dimensions(bucket_name=project_name, project_id=project_id)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -235,6 +222,72 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
         assert tasks_status.get("uuid") == task_id
 
 
+@patch(
+    "divbase_api.worker.tasks.create_s3_file_manager",
+    side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
+)
+def test_query_exits_when_vcf_file_version_is_outdated(
+    mock_create_s3_manager,
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    fixtures_dir,
+    run_update_dimensions,
+    project_map,
+    db_session_sync,
+):
+    """
+    Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
+    because the dimensions file expects an older version of the VCF file.
+    """
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[bucket_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+
+    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
+        if filename.startswith(fixture_dir):
+            return filename
+        return f"{fixture_dir}/{filename}"
+
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+        """
+        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
+        """
+        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
+
+    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+        """
+        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
+        """
+        pass
+
+    with (
+        patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
+        patch("divbase_api.worker.tasks._download_vcf_files", new=patched_download_vcf_files),
+    ):
+        test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
+
+        command = f"files upload {test_file}  --project {bucket_name}"
+        result = runner.invoke(app, command)
+
+        assert result.exit_code == 0
+        assert f"{str(test_file)}" in result.stdout
+
+        params = {
+            "tsv_filter": "Area:West of Ireland;Sex:F",
+            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+            "bucket_name": "split-scaffold-project",
+            "user_name": "test-user",
+            "project_id": project_id,
+        }
+        with pytest.raises(ValueError) as excinfo:
+            bcftools_pipe_task(**params)
+        assert (
+            "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+            in str(excinfo.value)
+        )
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
@@ -250,11 +303,10 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
             },
             False,
             False,
+            ["Starting bcftools_pipe_task"],
             [
-                "Starting bcftools_pipe_task",
-                "No VCF dimensions file found in the bucket: split-scaffold-project.",
+                "The VCF dimensions index in project split-scaffold-project is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
             ],
-            ["The VCF dimensions file in project split-scaffold-project is missing or empty."],
         ),
         # Case 1: expected to be sucessful, should lead to concat
         (
@@ -286,6 +338,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "bucket_name": "split-scaffold-project",
                 "user_name": "test-user",
+                # project_id is added dynamically in the tests
             },
             False,
             True,
@@ -293,7 +346,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "Starting bcftools_pipe_task",
             ],
             [
-                "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. Please try another -r query with scaffolds/chromosomes that are present in the VCF files.To see a list of all unique scaffolds that are present across the VCF files in the project:'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>"
+                "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfill the query."
             ],
         ),
         # Case 3: expected to be sucessful, code should handle no tsv-filter in query
@@ -304,6 +357,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "bucket_name": "split-scaffold-project",
                 "user_name": "test-user",
+                # project_id is added dynamically in the tests
             },
             True,
             True,
@@ -331,6 +385,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "bucket_name": "query-project",
                 "user_name": "test-user",
+                # project_id is added dynamically in the tests
             },
             True,
             True,
@@ -355,6 +410,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "bucket_name": "mixed-concat-merge-project",
                 "user_name": "test-user",
+                # project_id is added dynamically in the tests
             },
             True,
             True,
@@ -384,6 +440,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "bucket_name": "mixed-concat-merge-project",
                 "user_name": "test-user",
+                # project_id is added dynamically in the tests
             },
             True,
             True,
@@ -420,6 +477,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     expected_logs,
     expected_error_msgs,
     run_update_dimensions,
+    project_map,
     db_session_sync,
 ):
     """
@@ -440,6 +498,10 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     The benefit of all this patching is that now it is possible to parameterize the test for expected (worker) log outcomes!
 
     """
+    bucket_name = params["bucket_name"]
+    project_id = project_map[bucket_name]
+    params["project_id"] = project_id
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     caplog.set_level(logging.INFO)
@@ -564,8 +626,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
 
     if ensure_dimensions_file:
-        run_update_dimensions(db_session_sync, bucket_name=params["bucket_name"])
-
+        run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
     try:
         current_app.conf.update(
             task_always_eager=True,
@@ -574,17 +635,17 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
         with (
             patch("boto3.client", side_effect=patched_boto3_client),
-            patch("divbase_api.worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
+            patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
             patch("divbase_lib.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
-            patch("divbase_api.worker.tasks.download_vcf_files", side_effect=patched_download_vcf_files),
+            patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
             patch("divbase_lib.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
             patch("divbase_lib.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
             patch(
                 "divbase_lib.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
-            patch("divbase_api.worker.tasks.upload_results_file", new=patched_upload_results_file),
-            patch("divbase_api.worker.tasks.delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
+            patch("divbase_api.worker.tasks._upload_results_file", new=patched_upload_results_file),
+            patch("divbase_api.worker.tasks._delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
             patch(
                 "divbase_lib.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
@@ -606,67 +667,3 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     finally:
         current_app.conf.task_always_eager = original_task_always_eager
         current_app.conf.task_eager_propagates = original_task_eager_propagates
-
-
-@patch(
-    "divbase_api.worker.tasks.create_s3_file_manager",
-    side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
-)
-def test_query_exits_when_vcf_file_version_is_outdated(
-    mock_create_s3_manager,
-    CONSTANTS,
-    logged_in_edit_user_with_existing_config,
-    fixtures_dir,
-    run_update_dimensions,
-    db_session_sync,
-):
-    """
-    Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
-    because the dimensions file expects an older version of the VCF file.
-    """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    # this factory fixture needs to be run before the with patch below since otherwise the patfch will also affect the fixture
-    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
-
-    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
-        if filename.startswith(fixture_dir):
-            return filename
-        return f"{fixture_dir}/{filename}"
-
-    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
-        """
-        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
-        """
-        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
-
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
-        """
-        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
-        """
-        pass
-
-    with (
-        patch("divbase_api.worker.tasks.download_sample_metadata", new=patched_download_sample_metadata),
-        patch("divbase_api.worker.tasks.download_vcf_files", new=patched_download_vcf_files),
-    ):
-        test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
-
-        command = f"files upload {test_file}  --project {bucket_name}"
-        result = runner.invoke(app, command)
-
-        assert result.exit_code == 0
-        assert f"{str(test_file)}" in result.stdout
-
-        params = {
-            "tsv_filter": "Area:West of Ireland;Sex:F",
-            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
-            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-            "bucket_name": "split-scaffold-project",
-            "user_name": "test-user",
-        }
-        with pytest.raises(ValueError) as excinfo:
-            bcftools_pipe_task(**params)
-        assert (
-            "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
-            in str(excinfo.value)
-        )
