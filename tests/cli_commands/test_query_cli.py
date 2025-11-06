@@ -30,8 +30,6 @@ from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
 
-api_base_url = os.environ["DIVBASE_API_URL"]
-
 
 @pytest.fixture(autouse=True, scope="function")
 def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
