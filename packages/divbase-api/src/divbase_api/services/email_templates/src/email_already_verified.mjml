@@ -1,0 +1,17 @@
+<mjml>
+  <mj-head>
+    <mj-title>Your Account is Already Verified</mj-title>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="20px" font-weight="bold">Your Account is Already Verified</mj-text>
+        <mj-text>
+          Hello,<br/><br/>
+          Your email {{ email }} is already verified. You can log in to your DivBase account directly.<br/><br/>
+          If you encounter any issues, please contact our support team.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

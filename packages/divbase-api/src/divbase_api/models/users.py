@@ -28,6 +28,8 @@ class UserDB(BaseDBModel):
 
     is_admin: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
+    email_verified: Mapped[bool] = mapped_column(default=False)
 
     project_memberships: Mapped[list["ProjectMembershipDB"]] = relationship(
         "ProjectMembershipDB", back_populates="user"

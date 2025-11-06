@@ -1,0 +1,26 @@
+<div class="auth-container">
+    <div class="auth-form">
+        <p class="form-description">
+            Enter your email address and we'll send you a new verification link if your account exists and isn't already verified.
+        </p>
+        
+        <form method="post" action="/auth/resend-email-verification">
+            <div class="form-group">
+                <label for="email">Email Address:</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    value="{{ email or '' }}" 
+                    required 
+                    placeholder="Enter your email address"
+                    autocomplete="email"
+                    class="form-control"
+                >
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Send Verification Email</button>
+        </form>
+        
+    </div>
+</div>

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <div class="email-verification-confirm">
+        <h2>Confirm Your Email Address</h2>
+        <p class="form-description">
+            Click the button below to confirm your email address '{{ email }}' and complete the verification process.
+        </p>
+        
+        <form method="post" action="/auth/confirm-email-verification">
+            <input type="hidden" name="token" value="{{ token }}">
+            <button type="submit" class="btn btn-primary">Confirm My Email Address</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

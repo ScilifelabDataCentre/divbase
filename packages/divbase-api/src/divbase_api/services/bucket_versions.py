@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import yaml
 
-from divbase_api.config import settings
+from divbase_api.api_config import settings
 from divbase_api.exceptions import (
     BucketVersionAlreadyExistsError,
     BucketVersioningFileAlreadyExistsError,

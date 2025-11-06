@@ -32,13 +32,6 @@ class UserUpdate(UserBase):
     pass
 
 
-class AdminUserUpdate(UserBase):
-    """Schema for admins to update a user."""
-
-    is_admin: bool | None = None
-    is_active: bool | None = None
-
-
 class UserPasswordUpdate(BaseModel):
     """Schema for a user to update their own password."""
 
@@ -62,3 +55,4 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    is_deleted: bool

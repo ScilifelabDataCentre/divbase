@@ -1,0 +1,74 @@
+<mjml>
+  <mj-head>
+    <mj-title>Verify Your Email - DivBase</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif" />
+      <mj-text padding="10px 25px" color="#555" />
+      <mj-button background-color="#2563eb" color="white" border-radius="6px" />
+    </mj-attributes>
+  </mj-head>
+  
+  <mj-body background-color="#f4f4f4">
+  
+    <mj-section background-color="#2563eb" padding="20px">
+      <mj-column>
+        <mj-text align="center" color="white" font-size="24px" font-weight="bold">
+          DivBase
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="white" padding="40px 20px">
+      <mj-column>
+        <mj-text font-size="20px" color="#1f2937" font-weight="bold" padding-bottom="20px">
+          Welcome to DivBase!
+        </mj-text>
+        
+        <mj-text font-size="16px" line-height="1.6" padding-bottom="20px">
+          Thank you for creating an account with DivBase. To complete your registration and start using our platform, please verify your email address by clicking the button below.
+        </mj-text>
+
+        <mj-button href="{{ verification_url }}" padding="20px 0">
+          Verify Email Address
+        </mj-button>
+
+        <mj-text font-size="14px" color="#6b7280" padding-top="20px">
+          If the button above doesn't work, you can copy and paste this link into your browser:
+        </mj-text>
+        
+        <mj-text font-size="14px" color="#2563eb" padding="10px 0">
+          {{ verification_url }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+
+    <mj-section background-color="#fef3c7" padding="15px 20px">
+      <mj-column>
+        <mj-text font-size="14px" color="#92400e" font-weight="bold" padding="0 0 5px 0">
+          Security Note:
+        </mj-text>
+        <mj-text font-size="14px" color="#92400e" padding="0">
+          This verification link will expire in {{ link_expire_hours }} hours for security reasons.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="white" padding="20px">
+      <mj-column>
+        <mj-text font-size="14px" color="#6b7280">
+          If you didn't create an account with DivBase, you can safely ignore this email.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#f9fafb" padding="20px">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#6b7280">
+          This email was sent by DivBase.<br/>
+          If you have any questions, please contact us.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

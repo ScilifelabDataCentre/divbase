@@ -31,6 +31,7 @@ class ProjectDB(BaseDBModel):
     description: Mapped[str] = mapped_column(String(1000), nullable=True)
     bucket_name: Mapped[str] = mapped_column(String(63), index=True, unique=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
     # if not BigInteger, max size would be ~2.1 GB
     storage_quota_bytes: Mapped[int] = mapped_column(BigInteger)
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)

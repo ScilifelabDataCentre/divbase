@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container">
     <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
+        <div class="col-md-10 col-lg-8">
             <div class="py-4">
                 <div class="card shadow-sm border-success">
                     <div class="card-body p-4 text-center">
@@ -19,19 +19,17 @@
                             Welcome to DivBase, <strong>{{ name }}</strong>!
                         </p>
                         
-                        <div class="alert alert-success" role="alert">
-                            <i class="bi bi-info-circle me-2"></i>
-                            Your account has been created with email: <strong>{{ email }}</strong>
+                        <div class="alert alert-warning" role="alert">
+                            <i class="bi bi-envelope-check me-2"></i>
+                            <strong>Important:</strong> Please check your email inbox (and spam folder) for a verification link sent to <strong>{{ email }}</strong>.
+                            The email will be sent from <em>{{ from_email }}</em>.
                         </div>
                         
                         <p class="text-muted mb-4">
-                            You can now sign in to your account
+                            You need to verify your email address to activate your account.
                         </p>
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                            <a href="/auth/login" class="btn btn-primary btn-lg">
-                                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In Now
-                            </a>
                             <a href="/" class="btn btn-outline-secondary">
                                 <i class="bi bi-house me-2"></i>Go to home page
                             </a>
