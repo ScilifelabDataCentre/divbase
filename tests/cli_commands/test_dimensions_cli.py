@@ -8,11 +8,11 @@ import os
 import re
 from unittest.mock import patch
 
-import httpx
 import pytest
 import yaml
 from typer.testing import CliRunner
 
+from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
@@ -24,9 +24,19 @@ runner = CliRunner()
 api_base_url = os.environ["DIVBASE_API_URL"]
 
 
+@pytest.fixture(autouse=True, scope="function")
+def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project_map):
+    """
+    Clean all the VCF dimensions entries for all projects before each test in this file.
+    """
+    # TODO it would probably be more efficient to have a worker db crud that can take a list of files or a list of project and do this in a single db call. But for the testing stack, this is fine.
+    for project_id in project_map.values():
+        clean_vcf_dimensions(db_session_sync, project_id)
+    yield
+
+
 def test_update_vcf_dimensions_task_directly(
     CONSTANTS,
-    clean_vcf_dimensions,
     run_update_dimensions,
     db_session_sync,
     project_map,
@@ -36,7 +46,6 @@ def test_update_vcf_dimensions_task_directly(
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[bucket_name]
-    clean_vcf_dimensions(db_session_sync, project_id)
 
     result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
@@ -48,13 +57,19 @@ def test_update_vcf_dimensions_task_directly(
 
 
 def test_show_vcf_dimensions_task(
-    CONSTANTS, run_update_dimensions, db_session_sync, logged_in_edit_user_with_existing_config
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
 ):
     """
     Test the CLI show command after indexing dimensions via the API.
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    run_update_dimensions(db_session_sync, bucket_name=bucket_name)
+    project_id = project_map[bucket_name]
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
     # Basic version of command
     command = f"dimensions show --project {bucket_name}"
@@ -97,7 +112,12 @@ def test_show_vcf_dimensions_task(
             assert scaffold_name in scaffolds, f"{scaffold_name} not found in scaffolds for {vcf_file}: {scaffolds}"
 
 
-def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_in_edit_user_with_existing_config):
+def test_show_vcf_dimensions_task_when_file_missing(
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
     """
     Test that the CLI handles the case when no dimensions are indexed (empty database).
     """
@@ -113,8 +133,6 @@ def test_show_vcf_dimensions_task_when_file_missing(CONSTANTS, logged_in_edit_us
 
 def test_get_dimensions_info_returns_empty(
     CONSTANTS,
-    clean_vcf_dimensions,
-    run_update_dimensions,
     db_session_sync,
     project_map,
 ):
@@ -123,68 +141,55 @@ def test_get_dimensions_info_returns_empty(
     """
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[bucket_name]
-    clean_vcf_dimensions(db_session_sync, project_id)
 
-    api_base_url = "http://localhost:8001/api"
-    login_response = httpx.post(
-        f"{api_base_url}/v1/auth/login",
-        data={
-            "grant_type": "password",
-            "username": os.environ["WORKER_SERVICE_EMAIL"],
-            "password": os.environ["WORKER_SERVICE_PASSWORD"],
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    login_response.raise_for_status()
-
-    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
-    assert result == {"vcf_files": []}  # TODO this might need to be updated
+    result = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert result["vcf_files"] == []
 
 
-def test_update_vcf_dimensions_task_raises_no_vcf_files_error(CONSTANTS):
+def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+):
     """
     Test that the update task raises an error when the bucket has no VCF files.
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
     bucket_name = "empty-project"
+    project_id = project_map[bucket_name]
 
     with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
-            update_vcf_dimensions_task(bucket_name=bucket_name)
+            update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
 
-# def test_remove_VCF_and_update_dimension_entry(CONSTANTS):
-#     """
-#     Test removing a VCF metadata entry via the manager.
-#     """
-#     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-#     vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
+def test_remove_VCF_and_update_dimension_entry(
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test removing a VCF metadata entry
+    """
+    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[bucket_name]
+    vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
 
-#     api_base_url = "http://localhost:8000/api"
-#     login_response = httpx.post(
-#         f"{api_base_url}/v1/auth/login",
-#         data={
-#             "grant_type": "password",
-#             "username": os.environ["WORKER_SERVICE_EMAIL"],
-#             "password": os.environ["WORKER_SERVICE_PASSWORD"],
-#         },
-#         headers={"Content-Type": "application/x-www-form-urlencoded"},
-#     )
-#     login_response.raise_for_status()
-#     auth_token = login_response.json()["access_token"]
-
-#     manager = create_vcf_dimension_manager(bucket_name=bucket_name, auth_token=auth_token)
-
-#     if manager._project_id:
-#         manager.delete_vcf_metadata(vcf_file, manager._project_id)
-#         updated_dimensions = manager.get_dimensions_info()
-#         filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
-#         assert vcf_file not in filenames
+    delete_vcf_metadata(db=db_session_sync, vcf_file_s3_key=vcf_file, project_id=project_id)
+    updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+    assert vcf_file not in filenames
 
 
 @patch("divbase_api.worker.tasks.create_s3_file_manager")
-def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, CONSTANTS, tmp_path):
+def test_update_dimensions_skips_divbase_generated_vcf(
+    mock_create_s3_manager,
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+    tmp_path,
+):
     """
     Test that after running a query (which generates a DivBase result VCF),
     update_vcf_dimensions_task skips that file and returns a skip message.
@@ -192,6 +197,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[bucket_name]
 
     divbase_vcf_name = "merged_test_divbase_result.vcf.gz"
     vcf_path = tmp_path / divbase_vcf_name
@@ -212,7 +218,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
         bucket_name=bucket_name,
     )
 
-    result = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+    result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
     skipped_files = result.get("VCF files skipped by this job (previous DivBase-generated result VCFs)", [])
     assert any(divbase_vcf_name in msg for msg in skipped_files), (
@@ -223,7 +229,13 @@ def test_update_dimensions_skips_divbase_generated_vcf(mock_create_s3_manager, C
 
 
 @patch("divbase_api.worker.tasks.create_s3_file_manager")
-def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_manager, CONSTANTS, tmp_path):
+def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
+    mock_create_s3_manager,
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+    tmp_path,
+):
     """
     Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,
     the task returns a message indicating no new files were found.
@@ -231,8 +243,9 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[bucket_name]
 
-    result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+    result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
     assert result_first_run["status"] == "completed"
     added_files = result_first_run["VCF files that were added to dimensions index by this job"]
@@ -241,7 +254,9 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(mock_create_s3_
     for vcf in expected_vcfs:
         assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
 
-    result_second_run = update_vcf_dimensions_task(bucket_name=bucket_name, user_name="Test User")
+    result_second_run = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, user_name="Test User"
+    )
     assert result_second_run["status"] == "completed"
     assert (
         "None: no new VCF files or file versions were detected in the project."
