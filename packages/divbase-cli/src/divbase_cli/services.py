@@ -146,9 +146,9 @@ def download_files_command(
                 missing_objects=missing_objects,
             )
         to_download = {file: file_versions_at_desired_state[file] for file in all_files}
-        json_data = {"objects": [{"object_name": obj, "version_id": to_download[obj]} for obj in all_files]}
+        json_data = [{"object_name": obj, "version_id": to_download[obj]} for obj in all_files]
     else:
-        json_data = {"objects": [{"object_name": obj, "version_id": None} for obj in all_files]}
+        json_data = [{"object_name": obj, "version_id": None} for obj in all_files]
 
     response = make_authenticated_request(
         method="POST",

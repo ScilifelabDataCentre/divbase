@@ -5,14 +5,9 @@ Schemas for working with S3 file operations.
 from pydantic import BaseModel, Field
 
 
-class DownloadOneObjectRequest(BaseModel):
+class DownloadObjectRequest(BaseModel):
     object_name: str = Field(..., description="Name of the object to be downloaded")
     version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
-
-
-# Careful if trying to simplfy this logic, can a user download the same file at multiple versions?
-class DownloadObjectsRequest(BaseModel):
-    objects: list[DownloadOneObjectRequest]
 
 
 class PreSignedDownloadResponse(BaseModel):

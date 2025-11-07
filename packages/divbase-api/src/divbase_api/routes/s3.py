@@ -23,7 +23,7 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
 from divbase_lib.api_schemas.s3 import (
-    DownloadObjectsRequest,
+    DownloadObjectRequest,
     PreSignedDownloadResponse,
     PreSignedUploadResponse,
 )
@@ -49,7 +49,7 @@ def check_too_many_objects_in_request(numb_objects: int, max_objects: int = 100)
 @s3_router.post("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
 async def download_files(
     project_name: str,
-    objects_list: DownloadObjectsRequest,
+    objects_to_download: list[DownloadObjectRequest],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -58,10 +58,10 @@ async def download_files(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to download files from this project.")
 
-    check_too_many_objects_in_request(len(objects_list.objects))
+    check_too_many_objects_in_request(len(objects_to_download))
 
     response = []
-    for obj in objects_list.objects:
+    for obj in objects_to_download:
         pre_signed_response = s3_signer_service.create_presigned_url_for_download(
             bucket_name=project.bucket_name, object_name=obj.object_name, version_id=obj.version_id
         )
