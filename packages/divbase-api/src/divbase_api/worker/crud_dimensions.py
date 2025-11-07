@@ -29,9 +29,8 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
                 "variant_count": entry.variant_count,
                 "sample_count": entry.sample_count,
                 "file_size_bytes": entry.file_size_bytes,
-                "indexed_at": entry.indexed_at.isoformat() if entry.indexed_at else None,
-                "created_at": entry.created_at.isoformat() if entry.created_at else None,
-                "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+                "created_at": entry.created_at.isoformat(),
+                "updated_at": entry.updated_at.isoformat(),
             }
             for entry in entries
         ],
@@ -42,7 +41,6 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
 
 def get_skipped_vcfs_by_project_worker(db: Session, project_id: int) -> dict[str, str]:
     """
-    TODO: FOR WORKER INTERACTIONS WITH API ONLY
     Get all skipped VCF entries for a given project.
     """
     stmt = select(SkippedVCFDB).where(SkippedVCFDB.project_id == project_id)

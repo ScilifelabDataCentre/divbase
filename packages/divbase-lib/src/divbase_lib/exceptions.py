@@ -240,23 +240,6 @@ class SidecarColumnNotFoundError(Exception):
     pass
 
 
-class VCFDimensionsEntryMissingError(ValueError):
-    """Raised when there are no entries in the VCF dimensions db table."""
-
-    def __init__(self, bucket_name: str):
-        error_message = (
-            f"The VCF dimensions index in project {bucket_name} is missing or empty. "
-            "Please ensure that there are VCF files in the project and run:\n"
-            "'divbase-cli dimensions update --project <project_name>'\n"
-        )
-        super().__init__(error_message)
-        self.bucket_name = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
 class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
 

@@ -4,7 +4,7 @@ API routes for VCF dimensions (technical metadata) operations.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
@@ -14,7 +14,7 @@ from divbase_api.crud.vcf_dimensions import (
 )
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
-from divbase_api.exceptions import AuthorizationError
+from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import update_vcf_dimensions_task
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get("/list/user-project-name/{project_name}")
+@vcf_dimensions_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def list_vcf_metadata_by_project_name_user_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -55,10 +55,7 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     ]
 
     if not vcf_files and not skipped_files:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No VCF metadata or skipped files found for project '{project_name}'",
-        )
+        raise VCFDimensionsEntryMissingError(project_name=project.name)
 
     return {
         "project_id": project.id,
@@ -70,7 +67,7 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     }
 
 
-@vcf_dimensions_router.post("/update/{project_name}", status_code=status.HTTP_202_ACCEPTED)
+@vcf_dimensions_router.put("/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED)
 def update_vcf_dimensions_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -81,8 +78,8 @@ def update_vcf_dimensions_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.READ):
-        raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
 
     task_kwargs = {"bucket_name": project.bucket_name, "project_id": project.id, "user_name": current_user.email}
 

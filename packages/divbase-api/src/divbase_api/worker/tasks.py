@@ -19,7 +19,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
-from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsEntryMissingError
+from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
 
@@ -155,7 +155,12 @@ def bcftools_pipe_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(bucket_name=bucket_name)
+        # TODO - should this return a dict with status error instead?
+        raise ValueError(
+            f"The VCF dimensions index in project '{bucket_name}' is missing or empty. "
+            "Please ensure that there are VCF files in the project and run:\n"
+            "'divbase-cli dimensions update --project <project_name>'\n"
+        )
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 

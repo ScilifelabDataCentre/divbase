@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 
-import httpx
 import typer
 import yaml
 
@@ -9,7 +8,6 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.exceptions import VCFDimensionsEntryMissingError
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +28,9 @@ def update_dimensions_index(
     project_config = resolve_project(project_name=project, config_path=config_file)
 
     response = make_authenticated_request(
-        method="POST",
+        method="PUT",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/vcf-dimensions/update/{project_config.name}",
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
 
     task_id = response.json()
@@ -63,26 +61,12 @@ def show_dimensions_index(
 
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    try:
-        response = make_authenticated_request(
-            method="GET",
-            divbase_base_url=project_config.divbase_url,
-            api_route=f"v1/vcf-dimensions/list/user-project-name/{project_config.name}",
-        )
-        vcf_dimensions_data = response.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise VCFDimensionsEntryMissingError(bucket_name=project_config.name) from e
-        elif e.response.status_code == 403:
-            print(f"Error: You don't have access to project '{project_config.name}'")
-            raise typer.Exit(1) from None
-        raise
-
-    if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(bucket_name=project_config.name)
-
-    if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(bucket_name=project_config.name)
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+    )
+    vcf_dimensions_data = response.json()
 
     dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
 
@@ -134,7 +118,7 @@ def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
         dimensions_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],
-            "last_updated": entry.get("indexed_at") or entry.get("updated_at"),
+            "last_updated": entry.get("updated_at"),
             "dimensions": {
                 "scaffolds": entry.get("scaffolds", []),
                 "sample_count": entry.get("sample_count", 0),

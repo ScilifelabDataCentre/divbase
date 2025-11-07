@@ -15,7 +15,6 @@ from divbase_api.api_config import settings
 from divbase_api.db import (
     create_all_tables,
     create_first_admin_user,
-    create_worker_service_account,
     engine,
     health_check_db,
 )
@@ -48,7 +47,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Database connection healthy.")
     await create_all_tables()
     await create_first_admin_user()
-    await create_worker_service_account()
     logger.info("DivBase API startup events complete.")
 
     yield

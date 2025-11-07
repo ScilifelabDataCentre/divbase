@@ -2,10 +2,9 @@
 VCF dimensions (= technical metadata) DB Model.
 """
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,9 +34,6 @@ class VCFMetadataDB(BaseDBModel):
     )
     s3_version_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger)
-    indexed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
     samples: Mapped[list[str]] = mapped_column(ARRAY(String), index=True)  # Sample names
     scaffolds: Mapped[list[str]] = mapped_column(ARRAY(String))  # Scaffold/chromosome names
     variant_count: Mapped[int] = mapped_column(BigInteger)

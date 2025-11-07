@@ -26,6 +26,7 @@ from divbase_api.exceptions import (
     ProjectNotFoundError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
+    VCFDimensionsEntryMissingError,
 )
 from divbase_api.frontend_routes.core import templates
 
@@ -233,6 +234,19 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException):
         return render_error_page(request, "An unexpected error occurred. Please try again later.", exc.status_code)
 
 
+async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFDimensionsEntryMissingError):
+    logger.info(f"VCF dimensions entry missing for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "vcf_dimensions_entry_missing_error"},
+            headers=exc.headers,
+        )
+    else:
+        return render_error_page(request, exc.message, status_code=exc.status_code)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with FastAPI app.
@@ -246,10 +260,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
-    app.add_exception_handler(
-        BucketVersioningFileAlreadyExistsError,
-        bucket_versioning_file_exists_error_handler,  # type: ignore
-    )
+    app.add_exception_handler(BucketVersioningFileAlreadyExistsError, bucket_versioning_file_exists_error_handler)  # type: ignore
     app.add_exception_handler(BucketVersionAlreadyExistsError, bucket_version_exists_error_handler)  # type: ignore
     app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
+    app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore

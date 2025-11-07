@@ -151,7 +151,6 @@ def pipe_query(
         api_route="v1/query/bcftools-pipe/",
         params=params,
     )
-    response.raise_for_status()
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
