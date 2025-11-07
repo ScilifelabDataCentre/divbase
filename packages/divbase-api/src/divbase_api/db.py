@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from divbase_api.api_config import settings
-from divbase_api.crud.users import create_user, get_all_users, get_user_by_email
+from divbase_api.crud.users import create_user, get_all_users
 from divbase_api.models.base import Base
 from divbase_api.schemas.users import UserCreate
 
@@ -96,41 +96,3 @@ async def create_first_admin_user() -> None:
             email_verified=True,
         )
     logger.info(f"First admin user created with email: {admin_user.email}")
-
-
-async def create_worker_service_account() -> None:
-    """
-    Create a service account for worker tasks to authenticate with the API.
-
-    This account is used by Celery workers to call VCF dimensions API endpoints.
-    """
-    worker_service_email = settings.api.worker_service_email
-    worker_service_password = settings.api.worker_service_password
-
-    if worker_service_email == "NOT_SET" or worker_service_password.get_secret_value() == "NOT_SET":
-        logger.info(
-            "No worker service account env vars set (WORKER_SERVICE_EMAIL, WORKER_SERVICE_PASSWORD), "
-            "skipping service account creation"
-        )
-        return
-
-    async with AsyncSessionLocal() as db:
-        existing_service_account = await get_user_by_email(db=db, email=worker_service_email)
-
-        if existing_service_account:
-            logger.info("Worker service account already exists, skipping creation")
-            return
-
-        user_info = UserCreate(
-            name="Worker Service Account",
-            email=worker_service_email,
-            password=worker_service_password,
-        )
-
-        service_user = await create_user(
-            db=db,
-            user_data=user_info,
-            is_admin=False,
-        )
-
-    logger.info(f"Worker service account created with email: {service_user.email}")
