@@ -5,9 +5,17 @@ CLI commands for managing S3 bucket versions.
 from pathlib import Path
 from urllib.parse import urlencode
 
-from divbase_cli.pre_signed_urls import download_multiple_pre_signed_urls, upload_multiple_pre_signed_urls
+from divbase_cli.cli_exceptions import ChecksumVerificationError
+from divbase_cli.pre_signed_urls import (
+    DownloadOutcome,
+    FailedDownload,
+    UploadOutcome,
+    download_multiple_pre_signed_urls,
+    upload_multiple_pre_signed_urls,
+)
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
+from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, verify_downloaded_checksum
 from divbase_lib.schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
@@ -114,8 +122,9 @@ def download_files_command(
     project_name: str,
     all_files: list[str],
     download_dir: Path,
+    verify_checksums: bool,
     bucket_version: str | None = None,
-) -> list[Path]:
+) -> DownloadOutcome:
     """
     Download files from the given project's S3 bucket.
     """
@@ -149,12 +158,30 @@ def download_files_command(
         json=json_data,
     )
 
-    return download_multiple_pre_signed_urls(pre_signed_urls=response.json(), download_dir=download_dir)
+    download_results = download_multiple_pre_signed_urls(pre_signed_urls=response.json(), download_dir=download_dir)
+
+    if verify_checksums:
+        # Create separate lists to avoid modifying while iterating
+        verified_successful, checksum_failures = [], []
+
+        for download in download_results.successful:
+            try:
+                verify_downloaded_checksum(file_path=download.file_path, expected_checksum=download.etag)
+                verified_successful.append(download)
+            except ChecksumVerificationError as err:
+                checksum_failures.append(
+                    FailedDownload(object_name=download.object_name, file_path=download.file_path, exception=err)
+                )
+
+        download_results.successful = verified_successful
+        download_results.failed.extend(checksum_failures)
+
+    return download_results
 
 
 def upload_files_command(
-    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool
-) -> dict[str, Path]:
+    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool, checksum: bool
+) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
     Files uploaded and there names in  returned as a list Paths
@@ -175,16 +202,22 @@ def upload_files_command(
         if existing_objects:
             raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), project_name=project_name)
 
-    query_params = {
-        "project_name": project_name,
-        "object_names": object_names,
-    }
+    objects_dict = {}
+    for file in all_files:
+        object_name = file.name
+        if checksum:
+            md5_hash = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.BASE64)
+            objects_dict[object_name] = md5_hash
+        else:
+            objects_dict[object_name] = None
 
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/upload?{urlencode(query_params, doseq=True)}",
+        api_route=f"v1/s3/upload?project_name={project_name}",
+        json=objects_dict,
     )
+
     pre_signed_urls = response.json()
 
     return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)

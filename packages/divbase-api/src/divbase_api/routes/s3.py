@@ -92,22 +92,23 @@ async def list_files(
 @s3_router.post("/upload", status_code=status.HTTP_200_OK, response_model=list[PreSignedUploadResponse])
 async def generate_upload_url(
     project_name: str,
+    objects: dict[str, str | None],  # dict of object names and optional md5 checksums
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-    object_names: list[str] = Query(..., description="Name of the objects to upload"),
 ):
     """Generate pre-signed POST urls to upload 1 or more file to S3. Max 100 files at a time."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to upload files to this project.")
 
-    check_too_many_objects_in_request(len(object_names))
+    check_too_many_objects_in_request(len(objects))
 
     response = []
-    for obj_name in object_names:
+    for obj_name, md5_hash in objects.items():
         pre_signed_response = s3_signer_service.create_presigned_url_for_upload(
             bucket_name=project.bucket_name,
             object_name=obj_name,
+            md5_hash=md5_hash,
         )
         response.append(pre_signed_response)
 
