@@ -6,7 +6,15 @@ from itertools import combinations
 from pathlib import Path
 
 from celery import Celery
+from celery.signals import (
+    task_failure,
+    task_prerun,
+    task_retry,
+    task_revoked,
+    task_success,
+)
 
+from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.worker.crud_dimensions import (
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
@@ -69,6 +77,60 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 
 
 app.conf.task_routes = (dynamic_router,)
+
+
+@task_prerun.connect
+def task_prerun_handler(sender=None, task_id=None, **kwargs):
+    """Called when task starts executing (STARTED state)."""
+    _update_task_status_in_pg(task_id, TaskStatus.STARTED)
+
+
+@task_success.connect
+def task_success_handler(sender=None, result=None, **kwargs):
+    """Called when task completes successfully (SUCCESS state)."""
+    task_id = sender.request.id
+    _update_task_status_in_pg(task_id, TaskStatus.SUCCESS)
+
+
+@task_failure.connect
+def task_failure_handler(
+    sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra
+):
+    """Called when task fails (FAILURE state)."""
+    _update_task_status_in_pg(task_id, TaskStatus.FAILURE, error_msg=str(exception)[:500])
+
+
+@task_retry.connect
+def task_retry_handler(sender=None, request=None, reason=None, einfo=None, **kwargs):
+    """Called when task is retried (RETRY state)."""
+    task_id = request.id
+    _update_task_status_in_pg(task_id, TaskStatus.RETRY, error_msg=str(reason)[:500])
+
+
+@task_revoked.connect
+def task_revoked_handler(sender=None, request=None, terminated=None, signum=None, expired=None, **kwargs):
+    """Called when task is revoked/cancelled (REVOKED state)."""
+    task_id = request.id if request else None
+    reason = "terminated" if terminated else "expired" if expired else "revoked"
+    if task_id:
+        _update_task_status_in_pg(task_id, TaskStatus.REVOKED, error_msg=f"Task {reason}")
+
+
+def _update_task_status_in_pg(task_id: str, status: TaskStatus, error_msg: str = None):
+    """Update task status in database."""
+    try:
+        with SyncSessionLocal() as session:
+            entry = session.query(TaskHistoryDB).filter_by(task_id=str(task_id)).first()
+            if entry:
+                entry.status = status
+                if error_msg:
+                    entry.error_message = error_msg
+                session.commit()
+                logger.debug(f"Updated task {task_id} to status {status}")
+            else:
+                logger.warning(f"Task {task_id} not found in database")
+    except Exception as e:
+        logger.error(f"Failed to update task status for {task_id}: {e}")
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])

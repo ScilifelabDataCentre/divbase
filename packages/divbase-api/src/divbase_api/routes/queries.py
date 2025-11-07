@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, status
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.task_history import record_pending_task
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
@@ -52,6 +53,8 @@ def sample_metadata_query(
     }
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
+    record_pending_task(task_id=results.id, user_id=current_user.id, project_id=project.id)
+
     result_dict = results.get(timeout=10)  # TODO think about what happens if this timeout is reached
 
     if "error" in result_dict:
@@ -93,4 +96,5 @@ def create_bcftools_jobs(
     }
 
     results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
+    record_pending_task(task_id=results.id, user_id=current_user.id, project_id=project.id)
     return results.id
