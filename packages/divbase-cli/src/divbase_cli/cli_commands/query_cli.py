@@ -164,7 +164,12 @@ def check_status(
         help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
     ),
     config_file: Path = CONFIG_FILE_OPTION,
-    limit: int = typer.Option(20, help="Maximum number of tasks to display."),
+    project: str | None = typer.Option(
+        None, help="Optional project name to filter the user's task history by project."
+    ),
+    limit: int = typer.Option(
+        10, help="Maximum number of tasks to display in the terminal. Sorted by recency. Default = 20."
+    ),
 ):
     """
     Check status of all query jobs submitted by the user.
@@ -183,16 +188,18 @@ def check_status(
 
     if task_id:
         api_route = f"v1/task-history/list/{task_id}"
-        request_kwargs = {}
+        params = None
     else:
         api_route = "v1/task-history/list"
-        request_kwargs = {"params": {"limit": limit}}
+        params = {"limit": limit}
+        if project:
+            params["project"] = project
 
     task_history_response = make_authenticated_request(
         method="GET",
         divbase_base_url=logged_in_url,
         api_route=api_route,
-        **request_kwargs,
+        params=params,
     )
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
@@ -209,4 +216,4 @@ def check_status(
     task_history_manager = TaskHistoryManager(
         task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
     )
-    task_history_manager.print_task_history()
+    task_history_manager.print_task_history(display_limit=limit)
