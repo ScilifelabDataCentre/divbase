@@ -40,7 +40,7 @@ app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Redis-specific config
 app.conf.update(
-    result_expires=3600,
+    result_expires=2592000,  # 30 days in seconds
     task_track_started=True,
     task_serializer="json",
     accept_content=["json"],

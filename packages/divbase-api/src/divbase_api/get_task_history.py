@@ -75,11 +75,27 @@ def _make_flower_request(request_url: str) -> dict[str, Any]:
     return response.json()
 
 
-def _check_if_user_has_permission_to_view_task(task_id: str, user_id: int, is_admin: bool) -> bool:
+def _check_if_user_has_permission_to_view_task(
+    task_id: str,
+    user_id: int,
+    is_admin: bool,
+) -> bool:
+    """
+    Check if the user has permission to view this task.
+    Returns False if task not found in postgres TaskHistoryDB table or in results backend
+    (redis backend may purge old tasks).
+    """
     if is_admin:
         return True
 
-    with SyncSessionLocal() as session:
-        entry = session.query(TaskHistoryDB).filter_by(task_id=task_id).first()
-        if entry:
-            return entry.user_id == user_id
+    try:
+        with SyncSessionLocal() as session:
+            entry = session.query(TaskHistoryDB).filter_by(task_id=task_id).first()
+            if entry:
+                return entry.user_id == user_id
+            else:
+                logger.debug(f"Task {task_id} not found in database and/or in results backend")
+                return False
+    except Exception as e:
+        logger.error(f"Database error checking permission for task {task_id}: {e}")
+        return False
