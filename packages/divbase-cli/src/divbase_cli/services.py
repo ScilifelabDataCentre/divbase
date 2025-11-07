@@ -5,17 +5,15 @@ CLI commands for managing S3 bucket versions.
 from pathlib import Path
 from urllib.parse import urlencode
 
-from divbase_cli.cli_exceptions import ChecksumVerificationError
 from divbase_cli.pre_signed_urls import (
     DownloadOutcome,
-    FailedDownload,
     UploadOutcome,
     download_multiple_pre_signed_urls,
     upload_multiple_pre_signed_urls,
 )
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, verify_downloaded_checksum
+from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 from divbase_lib.schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
@@ -158,24 +156,9 @@ def download_files_command(
         json=json_data,
     )
 
-    download_results = download_multiple_pre_signed_urls(pre_signed_urls=response.json(), download_dir=download_dir)
-
-    if verify_checksums:
-        # Create separate lists to avoid modifying while iterating
-        verified_successful, checksum_failures = [], []
-
-        for download in download_results.successful:
-            try:
-                verify_downloaded_checksum(file_path=download.file_path, expected_checksum=download.etag)
-                verified_successful.append(download)
-            except ChecksumVerificationError as err:
-                checksum_failures.append(
-                    FailedDownload(object_name=download.object_name, file_path=download.file_path, exception=err)
-                )
-
-        download_results.successful = verified_successful
-        download_results.failed.extend(checksum_failures)
-
+    download_results = download_multiple_pre_signed_urls(
+        pre_signed_urls=response.json(), download_dir=download_dir, verify_checksums=verify_checksums
+    )
     return download_results
 
 

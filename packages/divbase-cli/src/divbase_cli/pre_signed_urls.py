@@ -10,6 +10,9 @@ from pathlib import Path
 
 import httpx
 
+from divbase_cli.cli_exceptions import ChecksumVerificationError
+from divbase_lib.s3_checksums import verify_downloaded_checksum
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +22,6 @@ class SuccessfulDownload:
 
     file_path: Path
     object_name: str
-    etag: str
 
 
 @dataclass
@@ -39,12 +41,12 @@ class DownloadOutcome:
     failed: list[FailedDownload]
 
 
-def download_multiple_pre_signed_urls(pre_signed_urls: list[dict], download_dir: Path) -> DownloadOutcome:
+def download_multiple_pre_signed_urls(
+    pre_signed_urls: list[dict], verify_checksums: bool, download_dir: Path
+) -> DownloadOutcome:
     """
     Download files using pre-signed URLs.
     Returns a DownloadResults object containing all successful and failed downloads.
-
-    # TODO - consider put checksum verification inside here
     """
     successful_downloads, failed_downloads = [], []
     with httpx.Client(timeout=30.0) as client:
@@ -61,19 +63,23 @@ def download_multiple_pre_signed_urls(pre_signed_urls: list[dict], download_dir:
                         FailedDownload(object_name=object_name, file_path=out_file_path, exception=err)
                     )
                     continue
-                checksum = response.headers.get("ETag", "").strip('"')
+                server_checksum = response.headers.get("ETag", "").strip('"')
 
                 with open(out_file_path, "wb") as file:
                     for chunk in response.iter_bytes(chunk_size=8192):
                         file.write(chunk)
 
-            successful_downloads.append(
-                SuccessfulDownload(
-                    file_path=out_file_path,
-                    object_name=object_name,
-                    etag=checksum,
-                )
-            )
+            if verify_checksums:
+                try:
+                    verify_downloaded_checksum(file_path=out_file_path, expected_checksum=server_checksum)
+                    successful_downloads.append(SuccessfulDownload(file_path=out_file_path, object_name=object_name))
+
+                except ChecksumVerificationError as err:
+                    failed_downloads.append(
+                        FailedDownload(object_name=object_name, file_path=out_file_path, exception=err)
+                    )
+            else:
+                successful_downloads.append(SuccessfulDownload(file_path=out_file_path, object_name=object_name))
 
     return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
 
@@ -99,8 +105,8 @@ class FailedUpload:
 class UploadOutcome:
     """Outcome of attempting to upload multiple files."""
 
-    successful: list[SuccessfulDownload]
-    failed: list[FailedDownload]
+    successful: list[SuccessfulUpload]
+    failed: list[FailedUpload]
 
 
 def upload_multiple_pre_signed_urls(pre_signed_urls: list[dict], all_files: list[Path]) -> UploadOutcome:
@@ -128,7 +134,6 @@ def upload_multiple_pre_signed_urls(pre_signed_urls: list[dict], all_files: list
                     response.raise_for_status()
                     successful_uploads.append(SuccessfulUpload(file_path=file_path, object_name=object_name))
                 except httpx.HTTPStatusError as err:
-                    print(f"Error uploading {object_name}: {err}")
                     failed_uploads.append(FailedUpload(object_name=object_name, file_path=file_path, exception=err))
 
     return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
