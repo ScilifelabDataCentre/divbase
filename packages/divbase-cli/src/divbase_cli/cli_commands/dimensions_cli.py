@@ -118,7 +118,7 @@ def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
         dimensions_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],
-            "last_updated": entry.get("indexed_at") or entry.get("updated_at"),
+            "last_updated": entry.get("updated_at"),
             "dimensions": {
                 "scaffolds": entry.get("scaffolds", []),
                 "sample_count": entry.get("sample_count", 0),
