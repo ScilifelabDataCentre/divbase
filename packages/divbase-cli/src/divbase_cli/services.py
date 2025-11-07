@@ -12,9 +12,7 @@ from divbase_cli.pre_signed_urls import (
     upload_multiple_pre_signed_urls,
 )
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
-from divbase_lib.schemas.bucket_versions import (
+from divbase_lib.api_schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
     BucketVersionDetail,
@@ -25,6 +23,9 @@ from divbase_lib.schemas.bucket_versions import (
     FilesAtVersionResponse,
     VersionListResponse,
 )
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse
+from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
+from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 
 
 def create_version_object_command(
@@ -155,9 +156,10 @@ def download_files_command(
         api_route=f"v1/s3/download?project_name={project_name}",
         json=json_data,
     )
+    pre_signed_urls = [PreSignedDownloadResponse(**item) for item in response.json()]
 
     download_results = download_multiple_pre_signed_urls(
-        pre_signed_urls=response.json(), download_dir=download_dir, verify_checksums=verify_checksums
+        pre_signed_urls=pre_signed_urls, download_dir=download_dir, verify_checksums=verify_checksums
     )
     return download_results
 

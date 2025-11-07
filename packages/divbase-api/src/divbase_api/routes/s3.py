@@ -21,12 +21,12 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.s3 import (
+from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
+from divbase_lib.api_schemas.s3 import (
     DownloadObjectsRequest,
     PreSignedDownloadResponse,
     PreSignedUploadResponse,
 )
-from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
 from divbase_lib.s3_client import S3FileManager
 
 logger = logging.getLogger(__name__)

@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from divbase_cli.cli_exceptions import ChecksumVerificationError
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class DownloadOutcome:
 
 
 def download_multiple_pre_signed_urls(
-    pre_signed_urls: list[dict], verify_checksums: bool, download_dir: Path
+    pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path
 ) -> DownloadOutcome:
     """
     Download files using pre-signed URLs.
@@ -51,37 +52,47 @@ def download_multiple_pre_signed_urls(
     successful_downloads, failed_downloads = [], []
     with httpx.Client(timeout=30.0) as client:
         for obj in pre_signed_urls:
-            object_name = obj["object_name"]
-            pre_signed_url = obj["pre_signed_url"]
-            out_file_path = download_dir / object_name
-
-            with client.stream("GET", pre_signed_url) as response:
-                try:
-                    response.raise_for_status()
-                except httpx.HTTPError as err:
-                    failed_downloads.append(
-                        FailedDownload(object_name=object_name, file_path=out_file_path, exception=err)
-                    )
-                    continue
-                server_checksum = response.headers.get("ETag", "").strip('"')
-
-                with open(out_file_path, "wb") as file:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        file.write(chunk)
-
-            if verify_checksums:
-                try:
-                    verify_downloaded_checksum(file_path=out_file_path, expected_checksum=server_checksum)
-                    successful_downloads.append(SuccessfulDownload(file_path=out_file_path, object_name=object_name))
-
-                except ChecksumVerificationError as err:
-                    failed_downloads.append(
-                        FailedDownload(object_name=object_name, file_path=out_file_path, exception=err)
-                    )
+            result = _download_single_pre_signed_url(
+                httpx_client=client,
+                pre_signed_url=obj.pre_signed_url,
+                verify_checksums=verify_checksums,
+                output_file_path=download_dir / obj.object_name,
+                object_name=obj.object_name,
+            )
+            if isinstance(result, SuccessfulDownload):
+                successful_downloads.append(result)
             else:
-                successful_downloads.append(SuccessfulDownload(file_path=out_file_path, object_name=object_name))
+                failed_downloads.append(result)
 
     return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
+
+
+def _download_single_pre_signed_url(
+    httpx_client: httpx.Client, pre_signed_url: str, verify_checksums: bool, output_file_path: Path, object_name: str
+) -> SuccessfulDownload | FailedDownload:
+    """
+    Download a single file using a pre-signed URL.
+    Helper function, do not call directly from outside this module.
+    """
+    with httpx_client.stream("GET", pre_signed_url) as response:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as err:
+            return FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
+
+        server_checksum = response.headers.get("ETag", "").strip('"')
+
+        with open(output_file_path, "wb") as file:
+            for chunk in response.iter_bytes(chunk_size=8192):
+                file.write(chunk)
+
+    if verify_checksums:
+        try:
+            verify_downloaded_checksum(file_path=output_file_path, expected_checksum=server_checksum)
+        except ChecksumVerificationError as err:
+            return FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
+
+    return SuccessfulDownload(file_path=output_file_path, object_name=object_name)
 
 
 @dataclass
