@@ -23,12 +23,13 @@ class TaskHistoryManager:
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: list, divbase_user: str = None):
+    def __init__(self, task_items: list, divbase_user: str = None, is_admin: bool = False):
         self.task_items = task_items
         self.current_divbase_user = divbase_user
+        self.is_admin = is_admin
 
     def print_task_history(self, display_limit: int = 10) -> None:
-        """Display the task history fetched from the Flowwre APIin a formatted table."""
+        """Display the task history fetched from the Flowwre API in a formatted table."""
 
         sorted_tasks = sorted(self.task_items, key=lambda x: x[2], reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
@@ -93,9 +94,12 @@ class TaskHistoryManager:
         Extract submitter from task kwargs.
         """
         kwargs = task.get("kwargs", "{}")
-        # TODO, look into literal_eval.
-        kwargs_dict = ast.literal_eval(kwargs)
-        return kwargs_dict.get("submitter", "Unknown")
+        try:
+            parsed_kwargs = ast.literal_eval(kwargs)
+            return parsed_kwargs.get("user_name", "Unknown")
+        except ValueError as e:
+            logger.warning(f"Could not parse kwargs: {e}")
+            return "Unknown"
 
     def format_result(self, task, state):
         """
@@ -112,4 +116,4 @@ class TaskHistoryManager:
         """
         Check if current user has permission to view this task
         """
-        return self.current_divbase_user == submitter or self.current_divbase_user == "divbase_admin"
+        return self.current_divbase_user == submitter or self.is_admin
