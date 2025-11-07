@@ -23,7 +23,7 @@ def get_all_tasks(current_user: Annotated[UserDB, Depends(get_current_user)], li
     """
     return get_task_history_list(
         display_limit=limit,
-        submitter_email=current_user.email,
+        user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
 
@@ -38,6 +38,6 @@ def get_task_by_id(
     """
     return get_task_history_by_id(
         task_id=task_id,
-        submitter_email=current_user.email,
+        user_id=current_user.id,
         is_admin=current_user.is_admin,
     )

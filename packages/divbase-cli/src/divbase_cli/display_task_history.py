@@ -33,7 +33,7 @@ class TaskHistoryManager:
     def print_task_history(self, display_limit: int = 10) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].get("started", 0), reverse=True)
+        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].get("started") or 0, reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
