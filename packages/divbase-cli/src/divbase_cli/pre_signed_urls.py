@@ -56,8 +56,8 @@ def download_multiple_pre_signed_urls(
                 httpx_client=client,
                 pre_signed_url=obj.pre_signed_url,
                 verify_checksums=verify_checksums,
-                output_file_path=download_dir / obj.object_name,
-                object_name=obj.object_name,
+                output_file_path=download_dir / obj.name,
+                object_name=obj.name,
             )
             if isinstance(result, SuccessfulDownload):
                 successful_downloads.append(result)
@@ -136,8 +136,8 @@ def upload_multiple_pre_signed_urls(
                 httpx_client=client,
                 pre_signed_url=obj.post_url,
                 fields=obj.fields,
-                file_path=file_map[obj.object_name],
-                object_name=obj.object_name,
+                file_path=file_map[obj.name],
+                object_name=obj.name,
             )
 
             if isinstance(result, SuccessfulUpload):

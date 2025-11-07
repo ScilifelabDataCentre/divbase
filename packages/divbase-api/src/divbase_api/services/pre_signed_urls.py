@@ -53,7 +53,7 @@ class S3PreSignedService:
         )
 
         return PreSignedDownloadResponse(
-            object_name=object_name,
+            name=object_name,
             pre_signed_url=url,
             version_id=version_id,
         )
@@ -84,7 +84,7 @@ class S3PreSignedService:
             Conditions=conditions,
             ExpiresIn=3600 * 24,  # 24 hours
         )
-        return PreSignedUploadResponse(object_name=object_name, post_url=response["url"], fields=response["fields"])
+        return PreSignedUploadResponse(name=object_name, post_url=response["url"], fields=response["fields"])
 
 
 @lru_cache()

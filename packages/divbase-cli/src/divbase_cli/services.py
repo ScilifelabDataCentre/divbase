@@ -3,7 +3,6 @@ CLI commands for managing S3 bucket versions.
 """
 
 from pathlib import Path
-from urllib.parse import urlencode
 
 from divbase_cli.pre_signed_urls import (
     DownloadOutcome,
@@ -146,9 +145,9 @@ def download_files_command(
                 missing_objects=missing_objects,
             )
         to_download = {file: file_versions_at_desired_state[file] for file in all_files}
-        json_data = [{"object_name": obj, "version_id": to_download[obj]} for obj in all_files]
+        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in all_files]
     else:
-        json_data = [{"object_name": obj, "version_id": None} for obj in all_files]
+        json_data = [{"name": obj, "version_id": None} for obj in all_files]
 
     response = make_authenticated_request(
         method="POST",
@@ -187,20 +186,19 @@ def upload_files_command(
         if existing_objects:
             raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), project_name=project_name)
 
-    objects_dict = {}
+    objects_to_upload = []
     for file in all_files:
-        object_name = file.name
         if checksum:
             md5_hash = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.BASE64)
-            objects_dict[object_name] = md5_hash
+            objects_to_upload.append({"name": file.name, "md5_hash": md5_hash})
         else:
-            objects_dict[object_name] = None
+            objects_to_upload.append({"name": file.name, "md5_hash": None})
 
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/s3/upload?project_name={project_name}",
-        json=objects_dict,
+        json=objects_to_upload,
     )
     pre_signed_urls = [PreSignedUploadResponse(**item) for item in response.json()]
     return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)
@@ -211,14 +209,10 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
     Soft delete objects from the project's S3 bucket.
     Returns a list of the soft deleted objects
     """
-    query_params = {
-        "project_name": project_name,
-        "object_names": all_files,
-    }
-
     response = make_authenticated_request(
         method="DELETE",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/soft_delete?{urlencode(query_params, doseq=True)}",
+        api_route=f"v1/s3/?project_name={project_name}",
+        json={"objects": all_files},
     )
     return response.json().get("deleted", [])
