@@ -23,7 +23,7 @@ from divbase_lib.api_schemas.bucket_versions import (
     FilesAtVersionResponse,
     VersionListResponse,
 )
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 
@@ -202,9 +202,7 @@ def upload_files_command(
         api_route=f"v1/s3/upload?project_name={project_name}",
         json=objects_dict,
     )
-
-    pre_signed_urls = response.json()
-
+    pre_signed_urls = [PreSignedUploadResponse(**item) for item in response.json()]
     return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)
 
 

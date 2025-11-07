@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 
 from divbase_cli.cli_exceptions import ChecksumVerificationError
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,9 @@ class UploadOutcome:
     failed: list[FailedUpload]
 
 
-def upload_multiple_pre_signed_urls(pre_signed_urls: list[dict], all_files: list[Path]) -> UploadOutcome:
+def upload_multiple_pre_signed_urls(
+    pre_signed_urls: list[PreSignedUploadResponse], all_files: list[Path]
+) -> UploadOutcome:
     """
     Upload files using pre-signed POST URLs.
     Returns a UploadResults object containing the results of the upload attempts.
@@ -128,23 +130,41 @@ def upload_multiple_pre_signed_urls(pre_signed_urls: list[dict], all_files: list
     file_map = {file.name: file for file in all_files}
 
     successful_uploads, failed_uploads = [], []
-
     with httpx.Client(timeout=30.0) as client:
         for obj in pre_signed_urls:
-            object_name = obj["object_name"]
-            post_url = obj["post_url"]
-            fields = obj["fields"]
+            result = _upload_single_pre_signed_url(
+                httpx_client=client,
+                pre_signed_url=obj.post_url,
+                fields=obj.fields,
+                file_path=file_map[obj.object_name],
+                object_name=obj.object_name,
+            )
 
-            file_path = file_map[object_name]
-
-            with open(file_path, "rb") as file:
-                files = {"file": (object_name, file, "application/octet-stream")}
-                response = client.post(post_url, data=fields, files=files)
-
-                try:
-                    response.raise_for_status()
-                    successful_uploads.append(SuccessfulUpload(file_path=file_path, object_name=object_name))
-                except httpx.HTTPStatusError as err:
-                    failed_uploads.append(FailedUpload(object_name=object_name, file_path=file_path, exception=err))
+            if isinstance(result, SuccessfulUpload):
+                successful_uploads.append(result)
+            else:
+                failed_uploads.append(result)
 
     return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
+
+
+def _upload_single_pre_signed_url(
+    httpx_client: httpx.Client,
+    pre_signed_url: str,
+    fields: dict,
+    file_path: Path,
+    object_name: str,
+) -> SuccessfulUpload | FailedUpload:
+    """
+    Upload a single file using a pre-signed POST URL.
+    Helper function, do not call directly from outside this module.
+    """
+    with open(file_path, "rb") as file:
+        files = {"file": (object_name, file, "application/octet-stream")}
+        response = httpx_client.post(pre_signed_url, data=fields, files=files)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as err:
+            return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
+
+    return SuccessfulUpload(file_path=file_path, object_name=object_name)
