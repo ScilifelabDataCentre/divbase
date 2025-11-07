@@ -8,7 +8,6 @@ A clean project (its bucket is auto emptied before each test) is available to an
 
 import boto3
 import pytest
-from httpx import HTTPStatusError
 from typer.testing import CliRunner
 
 from divbase_cli.divbase_cli import app
@@ -228,8 +227,9 @@ def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp
     command = f"files download nonexistent_file.txt --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
-    assert result.exit_code != 0
-    assert isinstance(result.exception, HTTPStatusError)
+    assert result.exit_code == 0
+    assert "WARNING: Failed to download the following files:" in result.stdout
+    assert "nonexistent_file.txt" in result.stdout
 
 
 def test_download_at_a_project_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, fixtures_dir):
