@@ -8,7 +8,7 @@ from divbase_api.api_config import settings
 logger = logging.getLogger(__name__)
 
 
-def get_task_history(task_id: str = None, display_limit: int = 10) -> list:
+def get_task_history(task_id: str = None, display_limit: int = 50) -> list:
     """
     Get the task history from the Flower API.
 

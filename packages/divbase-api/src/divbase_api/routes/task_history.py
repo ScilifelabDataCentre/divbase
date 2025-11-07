@@ -18,7 +18,7 @@ task_history_router = APIRouter()
 
 
 @task_history_router.get("/list")
-def get_all_tasks(current_user: Annotated[UserDB, Depends(get_current_user)], limit: int = 10):
+def get_all_tasks(current_user: Annotated[UserDB, Depends(get_current_user)], limit: int):
     """
     Get the task history for the current user. Admin users can view all tasks, non-admin users can only view their own tasks.
     """
