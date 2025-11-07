@@ -2,17 +2,19 @@ import logging
 from typing import Any
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
-from divbase_api.models.task_history import TaskHistoryDB
-from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_api.crud.task_history import check_user_can_view_task_history
 from divbase_lib.queries import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
 
-def get_task_history_list(
+async def get_task_history_list(
+    db: AsyncSession,
     user_id: int,
+    project_name: str | None = None,
     is_admin: bool = False,
     display_limit: int = 50,
 ) -> TaskHistoryResults:
@@ -23,8 +25,10 @@ def get_task_history_list(
     request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
     all_tasks = _make_flower_request(request_url)
     filtered_tasks = {}
+
     for tid, data in all_tasks.items():
-        if _check_if_user_has_permission_to_view_task(
+        if await check_user_can_view_task_history(
+            db=db,
             task_id=tid,
             user_id=user_id,
             is_admin=is_admin,
@@ -33,7 +37,8 @@ def get_task_history_list(
     return TaskHistoryResults(tasks=filtered_tasks)
 
 
-def get_task_history_by_id(
+async def get_task_history_by_id(
+    db: AsyncSession,
     task_id: str,
     user_id: int,
     is_admin: bool = False,
@@ -43,7 +48,8 @@ def get_task_history_by_id(
     """
     request_url = f"{settings.flower.url}/api/task/info/{task_id}"
     task = _make_flower_request(request_url)
-    if not _check_if_user_has_permission_to_view_task(
+    if not await check_user_can_view_task_history(
+        db=db,
         task_id=task_id,
         user_id=user_id,
         is_admin=is_admin,
@@ -73,29 +79,3 @@ def _make_flower_request(request_url: str) -> dict[str, Any]:
         raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")
 
     return response.json()
-
-
-def _check_if_user_has_permission_to_view_task(
-    task_id: str,
-    user_id: int,
-    is_admin: bool,
-) -> bool:
-    """
-    Check if the user has permission to view this task.
-    Returns False if task not found in postgres TaskHistoryDB table or in results backend
-    (redis backend may purge old tasks).
-    """
-    if is_admin:
-        return True
-
-    try:
-        with SyncSessionLocal() as session:
-            entry = session.query(TaskHistoryDB).filter_by(task_id=task_id).first()
-            if entry:
-                return entry.user_id == user_id
-            else:
-                logger.debug(f"Task {task_id} not found in database and/or in results backend")
-                return False
-    except Exception as e:
-        logger.error(f"Database error checking permission for task {task_id}: {e}")
-        return False

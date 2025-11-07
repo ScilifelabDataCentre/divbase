@@ -13,6 +13,7 @@ from celery.signals import (
     task_revoked,
     task_success,
 )
+from sqlalchemy import select
 
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.worker.crud_dimensions import (
@@ -119,13 +120,14 @@ def task_revoked_handler(sender=None, request=None, terminated=None, signum=None
 def _update_task_status_in_pg(task_id: str, status: TaskStatus, error_msg: str = None):
     """Update task status in database."""
     try:
-        with SyncSessionLocal() as session:
-            entry = session.query(TaskHistoryDB).filter_by(task_id=str(task_id)).first()
+        with SyncSessionLocal() as db:
+            stmt = select(TaskHistoryDB).where(TaskHistoryDB.task_id == str(task_id))
+            entry = db.execute(stmt).scalar_one_or_none()
             if entry:
                 entry.status = status
                 if error_msg:
                     entry.error_message = error_msg
-                session.commit()
+                db.commit()
                 logger.debug(f"Updated task {task_id} to status {status}")
             else:
                 logger.warning(f"Task {task_id} not found in database")

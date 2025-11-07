@@ -69,7 +69,7 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
 
 
 @vcf_dimensions_router.put("/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED)
-def update_vcf_dimensions_endpoint(
+async def update_vcf_dimensions_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
@@ -85,5 +85,5 @@ def update_vcf_dimensions_endpoint(
     task_kwargs = {"bucket_name": project.bucket_name, "project_id": project.id, "user_name": current_user.email}
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
-    record_pending_task(task_id=results.id, user_id=current_user.id, project_id=project.id)
+    await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
     return results.id
