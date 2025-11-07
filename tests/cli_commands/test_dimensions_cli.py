@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError, VCFDimensionsEntryMissingError
+from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError
 from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import PROJECTS
 
@@ -116,14 +116,15 @@ def test_show_vcf_dimensions_task_when_file_missing(
     """
     Test that the CLI handles the case when no dimensions are indexed (empty database).
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
-    command = f"dimensions show --project {bucket_name}"
+    command = f"dimensions show --project {project_name}"
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, (VCFDimensionsEntryMissingError, DivBaseAPIError))
-    assert bucket_name in str(result.exception)
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert project_name in str(result.exception)
+    assert "vcf_dimensions_entry_missing_error" in str(result.exception)
 
 
 def test_get_dimensions_info_returns_empty(

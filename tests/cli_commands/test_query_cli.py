@@ -303,7 +303,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             False,
             ["Starting bcftools_pipe_task"],
             [
-                "The VCF dimensions index in project split-scaffold-project is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
+                "The VCF dimensions index in project 'split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
             ],
         ),
         # Case 1: expected to be sucessful, should lead to concat

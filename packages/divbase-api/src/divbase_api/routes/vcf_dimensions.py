@@ -4,7 +4,7 @@ API routes for VCF dimensions (technical metadata) operations.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
@@ -14,7 +14,7 @@ from divbase_api.crud.vcf_dimensions import (
 )
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
-from divbase_api.exceptions import AuthorizationError
+from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import update_vcf_dimensions_task
@@ -55,10 +55,7 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     ]
 
     if not vcf_files and not skipped_files:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No VCF metadata or skipped files found for project '{project_name}'",
-        )
+        raise VCFDimensionsEntryMissingError(project_name=project.name)
 
     return {
         "project_id": project.id,

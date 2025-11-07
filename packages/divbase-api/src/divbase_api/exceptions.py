@@ -88,3 +88,15 @@ class BucketVersionNotFoundError(DivBaseAPIException):
     def __init__(self, bucket_version: str, bucket_name: str):
         message = f"The version requested: '{bucket_version}' does not exist in the bucket: '{bucket_name}'."
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class VCFDimensionsEntryMissingError(DivBaseAPIException):
+    """Raised when there are no entries in the VCF dimensions db table."""
+
+    def __init__(self, project_name: str):
+        message = (
+            f"The VCF dimensions index in project '{project_name}' is missing or empty. "
+            "Please ensure that there are VCF files in the project and run:\n"
+            "'divbase-cli dimensions update --project <project_name>'\n"
+        )
+        super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
