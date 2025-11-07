@@ -36,36 +36,29 @@ class TaskHistoryManager:
         sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].get("started", 0), reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
 
-        table = self.create_task_history_table()
+        table = self._create_task_history_table()
 
         for task_id, task in limited_tasks:
             state = task.get("state", "N/A")
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = self.get_submitter_from_kwargs(task)
-            result = self.format_result(task, state)
+            submitter = self._get_submitter_from_task_kwargs(task)
+            result = self._format_result(task, state)
 
-            if self.permission_to_view_task(submitter):
-                table.add_row(
-                    submitter,
-                    task_id,
-                    state_with_colour,
-                    self.format_unix_timestamp(task.get("received", "N/A")),
-                    self.format_unix_timestamp(task.get("started", "N/A")),
-                    str(task.get("runtime", "N/A")),
-                    result,
-                )
+            table.add_row(
+                submitter,
+                task_id,
+                state_with_colour,
+                self._format_unix_timestamp(task.get("received", "N/A")),
+                self._format_unix_timestamp(task.get("started", "N/A")),
+                str(task.get("runtime", "N/A")),
+                result,
+            )
         console = Console()
         console.print(table)
 
-    def sort_tasks_by_runtime(self, tasks):
-        """
-        Sort tasks by their runtime in descending order.
-        """
-        return sorted(tasks, key=lambda x: x.get("runtime", 0), reverse=True)
-
-    def format_unix_timestamp(self, timestamp):
+    def _format_unix_timestamp(self, timestamp):
         """
         The flower task status API returns timestamps as integers or floats.
         This function formats them into a human-readable string.
@@ -76,7 +69,7 @@ class TaskHistoryManager:
             return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {local_timezone}"
         return str(timestamp)
 
-    def create_task_history_table(self):
+    def _create_task_history_table(self):
         """
         Use the Rich library to initiate a table for displaying task history.
         """
@@ -90,7 +83,7 @@ class TaskHistoryManager:
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
 
-    def get_submitter_from_kwargs(self, task):
+    def _get_submitter_from_task_kwargs(self, task):
         """
         Extract submitter from task kwargs.
         """
@@ -102,7 +95,7 @@ class TaskHistoryManager:
             logger.warning(f"Could not parse kwargs: {e}")
             return "Unknown"
 
-    def format_result(self, task, state):
+    def _format_result(self, task, state):
         """
         Format the result message based on the task state.
         """
@@ -112,9 +105,3 @@ class TaskHistoryManager:
         else:
             result_message = str(task.get("result", "N/A"))
             return f"[green]{result_message}[/green]"
-
-    def permission_to_view_task(self, submitter) -> bool:
-        """
-        Check if current user has permission to view this task
-        """
-        return self.current_divbase_user == submitter or self.is_admin
