@@ -28,9 +28,9 @@ def update_dimensions_index(
     project_config = resolve_project(project_name=project, config_path=config_file)
 
     response = make_authenticated_request(
-        method="POST",
+        method="PUT",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/vcf-dimensions/update/{project_config.name}",
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
 
     task_id = response.json()
@@ -64,7 +64,7 @@ def show_dimensions_index(
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/vcf-dimensions/list/user-project-name/{project_config.name}",
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
     vcf_dimensions_data = response.json()
 

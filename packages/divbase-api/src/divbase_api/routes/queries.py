@@ -40,7 +40,7 @@ def sample_metadata_query(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.READ):
+    if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
 
     task_kwargs = {
@@ -67,7 +67,7 @@ def sample_metadata_query(
     }
 
 
-@query_router.post("/bcftools-pipe/", status_code=status.HTTP_200_OK)
+@query_router.post("/bcftools-pipe/", status_code=status.HTTP_201_CREATED)
 def create_bcftools_jobs(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -80,7 +80,7 @@ def create_bcftools_jobs(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.READ):
+    if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
 
     task_kwargs = {
