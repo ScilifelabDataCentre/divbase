@@ -28,6 +28,7 @@ from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_divbase_api_url, resolve_project
 from divbase_cli.display_task_history import TaskHistoryManager
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.queries import SidecarQueryResult
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,13 @@ def sample_metadata_query(
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project": project_config.name}
-    response = httpx.post(f"{project_config.divbase_url}/v1/query/sample-metadata/", params=params)
+    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project_name": project_config.name}
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route="v1/query/sample-metadata/",
+        params=params,
+    )
 
     data = response.json()
 
@@ -96,7 +102,7 @@ def sample_metadata_query(
         if "objectdoesnotexist" in error_type:
             print("Hint: Upload the metadata file with:")
             print(f"divbase-cli files upload {metadata_tsv_name} --project {project}")
-        # Note: VCFDimensionsFileMissingOrEmptyError already contains a hint in the detail, so no need for custom hint here.
+        # Note: VCFDimensionsEntryMissingError already contains a hint in the detail, so no need for custom hint here.
         return
 
     results = SidecarQueryResult(**response.json())
@@ -136,10 +142,14 @@ def pipe_query(
         "tsv_filter": tsv_filter,
         "command": command,
         "metadata_tsv_name": metadata_tsv_name,
-        "project": project_config.name,
+        "project_name": project_config.name,
     }
-    response = httpx.post(f"{project_config.divbase_url}/v1/query/bcftools-pipe/", params=params)
-    response.raise_for_status()
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route="v1/query/bcftools-pipe/",
+        params=params,
+    )
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")

@@ -142,9 +142,6 @@ async def get_project_member_from_cookie(
     return project, current_user, user_role
 
 
-### Deps for direct API access below ###
-
-
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: AsyncSession = Depends(get_db)) -> UserDB:
     """
     Get current user from JWT Access token

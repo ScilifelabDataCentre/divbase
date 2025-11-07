@@ -26,6 +26,5 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 known-first-party = [
     "divbase_cli",
     "divbase_lib", 
-    "divbase_worker",
     "divbase_api",
 ]

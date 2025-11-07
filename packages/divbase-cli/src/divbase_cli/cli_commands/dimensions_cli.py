@@ -1,15 +1,13 @@
 import logging
 from pathlib import Path
 
-import httpx
 import typer
 import yaml
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.services import show_dimensions_command
-from divbase_lib.exceptions import VCFDimensionsFileMissingOrEmptyError
+from divbase_cli.user_auth import make_authenticated_request
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +27,11 @@ def update_dimensions_index(
 
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {
-        "project": project_config.name,
-    }
-    response = httpx.post(f"{project_config.divbase_url}/v1/dimensions/update/", params=params)
-    response.raise_for_status()
+    response = make_authenticated_request(
+        method="PUT",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+    )
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
@@ -62,13 +60,19 @@ def show_dimensions_index(
     """
 
     project_config = resolve_project(project_name=project, config_path=config_file)
-    dimensions_info = show_dimensions_command(project_config=project_config)
-    if not dimensions_info.get("dimensions"):
-        raise VCFDimensionsFileMissingOrEmptyError(bucket_name=project_config.bucket_name)
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+    )
+    vcf_dimensions_data = response.json()
+
+    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
 
     if filename:
         record = None
-        for entry in dimensions_info.get("dimensions", []):
+        for entry in dimensions_info.get("indexed_files", []):
             if entry.get("filename") == filename:
                 record = entry
                 break
@@ -83,7 +87,7 @@ def show_dimensions_index(
 
     if unique_scaffolds:
         unique_scaffold_names = set()
-        for entry in dimensions_info.get("dimensions", []):
+        for entry in dimensions_info.get("indexed_files", []):
             unique_scaffold_names.update(entry.get("dimensions", {}).get("scaffolds", []))
 
         numeric_scaffold_names = []
@@ -102,3 +106,38 @@ def show_dimensions_index(
         return
 
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
+
+
+def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
+    """
+    Convert the new API response format to a YAML-like format.
+    """
+    dimensions_list = []
+
+    for entry in api_response.get("vcf_files", []):
+        dimensions_entry = {
+            "filename": entry["vcf_file_s3_key"],
+            "file_version_ID_in_bucket": entry["s3_version_id"],
+            "last_updated": entry.get("updated_at"),
+            "dimensions": {
+                "scaffolds": entry.get("scaffolds", []),
+                "sample_count": entry.get("sample_count", 0),
+                "sample_names": entry.get("samples", []),
+                "variants": entry.get("variant_count", 0),
+            },
+        }
+        dimensions_list.append(dimensions_entry)
+
+    skipped_list = []
+    for entry in api_response.get("skipped_files", []):
+        skipped_entry = {
+            "filename": entry["vcf_file_s3_key"],
+            "file_version_ID_in_bucket": entry["s3_version_id"],
+            "skip_reason": entry.get("skip_reason", "unknown"),
+        }
+        skipped_list.append(skipped_entry)
+
+    return {
+        "indexed_files": dimensions_list,
+        "skipped_files": skipped_list,
+    }

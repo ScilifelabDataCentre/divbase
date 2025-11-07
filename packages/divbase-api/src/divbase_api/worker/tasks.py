@@ -7,10 +7,21 @@ from pathlib import Path
 
 from celery import Celery
 
-from divbase_lib.exceptions import NoVCFFilesFoundError, VCFDimensionsFileMissingOrEmptyError
+from divbase_api.worker.crud_dimensions import (
+    create_or_update_skipped_vcf,
+    create_or_update_vcf_metadata,
+    delete_skipped_vcf,
+    delete_vcf_metadata,
+    get_skipped_vcfs_by_project_worker,
+    get_vcf_metadata_by_project,
+)
+from divbase_api.worker.vcf_dimension_indexing import (
+    VCFDimensionCalculator,
+)
+from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
-from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -61,86 +72,135 @@ app.conf.task_routes = (dynamic_router,)
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
-def sample_metadata_query_task(tsv_filter: str, metadata_tsv_name: str, bucket_name: str) -> dict:
-    """
-    Run a sample metadata query task as a Celery task.
-    """
+def sample_metadata_query_task(
+    tsv_filter: str,
+    metadata_tsv_name: str,
+    bucket_name: str,
+    project_id: int,
+    user_name: str,
+) -> dict:
+    """Run a sample metadata query task as a Celery task."""
+    task_id = sample_metadata_query_task.request.id
+
     try:
         s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-        metadata_path = download_sample_metadata(
+        metadata_path = _download_sample_metadata(
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
+
+        with SyncSessionLocal() as db:
+            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+        if not vcf_dimensions_data.get("vcf_files"):
+            return {
+                "status": "error",
+                "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
+                "type": "VCFDimensionsMissingError",
+                "task_id": task_id,
+            }
 
         metadata_result = run_sidecar_metadata_query(
             file=metadata_path,
             filter_string=tsv_filter,
-            bucket_name=bucket_name,
-            s3_file_manager=s3_file_manager,
+            project_id=project_id,
+            vcf_dimensions_data=vcf_dimensions_data,
         )
-        # celery serializes the return value, hence conversion to dict.
-        return dataclasses.asdict(metadata_result)
+
+        try:
+            os.remove(metadata_path)
+            logger.info(f"Deleted metadata file {metadata_path} from worker.")
+        except Exception as e:
+            logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
+
+        result = dataclasses.asdict(metadata_result)
+        result["status"] = "completed"
+        result["task_id"] = task_id
+
+        logger.info(
+            f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
+            f"mapped to {len(metadata_result.unique_filenames)} VCF files"
+        )
+
+        return result
+
     except Exception as e:
-        # bring error back up to API level
-        return {"error": str(e), "type": type(e).__name__, "status": "error"}
+        logger.error(f"Error in sample_metadata_query_task: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "type": type(e).__name__,
+            "task_id": task_id,
+        }
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
 def bcftools_pipe_task(
-    tsv_filter: str, command: str, metadata_tsv_name: str, bucket_name: str, user_name: str = "Default User"
+    tsv_filter: str,
+    command: str,
+    metadata_tsv_name: str,
+    bucket_name: str,
+    project_id: int,
+    user_name: str,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
-
-    TODO - how MinIO URL is handled needs a lot of thought here.
-    Unlike rest of API, might not be in same "local network"
     """
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
-    vcf_dimensions_manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    if not vcf_dimensions_manager.dimensions_info or not vcf_dimensions_manager.dimensions_info.get("dimensions"):
-        raise VCFDimensionsFileMissingOrEmptyError(vcf_dimensions_manager.bucket_name)
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+    if not vcf_dimensions_data.get("vcf_files"):
+        # TODO - should this return a dict with status error instead?
+        raise ValueError(
+            f"The VCF dimensions index in project '{bucket_name}' is missing or empty. "
+            "Please ensure that there are VCF files in the project and run:\n"
+            "'divbase-cli dimensions update --project <project_name>'\n"
+        )
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
-    metadata_path = download_sample_metadata(
+    metadata_path = _download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
+        project_id=project_id,
+        vcf_dimensions_data=vcf_dimensions_data,
     )
 
-    check_that_file_versions_match_dimensions_index(
-        vcf_dimensions_manager, latest_versions_of_bucket_files, metadata_result
+    _check_that_file_versions_match_dimensions_index(
+        vcf_dimensions_data=vcf_dimensions_data,
+        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        metadata_result=metadata_result,
     )
+
+    files_to_download = metadata_result.unique_filenames
+    sample_and_filename_subset = metadata_result.sample_and_filename_subset
 
     if "view -r" in command:
-        files_to_download = check_for_unnecessary_files_for_region_query(
+        files_to_download = _check_for_unnecessary_files_for_region_query(
             command=command,
             files_to_download=metadata_result.unique_filenames,
-            vcf_dimensions_manager=vcf_dimensions_manager,
+            vcf_dimensions_data=vcf_dimensions_data,
         )
 
         sample_and_filename_subset = [
             entry for entry in metadata_result.sample_and_filename_subset if entry["Filename"] in files_to_download
         ]
-    else:
-        sample_and_filename_subset = metadata_result.sample_and_filename_subset
-        files_to_download = metadata_result.unique_filenames
 
-    check_if_samples_can_be_combined_with_bcftools(
+    _check_if_samples_can_be_combined_with_bcftools(
         files_to_download=files_to_download,
-        vcf_dimensions_manager=vcf_dimensions_manager,
+        vcf_dimensions_data=vcf_dimensions_data,
     )
 
-    _ = download_vcf_files(
+    _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
@@ -160,21 +220,19 @@ def bcftools_pipe_task(
         logger.error(f"Error in bcftools task: {str(e)}")
         return {"status": "error", "error": str(e), "task_id": task_id}
 
-    upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+    _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
     return {"status": "completed", "output_file": output_file, "submitter": user_name}
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"):
+def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str):
     """
-    Update the VCF dimensions file for the specified bucket. Ensures that the index only covers files in the bucket at the time of task execution.
-
-    Re: vcfs_deleted_from_bucket_since_last_indexing: since both lists it is dependent on are already calculated,
-    set difference is a faster operation than a new list comp.
+    Update VCF dimensions in the database for the specified bucket.
     """
     task_id = update_vcf_dimensions_task.request.id
+
     s3_file_manager = create_s3_file_manager(url="http://minio:9000")
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
@@ -182,81 +240,118 @@ def update_vcf_dimensions_task(bucket_name: str, user_name: str = "Default User"
 
     if not vcf_files:
         raise NoVCFFilesFoundError(
-            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. Please upload at least one VCF file and run this command again."
+            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. "
+            "Please upload at least one VCF file and run this command again."
         )
 
-    manager = VCFDimensionIndexManager(bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    already_indexed_vcfs = manager.get_indexed_filenames()
-    already_skipped_files = manager.get_skipped_divbase_results()
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+    already_indexed_vcfs = {
+        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+    }
+
+    with SyncSessionLocal() as db:
+        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
+
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     non_indexed_vcfs = [
         file
         for file in vcf_files
         if not (
-            (file in already_skipped_files and already_skipped_files[file] == latest_versions_of_bucket_files.get(file))
+            (file in already_skipped_vcfs and already_skipped_vcfs[file] == latest_versions_of_bucket_files.get(file))
             or (
                 file in already_indexed_vcfs and already_indexed_vcfs[file] == latest_versions_of_bucket_files.get(file)
             )
         )
     ]
 
-    _ = download_vcf_files(
+    _ = _download_vcf_files(
         files_to_download=non_indexed_vcfs,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
 
+    calculator = VCFDimensionCalculator()
+
     files_indexed_by_this_job = []
     divbase_results_files_skipped_by_this_job = []
+
     for file in non_indexed_vcfs:
         try:
-            result_msg = manager.add_dimension_entry(vcf_filename=file)
-            if "Added" in result_msg or "Updated" in result_msg:
-                files_indexed_by_this_job.append(file)
-            elif "Skipping" in result_msg:
-                manager.add_skipped_divbase_result_entry(vcf_filename=file)
+            vcf_dims = calculator.calculate_dimensions(Path(file))
+
+            if vcf_dims is None:
+                skipped_vcf_data = {
+                    "vcf_file_s3_key": file,
+                    "project_id": project_id,
+                    "s3_version_id": latest_versions_of_bucket_files.get(file),
+                    "skip_reason": "divbase_generated",
+                }
+
+                with SyncSessionLocal() as db:
+                    create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
+
                 divbase_results_files_skipped_by_this_job.append(file)
+                logger.info(f"Skipping DivBase-generated result file: {file}")
+                continue
+
+            vcf_metadata_data = {
+                "vcf_file_s3_key": file,
+                "project_id": project_id,
+                "s3_version_id": latest_versions_of_bucket_files.get(file),
+                "samples": vcf_dims["sample_names"],
+                "scaffolds": vcf_dims["scaffolds"],
+                "variant_count": vcf_dims["variants"],
+                "sample_count": vcf_dims["sample_count"],
+                "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
+            }
+
+            with SyncSessionLocal() as db:
+                create_or_update_vcf_metadata(db=db, vcf_metadata_data=vcf_metadata_data)
+            files_indexed_by_this_job.append(file)
+            logger.info(f"Indexed VCF metadata for: {file}")
+
         except Exception as e:
-            logger.error(f"Error in dimensions indexing task: {str(e)}")
+            logger.error(f"Error indexing {file}: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
 
     vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
-    skipped_deleted_from_bucket = list(set(already_skipped_files) - set(vcf_files))
+    skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
 
+    # TODO this block could be done in one go for calling db once with a list
     if vcfs_deleted_from_bucket_since_last_indexing:
         for file in vcfs_deleted_from_bucket_since_last_indexing:
-            manager.remove_dimension_entry(vcf_filename=file)
+            try:
+                with SyncSessionLocal() as db:
+                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
+                logger.info(f"Deleted VCF metadata for removed file: {file}")
+            except Exception as e:
+                logger.error(f"Failed to delete VCF metadata for {file}: {e}")
 
     if skipped_deleted_from_bucket:
         for file in skipped_deleted_from_bucket:
-            manager.remove_skipped_divbase_result_entry(vcf_filename=file)
+            with SyncSessionLocal() as db:
+                delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
 
-    delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+    _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
-    try:
-        manager._upload_bucket_dimensions_file(dimensions_data=manager.dimensions_info)
-    except Exception as e:
-        logger.error(f"Failed to upload bucket dimensions file: {e}")
-        return {
-            "status": "error",
-            "error": f"Failed to upload bucket dimensions file: {e}",
-            "task_id": task_id,
-        }
-
-    if files_indexed_by_this_job == []:
+    if not files_indexed_by_this_job:
         files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
-    if divbase_results_files_skipped_by_this_job == []:
+    if not divbase_results_files_skipped_by_this_job:
         divbase_results_files_skipped_by_this_job = ["None: no DivBase-generated results were detected in the project."]
+
     return {
         "status": "completed",
         "submitter": user_name,
-        "VCF files that were added to dimensions file by this job": files_indexed_by_this_job,
+        "VCF files that were added to dimensions index by this job": files_indexed_by_this_job,
         "VCF files skipped by this job (previous DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
+        "VCF files that have been deleted from the project and thus have been dropped from the index": vcfs_deleted_from_bucket_since_last_indexing,
     }
 
 
-def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
+def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
     """
@@ -267,7 +362,7 @@ def download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_m
     )[0]
 
 
-def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
+def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
@@ -285,7 +380,7 @@ def download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_m
     return downloaded_files
 
 
-def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
+def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
     Upon completion of the task, upload the results file to the specified bucket.
     """
@@ -295,11 +390,11 @@ def upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3
     )
 
 
-def check_for_unnecessary_files_for_region_query(
+def _check_for_unnecessary_files_for_region_query(
     command: str,
     files_to_download: list[str],
-    vcf_dimensions_manager: VCFDimensionIndexManager,
-) -> dict:
+    vcf_dimensions_data: dict,
+) -> list[str]:
     """
     If the 'view -r' query is present, read the .vcf_dimensions.yaml file and check if the specified scaffolds are available in the VCF files.
     If a file in files_to_download (as identified by sidecar sample metadata query) does not contain any of the specified scaffolds, it will be skipped.
@@ -308,12 +403,10 @@ def check_for_unnecessary_files_for_region_query(
     NOTE! There is a risk that users mistype...
 
     """
-
-    manager = vcf_dimensions_manager
-    dimensions_index = manager.dimensions_info
-    if not dimensions_index.get("dimensions"):
+    if not vcf_dimensions_data.get("vcf_files"):
         logger.warning(
-            "VCF dimensions file is missing or empty. All current VCF files will be transferred to the worker without filtering."
+            "VCF dimensions data is missing or empty. "
+            "All current VCF files will be transferred to the worker without filtering."
         )
         return files_to_download
 
@@ -323,40 +416,41 @@ def check_for_unnecessary_files_for_region_query(
     matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
     if not matches:
         return files_to_download
+
     for match in matches:
         regions = [region.strip() for region in match.split(",") if region.strip()]
         for region in regions:
             scaffold_name = region.split(":")[0]
             scaffolds.append(scaffold_name)
 
+    vcf_lookup = {entry["vcf_file_s3_key"]: entry for entry in vcf_dimensions_data["vcf_files"]}
+
     for file in files_to_download:
-        record = None
-        for rec in dimensions_index.get("dimensions", []):
-            if rec.get("filename") == file:
-                record = rec
-                break
-        if not record:
-            logger.warning(f"File '{file}' is not indexed in the VCF dimensions file.")
+        if file not in vcf_lookup:
+            logger.warning(f"File '{file}' is not indexed in the VCF dimensions.")
             continue
 
-        record_scaffolds = set(record.get("dimensions", {}).get("scaffolds", []))
+        record_scaffolds = set(vcf_lookup[file].get("scaffolds", []))
+
         for scaffold_name in scaffolds:
             if scaffold_name in record_scaffolds:
                 logger.info(f"'view -r' query requires scaffold '{scaffold_name}'. It is present in file '{file}'.")
                 if file not in files_to_download_updated:
                     files_to_download_updated.append(file)
 
-    if files_to_download_updated == []:
+    if not files_to_download_updated:
         raise ValueError(
-            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfills the query. \n"
-            "Please try another -r query with scaffolds/chromosomes that are present in the VCF files."
-            "To see a list of all unique scaffolds that are present across the VCF files in the project:"
-            "'DIVBASE_ENV=local divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
+            "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, "
+            "there are no VCF files in the project that fulfill the query.\n"
+            "Please try another -r query with scaffolds/chromosomes that are present in the VCF files.\n"
+            "To see a list of all unique scaffolds: "
+            "'divbase-cli dimensions show --unique-scaffolds --project <PROJECT_NAME>'"
         )
+
     return files_to_download_updated
 
 
-def delete_job_files_from_worker(
+def _delete_job_files_from_worker(
     vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
 ) -> None:
     """
@@ -382,27 +476,33 @@ def delete_job_files_from_worker(
             logger.warning(f"Could not delete output file from worker {output_file}: {e}")
 
 
-def check_if_samples_can_be_combined_with_bcftools(
-    files_to_download,
-    vcf_dimensions_manager: VCFDimensionIndexManager,
+def _check_if_samples_can_be_combined_with_bcftools(
+    files_to_download: list[str],
+    vcf_dimensions_data: dict,
 ) -> None:
-    dimensions_index = vcf_dimensions_manager.dimensions_info
-    if not dimensions_index.get("dimensions"):
-        raise ValueError("VCF dimensions file is missing or empty. Cannot check if samples can be combined.")
+    """
+    Check if samples in VCF files can be combined with bcftools merge/concat.
+    Raises ValueError if samples have incompatible overlaps.
+    """
+
+    vcf_lookup = {entry["vcf_file_s3_key"]: entry for entry in vcf_dimensions_data["vcf_files"]}
 
     file_to_samples = {}
     for file in files_to_download:
-        entry = next((rec for rec in dimensions_index.get("dimensions", []) if rec.get("filename") == file), None)
-        if not entry or "dimensions" not in entry or "sample_names" not in entry["dimensions"]:
+        if file not in vcf_lookup:
             raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
-        # TODO should this error also suggest to run "dimensions update"
-        file_to_samples[file] = entry["dimensions"]["sample_names"]
+
+        sample_names = vcf_lookup[file].get("samples")
+        if not sample_names:
+            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+
+        file_to_samples[file] = sample_names
 
     manager = BcftoolsQueryManager()
     sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
     logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
 
-    sample_set_overlap_results = calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
+    sample_set_overlap_results = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
     logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
 
     if (
@@ -433,7 +533,7 @@ def check_if_samples_can_be_combined_with_bcftools(
         return
 
 
-def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
     """
     Analyze all pairwise overlap types between sample sets.
     Catches the case where two sets have the same elements but different order.
@@ -462,20 +562,23 @@ def calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tupl
     return sample_set_overlap_results
 
 
-def check_that_file_versions_match_dimensions_index(
-    vcf_dimensions_manager: VCFDimensionIndexManager,
+def _check_that_file_versions_match_dimensions_index(
+    vcf_dimensions_data: dict,
     latest_versions_of_bucket_files: dict[str, str],
-    metadata_result: dict,
+    metadata_result,
 ) -> None:
     """
     Ensure that the VCF dimensions index is up to date with the latest versions of the VCF files.
     """
+    # Build lookup dict: filename -> s3_version_id
+    vcf_lookup = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data["vcf_files"]}
 
-    already_indexed_vcfs = vcf_dimensions_manager.get_indexed_filenames()
     for file in metadata_result.unique_filenames:
         file_version_ID = latest_versions_of_bucket_files.get(file, "null")
-        if file not in already_indexed_vcfs or already_indexed_vcfs[file] != file_version_ID:
-            logger.info(f"Updated VCF dimensions for file: {file}")
+
+        if file not in vcf_lookup or vcf_lookup[file] != file_version_ID:
+            logger.error(f"VCF dimensions are outdated for file: {file}")
             raise ValueError(
-                "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+                "The VCF dimensions file is not up to date with the VCF files in the project. "
+                "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )

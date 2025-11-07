@@ -27,12 +27,9 @@ from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
 from divbase_api.routes.bucket_versions import bucket_version_router
+from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
-from divbase_worker.tasks import (
-    bcftools_pipe_task,
-    sample_metadata_query_task,
-    update_vcf_dimensions_task,
-)
+from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
 
@@ -73,6 +70,11 @@ app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
+app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
+
+app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
+
+
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
 
@@ -96,65 +98,6 @@ def get_jobs_by_user(user_name: str = "Default User"):
 def get_task_by_id(task_id: str):
     task_items = get_task_history(task_id=task_id)
     return task_items
-
-
-@app.post("/api/v1/query/sample-metadata/")
-def sample_metadata_query(tsv_filter: str, metadata_tsv_name: str, project: str):
-    bucket_name = project
-    task_kwargs = {
-        "tsv_filter": tsv_filter,
-        "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": bucket_name,
-    }
-
-    results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
-    result_dict = results.get(timeout=10)
-
-    if "error" in result_dict:
-        error_type = result_dict.get("type", "ServerError")
-        error_details = result_dict.get("error", "Unknown error occurred")
-        return {"detail": error_details, "type": error_type}
-
-    return result_dict
-
-
-@app.post("/api/v1/query/bcftools-pipe/")
-def create_bcftools_jobs(
-    tsv_filter: str,
-    metadata_tsv_name: str,
-    command: str,
-    project: str,
-    user_name: str = "Default User",
-):
-    """
-    Create a new bcftools query job for the specified project.
-    """
-    bucket_name = project
-    task_kwargs = {
-        "tsv_filter": tsv_filter,
-        "command": command,
-        "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": bucket_name,
-        "user_name": user_name,
-    }
-
-    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
-    return results.id
-
-
-@app.post("/api/v1/dimensions/update/")
-def update_vcf_dimensions_for_a_project(project: str, user_name: str = "Default User"):
-    """
-    Update the VCF dimensions files for the specified project
-    """
-    bucket_name = project
-    task_kwargs = {
-        "bucket_name": bucket_name,
-        "user_name": user_name,
-    }
-
-    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
-    return results.id
 
 
 def main():

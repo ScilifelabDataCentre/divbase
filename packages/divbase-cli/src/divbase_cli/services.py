@@ -7,9 +7,7 @@ from urllib.parse import urlencode
 
 from divbase_cli.pre_signed_urls import download_multiple_pre_signed_urls, upload_multiple_pre_signed_urls
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_cli.user_config import ProjectConfig
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_lib.s3_client import create_s3_file_manager
 from divbase_lib.schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
@@ -21,7 +19,6 @@ from divbase_lib.schemas.bucket_versions import (
     FilesAtVersionResponse,
     VersionListResponse,
 )
-from divbase_lib.vcf_dimension_indexing import VCFDimensionIndexManager
 
 
 def create_version_object_command(
@@ -209,12 +206,3 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
         api_route=f"v1/s3/soft_delete?{urlencode(query_params, doseq=True)}",
     )
     return response.json().get("deleted", [])
-
-
-def show_dimensions_command(project_config: ProjectConfig) -> dict[str, dict]:
-    """
-    Helper function used by the dimensions CLI command to show the dimensions index for a project.
-    """
-    s3_file_manager = create_s3_file_manager(project_config.s3_url)
-    manager = VCFDimensionIndexManager(bucket_name=project_config.bucket_name, s3_file_manager=s3_file_manager)
-    return manager.get_dimensions_info()

@@ -7,7 +7,13 @@ from celery import current_app
 from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
-from divbase_worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
+from divbase_api.worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
+
+
+@pytest.fixture(autouse=True, scope="function")
+def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
+    """Enable auto-cleanup of dimensions entries for all tests in this test file."""
+    yield
 
 
 @pytest.mark.integration
@@ -16,6 +22,8 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     concurrency_of_default_queue,
     bcftools_pipe_kwargs_fixture,
     run_update_dimensions,
+    db_session_sync,
+    project_map,
 ):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
@@ -35,14 +43,16 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     """
 
     bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
-    run_update_dimensions(bucket_name=bucket_name)
+    project_id = project_map[bucket_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
-    broker_url = app.conf.broker_url
+    broker_url = current_app.conf.broker_url
     with Connection(broker_url) as conn:
         conn.ensure_connection(max_retries=1)
 
-    if isinstance(app.backend, RedisBackend):
-        app.backend.client.ping()
+    if isinstance(current_app.backend, RedisBackend):
+        current_app.backend.client.ping()
 
     total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
     task_count = total_default_queue_concurrency_on_host + 1
@@ -87,7 +97,14 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     ],
 )
 def test_task_routing(
-    wait_for_celery_task_completion, tasks_to_test, kwargs_fixture, expected_queue, request, run_update_dimensions
+    wait_for_celery_task_completion,
+    tasks_to_test,
+    kwargs_fixture,
+    expected_queue,
+    request,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
 ):
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
@@ -119,7 +136,10 @@ def test_task_routing(
     """
     task_kwargs = request.getfixturevalue(kwargs_fixture)
     bucket_name = task_kwargs["bucket_name"]
-    run_update_dimensions(bucket_name=bucket_name)
+    project_id = project_map[bucket_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    task_kwargs["project_id"] = project_id
+    task_kwargs["user_name"] = "Test User"
 
     broker_url = app.conf.broker_url
     with Connection(broker_url) as conn:

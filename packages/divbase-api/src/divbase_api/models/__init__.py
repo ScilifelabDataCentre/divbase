@@ -15,4 +15,6 @@ __all__ = [
     "ProjectDB",
     "ProjectRoles",
     "ProjectMembershipDB",
+    "VCFMetadataDB",
+    "skipped_vcf_files",
 ]
