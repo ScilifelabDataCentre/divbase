@@ -5,6 +5,8 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
+from divbase_lib.queries import TaskHistoryResults
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,32 +25,31 @@ class TaskHistoryManager:
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: list, divbase_user: str = None, is_admin: bool = False):
+    def __init__(self, task_items: TaskHistoryResults, divbase_user: str = None, is_admin: bool = False):
         self.task_items = task_items
         self.current_divbase_user = divbase_user
         self.is_admin = is_admin
 
     def print_task_history(self, display_limit: int = 10) -> None:
-        """Display the task history fetched from the Flowwre API in a formatted table."""
+        """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items, key=lambda x: x[2], reverse=True)
+        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].get("started", 0), reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self.create_task_history_table()
 
-        for id, task, _ in limited_tasks:
+        for task_id, task in limited_tasks:
             state = task.get("state", "N/A")
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
             submitter = self.get_submitter_from_kwargs(task)
-
             result = self.format_result(task, state)
 
             if self.permission_to_view_task(submitter):
                 table.add_row(
                     submitter,
-                    id,
+                    task_id,
                     state_with_colour,
                     self.format_unix_timestamp(task.get("received", "N/A")),
                     self.format_unix_timestamp(task.get("started", "N/A")),

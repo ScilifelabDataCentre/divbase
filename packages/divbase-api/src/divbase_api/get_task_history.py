@@ -1,50 +1,43 @@
+import ast
 import logging
 from typing import Any
 
 import httpx
 
 from divbase_api.api_config import settings
+from divbase_lib.queries import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
 
-def get_task_history(task_id: str = None, display_limit: int = 50) -> list:
+def get_task_history(
+    task_id: str = None,
+    display_limit: int = 50,
+    submitter_email: str = None,
+    is_admin: bool = False,
+) -> TaskHistoryResults:
     """
     Get the task history from the Flower API.
 
     TODO - consider split this into two functions - one for single task, one for list of tasks.
-    TODO - consider a more defined return type than list, e.g. dataclass called TaskItem with fields for id, state, timestamp.
-        This would then involve changes to the CLI code too, which currently parses this nested dict.
 
-    Returns a list of tasks.
     """
     if task_id:
         request_url = f"{settings.flower.url}/api/task/info/{task_id}"
+        task = _make_flower_request(request_url)
+        if not _check_if_user_has_permission_to_view_task(task, submitter_email, is_admin):
+            return TaskHistoryResults(tasks={})
+        return TaskHistoryResults(tasks={task_id: task})
     else:
-        # TODO - if multiple users, this will get tasks from all users and not give correct number of results back.
-        api_limit = min(
-            100, display_limit * 5
-        )  # return more tasks than requested by the --limit arg to allow for downstream sorting
+        api_limit = min(100, display_limit * 5)
         request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
-
-    tasks = _make_flower_request(request_url)
-
-    task_items = []
-    if task_id:
-        task_items = [(task_id, tasks, parse_timestamp(tasks.get("started", 0)))]
-    else:
-        task_items = [(tid, data, parse_timestamp(data.get("started", 0))) for tid, data in tasks.items()]
-
-    return task_items
-
-
-def parse_timestamp(timestamp):
-    """
-    Convert timestamp to float, if it is a numeric string.
-    """
-    if isinstance(timestamp, str) and timestamp.replace(".", "").isdigit():
-        return float(timestamp)
-    return timestamp
+        all_tasks = _make_flower_request(request_url)
+        filtered_tasks = {
+            tid: data
+            for tid, data in all_tasks.items()
+            if _check_if_user_has_permission_to_view_task(data, submitter_email, is_admin)
+        }
+        return TaskHistoryResults(tasks=filtered_tasks)
 
 
 def _make_flower_request(request_url: str) -> dict[str, Any]:
@@ -68,3 +61,15 @@ def _make_flower_request(request_url: str) -> dict[str, Any]:
         raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")
 
     return response.json()
+
+
+def _check_if_user_has_permission_to_view_task(task: dict, submitter_email: str, is_admin: bool) -> bool:
+    if is_admin or not submitter_email:
+        return True
+    kwargs = task.get("kwargs", "{}")
+    try:
+        parsed_kwargs = ast.literal_eval(kwargs)
+    except Exception:
+        parsed_kwargs = {}
+    submitter = parsed_kwargs.get("user_name")
+    return submitter == submitter_email

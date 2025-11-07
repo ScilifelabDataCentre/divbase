@@ -30,7 +30,7 @@ from divbase_cli.display_task_history import TaskHistoryManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
 from divbase_lib.exceptions import AuthenticationError
-from divbase_lib.queries import SidecarQueryResult
+from divbase_lib.queries import SidecarQueryResult, TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,7 @@ def check_status(
         help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
     ),
     config_file: Path = CONFIG_FILE_OPTION,
+    limit: int = typer.Option(20, help="Maximum number of tasks to display."),
 ):
     """
     Check status of all query jobs submitted by the user.
@@ -182,16 +183,19 @@ def check_status(
 
     if task_id:
         api_route = f"v1/task-history/list/{task_id}"
+        request_kwargs = {}
     else:
         api_route = "v1/task-history/list"
+        request_kwargs = {"params": {"limit": limit}}
 
     task_history_response = make_authenticated_request(
         method="GET",
         divbase_base_url=logged_in_url,
         api_route=api_route,
+        **request_kwargs,
     )
 
-    task_history_data = task_history_response.json()
+    task_history_data = TaskHistoryResults(**task_history_response.json())
 
     whoami_response = make_authenticated_request(
         method="GET",

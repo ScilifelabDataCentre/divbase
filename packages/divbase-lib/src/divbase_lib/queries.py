@@ -39,6 +39,28 @@ class SidecarQueryResult:
     query_message: str
 
 
+@dataclass
+class BCFToolsInput:
+    """
+    Contains the inputs required to run a bcftools query.
+    """
+
+    sample_and_filename_subset: List[Dict[str, str]]
+    sampleIDs: List[str]
+    filenames: List[str]
+
+
+@dataclass
+class TaskHistoryResults:
+    """
+    Hold the results of a task history query.
+
+    The key is the celery task_id
+    """
+
+    tasks: dict[str, dict]
+
+
 def run_sidecar_metadata_query(
     file: Path,
     filter_string: str = None,
@@ -81,17 +103,6 @@ def run_sidecar_metadata_query(
         unique_filenames=list(unique_filenames),
         query_message=query_message,
     )
-
-
-@dataclass
-class BCFToolsInput:
-    """
-    Contains the inputs required to run a bcftools query.
-    """
-
-    sample_and_filename_subset: List[Dict[str, str]]
-    sampleIDs: List[str]
-    filenames: List[str]
 
 
 class BcftoolsQueryManager:
