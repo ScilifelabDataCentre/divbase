@@ -26,11 +26,8 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.display_task_history import TaskHistoryManager
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_cli.user_config import load_user_config
-from divbase_lib.exceptions import AuthenticationError
-from divbase_lib.queries import SidecarQueryResult, TaskHistoryResults
+from divbase_lib.queries import SidecarQueryResult
 
 logger = logging.getLogger(__name__)
 
@@ -154,66 +151,3 @@ def pipe_query(
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
-
-
-@query_app.command("task-status")
-def check_status(
-    task_id: str | None = typer.Argument(None, help="Optional task id to check the status of a specific query job."),
-    divbase_url: str | None = typer.Option(
-        None,
-        help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
-    ),
-    config_file: Path = CONFIG_FILE_OPTION,
-    project: str | None = typer.Option(
-        None, help="Optional project name to filter the user's task history by project."
-    ),
-    limit: int = typer.Option(
-        10, help="Maximum number of tasks to display in the terminal. Sorted by recency. Default = 20."
-    ),
-):
-    """
-    Check status of all query jobs submitted by the user.
-
-    TODO - non bcftools query jobs should not show up here (but this should be handled by the API).
-    TODO - Consider if representation of single task should be different from the list of tasks.
-
-    TODO - dimensions tasks are submitted from dimensions and not from query, so perhaps task-status should be in its separate cli command?
-    """
-
-    config = load_user_config(config_file)
-    logged_in_url = config.logged_in_url
-
-    if not logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
-
-    if task_id:
-        api_route = f"v1/task-history/list/{task_id}"
-        params = None
-    else:
-        api_route = "v1/task-history/list"
-        params = {"limit": limit}
-        if project:
-            params["project"] = project
-
-    task_history_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route=api_route,
-        params=params,
-    )
-
-    task_history_data = TaskHistoryResults(**task_history_response.json())
-
-    whoami_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route="v1/auth/whoami",
-    )
-    current_user_info = whoami_response.json()
-    current_user_email = current_user_info["email"]
-    is_admin = current_user_info.get("is_admin", False)
-
-    task_history_manager = TaskHistoryManager(
-        task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
-    )
-    task_history_manager.print_task_history(display_limit=limit)
