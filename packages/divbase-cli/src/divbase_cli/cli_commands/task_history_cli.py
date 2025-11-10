@@ -53,14 +53,14 @@ def list_task_history_for_user(
         task_history_response = make_authenticated_request(
             method="GET",
             divbase_base_url=logged_in_url,
-            api_route="v1/task-history/list/user_and_project",
+            api_route=f"v1/task-history/tasks/user/projects/{project}",
             params=params,
         )
     else:
         task_history_response = make_authenticated_request(
             method="GET",
             divbase_base_url=logged_in_url,
-            api_route="v1/task-history/list/user",
+            api_route="v1/task-history/tasks/user",
             params=params,
         )
 
@@ -100,7 +100,7 @@ def task_history_by_id(
     task_history_response = make_authenticated_request(
         method="GET",
         divbase_base_url=logged_in_url,
-        api_route=f"v1/task-history/list/{task_id}",
+        api_route=f"v1/task-history/tasks/{task_id}",
     )
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
@@ -140,13 +140,11 @@ def list_task_history_for_project(
         raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
     params = {"limit": limit}
-    if project:
-        params["project_name"] = project
 
     task_history_response = make_authenticated_request(
         method="GET",
         divbase_base_url=logged_in_url,
-        api_route="v1/task-history/project",
+        api_route=f"v1/task-history/projects/{project}",
         params=params,
     )
 

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 task_history_router = APIRouter()
 
 
-@task_history_router.get("/list/user")
+@task_history_router.get("/tasks/user")
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
     limit: int,
@@ -46,7 +46,7 @@ async def get_all_tasks_for_user(
     )
 
 
-@task_history_router.get("/list/user_and_project")
+@task_history_router.get("/tasks/user/projects/{project_name}")
 async def get_all_tasks_for_user_and_project(
     limit: int,
     project_name: str,
@@ -54,7 +54,7 @@ async def get_all_tasks_for_user_and_project(
     db: AsyncSession = Depends(get_db),
 ) -> TaskHistoryResults:
     """
-    Get the task history for the current user and project. Admin users can view all tasks, non-admin users can only view their own tasks.
+    Get the task history for the current user and project. Admin users can view all tasks of the project, non-admin users can only view their own tasks of the project.
     """
 
     project, current_user, role = project_and_user_and_role
@@ -74,7 +74,7 @@ async def get_all_tasks_for_user_and_project(
     )
 
 
-@task_history_router.get("/list/{task_id}")
+@task_history_router.get("/tasks/{task_id}")
 async def get_task_by_id(
     task_id: str,
     current_user: Annotated[UserDB, Depends(get_current_user)],
@@ -91,7 +91,7 @@ async def get_task_by_id(
     )
 
 
-@task_history_router.get("/project")
+@task_history_router.get("/projects/{project_name}")
 async def get_project_tasks(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
