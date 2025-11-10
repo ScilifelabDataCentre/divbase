@@ -9,8 +9,8 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import DivBaseAPIError
 
 runner = CliRunner()
 

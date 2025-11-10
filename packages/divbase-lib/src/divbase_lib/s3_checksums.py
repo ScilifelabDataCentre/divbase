@@ -12,7 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Iterator
 
-from divbase_cli.cli_exceptions import ChecksumVerificationError
+from divbase_lib.exceptions import ChecksumVerificationError
 
 logger = logging.getLogger(__name__)
 

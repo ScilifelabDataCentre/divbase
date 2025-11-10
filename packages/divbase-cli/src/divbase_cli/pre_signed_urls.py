@@ -10,8 +10,8 @@ from pathlib import Path
 
 import httpx
 
-from divbase_cli.cli_exceptions import ChecksumVerificationError
 from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
