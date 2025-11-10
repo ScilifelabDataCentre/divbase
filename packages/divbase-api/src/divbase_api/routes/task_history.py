@@ -12,14 +12,14 @@ from divbase_api.crud.projects import has_required_role
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user, get_project_member
 from divbase_api.exceptions import AuthorizationError
-from divbase_api.get_task_history import (
+from divbase_api.models.projects import ProjectDB, ProjectRoles
+from divbase_api.models.users import UserDB
+from divbase_api.services.task_history import (
     TaskHistoryResults,
     get_project_task_history,
     get_task_history_by_id,
     get_task_history_list,
 )
-from divbase_api.models.projects import ProjectDB, ProjectRoles
-from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
 
