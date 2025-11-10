@@ -109,7 +109,7 @@ def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/list?project_name={project_name}",
+        api_route=f"v1/s3/?project_name={project_name}",
     )
 
     return response.json()
@@ -224,6 +224,6 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
         method="DELETE",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/s3/?project_name={project_name}",
-        json={"objects": all_files},
+        json=all_files,
     )
-    return response.json().get("deleted", [])
+    return response.json()

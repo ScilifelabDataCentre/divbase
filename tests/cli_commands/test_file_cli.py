@@ -73,9 +73,10 @@ def test_list_files_empty_project(logged_in_edit_user_with_existing_config, CONS
     assert "No files found" in result.stdout
 
 
-def test_upload_1_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
     """Test upload 1 file to the project."""
-    test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
+    test_file = tmp_path / "fake_test_file.txt"
+    test_file.write_text("testing, testing 1 2 3...")
 
     command = f"files upload {test_file}"
     result = runner.invoke(app, command)
@@ -85,9 +86,10 @@ def test_upload_1_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixt
 
 
 def test_upload_1_file_to_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+    """Specify a project when uploading a file."""
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
-    command = f"files upload {test_file} --project {CONSTANTS['NON_DEFAULT_PROJECT']}"
+    command = f"files upload {test_file} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -97,7 +99,7 @@ def test_upload_1_file_to_non_default_project(logged_in_edit_user_with_existing_
 def test_upload_multiple_files_at_once(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     test_files = [(fixtures_dir / file_name).resolve() for file_name in CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"]]
 
-    command = f"files upload {' '.join(map(str, test_files))}"
+    command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -109,7 +111,7 @@ def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS
     """Test upload all files in a directory."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
-    command = f"files upload --upload-dir {fixtures_dir.resolve()}"
+    command = f"files upload --upload-dir {fixtures_dir.resolve()} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -118,11 +120,11 @@ def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS
         assert str(file.resolve()) in clean_stdout
 
 
-def test_upload_with_safe_mode(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
-    """Test upload with safe mode works first time, but fails on subsequent attempts."""
+def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+    """Test upload with safe mode on (default) works the first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
-    command = f"files upload {file_path} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload {file_path} --project {CONSTANTS['CLEANED_PROJECT']}"
 
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -132,22 +134,35 @@ def test_upload_with_safe_mode(logged_in_edit_user_with_existing_config, CONSTAN
     assert isinstance(result.exception, FilesAlreadyInBucketError)
 
 
-def test_no_file_uploaded_if_some_duplicated_with_safe_mode(
+def test_reupload_of_same_file_with_safe_mode_off_works(
     logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir
 ):
+    """Test upload with safe mode off works for reuploading the same file."""
+    file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
+    file_path = f"{fixtures_dir}/{file_name}"
+    command = f"files upload {file_path} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
+
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+
+def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     """
-    Test that no files are uploaded with safe mode on,
+    Test that no files are uploaded with safe mode on (which is the default)
     if at least 1 of the files trying to be uploaded already exists in the project's bucket.
     """
     test_files = [(fixtures_dir / file_name).resolve() for file_name in CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"]]
 
     # upload just 1 of the files first
-    command = f"files upload {test_files[0]} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload {test_files[0]} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     # none should be uploaded as the first one already exists
-    command = f"files upload {' '.join(map(str, test_files))} --safe-mode --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, FilesAlreadyInBucketError)

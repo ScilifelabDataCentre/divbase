@@ -203,14 +203,14 @@ def test_get_version_updates_hashes_on_new_upload(logged_in_edit_user_with_exist
     Test a simple protocol where:
     1. upload file
     2. create a version
-    3. upload the same file again
+    3. upload the same file again (disabling the safe mode setting so it can be re-uploaded)
     4. create another version
 
     Validate that the hashes for the uploaded file in each version are different.
     """
     test_file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     test_file_path = (fixtures_dir / test_file_name).resolve()
-    upload_cmd = f"files upload {test_file_path}"
+    upload_cmd = f"files upload {test_file_path} --disable-safe-mode"
 
     result = runner.invoke(app, f"version add {VERSION_3_NAME}")
     assert result.exit_code == 0
