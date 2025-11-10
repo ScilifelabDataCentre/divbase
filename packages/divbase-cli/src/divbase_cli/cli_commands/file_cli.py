@@ -102,15 +102,16 @@ def download_files(
         bucket_version=bucket_version,
     )
 
+    if download_results.successful:
+        print("[green bold]Successfully downloaded the following files:[/green bold]")
+        for success in download_results.successful:
+            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
     if download_results.failed:
-        print("[red bold]WARNING: Failed to download the following files:[/red bold]")
+        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
 
-    if download_results.successful:
-        print("Successfully downloaded the following files:")
-        for success in download_results.successful:
-            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
+        raise typer.Exit(1)
 
 
 @file_app.command("upload")
@@ -166,16 +167,17 @@ def upload_files(
         safe_mode=safe_mode,
     )
 
-    if uploaded_results.failed:
-        print("[red bold]WARNING: Failed to upload the following files:[/red bold]")
-        for failed in uploaded_results.failed:
-            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
-            print("/n")
-
     if uploaded_results.successful:
         print("[green bold] The following files were successfully uploaded: [/green bold]")
         for object in uploaded_results.successful:
             print(f"- '{object.object_name}' created from file at: '{object.file_path.resolve()}'")
+
+    if uploaded_results.failed:
+        print("[red bold]ERROR: Failed to upload the following files:[/red bold]")
+        for failed in uploaded_results.failed:
+            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+
+        raise typer.Exit(1)
 
 
 @file_app.command("remove")

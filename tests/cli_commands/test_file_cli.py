@@ -175,6 +175,14 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
 
 
+def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
+    command = "files upload nonexistent_file.txt"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, FileNotFoundError)
+
+
 def test_download_1_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
     download_dir = tmp_path / "downloads"
@@ -242,8 +250,8 @@ def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp
     command = f"files download nonexistent_file.txt --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
-    assert result.exit_code == 0
-    assert "WARNING: Failed to download the following files:" in result.stdout
+    assert result.exit_code != 0
+    assert "ERROR: Failed to download the following files:" in result.stdout
     assert "nonexistent_file.txt" in result.stdout
 
 
