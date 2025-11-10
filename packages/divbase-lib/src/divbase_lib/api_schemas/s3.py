@@ -33,3 +33,18 @@ class PreSignedUploadResponse(BaseModel):
     name: str = Field(..., description="Name of the object to be uploaded")
     post_url: str = Field(..., description="Pre-signed URL to which the file should be uploaded")
     fields: dict = Field(..., description="Fields required for the POST request")
+
+
+class CheckFileExistsRequest(BaseModel):
+    """Request model to check if a file already exists in the bucket (using the checksum)"""
+
+    object_name: str
+    md5_checksum: str
+
+
+class ExistingFileResponse(BaseModel):
+    """Response model for reporting a file that already exists in the bucket (using it's checksum)"""
+
+    object_name: str
+    md5_checksum: str
+    matching_object_name: str | None

@@ -9,6 +9,8 @@ we ensure that when you manually raise a specific exception the error message lo
 
 from pathlib import Path
 
+from divbase_lib.api_schemas.s3 import ExistingFileResponse
+
 
 class ObjectDoesNotExistError(FileNotFoundError):
     """Raised when an S3 object/key does not exist in the bucket."""
@@ -70,8 +72,8 @@ class FilesAlreadyInBucketError(FileExistsError):
     and the user does not want to accidently create a new version of any file.
     """
 
-    def __init__(self, existing_objects: list[str], project_name: str):
-        files_list = "\n".join(f"- '{name}'" for name in existing_objects)
+    def __init__(self, existing_objects: list[ExistingFileResponse], project_name: str):
+        files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_objects)
         error_message = (
             f"For the project: '{project_name}'\n"
             "The following objects that you're trying to upload already exist in the project's bucket:\n"

@@ -53,3 +53,12 @@ def verify_downloaded_checksum(file_path: Path, expected_checksum: str) -> None:
     calculated_md5 = calculate_md5_checksum(file_path=file_path, output_format=MD5CheckSumFormat.HEX)
     if calculated_md5 != expected_checksum:
         raise ChecksumVerificationError(expected_checksum=expected_checksum, calculated_checksum=calculated_md5)
+
+
+def convert_checksum_hex_to_base64(hex_checksum: str) -> str:
+    """
+    Convert a hex-encoded MD5 checksum to base64-encoded format.
+    """
+    raw_bytes = bytes.fromhex(hex_checksum)
+    base64_checksum = base64.b64encode(raw_bytes).decode("utf-8")
+    return base64_checksum

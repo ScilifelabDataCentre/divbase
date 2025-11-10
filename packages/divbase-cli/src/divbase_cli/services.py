@@ -22,9 +22,9 @@ from divbase_lib.api_schemas.bucket_versions import (
     FilesAtVersionResponse,
     VersionListResponse,
 )
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.api_schemas.s3 import ExistingFileResponse, PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
-from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
+from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, convert_checksum_hex_to_base64
 
 
 def create_version_object_command(
@@ -164,33 +164,44 @@ def download_files_command(
 
 
 def upload_files_command(
-    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool, checksum: bool
+    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool
 ) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
     Files uploaded and there names in  returned as a list Paths
 
-    Safe mode checks if any of the files that are to be uploaded already exist in the bucket.
+    - Safe mode:
+        1. checks if any of the files that are to be uploaded already exist in the bucket (by comparing checksums)
+        2. Adds checksum to upload request to allow server to verify upload.
     """
-    object_names = [file.name for file in all_files]
+    file_checksums_hex = {}
+    if safe_mode:
+        for file in all_files:
+            file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
 
     if safe_mode:
-        response = make_authenticated_request(
-            method="GET",
-            divbase_base_url=divbase_base_url,
-            api_route=f"v1/s3/list?project_name={project_name}",
-        )
-        current_files = response.json()
+        files_to_check = []
+        for file in all_files:
+            files_to_check.append({"object_name": file.name, "md5_checksum": file_checksums_hex[file.name]})
 
-        existing_objects = set(object_names) & set(current_files)
-        if existing_objects:
-            raise FilesAlreadyInBucketError(existing_objects=list(existing_objects), project_name=project_name)
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/check-exists?project_name={project_name}",
+            json=files_to_check,
+        )
+        existing_files = response.json()
+
+        if existing_files:
+            existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
+            raise FilesAlreadyInBucketError(existing_objects=existing_object_names, project_name=project_name)
 
     objects_to_upload = []
     for file in all_files:
-        if checksum:
-            md5_hash = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.BASE64)
-            objects_to_upload.append({"name": file.name, "md5_hash": md5_hash})
+        if safe_mode:
+            hex_checksum = file_checksums_hex[file.name]
+            base64_checksum = convert_checksum_hex_to_base64(hex_checksum)
+            objects_to_upload.append({"name": file.name, "md5_hash": base64_checksum})
         else:
             objects_to_upload.append({"name": file.name, "md5_hash": None})
 

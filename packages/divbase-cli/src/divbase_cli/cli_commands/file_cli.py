@@ -9,7 +9,6 @@ from typing import List
 
 import typer
 from rich import print
-from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
@@ -119,13 +118,15 @@ def upload_files(
     files: List[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
     upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    checksum: bool = typer.Option(True, "--no-checksum", help="Disable checksum verification for uploaded files."),
-    safe_mode: Annotated[
-        bool,
-        typer.Option(
-            "--safe-mode", help="Check if any of the files you're about to upload already exist and if so don't upload"
-        ),
-    ] = False,
+    # TODO is this confusing naming? You can see what I mean when when you run -h on this command
+    safe_mode: bool = typer.Option(
+        True,
+        "--disable-safe-mode",
+        help="Disable safe mode. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload:\n"
+        "1. Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process. \n"
+        "2. Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums).\n"
+        "It is recommended to leave safe mode enabled unless you have a specific reason to disable it.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
@@ -163,7 +164,6 @@ def upload_files(
         divbase_base_url=logged_in_url,
         all_files=list(all_files),
         safe_mode=safe_mode,
-        checksum=checksum,
     )
 
     if uploaded_results.failed:

@@ -17,13 +17,16 @@ from fastapi import APIRouter, Depends, status
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.s3 import check_files_already_exist_by_checksum
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
 from divbase_lib.api_schemas.s3 import (
+    CheckFileExistsRequest,
     DownloadObjectRequest,
+    ExistingFileResponse,
     PreSignedDownloadResponse,
     PreSignedUploadResponse,
     UploadObjectRequest,
@@ -136,3 +139,24 @@ async def soft_delete_files(
     )
 
     return s3_file_manager.soft_delete_objects(objects=objects, bucket_name=project.bucket_name)
+
+
+# using POST as GET with body is not considered good practice
+@s3_router.post("/check-exists", status_code=status.HTTP_200_OK, response_model=list[ExistingFileResponse])
+async def check_file_already_exists_by_checksum(
+    files_to_check: list[CheckFileExistsRequest],
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    Check if the files provided already exist in the project's bucket.
+    Compares the MD5 checksums of files of the same name. Returns those that do.
+    Max 100 files at a time.
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to check files in this project.")
+
+    check_too_many_objects_in_request(len(files_to_check))
+
+    return check_files_already_exist_by_checksum(files_to_check=files_to_check, bucket_name=project.bucket_name)
