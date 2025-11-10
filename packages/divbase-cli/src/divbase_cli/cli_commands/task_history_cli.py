@@ -72,6 +72,7 @@ def list_task_history(
     current_user_email = current_user_info["email"]
     is_admin = current_user_info.get("is_admin", False)
 
+    # TODO this filters redundantly since the API should only return tasks for the current user unless the user is an admin
     task_history_manager = TaskHistoryManager(
         task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
     )
@@ -118,3 +119,49 @@ def task_history_by_id(
         task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
     )
     task_history_manager.print_task_history()
+
+
+@task_history_app.command("project")
+def list_task_history_for_project(
+    config_file: Path = CONFIG_FILE_OPTION,
+    limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
+    project: str = typer.Argument(..., help="Project name to check the task history for."),
+):
+    """
+    Check status of all tasks submitted for a project. Requires a manager role in the project. Displays the latest 10 tasks by default, unless --limit is specified.
+    """
+
+    # TODO add option to sort ASC/DESC by task timestamp
+
+    config = load_user_config(config_file)
+    logged_in_url = config.logged_in_url
+
+    if not logged_in_url:
+        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+
+    params = {"limit": limit}
+    if project:
+        params["project_name"] = project
+
+    task_history_response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=logged_in_url,
+        api_route="v1/task-history/project",
+        params=params,
+    )
+
+    task_history_data = TaskHistoryResults(**task_history_response.json())
+
+    whoami_response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=logged_in_url,
+        api_route="v1/auth/whoami",
+    )
+    current_user_info = whoami_response.json()
+    current_user_email = current_user_info["email"]
+    is_admin = current_user_info.get("is_admin", False)
+
+    task_history_manager = TaskHistoryManager(
+        task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
+    )
+    task_history_manager.print_task_history(display_limit=limit)

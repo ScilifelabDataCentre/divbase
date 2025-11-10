@@ -8,9 +8,17 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
 
+from divbase_api.crud.projects import has_required_role
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_user
-from divbase_api.get_task_history import TaskHistoryResults, get_task_history_by_id, get_task_history_list
+from divbase_api.deps import get_current_user, get_project_member
+from divbase_api.exceptions import AuthorizationError
+from divbase_api.get_task_history import (
+    TaskHistoryResults,
+    get_project_task_history,
+    get_task_history_by_id,
+    get_task_history_list,
+)
+from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
@@ -51,4 +59,27 @@ async def get_task_by_id(
         task_id=task_id,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
+    )
+
+
+@task_history_router.get("/project")
+async def get_project_tasks(
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> TaskHistoryResults:
+    """
+    Get the task history for a project. Requires MANAGE role or higher.
+    """
+
+    project, _, role = project_and_user_and_role
+
+    if not has_required_role(role, ProjectRoles.MANAGE):
+        raise AuthorizationError(
+            "Project not found or you don't have permission to view task history for this whole project."
+        )
+
+    return await get_project_task_history(
+        db=db,
+        project_id=project.id,
     )

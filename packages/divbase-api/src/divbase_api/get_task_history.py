@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.api_config import settings
 from divbase_api.crud.task_history import (
     filter_task_ids_by_project_name,
+    get_allowed_task_ids_for_project,
     get_allowed_task_ids_for_user,
 )
 from divbase_lib.queries import TaskHistoryResults
@@ -29,6 +30,7 @@ async def get_task_history_list(
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
 
+    # TODO rename to get_user_task_history
     allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
 
     if project_name:
@@ -41,6 +43,34 @@ async def get_task_history_list(
     request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
     all_tasks = _make_flower_request(request_url)
 
+    # TODO refactor this to do filtering in the API request if Flower supports it
+    filtered_tasks = {}
+    for tid, data in all_tasks.items():
+        if tid in allowed_task_ids:
+            filtered_tasks[tid] = data
+
+    return TaskHistoryResults(tasks=filtered_tasks)
+
+
+async def get_project_task_history(
+    db: AsyncSession,
+    project_id: int,
+) -> TaskHistoryResults:
+    """
+    Get the the task history of a project from the Flower API.
+
+    """
+
+    allowed_task_ids = await get_allowed_task_ids_for_project(db, project_id)
+
+    if not allowed_task_ids:
+        return TaskHistoryResults(tasks={})
+
+    api_limit = min(100, 50 * 5)
+    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
+    all_tasks = _make_flower_request(request_url)
+
+    # TODO refactor this to do filtering in the API request if Flower supports it
     filtered_tasks = {}
     for tid, data in all_tasks.items():
         if tid in allowed_task_ids:
