@@ -153,7 +153,7 @@ class S3FileManager:
 
     def get_file_checksum(self, bucket_name: str, object_name: str) -> str | None:
         """
-        get the MD5 checksum of a file in the bucket, if it exists.
+        Get the MD5 checksum of a file in the bucket, if it exists.
         Returns None if the file does not exist.
         """
         try:
@@ -167,6 +167,22 @@ class S3FileManager:
                 )
                 return None
         return response.get("ETag", "").strip('"')
+
+    def get_multiple_checksums(self, bucket_name: str, object_names: list[str]) -> dict[str, str]:
+        """
+        Given a list of potential file names in the bucket, return a dict of those that exists with their checksums.
+
+        Note, this is used when uploading multiple files and want to check which already exist in the bucket.
+        So it should not be assumed all files provided actually exist in the bucket.
+        """
+        matches = {}
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key in object_names:
+                    matches[key] = obj.get("ETag", "").strip('"')
+        return matches
 
 
 def create_s3_file_manager(
