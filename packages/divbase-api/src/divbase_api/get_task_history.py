@@ -28,14 +28,18 @@ async def get_task_history_list(
     allowed_task_ids uses a db lookup, but all_tasks is fetched from the Flower API.
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
-    api_limit = min(100, display_limit * 5)
-    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
-    all_tasks = _make_flower_request(request_url)
 
     allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
 
     if project_name:
         allowed_task_ids = await filter_task_ids_by_project_name(db, allowed_task_ids, project_name)
+
+    if not allowed_task_ids:
+        return TaskHistoryResults(tasks={})
+
+    api_limit = min(100, display_limit * 5)
+    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
+    all_tasks = _make_flower_request(request_url)
 
     filtered_tasks = {}
     for tid, data in all_tasks.items():
@@ -54,16 +58,15 @@ async def get_task_history_by_id(
     """
     Get the task history from the Flower API for a specific task ID.
     """
+    allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
+
+    if task_id not in allowed_task_ids:
+        return TaskHistoryResults(tasks={})
+
     request_url = f"{settings.flower.url}/api/task/info/{task_id}"
     task = _make_flower_request(request_url)
 
     if not task:
-        # early exit if task does not exist in results backend
-        return TaskHistoryResults(tasks={})
-
-    allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
-
-    if task_id not in allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
     return TaskHistoryResults(tasks={task_id: task})
