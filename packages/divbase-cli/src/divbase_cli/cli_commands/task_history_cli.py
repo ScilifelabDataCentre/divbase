@@ -28,10 +28,6 @@ task_history_app = typer.Typer(
 
 @task_history_app.command("list")
 def list_task_history(
-    divbase_url: str | None = typer.Option(
-        None,
-        help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
-    ),
     config_file: Path = CONFIG_FILE_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str | None = typer.Option(
@@ -82,10 +78,6 @@ def list_task_history(
 @task_history_app.command("id")
 def task_history_by_id(
     task_id: str | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
-    divbase_url: str | None = typer.Option(
-        None,
-        help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
-    ),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
