@@ -26,8 +26,8 @@ task_history_app = typer.Typer(
 )
 
 
-@task_history_app.command("list")
-def list_task_history(
+@task_history_app.command("user")
+def list_task_history_for_user(
     config_file: Path = CONFIG_FILE_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str | None = typer.Option(
@@ -47,15 +47,22 @@ def list_task_history(
         raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
     params = {"limit": limit}
-    if project:
-        params["project"] = project
 
-    task_history_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route="v1/task-history/list",
-        params=params,
-    )
+    if project:
+        params["project_name"] = project
+        task_history_response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=logged_in_url,
+            api_route="v1/task-history/list/user_and_project",
+            params=params,
+        )
+    else:
+        task_history_response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=logged_in_url,
+            api_route="v1/task-history/list/user",
+            params=params,
+        )
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
@@ -124,6 +131,7 @@ def list_task_history_for_project(
     """
 
     # TODO add option to sort ASC/DESC by task timestamp
+    # TODO use default project from config if not --project specified
 
     config = load_user_config(config_file)
     logged_in_url = config.logged_in_url

@@ -18,7 +18,8 @@ from divbase_api.services.task_history import (
     TaskHistoryResults,
     get_project_task_history,
     get_task_history_by_id,
-    get_task_history_list,
+    get_user_and_project_task_history,
+    get_user_task_history,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,8 @@ logger = logging.getLogger(__name__)
 task_history_router = APIRouter()
 
 
-@task_history_router.get("/list")
-async def get_all_tasks(
+@task_history_router.get("/list/user")
+async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
     limit: int,
     project: str | None = None,
@@ -36,10 +37,38 @@ async def get_all_tasks(
     """
     Get the task history for the current user. Admin users can view all tasks, non-admin users can only view their own tasks.
     """
-    return await get_task_history_list(
+    return await get_user_task_history(
         db=db,
         display_limit=limit,
         project_name=project,
+        user_id=current_user.id,
+        is_admin=current_user.is_admin,
+    )
+
+
+@task_history_router.get("/list/user_and_project")
+async def get_all_tasks_for_user_and_project(
+    limit: int,
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> TaskHistoryResults:
+    """
+    Get the task history for the current user and project. Admin users can view all tasks, non-admin users can only view their own tasks.
+    """
+
+    project, current_user, role = project_and_user_and_role
+
+    # TODO harmonize how to handle when user has not submitted any tasks, or do not have permissions. A Read user cannot submit tasks...
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError(
+            "Project not found or you don't have permission to view task history from this project."
+        )
+
+    return await get_user_and_project_task_history(
+        db=db,
+        display_limit=limit,
+        project_id=project.id,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )

@@ -52,6 +52,35 @@ async def get_allowed_task_ids_for_user(
     return allowed_task_ids
 
 
+async def get_allowed_task_ids_for_user_and_project(
+    db: AsyncSession,
+    user_id: int,
+    project_id: int,
+    is_admin: bool,
+) -> set[str]:
+    """
+    Get all task IDs the user has permission to view.
+
+    The query returns [(taskid1,), (taskid2,), (taskid3,)] etc. thus need to extract first element of each tuple.
+
+    Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
+    """
+    if is_admin:
+        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.project_id == project_id)
+    else:
+        stmt = (
+            select(TaskHistoryDB.task_id)
+            .where(TaskHistoryDB.user_id == user_id)
+            .where(TaskHistoryDB.project_id == project_id)
+        )
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+    allowed_task_ids = set()
+    for row in rows:
+        allowed_task_ids.add(row[0])
+    return allowed_task_ids
+
+
 async def filter_task_ids_by_project_name(db: AsyncSession, task_ids: set[str], project_name: str) -> set[str]:
     """
     Filter a Set of task IDs by project name. Uses relationship between TaskHistoryDB and ProjectDB to make a single query with a table join.

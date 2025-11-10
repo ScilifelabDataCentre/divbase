@@ -6,16 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.task_history import (
-    filter_task_ids_by_project_name,
     get_allowed_task_ids_for_project,
     get_allowed_task_ids_for_user,
+    get_allowed_task_ids_for_user_and_project,
 )
 from divbase_lib.queries import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
 
-async def get_task_history_list(
+async def get_user_task_history(
     db: AsyncSession,
     user_id: int,
     project_name: str | None = None,
@@ -30,11 +30,39 @@ async def get_task_history_list(
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
 
-    # TODO rename to get_user_task_history
     allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
 
-    if project_name:
-        allowed_task_ids = await filter_task_ids_by_project_name(db, allowed_task_ids, project_name)
+    if not allowed_task_ids:
+        return TaskHistoryResults(tasks={})
+
+    api_limit = min(100, display_limit * 5)
+    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
+    all_tasks = _make_flower_request(request_url)
+
+    # TODO refactor this to do filtering in the API request if Flower supports it
+    filtered_tasks = {}
+    for tid, data in all_tasks.items():
+        if tid in allowed_task_ids:
+            filtered_tasks[tid] = data
+
+    return TaskHistoryResults(tasks=filtered_tasks)
+
+
+async def get_user_and_project_task_history(
+    db: AsyncSession,
+    user_id: int,
+    project_id: int | None = None,
+    is_admin: bool = False,
+    display_limit: int = 50,
+) -> TaskHistoryResults:
+    """
+    Get a list of the task history from the Flower API for a user and project.
+
+    For the case of a results backend purge (task not in flower API results):
+    allowed_task_ids uses a db lookup, but all_tasks is fetched from the Flower API.
+    Thus, if a task is purged in the results backend, it is naturally excluded.
+    """
+    allowed_task_ids = await get_allowed_task_ids_for_user_and_project(db, user_id, project_id, is_admin)
 
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
