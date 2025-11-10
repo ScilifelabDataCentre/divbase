@@ -4,7 +4,7 @@ API routes for task history operations.
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 task_history_router = APIRouter()
 
 
-@task_history_router.get("/tasks/user")
+@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
     limit: int,
@@ -46,7 +46,7 @@ async def get_all_tasks_for_user(
     )
 
 
-@task_history_router.get("/tasks/user/projects/{project_name}")
+@task_history_router.get("/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user_and_project(
     limit: int,
     project_name: str,
@@ -74,7 +74,7 @@ async def get_all_tasks_for_user_and_project(
     )
 
 
-@task_history_router.get("/tasks/{task_id}")
+@task_history_router.get("/tasks/{task_id}", status_code=status.HTTP_200_OK)
 async def get_task_by_id(
     task_id: str,
     current_user: Annotated[UserDB, Depends(get_current_user)],
@@ -91,7 +91,7 @@ async def get_task_by_id(
     )
 
 
-@task_history_router.get("/projects/{project_name}")
+@task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_project_tasks(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
