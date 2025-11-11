@@ -30,7 +30,6 @@ task_history_router = APIRouter()
 @task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
-    project: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> TaskHistoryResults:
     """
@@ -38,7 +37,6 @@ async def get_all_tasks_for_user(
     """
     return await get_user_task_history(
         db=db,
-        project_name=project,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )

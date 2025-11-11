@@ -25,7 +25,6 @@ REQUEST_URL_WITH_LIMIT = f"{settings.flower.url}/api/tasks?limit={API_LIMIT}"
 async def get_user_task_history(
     db: AsyncSession,
     user_id: int,
-    project_name: str | None = None,
     is_admin: bool = False,
 ) -> TaskHistoryResults:
     """
@@ -54,7 +53,6 @@ async def get_user_and_project_task_history(
     user_id: int,
     project_id: int | None = None,
     is_admin: bool = False,
-    display_limit: int = 50,
 ) -> TaskHistoryResults:
     """
     Get a list of the task history from the Flower API for a user and project.
