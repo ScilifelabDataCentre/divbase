@@ -2,13 +2,40 @@
 Schemas for task history routes.
 """
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
 # Response Models
 
-# TODO nest the results model here
+
+class FlowerTaskMetadataQueryResult(BaseModel):
+    sample_and_filename_subset: Optional[list[Dict[str, Any]]]
+    unique_sample_ids: Optional[List[str]]
+    unique_filenames: Optional[List[str]]
+    query_message: Optional[str]
+    status: Optional[str]
+    task_id: Optional[str]
+
+
+class FlowerTaskBcftoolsQueryResult(BaseModel):
+    status: str
+    output_file: Optional[str]
+    submitter: Optional[str]
+
+
+class FlowerTaskDimensionUpdateResult(BaseModel):
+    status: str
+    submitter: Optional[str]
+    VCF_files_added: Optional[List[str]] = Field(
+        None, alias="VCF files that were added to dimensions index by this job"
+    )
+    VCF_files_skipped: Optional[List[str]] = Field(
+        None, alias="VCF files skipped by this job (previous DivBase-generated result VCFs)"
+    )
+    VCF_files_deleted: Optional[List[str]] = Field(
+        None, alias="VCF files that have been deleted from the project and thus have been dropped from the index"
+    )
 
 
 class FlowerTaskResult(BaseModel):
@@ -30,7 +57,9 @@ class FlowerTaskResult(BaseModel):
     eta: Optional[float]
     expires: Optional[float]
     retries: Optional[int]
-    result: Optional[str]  # use raw string for now, but should convert to dict eventaully
+    result: Optional[
+        Union[FlowerTaskBcftoolsQueryResult, FlowerTaskMetadataQueryResult, FlowerTaskDimensionUpdateResult, str]
+    ]
     exception: Optional[str]
     timestamp: Optional[float]
     runtime: Optional[float]

@@ -1,3 +1,4 @@
+import ast
 import logging
 from typing import Any
 
@@ -10,7 +11,13 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
 )
-from divbase_lib.schemas.task_history import FlowerTaskResult, TaskHistoryResults
+from divbase_lib.schemas.task_history import (
+    FlowerTaskBcftoolsQueryResult,
+    FlowerTaskDimensionUpdateResult,
+    FlowerTaskMetadataQueryResult,
+    FlowerTaskResult,
+    TaskHistoryResults,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +123,7 @@ async def get_task_history_by_id(
     if not task_data:
         return TaskHistoryResults(tasks={})
     else:
+        task_data = _assign_response_model_to_flower_task_result_field(task_data)
         return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
 
 
@@ -151,6 +159,29 @@ def _filter_flower_results_by_allowed_task_ids(
     filtered_tasks = {}
     for tid, task_data in all_tasks.items():
         if tid in allowed_task_ids:
+            task_data = _assign_response_model_to_flower_task_result_field(task_data)
             filtered_tasks[tid] = FlowerTaskResult(**task_data)
 
     return TaskHistoryResults(tasks=filtered_tasks)
+
+
+def _assign_response_model_to_flower_task_result_field(task_data: dict) -> dict:
+    """Parse the 'result' field of a Flower task data dictionary into the appropriate model."""
+    result_raw = task_data.get("result")
+    parsed_result = None
+    if result_raw:
+        try:
+            result_dict = ast.literal_eval(result_raw) if isinstance(result_raw, str) else result_raw
+            if task_data.get("name") == "tasks.sample_metadata_query":
+                parsed_result = FlowerTaskMetadataQueryResult(**result_dict)
+            elif task_data.get("name") == "tasks.bcftools_query":
+                parsed_result = FlowerTaskBcftoolsQueryResult(**result_dict)
+            elif task_data.get("name") == "tasks.update_vcf_dimensions_task":
+                parsed_result = FlowerTaskDimensionUpdateResult(**result_dict)
+            else:
+                parsed_result = result_dict
+        except Exception:
+            parsed_result = result_raw
+
+    task_data["result"] = parsed_result
+    return task_data
