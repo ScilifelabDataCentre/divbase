@@ -6,27 +6,17 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from divbase_lib.schemas.queries import (
+    BcftoolsQueryKwargs,
+    SampleMetadataQueryKwargs,
+    TaskBcftoolsQueryResult,
+    TaskMetadataQueryResult,
+)
+
 # Response Models
 
 
-class TaskMetadataQueryResult(BaseModel):
-    """Metadata query task result details. Based on the return of tasks.sample_metadata_query."""
-
-    sample_and_filename_subset: List[Dict[str, Any]]
-    unique_sample_ids: List[str]
-    unique_filenames: List[str]
-    query_message: str
-    status: str
-
-
-class TaskBcftoolsQueryResult(BaseModel):
-    """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
-
-    status: str
-    output_file: str
-    submitter: str
-
-
+# TODO move this to a schemas file for dimension tasks
 class TaskDimensionUpdateResult(BaseModel):
     """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
 
@@ -58,7 +48,9 @@ class FlowerTaskResult(BaseModel):
     retried: Optional[float]
     revoked: Optional[float]
     args: Optional[str]
-    kwargs: Optional[str]
+    kwargs: Optional[
+        Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, Dict[str, Any]]
+    ]  # TODO add dimensions task kwargs
     eta: Optional[float]
     expires: Optional[float]
     retries: Optional[int]

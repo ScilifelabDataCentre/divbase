@@ -46,7 +46,6 @@ class BCFToolsInput:
     Contains the inputs required to run a bcftools query.
     """
 
-    # TODO pydantic request schema instead of dataclass?
     sample_and_filename_subset: List[Dict[str, str]]
     sampleIDs: List[str]
     filenames: List[str]

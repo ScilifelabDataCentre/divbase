@@ -110,6 +110,21 @@ class TaskHistoryDisplayManager:
             logger.warning(f"Could not parse kwargs: {e}")
             return "Unknown"
 
+    def _get_submitter_from_task_kwargs(self, task):
+        """
+        Extract submitter from task kwargs.
+        """
+        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookupin the task_history db table would maybe make more sense?
+        kwargs = task.kwargs
+        if kwargs is None:
+            return "Unknown"
+        user_name = getattr(kwargs, "user_name", None)
+        if user_name:
+            return user_name
+        if isinstance(kwargs, dict):
+            return kwargs.get("user_name", "Unknown")  # TODO the dimensions task is yet to return kwargs as a dict
+        return "Unknown"
+
     def _format_result(self, task, state):
         """
         Format the result message based on the task state and type.

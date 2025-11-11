@@ -20,6 +20,12 @@ from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
 )
+from divbase_lib.schemas.queries import (
+    BcftoolsQueryKwargs,
+    BcftoolsQueryRequest,
+    SampleMetadataQueryKwargs,
+    SampleMetadataQueryRequest,
+)
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
 
@@ -31,10 +37,9 @@ query_router = APIRouter()
 # TODO response_model like in the versioning routes
 
 
-@query_router.post("/sample-metadata/", status_code=status.HTTP_200_OK)
+@query_router.post("/sample-metadata/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def sample_metadata_query(
-    tsv_filter: str,
-    metadata_tsv_name: str,
+    sample_metadata_query_request: SampleMetadataQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
@@ -47,15 +52,15 @@ async def sample_metadata_query(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
 
-    task_kwargs = {
-        "tsv_filter": tsv_filter,
-        "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": project.bucket_name,
-        "project_id": project.id,
-        "user_name": current_user.email,
-    }
+    task_kwargs = SampleMetadataQueryKwargs(
+        tsv_filter=sample_metadata_query_request.tsv_filter,
+        metadata_tsv_name=sample_metadata_query_request.metadata_tsv_name,
+        bucket_name=project.bucket_name,
+        project_id=project.id,
+        user_name=current_user.email,
+    )
 
-    results = sample_metadata_query_task.apply_async(kwargs=task_kwargs)
+    results = sample_metadata_query_task.apply_async(kwargs=task_kwargs.model_dump())
     await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
 
     result_dict = results.get(timeout=10)  # TODO think about what happens if this timeout is reached
@@ -73,11 +78,9 @@ async def sample_metadata_query(
     }
 
 
-@query_router.post("/bcftools-pipe/", status_code=status.HTTP_201_CREATED)
+@query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
 async def create_bcftools_jobs(
-    tsv_filter: str,
-    metadata_tsv_name: str,
-    command: str,
+    bcftools_query_request: BcftoolsQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
@@ -90,15 +93,15 @@ async def create_bcftools_jobs(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
 
-    task_kwargs = {
-        "tsv_filter": tsv_filter,
-        "command": command,
-        "metadata_tsv_name": metadata_tsv_name,
-        "bucket_name": project.bucket_name,
-        "project_id": project.id,
-        "user_name": current_user.email,
-    }
+    task_kwargs = BcftoolsQueryKwargs(
+        tsv_filter=bcftools_query_request.tsv_filter,
+        command=bcftools_query_request.command,
+        metadata_tsv_name=bcftools_query_request.metadata_tsv_name,
+        bucket_name=project.bucket_name,
+        project_id=project.id,
+        user_name=current_user.email,
+    )
 
-    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs)
+    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())
     await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
     return results.id

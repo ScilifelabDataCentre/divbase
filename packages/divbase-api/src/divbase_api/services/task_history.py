@@ -11,6 +11,7 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
 )
+from divbase_lib.schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.schemas.task_history import (
     FlowerTaskResult,
     TaskBcftoolsQueryResult,
@@ -123,7 +124,7 @@ async def get_task_history_by_id(
     if not task_data:
         return TaskHistoryResults(tasks={})
     else:
-        task_data = _assign_response_model_to_flower_task_result_field(task_data)
+        task_data = _assign_response_models_to_flower_task_fields(task_data)
         return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
 
 
@@ -159,13 +160,13 @@ def _filter_flower_results_by_allowed_task_ids(
     filtered_tasks = {}
     for tid, task_data in all_tasks.items():
         if tid in allowed_task_ids:
-            task_data = _assign_response_model_to_flower_task_result_field(task_data)
+            task_data = _assign_response_models_to_flower_task_fields(task_data)
             filtered_tasks[tid] = FlowerTaskResult(**task_data)
 
     return TaskHistoryResults(tasks=filtered_tasks)
 
 
-def _assign_response_model_to_flower_task_result_field(task_data: dict) -> dict:
+def _assign_response_models_to_flower_task_fields(task_data: dict) -> dict:
     """Parse the 'result' field of a Flower task data dictionary into the appropriate model."""
     result_raw = task_data.get("result")
     parsed_result = None
@@ -183,5 +184,20 @@ def _assign_response_model_to_flower_task_result_field(task_data: dict) -> dict:
         except Exception:
             parsed_result = result_raw
 
+    kwargs_raw = task_data.get("kwargs")
+    parsed_kwargs = None
+    if kwargs_raw:
+        try:
+            kwargs_dict = ast.literal_eval(kwargs_raw) if isinstance(kwargs_raw, str) else kwargs_raw
+            if task_data.get("name") == "tasks.sample_metadata_query":
+                parsed_kwargs = SampleMetadataQueryKwargs(**kwargs_dict)
+            elif task_data.get("name") == "tasks.bcftools_query":
+                parsed_kwargs = BcftoolsQueryKwargs(**kwargs_dict)
+            else:
+                parsed_kwargs = kwargs_dict
+        except Exception:
+            parsed_kwargs = kwargs_raw
+
     task_data["result"] = parsed_result
+    task_data["kwargs"] = parsed_kwargs
     return task_data
