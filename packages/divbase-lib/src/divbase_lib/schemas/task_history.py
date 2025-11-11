@@ -9,32 +9,37 @@ from pydantic import BaseModel, Field
 # Response Models
 
 
-class FlowerTaskMetadataQueryResult(BaseModel):
-    sample_and_filename_subset: Optional[list[Dict[str, Any]]]
-    unique_sample_ids: Optional[List[str]]
-    unique_filenames: Optional[List[str]]
-    query_message: Optional[str]
-    status: Optional[str]
-    task_id: Optional[str]
+class TaskMetadataQueryResult(BaseModel):
+    """Metadata query task result details. Based on the return of tasks.sample_metadata_query."""
 
-
-class FlowerTaskBcftoolsQueryResult(BaseModel):
+    sample_and_filename_subset: List[Dict[str, Any]]
+    unique_sample_ids: List[str]
+    unique_filenames: List[str]
+    query_message: str
     status: str
-    output_file: Optional[str]
-    submitter: Optional[str]
 
 
-class FlowerTaskDimensionUpdateResult(BaseModel):
+class TaskBcftoolsQueryResult(BaseModel):
+    """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
+
     status: str
-    submitter: Optional[str]
+    output_file: str
+    submitter: str
+
+
+class TaskDimensionUpdateResult(BaseModel):
+    """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
+
+    status: str
+    submitter: str
     VCF_files_added: Optional[List[str]] = Field(
-        None, alias="VCF files that were added to dimensions index by this job"
+        None, description="VCF files that were added to dimensions index by this job"
     )
     VCF_files_skipped: Optional[List[str]] = Field(
-        None, alias="VCF files skipped by this job (previous DivBase-generated result VCFs)"
+        None, description="VCF files skipped by this job (previous DivBase-generated result VCFs)"
     )
     VCF_files_deleted: Optional[List[str]] = Field(
-        None, alias="VCF files that have been deleted from the project and thus have been dropped from the index"
+        None, description="VCF files that have been deleted from the project and thus have been dropped from the index"
     )
 
 
@@ -57,9 +62,7 @@ class FlowerTaskResult(BaseModel):
     eta: Optional[float]
     expires: Optional[float]
     retries: Optional[int]
-    result: Optional[
-        Union[FlowerTaskBcftoolsQueryResult, FlowerTaskMetadataQueryResult, FlowerTaskDimensionUpdateResult, str]
-    ]
+    result: Optional[Union[TaskBcftoolsQueryResult, TaskMetadataQueryResult, TaskDimensionUpdateResult, str]]
     exception: Optional[str]
     timestamp: Optional[float]
     runtime: Optional[float]

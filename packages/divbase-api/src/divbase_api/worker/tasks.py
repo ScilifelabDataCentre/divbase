@@ -382,6 +382,8 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
             return {"status": "error", "error": str(e), "task_id": task_id}
 
     vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
+    if not vcfs_deleted_from_bucket_since_last_indexing:
+        vcfs_deleted_from_bucket_since_last_indexing = None
     skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
 
     # TODO this block could be done in one go for calling db once with a list
@@ -402,16 +404,16 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
     if not files_indexed_by_this_job:
-        files_indexed_by_this_job = ["None: no new VCF files or file versions were detected in the project."]
+        files_indexed_by_this_job = None
     if not divbase_results_files_skipped_by_this_job:
-        divbase_results_files_skipped_by_this_job = ["None: no DivBase-generated results were detected in the project."]
+        divbase_results_files_skipped_by_this_job = None
 
     return {
         "status": "completed",
         "submitter": user_name,
-        "VCF files that were added to dimensions index by this job": files_indexed_by_this_job,
-        "VCF files skipped by this job (previous DivBase-generated result VCFs)": divbase_results_files_skipped_by_this_job,
-        "VCF files that have been deleted from the project and thus have been dropped from the index": vcfs_deleted_from_bucket_since_last_indexing,
+        "VCF_files_added": files_indexed_by_this_job,
+        "VCF_files_skipped": divbase_results_files_skipped_by_this_job,
+        "VCF_files_deleted": vcfs_deleted_from_bucket_since_last_indexing,
     }
 
 

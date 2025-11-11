@@ -5,6 +5,12 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
+from divbase_lib.schemas.task_history import (
+    TaskBcftoolsQueryResult,
+    TaskDimensionUpdateResult,
+    TaskMetadataQueryResult,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,12 +112,33 @@ class TaskHistoryDisplayManager:
 
     def _format_result(self, task, state):
         """
-        Format the result message based on the task state.
+        Format the result message based on the task state and type.
         """
         colour = self.STATE_COLOURS.get(state, "white")
         if state == "FAILURE":
             exception_message = task.exception or "Unknown error"
             return f"[{colour}]{exception_message}[/{colour}]"
-        else:
-            result_message = str(task.result or "N/A")
+
+        if isinstance(task.result, TaskBcftoolsQueryResult):
+            result_message = f"Output file ready for download: {task.result.output_file}"
             return f"[{colour}]{result_message}[/{colour}]"
+            # TODO this should maybe say which project?
+
+        elif isinstance(task.result, TaskMetadataQueryResult):
+            result_message = (
+                f"Unique sample IDs:\n  {task.result.unique_sample_ids}\n"
+                f"VCF files containing the sample IDs:\n  {task.result.unique_filenames}\n"
+                f"Sample metadata query:\n  {task.result.query_message}"
+            )
+            return f"[{colour}]{result_message}[/{colour}]"
+
+        elif isinstance(task.result, TaskDimensionUpdateResult):
+            result_message = (
+                f"VCF file dimensions index added or updated:\n  {task.result.VCF_files_added}\n"
+                f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
+                f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
+            )
+            return f"[{colour}]{result_message}[/{colour}]"
+
+        result_message = str(task.result)
+        return f"[{colour}]{result_message}[/{colour}]"

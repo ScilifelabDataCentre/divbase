@@ -12,11 +12,11 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user_and_project,
 )
 from divbase_lib.schemas.task_history import (
-    FlowerTaskBcftoolsQueryResult,
-    FlowerTaskDimensionUpdateResult,
-    FlowerTaskMetadataQueryResult,
     FlowerTaskResult,
+    TaskBcftoolsQueryResult,
+    TaskDimensionUpdateResult,
     TaskHistoryResults,
+    TaskMetadataQueryResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,11 +173,11 @@ def _assign_response_model_to_flower_task_result_field(task_data: dict) -> dict:
         try:
             result_dict = ast.literal_eval(result_raw) if isinstance(result_raw, str) else result_raw
             if task_data.get("name") == "tasks.sample_metadata_query":
-                parsed_result = FlowerTaskMetadataQueryResult(**result_dict)
+                parsed_result = TaskMetadataQueryResult(**result_dict)
             elif task_data.get("name") == "tasks.bcftools_query":
-                parsed_result = FlowerTaskBcftoolsQueryResult(**result_dict)
+                parsed_result = TaskBcftoolsQueryResult(**result_dict)
             elif task_data.get("name") == "tasks.update_vcf_dimensions_task":
-                parsed_result = FlowerTaskDimensionUpdateResult(**result_dict)
+                parsed_result = TaskDimensionUpdateResult(**result_dict)
             else:
                 parsed_result = result_dict
         except Exception:
