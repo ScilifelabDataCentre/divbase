@@ -13,6 +13,7 @@ from divbase_cli.cli_commands.file_cli import file_app
 from divbase_cli.cli_commands.query_cli import query_app
 from divbase_cli.cli_commands.user_config_cli import config_app
 from divbase_cli.cli_commands.version_cli import version_app
+from divbase_cli.cli_config import cli_settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,9 @@ app.add_typer(auth_app, name="auth")
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
-    logger.info("Starting divbase_cli CLI application.")
+    if cli_settings.LOGGING_ON:
+        logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stdout)])
+    logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
     app()
 
 
