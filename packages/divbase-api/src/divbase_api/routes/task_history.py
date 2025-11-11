@@ -15,22 +15,21 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.task_history import (
-    TaskHistoryResults,
     get_project_task_history,
     get_task_history_by_id,
     get_user_and_project_task_history,
     get_user_task_history,
 )
+from divbase_lib.schemas.task_history import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
 task_history_router = APIRouter()
 
 
-@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK)
+@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
-    limit: int,
     project: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> TaskHistoryResults:
@@ -39,16 +38,16 @@ async def get_all_tasks_for_user(
     """
     return await get_user_task_history(
         db=db,
-        display_limit=limit,
         project_name=project,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
 
 
-@task_history_router.get("/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK)
+@task_history_router.get(
+    "/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults
+)
 async def get_all_tasks_for_user_and_project(
-    limit: int,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
@@ -67,14 +66,13 @@ async def get_all_tasks_for_user_and_project(
 
     return await get_user_and_project_task_history(
         db=db,
-        display_limit=limit,
         project_id=project.id,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
 
 
-@task_history_router.get("/tasks/{task_id}", status_code=status.HTTP_200_OK)
+@task_history_router.get("/tasks/{task_id}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
 async def get_task_by_id(
     task_id: str,
     current_user: Annotated[UserDB, Depends(get_current_user)],
@@ -91,7 +89,7 @@ async def get_task_by_id(
     )
 
 
-@task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
+@task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
 async def get_project_tasks(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),

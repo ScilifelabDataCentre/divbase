@@ -33,6 +33,7 @@ class SidecarQueryResult:
     Hold the results of a query run on a sidecar metadata TSV file.
     """
 
+    # TODO pydantic model instead of dataclass?
     sample_and_filename_subset: List[Dict[str, str]]
     unique_sample_ids: List[str]
     unique_filenames: List[str]
@@ -45,20 +46,10 @@ class BCFToolsInput:
     Contains the inputs required to run a bcftools query.
     """
 
+    # TODO pydantic request schema instead of dataclass?
     sample_and_filename_subset: List[Dict[str, str]]
     sampleIDs: List[str]
     filenames: List[str]
-
-
-@dataclass
-class TaskHistoryResults:
-    """
-    Hold the results of a task history query.
-
-    The key is the celery task_id
-    """
-
-    tasks: dict[str, dict]
 
 
 def run_sidecar_metadata_query(

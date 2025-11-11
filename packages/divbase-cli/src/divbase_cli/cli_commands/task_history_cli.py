@@ -11,11 +11,11 @@ from pathlib import Path
 import typer
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_cli.display_task_history import TaskHistoryManager
+from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
 from divbase_lib.exceptions import AuthenticationError
-from divbase_lib.queries import TaskHistoryResults
+from divbase_lib.schemas.task_history import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +66,7 @@ def list_task_history_for_user(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    whoami_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route="v1/auth/whoami",
-    )
-    current_user_info = whoami_response.json()
-    current_user_email = current_user_info["email"]
-    is_admin = current_user_info.get("is_admin", False)
-
-    # TODO this filters redundantly since the API should only return tasks for the current user unless the user is an admin
-    task_history_manager = TaskHistoryManager(
-        task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
-    )
-    task_history_manager.print_task_history(display_limit=limit)
+    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history(display_limit=limit)
 
 
 @task_history_app.command("id")
@@ -105,19 +92,7 @@ def task_history_by_id(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    whoami_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route="v1/auth/whoami",
-    )
-    current_user_info = whoami_response.json()
-    current_user_email = current_user_info["email"]
-    is_admin = current_user_info.get("is_admin", False)
-
-    task_history_manager = TaskHistoryManager(
-        task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
-    )
-    task_history_manager.print_task_history()
+    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history()
 
 
 @task_history_app.command("project")
@@ -150,16 +125,4 @@ def list_task_history_for_project(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    whoami_response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=logged_in_url,
-        api_route="v1/auth/whoami",
-    )
-    current_user_info = whoami_response.json()
-    current_user_email = current_user_info["email"]
-    is_admin = current_user_info.get("is_admin", False)
-
-    task_history_manager = TaskHistoryManager(
-        task_items=task_history_data, divbase_user=current_user_email, is_admin=is_admin
-    )
-    task_history_manager.print_task_history(display_limit=limit)
+    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history(display_limit=limit)

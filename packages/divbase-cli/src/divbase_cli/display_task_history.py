@@ -5,15 +5,14 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
-from divbase_lib.queries import TaskHistoryResults
+from divbase_lib.schemas.task_history import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 
 
-class TaskHistoryManager:
+class TaskHistoryDisplayManager:
     """
-    A class that manages interactions with the Flower API.
-    It filters, and displays the task history based on the current user.
+    A class that manages displaying task history results to the user's terminal.
     """
 
     STATE_COLOURS = {
@@ -21,25 +20,25 @@ class TaskHistoryManager:
         "FAILURE": "red",
         "PENDING": "yellow",
         "STARTED": "blue",
-        "PROGRESS": "blue",
+        "RETRY": "blue",
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: TaskHistoryResults, divbase_user: str = None, is_admin: bool = False):
+    # TODO use the command that user sent to the API as table header?
+
+    def __init__(self, task_items: TaskHistoryResults):
         self.task_items = task_items
-        self.current_divbase_user = divbase_user
-        self.is_admin = is_admin
 
     def print_task_history(self, display_limit: int = 10) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].get("started") or 0, reverse=True)
+        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].state or "", reverse=True)
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
 
         for task_id, task in limited_tasks:
-            state = task.get("state", "N/A")
+            state = task.state or "N/A"
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
@@ -50,9 +49,9 @@ class TaskHistoryManager:
                 submitter,
                 task_id,
                 state_with_colour,
-                self._format_unix_timestamp(task.get("received", "N/A")),
-                self._format_unix_timestamp(task.get("started", "N/A")),
-                str(task.get("runtime", "N/A")),
+                self._format_unix_timestamp(task.received),
+                self._format_unix_timestamp(task.started),
+                str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
         console = Console()
@@ -73,7 +72,7 @@ class TaskHistoryManager:
         """
         Use the Rich library to initiate a table for displaying task history.
         """
-        table = Table(title=f"DivBase Task Status for user: {self.current_divbase_user}", show_lines=True)
+        table = Table(title="DivBase Task Status for TODO", show_lines=True)
         table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
         table.add_column("State", width=8)
@@ -87,7 +86,7 @@ class TaskHistoryManager:
         """
         Extract submitter from task kwargs.
         """
-        kwargs = task.get("kwargs", "{}")
+        kwargs = task.kwargs or "{}"
         try:
             parsed_kwargs = ast.literal_eval(kwargs)
             return parsed_kwargs.get("user_name", "Unknown")
@@ -99,9 +98,10 @@ class TaskHistoryManager:
         """
         Format the result message based on the task state.
         """
+        colour = self.STATE_COLOURS.get(state, "white")
         if state == "FAILURE":
-            exception_message = task.get("exception", "Unknown error")
-            return f"[red]{exception_message}[/red]"
+            exception_message = task.exception or "Unknown error"
+            return f"[{colour}]{exception_message}[/{colour}]"
         else:
-            result_message = str(task.get("result", "N/A"))
-            return f"[green]{result_message}[/green]"
+            result_message = str(task.result or "N/A")
+            return f"[{colour}]{result_message}[/{colour}]"

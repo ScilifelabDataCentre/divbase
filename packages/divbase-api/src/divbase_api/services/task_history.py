@@ -10,9 +10,16 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
 )
-from divbase_lib.queries import TaskHistoryResults
+from divbase_lib.schemas.task_history import FlowerTaskResult, TaskHistoryResults
 
 logger = logging.getLogger(__name__)
+
+
+# TODO ideally, the flower API could be queried with a list of tasks, but that seem not to be the case. for now, set a limit of 500 tasks to not put a lot of overhead on the call
+API_LIMIT = min(100, 500)
+REQUEST_URL_WITH_LIMIT = f"{settings.flower.url}/api/tasks?limit={API_LIMIT}"
+
+# TODO make a workaround to check if all allowed ids were returned? could call the Flower API task_ID by task_ID... but it would be inefficient
 
 
 async def get_user_task_history(
@@ -20,7 +27,6 @@ async def get_user_task_history(
     user_id: int,
     project_name: str | None = None,
     is_admin: bool = False,
-    display_limit: int = 50,
 ) -> TaskHistoryResults:
     """
     Get a list of the task history from the Flower API.
@@ -35,17 +41,12 @@ async def get_user_task_history(
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
-    api_limit = min(100, display_limit * 5)
-    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
-    all_tasks = _make_flower_request(request_url)
+    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
 
-    # TODO refactor this to do filtering in the API request if Flower supports it
-    filtered_tasks = {}
-    for tid, data in all_tasks.items():
-        if tid in allowed_task_ids:
-            filtered_tasks[tid] = data
-
-    return TaskHistoryResults(tasks=filtered_tasks)
+    filtered_results = _filter_flower_results_by_allowed_task_ids(
+        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
+    )
+    return filtered_results
 
 
 async def get_user_and_project_task_history(
@@ -67,17 +68,12 @@ async def get_user_and_project_task_history(
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
-    api_limit = min(100, display_limit * 5)
-    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
-    all_tasks = _make_flower_request(request_url)
+    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
 
-    # TODO refactor this to do filtering in the API request if Flower supports it
-    filtered_tasks = {}
-    for tid, data in all_tasks.items():
-        if tid in allowed_task_ids:
-            filtered_tasks[tid] = data
-
-    return TaskHistoryResults(tasks=filtered_tasks)
+    filtered_results = _filter_flower_results_by_allowed_task_ids(
+        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
+    )
+    return filtered_results
 
 
 async def get_project_task_history(
@@ -94,17 +90,12 @@ async def get_project_task_history(
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
-    api_limit = min(100, 50 * 5)
-    request_url = f"{settings.flower.url}/api/tasks?limit={api_limit}"
-    all_tasks = _make_flower_request(request_url)
+    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
 
-    # TODO refactor this to do filtering in the API request if Flower supports it
-    filtered_tasks = {}
-    for tid, data in all_tasks.items():
-        if tid in allowed_task_ids:
-            filtered_tasks[tid] = data
-
-    return TaskHistoryResults(tasks=filtered_tasks)
+    filtered_results = _filter_flower_results_by_allowed_task_ids(
+        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
+    )
+    return filtered_results
 
 
 async def get_task_history_by_id(
@@ -122,12 +113,12 @@ async def get_task_history_by_id(
         return TaskHistoryResults(tasks={})
 
     request_url = f"{settings.flower.url}/api/task/info/{task_id}"
-    task = _make_flower_request(request_url)
+    task_data = _make_flower_request(request_url)
 
-    if not task:
+    if not task_data:
         return TaskHistoryResults(tasks={})
-
-    return TaskHistoryResults(tasks={task_id: task})
+    else:
+        return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
 
 
 def _make_flower_request(request_url: str) -> dict[str, Any]:
@@ -151,3 +142,17 @@ def _make_flower_request(request_url: str) -> dict[str, Any]:
         raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")
 
     return response.json()
+
+
+def _filter_flower_results_by_allowed_task_ids(
+    all_tasks: dict[str, Any],
+    allowed_task_ids: set[str],
+) -> TaskHistoryResults:
+    """Filter the Flower API results to include only allowed task IDs."""
+
+    filtered_tasks = {}
+    for tid, task_data in all_tasks.items():
+        if tid in allowed_task_ids:
+            filtered_tasks[tid] = FlowerTaskResult(**task_data)
+
+    return TaskHistoryResults(tasks=filtered_tasks)
