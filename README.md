@@ -78,45 +78,20 @@ We also use [pre-commit hooks](https://pre-commit.com/). pre-commit runs on ever
 pre-commit install
 ```
 
-### 3. CLI Enviroment variables
+### 3. CLI Setup
 
-The DivBase project has 2 groups of environment variables:
+divbase-cli relies on 2 local files to preserve state between runs:
 
-1. Those needed by the user for running CLI commands and
-2. Those needed by the server to interact with itself.
+1. A config file stored in your home directory at `~/.config/divbase/config.yaml`.
+    This config contains information about your DivBase projects and which divbase server (if any) you're logged into.
+2. A secrets file stored in your home directory at `~/.config/divbase/.secrets`.
+    This file contains your access/refresh tokens for the DivBase server you're logged into.
 
-For the CLI commands we have the following environments:
+You can read the [docs/using_divbase_cli.md](docs/using_divbase_cli.md) for more information on how to setup the CLI tool for first time use.
 
-1. local - for local development
-2. test - used by pytest
-3. scilifelab2dev - to interact with instance of scilifelab2dev cluster.
-4. scilifelab2prod (not available yet)
+For convienance, we provide a local development setup script, but in order to run this you need the docker compose stack running (see next section).
 
-To specify the environment to use you can prepend each command (or set in your shell) the envrioment you want to use:
-
-```bash
-DIVBASE_ENV=local divbase-cli files list --project a-local-project
-```
-
-**Note:** You do not need to create `.env` files for the `local` (e.g. `.env.local`) or `test`(e.g. `.env.test` ) environments as these settings are not secret. They will be automatically provided when running.
-
-To use the `scilifelab2dev` environment you'll need to create the following file `.env.scilifelab2dev` which should never be committed to source control.
-
-```bash
-# .env.scilifelab2dev
-DIVBASE_S3_ACCESS_KEY=your_access_key_here
-DIVBASE_S3_SECRET_KEY=your_secret_key_here
-```
-
-Once created you can run cli commands by passing the environment as shown below.
-
-```bash
-DIVBASE_ENV=scilifelab2dev divbase-cli files list --project a-project-in-the-cloud
-```
-
-**Note:** Default behaviour if `DIVBASE_ENV` is not set is to get enviroment varialbes from `.env`. This would be used by actual users of the service who will not have to deal with having multiple environments like us.
-
-### 4. Run DivBase backend locally using Docker compose watch
+### 4. Run DivBase server locally using Docker compose watch
 
 ```bash
 docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/divbase_compose.yaml watch
@@ -127,6 +102,18 @@ This will deploy the API, job system and MinIO (S3) instance locally. Using `com
 Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/api/v1/docs> to test out some of API commands directly.
 
 There is now a very simple DivBase frontend running on <http://localhost:8000>. Frontend is part of the FastAPI app deployment. All API routes are appended with /api/v1 to avoid collisions. Frontend returns HTML etc... directly to browser via Jinja2 templating.
+
+To help with setup, we provide a local development setup script which will:
+
+- Create buckets on MinIO and add some data.
+- Create users and projects on DivBase and add users with different roles to each project.
+- create a user config file with these projects added to it.
+
+You can run the local_dev_setup script like this:
+
+```bash
+uv run scripts/local_dev_setup.py # make sure the compose stack is running
+```
 
 ### 5. Running tests
 
