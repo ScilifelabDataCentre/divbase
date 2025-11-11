@@ -9,6 +9,7 @@ from typing import List
 
 import typer
 from rich import print
+from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
@@ -57,11 +58,15 @@ def download_files(
             If also not specified in your user config, downloads to the current directory.
             You can also specify "." to download to the current directory.""",
     ),
-    verify_checksums: bool = typer.Option(
-        True,
-        "--no-verify-checksums",
-        help="By default, downloaded files are verified against their MD5 checksums. Use this flag to disable verification.",
-    ),
+    disable_verify_checksums: Annotated[
+        bool,
+        typer.Option(
+            "--disable-verify-checksums",
+            help="Turn off checksum verification which is on by default. "
+            "Checksum verification means all downloaded files are verified against their MD5 checksums."
+            "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
+        ),
+    ] = False,
     bucket_version: str = typer.Option(
         default=None, help="Version of the project's storage bucket at which to download the files."
     ),
@@ -98,7 +103,7 @@ def download_files(
         project_name=project_config.name,
         all_files=list(all_files),
         download_dir=download_dir_path,
-        verify_checksums=verify_checksums,
+        verify_checksums=not disable_verify_checksums,
         bucket_version=bucket_version,
     )
 
@@ -119,15 +124,16 @@ def upload_files(
     files: List[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
     upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    # TODO is this confusing naming? You can see what I mean when when you run -h on this command
-    safe_mode: bool = typer.Option(
-        True,
-        "--disable-safe-mode",
-        help="Disable safe mode. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload:\n"
-        "1. Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process. \n"
-        "2. Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums).\n"
-        "It is recommended to leave safe mode enabled unless you have a specific reason to disable it.",
-    ),
+    disable_safe_mode: Annotated[
+        bool,
+        typer.Option(
+            "--disable-safe-mode",
+            help="Turn off safe mode which is on by default. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload:"
+            "(1) Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process."
+            "(2) Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums)."
+            "It is recommended to leave safe mode enabled unless you have a specific reason to disable it.",
+        ),
+    ] = False,
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
@@ -164,7 +170,7 @@ def upload_files(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
         all_files=list(all_files),
-        safe_mode=safe_mode,
+        safe_mode=not disable_safe_mode,
     )
 
     if uploaded_results.successful:
