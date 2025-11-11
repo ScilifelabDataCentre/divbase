@@ -27,7 +27,6 @@ class ProjectConfig:
 
     name: str
     divbase_url: str
-    s3_url: str
 
     @property
     def bucket_name(self) -> str:
@@ -70,12 +69,12 @@ class UserConfig:
         with open(self.config_path, "w") as file:
             yaml.safe_dump(config_dict, file, sort_keys=False)
 
-    def add_project(self, name: str, divbase_url: str, s3_url: str, is_default: bool) -> ProjectConfig:
+    def add_project(self, name: str, divbase_url: str, is_default: bool) -> ProjectConfig:
         """
         Add a new project to the user configuration file.
         If the configuration file does not exist, it will be created.
         """
-        new_project = ProjectConfig(name=name, divbase_url=divbase_url, s3_url=s3_url)
+        new_project = ProjectConfig(name=name, divbase_url=divbase_url)
 
         if new_project.name in self.all_project_names:
             warnings.warn(
