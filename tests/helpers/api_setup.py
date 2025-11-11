@@ -2,8 +2,6 @@
 Helper functions for setting up the API for testing.
 
 Creates some users and projects in the test database instance.
-
-TODO: When CLI is more mature, use CLI commands to do this setup instead of direct API calls.
 """
 
 import httpx

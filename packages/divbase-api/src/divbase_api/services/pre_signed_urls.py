@@ -4,8 +4,6 @@ Gives end users access to S3 objects without needing AWS credentials.
 
 Certain operations like "list files" etc... instead performed directly by the backend and returned to end user.
 Pre-signed url approach not used when the request to s3 can be done in the (user to API) request-response cycle.
-
-TODO, what is user wants to download same object at multiple versions? - will approach fail as dict keys must be unique.
 """
 
 import logging
