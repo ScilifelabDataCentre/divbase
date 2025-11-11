@@ -1,7 +1,8 @@
 """
 Manages creation/validation of S3 object checksums for both file uploads and downloads.
 
-Initial work will only work on not handling multipart uploads/downloads which have a limit of 5GBs.
+We do not support multipart uploads/downloads at this time.
+Single part uploads/downloads have a limit of 5GBs.
 Docs: https://docs.netapp.com/us-en/storagegrid/s3/put-object.html
 """
 
@@ -31,7 +32,8 @@ class MD5CheckSumFormat(StrEnum):
 
 def calculate_md5_checksum(file_path: Path, output_format: MD5CheckSumFormat) -> str:
     """
-    Calculate the MD5 checksum of a file. Returns the hex-encoded MD5 checksum (lowercase)
+    Calculate the MD5 checksum of a file.
+    Returns the checksum in either hex-encoded (lowercase) or base64-encoded format.
     """
     md5_hash = hashlib.md5()
 

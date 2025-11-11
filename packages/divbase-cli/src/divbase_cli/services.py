@@ -168,7 +168,7 @@ def upload_files_command(
 ) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
-    Files uploaded and there names in  returned as a list Paths
+    Returns an UploadOutcome object containing details of which files were successfully uploaded and which failed.
 
     - Safe mode:
         1. checks if any of the files that are to be uploaded already exist in the bucket (by comparing checksums)
