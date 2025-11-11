@@ -41,7 +41,7 @@ app.add_typer(auth_app, name="auth")
 def main():
     if cli_settings.LOGGING_ON:
         logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stdout)])
-    logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
+        logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
     app()
 
 
