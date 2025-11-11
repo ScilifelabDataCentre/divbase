@@ -1,8 +1,8 @@
 """
 Functions that resolve for the CLI commands things like:
-    - which project (and associated storage bucket) to use
+    - which project to use
     - which download directory to use
-    - which DivBase API/S3 URL to use
+    - which DivBase API URL to use
 Based on provider user input and their config file.
 """
 
@@ -37,7 +37,7 @@ def resolve_project(project_name: str | None, config_path: Path) -> ProjectConfi
     Falls back to the default project set in the user config if not explicitly provided.
 
     Once the project is resolved a ProjectConfig object is returned,
-    which contains name and URLs (S3+API) for the project.
+    which contains the name and API URL of the project.
     """
     config = load_user_config(config_path)
     if not project_name:

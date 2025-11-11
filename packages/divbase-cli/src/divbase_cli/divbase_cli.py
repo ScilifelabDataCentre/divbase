@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     help="""
-    This tool lets you interact with your DivBase project(s) bucket(s) in order to: \n
-        - Query the metadata for the VCF files stored in the bucket. \n
-        - Upload/download files to/from the bucket. \n
-        - Version the state of all files in the entire bucket at a given timestamp.
+    This tool lets you interact with your DivBase project(s) in order to: \n
+        - Query the metadata for the VCF files stored in the project. \n
+        - Upload/download files to/from the project. \n
+        - Version the state of all files in the entire project at a given timestamp.
     """,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
