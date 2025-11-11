@@ -5,8 +5,6 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
-from divbase_lib.schemas.task_history import TaskHistoryResults
-
 logger = logging.getLogger(__name__)
 
 
@@ -24,14 +22,14 @@ class TaskHistoryDisplayManager:
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: TaskHistoryResults, command_context: dict):
+    def __init__(self, task_items: dict, command_context: dict):
         self.task_items = task_items
         self.command_context = command_context
 
     def print_task_history(self) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].state or "", reverse=True)
+        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].state or "", reverse=True)
         display_limit = self.command_context.get("display_limit", 10)
         limited_tasks = sorted_tasks[:display_limit]
 

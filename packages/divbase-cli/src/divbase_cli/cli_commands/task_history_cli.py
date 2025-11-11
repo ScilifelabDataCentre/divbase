@@ -62,9 +62,9 @@ def list_task_history_for_user(
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data,
+        task_items=task_history_data.tasks,
         command_context={
-            "user_name": "CURRENT_USER",
+            "user_name": task_history_data.user_email,
             "project_name": project,
             "task_id": None,
             "mode": "user_project" if project else "user",
@@ -97,9 +97,9 @@ def task_history_by_id(
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data,
+        task_items=task_history_data.tasks,
         command_context={
-            "user_name": "CURRENT_USER",
+            "user_name": None,
             "project_name": None,
             "task_id": task_id,
             "mode": "id",
@@ -136,9 +136,9 @@ def list_task_history_for_project(
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data,
+        task_items=task_history_data.tasks,
         command_context={
-            "user_name": "CURRENT_USER",
+            "user_name": None,
             "project_name": project,
             "task_id": None,
             "mode": "project",

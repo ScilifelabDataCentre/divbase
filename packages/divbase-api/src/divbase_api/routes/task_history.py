@@ -35,11 +35,14 @@ async def get_all_tasks_for_user(
     """
     Get the task history for the current user. Admin users can view all tasks, non-admin users can only view their own tasks.
     """
-    return await get_user_task_history(
+    result = await get_user_task_history(
         db=db,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
+
+    result.user_email = current_user.email
+    return result
 
 
 @task_history_router.get(
@@ -62,12 +65,15 @@ async def get_all_tasks_for_user_and_project(
             "Project not found or you don't have permission to view task history from this project."
         )
 
-    return await get_user_and_project_task_history(
+    result = await get_user_and_project_task_history(
         db=db,
         project_id=project.id,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
+
+    result.user_email = current_user.email
+    return result
 
 
 @task_history_router.get("/tasks/{task_id}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)

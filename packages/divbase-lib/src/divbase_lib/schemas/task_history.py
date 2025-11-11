@@ -6,10 +6,9 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
-# Request Models
-
-
 # Response Models
+
+# TODO nest the results model here
 
 
 class FlowerTaskResult(BaseModel):
@@ -52,3 +51,4 @@ class TaskHistoryResults(BaseModel):
     """Results from all tasks fetched from a task history request."""
 
     tasks: dict[str, FlowerTaskResult] = Field(..., description="Mapping of task_id to Flower task details")
+    user_email: Optional[str] = Field(None, description="Email of the user who requested the task history")
