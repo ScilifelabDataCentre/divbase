@@ -17,6 +17,7 @@ from divbase_api.exceptions import (
     BucketVersioningFileAlreadyExistsError,
     BucketVersionNotFoundError,
 )
+from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.bucket_versions import (
     AddVersionResponse,
     BucketVersionDetail,
@@ -25,7 +26,6 @@ from divbase_lib.api_schemas.bucket_versions import (
     VersionListResponse,
 )
 from divbase_lib.exceptions import ObjectDoesNotExistError
-from divbase_lib.s3_client import S3FileManager
 
 VERSION_FILE_NAME = ".bucket_versions.yaml"
 
