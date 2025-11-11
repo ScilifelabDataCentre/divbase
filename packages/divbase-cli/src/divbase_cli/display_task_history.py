@@ -24,15 +24,15 @@ class TaskHistoryDisplayManager:
         "REVOKED": "magenta",
     }
 
-    # TODO use the command that user sent to the API as table header?
-
-    def __init__(self, task_items: TaskHistoryResults):
+    def __init__(self, task_items: TaskHistoryResults, command_context: dict):
         self.task_items = task_items
+        self.command_context = command_context
 
-    def print_task_history(self, display_limit: int = 10) -> None:
+    def print_task_history(self) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
         sorted_tasks = sorted(self.task_items.tasks.items(), key=lambda x: x[1].state or "", reverse=True)
+        display_limit = self.command_context.get("display_limit", 10)
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
@@ -72,7 +72,19 @@ class TaskHistoryDisplayManager:
         """
         Use the Rich library to initiate a table for displaying task history.
         """
-        table = Table(title="DivBase Task Status for TODO", show_lines=True)
+        title_prefix = "DivBase Task History"
+        if self.command_context.get("mode") == "user":
+            title = f"{title_prefix} for User: {self.command_context.get('user_name', 'Unknown')}"
+        elif self.command_context.get("mode") == "user_project":
+            title = f"{title_prefix} for User: {self.command_context.get('user_name', 'Unknown')} and Project: {self.command_context.get('project_name', 'Unknown')}"
+        elif self.command_context.get("mode") == "id":
+            title = f"{title_prefix} for Task ID: {self.command_context.get('task_id', 'Unknown')}"
+        elif self.command_context.get("mode") == "project":
+            title = f"{title_prefix} for Project: {self.command_context.get('project_name', 'Unknown')}"
+        else:
+            title = title_prefix
+
+        table = Table(title=title, show_lines=True)
         table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
         table.add_column("State", width=8)

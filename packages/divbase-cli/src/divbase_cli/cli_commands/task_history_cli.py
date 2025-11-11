@@ -61,7 +61,16 @@ def list_task_history_for_user(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history(display_limit=limit)
+    TaskHistoryDisplayManager(
+        task_items=task_history_data,
+        command_context={
+            "user_name": "CURRENT_USER",
+            "project_name": project,
+            "task_id": None,
+            "mode": "user_project" if project else "user",
+            "display_limit": limit,
+        },
+    ).print_task_history()
 
 
 @task_history_app.command("id")
@@ -87,7 +96,16 @@ def task_history_by_id(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history()
+    TaskHistoryDisplayManager(
+        task_items=task_history_data,
+        command_context={
+            "user_name": "CURRENT_USER",
+            "project_name": None,
+            "task_id": task_id,
+            "mode": "id",
+            "display_limit": None,
+        },
+    ).print_task_history()
 
 
 @task_history_app.command("project")
@@ -117,4 +135,13 @@ def list_task_history_for_project(
 
     task_history_data = TaskHistoryResults(**task_history_response.json())
 
-    TaskHistoryDisplayManager(task_items=task_history_data).print_task_history(display_limit=limit)
+    TaskHistoryDisplayManager(
+        task_items=task_history_data,
+        command_context={
+            "user_name": "CURRENT_USER",
+            "project_name": project,
+            "task_id": None,
+            "mode": "project",
+            "display_limit": limit,
+        },
+    ).print_task_history()
