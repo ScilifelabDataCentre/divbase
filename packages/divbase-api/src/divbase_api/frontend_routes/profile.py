@@ -19,8 +19,7 @@ from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.projects import UserProjectResponse
-from divbase_api.schemas.users import UserResponse, UserUpdate
+from divbase_api.schemas.users import UserUpdate
 
 fr_profile_router = APIRouter()
 
@@ -33,15 +32,15 @@ async def user_profile_endpoint(
 ):
     """Render the user's profile page with their information."""
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
-    user_project_responses = create_user_project_responses(user_projects)
+    projects = create_user_project_responses(user_projects)
 
     return templates.TemplateResponse(
         request=request,
         name="profile_pages/index.html",
         context={
             "request": request,
-            "current_user": UserResponse.model_validate(current_user),
-            "projects": [UserProjectResponse.model_validate(project) for project in user_project_responses],
+            "current_user": current_user,
+            "projects": projects,
         },
     )
 
@@ -57,7 +56,7 @@ async def get_edit_user_profile_endpoint(
         name="profile_pages/edit_profile.html",
         context={
             "request": request,
-            "current_user": UserResponse.model_validate(current_user),
+            "current_user": current_user,
         },
     )
 

@@ -23,7 +23,7 @@ from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.users import UserCreate, UserPasswordUpdate, UserResponse
+from divbase_api.schemas.users import UserCreate, UserPasswordUpdate
 from divbase_api.security import (
     TokenType,
     create_token,
@@ -55,34 +55,34 @@ async def get_login(request: Request, current_user: UserDB | None = Depends(get_
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-    return templates.TemplateResponse(request=request, name="auth_pages/login.html")
+    return templates.TemplateResponse(request=request, name="auth_pages/login.html", context={"current_user": None})
 
 
 @fr_auth_router.post("/login", response_class=HTMLResponse)
 async def post_login(
     request: Request, email: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
 ):
-    """Handle login form submission."""
+    """
+    Handle login form submission.
+
+    If successful, set auth cookies and redirect to home page.
+    If failed, re-render login page with error message.
+    """
     try:
         user = await authenticate_user(db, email=email, password=password)
     except AuthenticationError as e:
         logger.info(f"Failed login attempt for email: {email} - {e.message}")
-
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/login.html",
-            context={"request": request, "error": e.message},
+            context={"current_user": None, "error": e.message},
         )
 
     logger.info(f"User {user.email} logged in successfully via frontend.")
     access_token, access_expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
     refresh_token, refresh_expires_at = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
-    response = templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"current_user": UserResponse.model_validate(user)},
-    )
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     response.set_cookie(
         key=TokenType.ACCESS.value,
@@ -92,7 +92,6 @@ async def post_login(
         secure=True,
         samesite="lax",
     )
-
     response.set_cookie(
         key=TokenType.REFRESH.value,
         value=refresh_token,
@@ -101,7 +100,6 @@ async def post_login(
         secure=True,
         samesite="lax",
     )
-
     return response
 
 
@@ -116,12 +114,8 @@ async def post_logout(request: Request):
 async def get_register(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
     """Render the registration page."""
     if current_user:
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={"request": request, "current_user": UserResponse.model_validate(current_user)},
-        )
-    return templates.TemplateResponse(request=request, name="auth_pages/register.html")
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return templates.TemplateResponse(request=request, name="auth_pages/register.html", context={"current_user": None})
 
 
 @fr_auth_router.post("/register", response_class=HTMLResponse)
@@ -141,12 +135,7 @@ async def post_register(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/register.html",
-            context={
-                "request": request,
-                "error": error_message,
-                "name": name,
-                "email": email,
-            },
+            context={"error": error_message, "name": name, "email": email},
         )
 
     if password != confirm_password:
@@ -169,12 +158,7 @@ async def post_register(
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register_success.html",
-        context={
-            "request": request,
-            "name": user_data.name,
-            "email": user_data.email,
-            "from_email": settings.email.from_email,
-        },
+        context={"name": user_data.name, "email": user_data.email, "from_email": settings.email.from_email},
     )
 
 
@@ -296,11 +280,14 @@ async def get_resend_verification_email(
     """
     Display the resend verification email page.
     """
-    # redirect to home if already logged in.
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-    return templates.TemplateResponse(request=request, name="auth_pages/email_verification.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/email_verification.html",
+        context={"current_user": None},
+    )
 
 
 @fr_auth_router.get("/forgot-password", response_class=HTMLResponse)
@@ -312,11 +299,11 @@ async def get_forgot_password_page(
     """
     Display the forgot password page.
     """
-    # TODO - think about how to handle logged in user? - Log them out?
-    if current_user:
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-
-    return templates.TemplateResponse(request=request, name="auth_pages/forgot_password.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/forgot_password.html",
+        context={"current_user": current_user},
+    )
 
 
 @fr_auth_router.post("/forgot-password", response_class=HTMLResponse)
@@ -328,17 +315,12 @@ async def post_forgot_password_form(
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """Handle forgot password form submission to send a password reset email."""
-    if current_user:
-        # TODO - think about how to handle logged in user? - Log them out?
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-
     RESET_LINK_SENT_MSG = (
         f"If your account exists, and your email is verified, a password reset email has been sent to {email}. \n Please check your inbox."
         + f"\nThe email will be sent from {settings.email.from_email}."
     )
 
     user = await get_user_by_email(db=db, email=email)
-
     # do not differentiate between existing and non-existing users for security reasons
     if not user or not user.email_verified:
         logger.info(
@@ -346,8 +328,8 @@ async def post_forgot_password_form(
         )
         return templates.TemplateResponse(
             request=request,
-            name="auth_pages/login.html",
-            context={"success": RESET_LINK_SENT_MSG},
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "success": RESET_LINK_SENT_MSG},
         )
 
     background_tasks.add_task(send_password_reset_email, email_to=user.email, user_id=user.id)
@@ -355,8 +337,8 @@ async def post_forgot_password_form(
     logger.info(f"Password reset email sent to: {email}")
     return templates.TemplateResponse(
         request=request,
-        name="auth_pages/login.html",
-        context={"success": RESET_LINK_SENT_MSG},
+        name="auth_pages/forgot_password.html",
+        context={"current_user": current_user, "success": RESET_LINK_SENT_MSG},
     )
 
 
@@ -373,20 +355,31 @@ async def get_reset_password_page(
     To access this endpoint a user receives an email with link to reset their password.
     The link contains a JWT as query param in the URL.
     """
-    # TODO - add email to context to show which email is being reset?
     user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not user_id:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
-            context={"error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
     user = await get_user_by_id_or_raise(db=db, id=user_id)
+
+    if current_user and current_user.id != user_id:
+        # logged in as a different user, force them to logout first
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={
+                "current_user": current_user,
+                "error": "It seems like you're trying to change the password for a different account than the one you're logged into. If this is not a mistake, please log out and try again.",
+            },
+        )
+
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/reset_password.html",
-        context={"token": token, "email": user.email},
+        context={"current_user": current_user, "token": token, "email": user.email},
     )
 
 
@@ -395,9 +388,11 @@ async def post_reset_password_form(
     request: Request,
     background_tasks: BackgroundTasks,
     token: str = Form(...),
+    email: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
     db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """
     Handle reset password form submission.
@@ -407,7 +402,7 @@ async def post_reset_password_form(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
-            context={"error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
     # Client side validation should mean these are never raised, but always have to check on server side.
@@ -421,17 +416,24 @@ async def post_reset_password_form(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/reset_password.html",
-            context={"request": request, "token": token, "error": str(error_msg)},
+            context={
+                "current_user": current_user,
+                "token": token,
+                "email": email,
+                "error": str(error_msg),
+            },
         )
     user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
     background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email, user_id=user.id)
     logger.info(f"User {user.email} has reset their password.")
 
-    # log the user out by deleting any existing auth cookies.
-    # TODO - when token blacklisting in place, blacklist the refresh tokens here.
+    # log the user out after successful password reset
     response = templates.TemplateResponse(
         request=request,
         name="auth_pages/login.html",
-        context={"success": "Your password has been reset successfully, you can now log in."},
+        context={
+            "current_user": None,
+            "success": "Your password has been reset successfully, you can now log in.",
+        },
     )
     return delete_auth_cookies(response=response)
