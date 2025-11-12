@@ -27,7 +27,11 @@ from divbase_api.security import (
     create_token,
     verify_token,
 )
-from divbase_api.services.email_sender import send_email_already_verified_email, send_verification_email
+from divbase_api.services.email_sender import (
+    send_email_already_verified_email,
+    send_password_reset_email,
+    send_verification_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -299,3 +303,60 @@ async def get_resend_verification_email(
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     return templates.TemplateResponse(request=request, name="auth_pages/email_verification.html")
+
+
+@fr_auth_router.get("/forgot-password", response_class=HTMLResponse)
+async def get_forgot_password_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+):
+    """
+    Display the forgot password page.
+    """
+    # TODO - think about how to handle logged in user? - Log them out?
+    if current_user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
+    return templates.TemplateResponse(request=request, name="auth_pages/forgot_password.html")
+
+
+@fr_auth_router.post("/forgot-password", response_class=HTMLResponse)
+async def post_forgot_password_form(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    email: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+):
+    """Handle forgot password form submission to send a password reset email."""
+    if current_user:
+        # TODO - think about how to handle logged in user? - Log them out?
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
+    RESET_LINK_SENT_MSG = (
+        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. \n Please check your inbox."
+        + f"\nThe email will be sent from {settings.email.from_email}."
+    )
+
+    user = await get_user_by_email(db=db, email=email)
+
+    # do not differentiate between existing and non-existing users for security reasons
+    if not user or not user.email_verified:
+        logger.info(
+            f"A password reset email was requested for '{email}' but not sent. User exists: {bool(user)}, email verified: {user.email_verified if user else 'N/A'}"
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/login.html",
+            context={"success": RESET_LINK_SENT_MSG},
+        )
+
+    background_tasks.add_task(send_password_reset_email, email_to=user.email, user_id=user.id)
+
+    logger.info(f"Password reset email sent to: {email}")
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/login.html",
+        context={"success": RESET_LINK_SENT_MSG},
+    )
