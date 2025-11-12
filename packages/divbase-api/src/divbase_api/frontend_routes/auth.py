@@ -14,6 +14,8 @@ from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
     confirm_user_email,
+    password_meets_requirements,
+    update_user_password,
 )
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
@@ -29,6 +31,7 @@ from divbase_api.security import (
 )
 from divbase_api.services.email_sender import (
     send_email_already_verified_email,
+    send_password_has_been_reset_email,
     send_password_reset_email,
     send_verification_email,
 )
@@ -37,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 
 fr_auth_router = APIRouter()
+
+
+INVALID_EXPIRED_PASSWORD_TOKEN_MSG = "Invalid or expired reset password link. Please request a new link below."
+INVALID_EXPIRED_EMAIL_TOKEN_MSG = "Invalid or expired email verification link. Please request a new link below."
 
 
 @fr_auth_router.get("/login", response_class=HTMLResponse)
@@ -204,7 +211,7 @@ async def get_verify_email(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
-            context={"error": "Invalid or expired email verification link. Please request a new link below."},
+            context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
     user = await get_user_by_id_or_raise(db=db, id=user_id)
@@ -229,7 +236,7 @@ async def confirm_email_verification(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
-            context={"error": "Invalid or expired email verification link. Please request a new link below."},
+            context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
     already_verified = await check_user_email_verified(db=db, id=user_id)
@@ -360,3 +367,90 @@ async def post_forgot_password_form(
         name="auth_pages/login.html",
         context={"success": RESET_LINK_SENT_MSG},
     )
+
+
+@fr_auth_router.get("/reset-password", response_class=HTMLResponse)
+async def get_reset_password_page(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+):
+    """
+    Display the reset password page.
+
+    To access this endpoint a user receives an email with link to reset their password.
+    The link contains a JWT as query param in the URL.
+    """
+    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not user_id:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
+
+    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/reset_password.html",
+        context={"token": token, "email": user.email},
+    )
+
+
+@fr_auth_router.post("/reset-password", response_class=HTMLResponse)
+async def post_reset_password_form(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    token: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle reset password form submission.
+
+    TODO - at what point can I start using SecretStr here?
+    """
+    if password != confirm_password:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/reset_password.html",
+            context={"request": request, "token": token, "error": "Passwords do not match"},
+        )
+
+    if not password_meets_requirements(password):
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/reset_password.html",
+            context={
+                "request": request,
+                "token": token,
+                "error": "Password is too weak. It must be at least 8 characters long.",
+            },
+        )
+
+    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not user_id:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
+
+    user = await update_user_password(db=db, user_id=user_id, new_password=SecretStr(password))
+    background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email, user_id=user.id)
+    logger.info(f"User {user.email} has reset their password.")
+
+    # log the user out by deleting any existing auth cookies.
+    # TODO - when token blacklisting in place, blacklist the refresh tokens here.
+    response = templates.TemplateResponse(
+        request=request,
+        name="auth_pages/login.html",
+        context={"success": "Your password has been reset successfully, you can now log in."},
+    )
+
+    response.delete_cookie(key=TokenType.ACCESS.value)
+    response.delete_cookie(key=TokenType.REFRESH.value)
+
+    return response

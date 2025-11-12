@@ -142,7 +142,7 @@ def send_password_has_been_reset_email(email_to: str, user_id: int) -> None:
     subject = "DivBase - Your password has been reset"
 
     html_content = render_email_template(
-        template_name="reset_was_password.html",
+        template_name="password_was_reset.html",
         context={"email": email_to},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
