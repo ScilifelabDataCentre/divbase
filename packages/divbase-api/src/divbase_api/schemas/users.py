@@ -38,6 +38,8 @@ class UserCreate(UserBase):
 class UserUpdate(UserBase):
     """Schema for a user to update their own profile."""
 
+    # TODO - Email should not be allowed to be changed here without email re-verification
+
     pass
 
 

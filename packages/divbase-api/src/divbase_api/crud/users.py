@@ -49,6 +49,9 @@ async def create_user(
     proposed_email = user_data.email.lower()
     current_user = await get_user_by_email(db=db, email=proposed_email)
     if current_user:
+        # TODO this could be changed to say, you'll recieve an email to verify account
+        # but we actually send a your email is already verified email
+        # To prevent email enumeration attacks
         raise UserRegistrationError(
             internal_logging_message=f"Attempt made to register new account with existing email: {proposed_email}"
         )
