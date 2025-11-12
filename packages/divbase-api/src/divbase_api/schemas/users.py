@@ -7,7 +7,16 @@ TODOs:
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
+from typing_extensions import Self
 
 
 class UserBase(BaseModel):
@@ -35,9 +44,21 @@ class UserUpdate(UserBase):
 class UserPasswordUpdate(BaseModel):
     """Schema for a user to update their own password."""
 
-    current_password: SecretStr = Field(..., min_length=8, max_length=100)
-    password: SecretStr | None = Field(None, min_length=8, max_length=100)
-    confirm_password: SecretStr | None = Field(None, min_length=8, max_length=100)
+    password: SecretStr
+    confirm_password: SecretStr
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v):
+        if len(v.get_secret_value()) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> Self:
+        if self.password.get_secret_value() != self.confirm_password.get_secret_value():
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class AdminUserPasswordUpdate(BaseModel):

@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -14,7 +14,6 @@ from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
     confirm_user_email,
-    password_meets_requirements,
     update_user_password,
 )
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
@@ -23,7 +22,7 @@ from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.users import UserCreate, UserResponse
+from divbase_api.schemas.users import UserCreate, UserPasswordUpdate, UserResponse
 from divbase_api.security import (
     TokenType,
     create_token,
@@ -382,6 +381,7 @@ async def get_reset_password_page(
     To access this endpoint a user receives an email with link to reset their password.
     The link contains a JWT as query param in the URL.
     """
+    # TODO - add email to context to show which email is being reset?
     user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not user_id:
         return templates.TemplateResponse(
@@ -409,27 +409,7 @@ async def post_reset_password_form(
 ):
     """
     Handle reset password form submission.
-
-    TODO - at what point can I start using SecretStr here?
     """
-    if password != confirm_password:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/reset_password.html",
-            context={"request": request, "token": token, "error": "Passwords do not match"},
-        )
-
-    if not password_meets_requirements(password):
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/reset_password.html",
-            context={
-                "request": request,
-                "token": token,
-                "error": "Password is too weak. It must be at least 8 characters long.",
-            },
-        )
-
     user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not user_id:
         return templates.TemplateResponse(
@@ -438,7 +418,20 @@ async def post_reset_password_form(
             context={"error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
-    user = await update_user_password(db=db, user_id=user_id, new_password=SecretStr(password))
+    # Client side validation should mean these are never raised, but always have to check on server side.
+    try:
+        password_data = UserPasswordUpdate(password=SecretStr(password), confirm_password=SecretStr(confirm_password))
+    except ValidationError as err:
+        error_msg = err.errors()[0]["msg"]
+        if "Value error, " in error_msg:
+            error_msg = error_msg.replace("Value error, ", "")
+
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/reset_password.html",
+            context={"request": request, "token": token, "error": str(error_msg)},
+        )
+    user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
     background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email, user_id=user.id)
     logger.info(f"User {user.email} has reset their password.")
 

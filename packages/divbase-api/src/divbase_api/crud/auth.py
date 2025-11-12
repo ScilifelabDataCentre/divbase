@@ -4,12 +4,12 @@ Authentication-related CRUD operations.
 
 from datetime import datetime, timezone
 
-from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
+from divbase_api.schemas.users import UserPasswordUpdate
 from divbase_api.security import get_password_hash, verify_password
 
 
@@ -60,19 +60,11 @@ async def confirm_user_email(db: AsyncSession, id: int) -> UserDB:
     return user
 
 
-def password_meets_requirements(password: str) -> bool:
-    """
-    Check if the password meets the minimum requirements.
-    We can extend this later.
-    """
-    return len(password) >= 8
-
-
-async def update_user_password(db: AsyncSession, user_id: int, new_password: SecretStr) -> UserDB:
+async def update_user_password(db: AsyncSession, user_id: int, password_data: UserPasswordUpdate) -> UserDB:
     """change the user's password."""
     user = await get_user_by_id_or_raise(db=db, id=user_id)
 
-    hashed_password = get_password_hash(new_password)
+    hashed_password = get_password_hash(password_data.password)
     user.hashed_password = hashed_password
     user.last_password_change = datetime.now(tz=timezone.utc)
     await db.commit()
