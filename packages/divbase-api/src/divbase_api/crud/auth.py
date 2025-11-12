@@ -4,13 +4,14 @@ Authentication-related CRUD operations.
 
 from datetime import datetime, timezone
 
+from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserPasswordUpdate
-from divbase_api.security import get_password_hash, verify_password
+from divbase_api.security import TokenType, get_password_hash, verify_password
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
@@ -70,3 +71,11 @@ async def update_user_password(db: AsyncSession, user_id: int, password_data: Us
     await db.commit()
     await db.refresh(user)
     return user
+
+
+def delete_auth_cookies(response: Response) -> Response:
+    """Helper to delete auth cookies from a response (e.g. on logout)."""
+    # TODO - when token blacklisting is implemented, blacklist the tokens here too. (make async at that point too...)
+    response.delete_cookie(TokenType.ACCESS.value)
+    response.delete_cookie(TokenType.REFRESH.value)
+    return response

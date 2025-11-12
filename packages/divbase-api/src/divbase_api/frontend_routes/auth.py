@@ -14,6 +14,7 @@ from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
     confirm_user_email,
+    delete_auth_cookies,
     update_user_password,
 )
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
@@ -107,17 +108,8 @@ async def post_login(
 @fr_auth_router.post("/logout", response_class=HTMLResponse)
 async def post_logout(request: Request):
     """Handle logout form submission."""
-    # TODO - decide if should store invalid token in DB.
-    response = templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"current_user": None},
-    )
-
-    response.delete_cookie(TokenType.ACCESS.value)
-    response.delete_cookie(TokenType.REFRESH.value)
-
-    return response
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return delete_auth_cookies(response=response)
 
 
 @fr_auth_router.get("/register", response_class=HTMLResponse)
@@ -442,8 +434,4 @@ async def post_reset_password_form(
         name="auth_pages/login.html",
         context={"success": "Your password has been reset successfully, you can now log in."},
     )
-
-    response.delete_cookie(key=TokenType.ACCESS.value)
-    response.delete_cookie(key=TokenType.REFRESH.value)
-
-    return response
+    return delete_auth_cookies(response=response)
