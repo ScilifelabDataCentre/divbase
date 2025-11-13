@@ -21,11 +21,11 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
 from divbase_lib.queries import BcftoolsQueryManager
-from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()

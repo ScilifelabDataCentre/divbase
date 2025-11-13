@@ -3,8 +3,8 @@ Crud operations for the S3 endpoints
 """
 
 from divbase_api.api_config import settings
+from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.s3 import CheckFileExistsRequest, ExistingFileResponse
-from divbase_lib.s3_client import S3FileManager
 
 
 def check_files_already_exist_by_checksum(

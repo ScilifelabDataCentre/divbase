@@ -1,5 +1,5 @@
 """
-CLI commands for managing S3 bucket versions.
+CLI commands for managing a project's bucket versions.
 """
 
 from pathlib import Path

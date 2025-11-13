@@ -1,7 +1,7 @@
 """
 Handles the user's configuration file for the divbase-cli package.
 User configuration is stored in a local file.
-By default the config will be stored at: "~/.config/.divbase_tools.yaml" # TODO - change name?
+By default the config will be stored at: "~/.config/divbase/config.yaml"
 
 Not to be confused with the bucket versioning files, which is stored in the project's bucket
 and versions the state of all files in the bucket at given timestamps.
@@ -27,16 +27,6 @@ class ProjectConfig:
 
     name: str
     divbase_url: str
-    s3_url: str
-
-    @property
-    def bucket_name(self) -> str:
-        """
-        The name of the storage project associated with this project.
-
-        Note: As of now it is the same, but in the future it might be different, but hopefully can be derived from the project name directly.
-        """
-        return self.name
 
 
 @dataclass
@@ -70,12 +60,12 @@ class UserConfig:
         with open(self.config_path, "w") as file:
             yaml.safe_dump(config_dict, file, sort_keys=False)
 
-    def add_project(self, name: str, divbase_url: str, s3_url: str, is_default: bool) -> ProjectConfig:
+    def add_project(self, name: str, divbase_url: str, is_default: bool) -> ProjectConfig:
         """
         Add a new project to the user configuration file.
         If the configuration file does not exist, it will be created.
         """
-        new_project = ProjectConfig(name=name, divbase_url=divbase_url, s3_url=s3_url)
+        new_project = ProjectConfig(name=name, divbase_url=divbase_url)
 
         if new_project.name in self.all_project_names:
             warnings.warn(

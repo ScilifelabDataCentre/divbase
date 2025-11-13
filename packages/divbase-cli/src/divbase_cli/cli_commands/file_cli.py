@@ -42,14 +42,16 @@ def list_files(
     if not files:
         print("No files found in the project's storage bucket.")
     else:
-        print(f"Files in bucket '{project_config.bucket_name}':")
+        print(f"Files in the project '{project_config.name}':")
         for file in files:
             print(f"- '{file}'")
 
 
 @file_app.command("download")
 def download_files(
-    files: List[str] = typer.Argument(None, help="Space seperated list of files/objects to download from the bucket."),
+    files: List[str] = typer.Argument(
+        None, help="Space separated list of files/objects to download from the project's bucket."
+    ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     download_dir: str = typer.Option(
         None,
