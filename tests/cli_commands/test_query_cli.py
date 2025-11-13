@@ -21,10 +21,10 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
-from divbase_lib.queries import BcftoolsQueryManager
 from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import MINIO_URL
 
@@ -634,18 +634,21 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         with (
             patch("boto3.client", side_effect=patched_boto3_client),
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
-            patch("divbase_lib.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
+            patch("divbase_api.services.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_lib.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
-            patch("divbase_lib.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
+            patch("divbase_api.services.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
             patch(
-                "divbase_lib.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
+                "divbase_api.services.queries.BcftoolsQueryManager.temp_file_management",
+                new=patched_temp_file_management,
+            ),
+            patch(
+                "divbase_api.services.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
             patch("divbase_api.worker.tasks._upload_results_file", new=patched_upload_results_file),
             patch("divbase_api.worker.tasks._delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
             patch(
-                "divbase_lib.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
+                "divbase_api.services.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
             ),
         ):
