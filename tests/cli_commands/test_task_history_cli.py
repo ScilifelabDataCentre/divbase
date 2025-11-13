@@ -2,13 +2,79 @@ from contextlib import contextmanager
 from time import sleep
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.divbase_cli import app
-from tests.helpers.api_setup import TEST_USERS
+from tests.cli_commands.conftest import _create_logged_in_user_fixture
+from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS
 
 runner = CliRunner()
+
+# NOTE: Getting the timing right for the below fixtures is not trivial. The test setup requires that
+# multiple users log in and submit tasks before any tests are run.
+
+
+# Autouse fixture that depends on all user fixtures to ensure tasks are submitted
+@pytest.fixture(scope="module", autouse=True)
+def all_users_tasks_submitted(edit_user_with_submitted_tasks, manage_user_with_submitted_tasks):
+    """
+    Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It waits for the other fixtures to complete = have reached their yield statement.
+    Together with the fixtures below, this results in two tasks being submitted per user. The tests in this module will then make tests based on these submitted tasks and which user they belong to.
+    Since it is autouse, it will run before any tests in this module.
+    """
+    pass
+
+
+@pytest.fixture(scope="module")
+def edit_user_with_submitted_tasks(CONSTANTS):
+    """
+    Module-scoped fixture: login as edit user and submit tasks.
+
+    factory is a generator object created, but not executed by _create_logged_in_user_fixture.
+    The next() runs all code before the yield and then waits. This allows for tasks to be
+    submitted for that logged in user. The final yield waits until all tests have been run,
+    and the runs the clean up code after the yield in _create_logged_in_user_fixture.
+    """
+    factory = _create_logged_in_user_fixture("edit user")(CONSTANTS)
+    next(factory)
+    _submit_tasks_for_user(CONSTANTS)
+    yield
+
+
+@pytest.fixture(scope="module")
+def manage_user_with_submitted_tasks(CONSTANTS):
+    """
+    Module-scoped fixture: login as manage user and submit tasks.
+
+    factory is a generator object created, but not executed by _create_logged_in_user_fixture.
+    The next() runs all code before the yield and then waits. This allows for tasks to be
+    submitted for that logged in user. The final yield waits until all tests have been run,
+    and the runs the clean up code after the yield in _create_logged_in_user_fixture.
+    """
+    factory = _create_logged_in_user_fixture("manage user")(CONSTANTS)
+    next(factory)
+    _submit_tasks_for_user(CONSTANTS)
+    yield
+
+
+def _submit_tasks_for_user(CONSTANTS):
+    """
+    Helper function to submit tasks for a logged-in user.
+    """
+    query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
+    project_name = CONSTANTS["QUERY_PROJECT"]
+
+    result_submit = runner.invoke(app, f"dimensions update --project {project_name}")
+    assert result_submit.exit_code == 0
+    sleep(0.5)
+
+    result_submit = runner.invoke(app, f"query tsv '{query_string}' --project {project_name}")
+    assert result_submit.exit_code == 0
+
+
+# TODO could make a login and submit task for admin, but admin user does not belong to any projects in the testing stack and can thus not submit tasks
 
 
 @contextmanager
@@ -33,15 +99,8 @@ def capture_task_history_manager():
     assert captured_manager is not None, "No TaskHistoryDisplayManager was captured"
 
 
-def test_edit_user_submits_and_sees_task_history(CONSTANTS, logged_in_edit_user_with_existing_config):
-    """Integration test where edit user submits two tasks and sees them in their task history."""
-    query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
-    project_name = CONSTANTS["QUERY_PROJECT"]
-    result_submit = runner.invoke(app, f"dimensions update --project {project_name}")
-    assert result_submit.exit_code == 0
-    sleep(0.5)
-    result_submit = runner.invoke(app, f"query tsv '{query_string}' --project {project_name}")
-    assert result_submit.exit_code == 0
+def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit_user_with_existing_config):
+    """Integration test where edit user can only see their own tasks."""
 
     with capture_task_history_manager() as get_manager:
         result_history = runner.invoke(app, "task-history user")
@@ -51,6 +110,26 @@ def test_edit_user_submits_and_sees_task_history(CONSTANTS, logged_in_edit_user_
 
     assert captured_manager.command_context["user_name"] == TEST_USERS["edit user"]["email"]
 
-    for task_id, task in captured_manager.task_items.items():
-        print(task_id, task)
-        assert task.kwargs.user_name == TEST_USERS["edit user"]["email"]
+    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+
+    assert TEST_USERS["edit user"]["email"] in user_emails
+    assert TEST_USERS["manage user"]["email"] not in user_emails
+    assert ADMIN_CREDENTIALS["email"] not in user_emails
+
+
+def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_existing_config):
+    """Integration test where admin user can see all users' tasks."""
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, "task-history user")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["user_name"] == ADMIN_CREDENTIALS["email"]
+
+    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+
+    # assert ADMIN_CREDENTIALS["email"] in user_emails
+    assert TEST_USERS["edit user"]["email"] in user_emails
+    assert TEST_USERS["manage user"]["email"] in user_emails
