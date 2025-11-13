@@ -14,8 +14,9 @@ from typer.testing import CliRunner
 
 from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
 from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import DivBaseAPIError, NoVCFFilesFoundError
+from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import PROJECTS
 

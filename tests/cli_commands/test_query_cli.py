@@ -264,7 +264,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 
-        command = f"files upload {test_file}  --project {bucket_name}"
+        command = f"files upload {test_file}  --project {bucket_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0

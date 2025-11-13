@@ -8,8 +8,9 @@ Based on provider user input and their config file.
 
 from pathlib import Path
 
+from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.user_config import ProjectConfig, load_user_config
-from divbase_lib.exceptions import AuthenticationError, ProjectNameNotSpecifiedError
+from divbase_lib.exceptions import ProjectNameNotSpecifiedError
 
 
 def ensure_logged_in(config_path: Path, desired_url: str | None = None) -> str:

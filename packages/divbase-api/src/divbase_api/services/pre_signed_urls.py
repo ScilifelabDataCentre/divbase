@@ -12,7 +12,7 @@ from functools import lru_cache
 import boto3
 
 from divbase_api.api_config import settings
-from divbase_api.schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,13 @@ class S3PreSignedService:
         )
 
         return PreSignedDownloadResponse(
-            object_name=object_name,
+            name=object_name,
             pre_signed_url=url,
             version_id=version_id,
         )
 
     def create_presigned_url_for_upload(
-        self, bucket_name: str, object_name: str, fields=None, conditions=None
+        self, bucket_name: str, object_name: str, md5_hash: str | None = None
     ) -> PreSignedUploadResponse:
         """
         Generate a presigned S3 POST URL to upload a file.
@@ -70,6 +70,11 @@ class S3PreSignedService:
         Fields is a dictionary filled with the form fields and respective values
         to use when submitting the post.
         """
+        fields, conditions = {}, []
+        if md5_hash:
+            fields["Content-MD5"] = md5_hash
+            conditions.append({"Content-MD5": md5_hash})
+
         response = self.s3_client.generate_presigned_post(
             Bucket=bucket_name,
             Key=object_name,
@@ -77,11 +82,7 @@ class S3PreSignedService:
             Conditions=conditions,
             ExpiresIn=3600 * 24,  # 24 hours
         )
-        return PreSignedUploadResponse(
-            object_name=object_name,
-            post_url=response["url"],
-            fields=response["fields"],
-        )
+        return PreSignedUploadResponse(name=object_name, post_url=response["url"], fields=response["fields"])
 
 
 @lru_cache()

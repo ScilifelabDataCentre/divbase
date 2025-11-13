@@ -9,6 +9,8 @@ we ensure that when you manually raise a specific exception the error message lo
 
 from pathlib import Path
 
+from divbase_lib.api_schemas.s3 import ExistingFileResponse
+
 
 class ObjectDoesNotExistError(FileNotFoundError):
     """Raised when an S3 object/key does not exist in the bucket."""
@@ -70,11 +72,11 @@ class FilesAlreadyInBucketError(FileExistsError):
     and the user does not want to accidently create a new version of any file.
     """
 
-    def __init__(self, existing_objects: list[str], project_name: str):
-        files_list = "\n".join(f"- '{name}'" for name in existing_objects)
+    def __init__(self, existing_objects: list[ExistingFileResponse], project_name: str):
+        files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_objects)
         error_message = (
             f"For the project: '{project_name}'\n"
-            "The following objects that you're trying to upload already exist in the project's bucket:\n"
+            "The exact versions of the following objects that you're trying to upload already exist in the project's bucket:\n"
             f"{files_list}."
         )
         super().__init__(error_message)
@@ -246,53 +248,12 @@ class NoVCFFilesFoundError(Exception):
     pass
 
 
-class AuthenticationError(Exception):
-    """Raised for user authentication errors when using CLI tool."""
+class ChecksumVerificationError(Exception):
+    """Raised when a calculated file's checksum does not match the expected value."""
 
-    def __init__(self, error_message: str = "Authentication required, make sure you're logged in."):
-        super().__init__(error_message)
+    def __init__(self, expected_checksum: str, calculated_checksum: str):
+        self.expected_checksum = expected_checksum
+        self.calculated_checksum = calculated_checksum
 
-
-class DivBaseAPIConnectionError(Exception):
-    """Raised when CLI tool can't connect to the provided DivBase API URL."""
-
-    def __init__(
-        self,
-        error_message: str = "Unable to connect to the DivBase API. Check the API URL and your network connection. Perhaps the server is down?",
-    ):
-        super().__init__(error_message)
-
-
-class DivBaseAPIError(Exception):
-    """
-    Used by CLI tool when making requests to DivBase API.
-    Raised when the DivBase API/server responds with an error status code.
-    Provides a helpful and easy-to-read error message for the user.
-    """
-
-    def __init__(
-        self,
-        error_details: str = "Not Provided",
-        error_type: str = "unknown",
-        status_code: int = None,
-        http_method: str = "unknown",
-        url: str = "unknown",
-    ):
-        self.status_code = status_code
-        self.error_type = error_type
-        self.error_details = error_details
-        self.http_method = http_method
-        self.url = url
-
-        self.error_message = (
-            f"DivBase Server returned an error response:\n"
-            f"HTTP Status code: {status_code}\n"
-            f"HTTP method: {http_method}\n"
-            f"URL: {url}\n"
-            f"Error type: {error_type}\n"
-            f"Details: {error_details}\n"
-        )
-        super().__init__(self.error_message)
-
-    def __str__(self):
-        return self.error_message
+        message = f"Checksum verification failed. Expected: {expected_checksum}, Calculated: {calculated_checksum}"
+        super().__init__(message)

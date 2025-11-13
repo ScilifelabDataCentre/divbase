@@ -14,7 +14,7 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.bucket_versions import create_bucket_version_manager
-from divbase_lib.schemas.bucket_versions import (
+from divbase_lib.api_schemas.bucket_versions import (
     AddVersionRequest,
     AddVersionResponse,
     CreateVersioningFileRequest,
