@@ -55,7 +55,7 @@ def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
     so we can validate an access token is not used for e.g. password reset.
     """
     expire = datetime.now(timezone.utc) + token_expires_delta[token_type]
-    to_encode = {"exp": expire, "sub": str(subject), "type": token_type.value}
+    to_encode = {"exp": expire, "iat": datetime.now(timezone.utc), "sub": str(subject), "type": token_type.value}
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
     return encoded_jwt, int(expire.timestamp())
 
@@ -68,6 +68,8 @@ def verify_token(token: str, desired_token_type: TokenType) -> int | None:
 
     Expiration time is automatically verified in jwt.decode() -> raises jwt.ExpiredSignatureError
     """
+    if desired_token_type == TokenType.REFRESH:
+        raise ValueError("Use verify_refresh_token() for refresh tokens.")
     try:
         payload = jwt.decode(
             jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
@@ -75,9 +77,32 @@ def verify_token(token: str, desired_token_type: TokenType) -> int | None:
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
-    if payload.get("type") != desired_token_type.value:
+    if payload.get("type") != desired_token_type:
         return None
     return int(payload.get("sub"))
+
+
+def verify_refresh_token(token: str) -> tuple[int, datetime] | None:
+    """
+    Verify and decode a JWT token of TokenType type "refresh".
+
+    This is implemented separately to normal verify_token() because we also want to return the "iat" (issued at) time.
+    For a password_last_updated comparison check.
+
+    If successful return the user id and iat, else return None.
+    """
+    try:
+        payload = jwt.decode(
+            jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
+        )
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+    if payload.get("type") != TokenType.REFRESH:
+        return None
+
+    iat = datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc)
+    return int(payload.get("sub")), iat
 
 
 def verify_expired_token(token: str, desired_token_type: TokenType) -> int | None:
@@ -101,6 +126,6 @@ def verify_expired_token(token: str, desired_token_type: TokenType) -> int | Non
     except jwt.InvalidTokenError:
         return None
 
-    if payload.get("type") != desired_token_type.value:
+    if payload.get("type") != desired_token_type:
         return None
     return int(payload.get("sub"))

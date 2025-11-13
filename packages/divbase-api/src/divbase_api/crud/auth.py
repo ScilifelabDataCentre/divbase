@@ -2,16 +2,19 @@
 Authentication-related CRUD operations.
 """
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.users import get_user_by_email, get_user_by_id_or_raise
+from divbase_api.crud.users import get_user_by_email, get_user_by_id, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserPasswordUpdate
-from divbase_api.security import TokenType, get_password_hash, verify_password
+from divbase_api.security import TokenType, get_password_hash, verify_password, verify_refresh_token, verify_token
+
+logger = logging.getLogger(__name__)
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
@@ -38,6 +41,49 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
             message="Email address not verified, check your inbox or visit the DivBase website to resend a new verification email."
         )
 
+    return user
+
+
+async def verify_user_from_access_token(db: AsyncSession, token: str) -> UserDB | None:
+    """
+    Attempt to verify a user from their access token, returning the UserDB if successful.
+
+    Returns None if verification fails.
+    """
+    user_id = verify_token(token=token, desired_token_type=TokenType.ACCESS)
+    if not user_id:
+        return None
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user:
+        logger.warning(f"A valid access token was used for a non-existent user with id: {user_id}.")
+        return None
+    return user
+
+
+async def verify_user_from_refresh_token(db: AsyncSession, token: str) -> UserDB | None:
+    """
+    Attempt to verify a user from their refresh token.
+    Returns the UserDB model if successful and None if verification fails.
+
+    As a refresh token is long lived (compared to access tokens), we add extra validation checks here.
+    """
+    result = verify_refresh_token(token=token)
+    if not result:
+        return None
+    user_id, token_iat = result
+
+    user = await get_user_by_id(db=db, id=user_id)
+    if not user:
+        logger.warning(f"A valid refresh token was used for a non-existent user with id: {user_id}.")
+        return None
+    if not user_account_valid(user):
+        logger.warning(f"Attempt to use refresh token for invalid user account: {user.email} (id: {user.id})")
+        return None
+    if user.last_password_change and token_iat < user.last_password_change:
+        logger.info(
+            f"Refresh token issued before last password change for user: {user.email} (id: {user.id}). Rejecting token."
+        )
+        return None
     return user
 
 

@@ -15,6 +15,7 @@ from divbase_api.security import (
     token_expires_delta,
     verify_expired_token,
     verify_password,
+    verify_refresh_token,
     verify_token,
 )
 
@@ -65,7 +66,12 @@ def test_validate_tokens(valid_tokens):
     Test valid tokens can be validated and only validated by their correct type (access, refresh, etc).
     """
     for token_type, token in valid_tokens.items():
-        assert verify_token(token, token_type) == USER_ID
+        if token_type == TokenType.REFRESH:
+            result = verify_refresh_token(token)
+            assert result is not None
+            assert result[0] == USER_ID
+        else:
+            assert verify_token(token, token_type) == USER_ID
 
 
 def test_expired_tokens_fail(expired_tokens):
@@ -73,7 +79,10 @@ def test_expired_tokens_fail(expired_tokens):
     Test that expired tokens are correctly identified as expired.
     """
     for token_type, token in expired_tokens.items():
-        assert verify_token(token, token_type) is None
+        if token_type == TokenType.REFRESH:
+            assert verify_refresh_token(token) is None
+        else:
+            assert verify_token(token, token_type) is None
 
 
 def test_invalid_tokens_fail():
@@ -86,20 +95,44 @@ def test_invalid_tokens_fail():
     ]
     for token in invalid_tokens:
         assert verify_token(token=token, desired_token_type=TokenType.ACCESS) is None
-        assert verify_token(token=token, desired_token_type=TokenType.REFRESH) is None
         assert verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION) is None
         assert verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET) is None
+
+        assert verify_refresh_token(token=token) is None
 
 
 def test_incorrect_token_type_fails():
     """Test that tokens created for one type fail when attempting to validate as a different type."""
-    for token_type in TokenType:
+    for token_type in [TokenType.ACCESS, TokenType.EMAIL_VERIFICATION, TokenType.PASSWORD_RESET]:
         token, _ = create_token(subject=1, token_type=token_type)
-        for test_type in TokenType:
+        for test_type in [TokenType.ACCESS, TokenType.EMAIL_VERIFICATION, TokenType.PASSWORD_RESET]:
             if test_type == token_type:
                 assert verify_token(token=token, desired_token_type=test_type) == USER_ID
             else:
                 assert verify_token(token=token, desired_token_type=test_type) is None
+
+
+def test_verify_refresh_token_with_other_token_types_fails(valid_tokens):
+    """
+    Test that the verify_refresh_token function raises an error if a non-refresh token is used.
+    """
+    for token_type, token in valid_tokens.items():
+        if token_type != TokenType.REFRESH:
+            assert verify_refresh_token(token=token) is None
+
+
+def test_cannot_verify_refresh_token_with_regular_verify_token(valid_tokens):
+    """
+    Test that the verify_token function raises an error if a refresh token is used.
+    Because a different function should be used to refresh token verification.
+    """
+    refresh_token = valid_tokens[TokenType.REFRESH]
+    result = verify_refresh_token(token=refresh_token)
+    assert result is not None
+    assert result[0] == USER_ID
+
+    with pytest.raises(ValueError):
+        verify_token(token=refresh_token, desired_token_type=TokenType.REFRESH)
 
 
 def test_verify_expired_token_fn(expired_tokens):
