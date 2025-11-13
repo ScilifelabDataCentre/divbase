@@ -43,17 +43,19 @@ def wait_for_task_complete(task_id: str, max_retries: int = 30):
     while max_retries > 0:
         result = runner.invoke(app, command)
         output = result.stdout.replace("\n", " ").replace("\r", " ")
+        formatted_output = " ".join(output.split())  # handle multiline and irregular spaces in output
         if (
-            "FAILURE" in output
-            or "SUCCESS" in output
-            or "'status': 'completed'" in output
-            or "completed" in output
-            or "FAIL" in output
-            or "SidecarInvalidFilterError" in output
-            or "Unsupported bcftools command" in output
-            or "Empty command provided" in output
-            or "'status': 'error'" in output
-            or "Output file ready for download:" in output
+            "FAILURE" in formatted_output
+            or "SUCCESS" in formatted_output
+            or "'status': 'completed'" in formatted_output
+            or "completed" in formatted_output
+            or "FAIL" in formatted_output
+            or "SidecarInvalidFilterError" in formatted_output
+            or "Unsupported bcftools command" in formatted_output
+            or "Empty command provided" in formatted_output
+            or "'status': 'error'" in formatted_output
+            or "Output file ready for download" in formatted_output
+            or ".vcf.gz" in formatted_output
         ):
             return result
         time.sleep(1)

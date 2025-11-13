@@ -31,6 +31,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
+from divbase_lib.schemas.vcf_dimensions import DimensionUpdateTaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +293,7 @@ def bcftools_pipe_task(
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str):
+def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
     """
@@ -409,13 +410,16 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     if not divbase_results_files_skipped_by_this_job:
         divbase_results_files_skipped_by_this_job = None
 
-    return {
-        "status": "completed",
-        "submitter": user_name,
-        "VCF_files_added": files_indexed_by_this_job,
-        "VCF_files_skipped": divbase_results_files_skipped_by_this_job,
-        "VCF_files_deleted": vcfs_deleted_from_bucket_since_last_indexing,
-    }
+    result = DimensionUpdateTaskResult(
+        status="completed",
+        submitter=user_name,
+        VCF_files_added=files_indexed_by_this_job,
+        VCF_files_skipped=divbase_results_files_skipped_by_this_job,
+        VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
+    )
+
+    # Convert to dict since celery serizlizes to JSON when writing to results backend. Pydantic model serilization is not supported by celery
+    return result.model_dump()
 
 
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:

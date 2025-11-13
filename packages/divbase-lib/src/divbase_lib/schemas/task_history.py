@@ -12,25 +12,9 @@ from divbase_lib.schemas.queries import (
     SampleMetadataQueryKwargs,
     SampleMetadataQueryTaskResult,
 )
+from divbase_lib.schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
 
 # Response Models
-
-
-# TODO move this to a schemas file for dimension tasks
-class DimensionUpdateTaskResult(BaseModel):
-    """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
-
-    status: Optional[str] = None
-    submitter: str
-    VCF_files_added: Optional[List[str]] = Field(
-        None, description="VCF files that were added to dimensions index by this job"
-    )
-    VCF_files_skipped: Optional[List[str]] = Field(
-        None, description="VCF files skipped by this job (previous DivBase-generated result VCFs)"
-    )
-    VCF_files_deleted: Optional[List[str]] = Field(
-        None, description="VCF files that have been deleted from the project and thus have been dropped from the index"
-    )
 
 
 class FlowerTaskResult(BaseModel):
@@ -48,9 +32,7 @@ class FlowerTaskResult(BaseModel):
     retried: Optional[float]
     revoked: Optional[float]
     args: Optional[str]
-    kwargs: Optional[
-        Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, Dict[str, Any]]
-    ]  # TODO add dimensions task kwargs
+    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, Dict[str, Any]]]
     eta: Optional[float]
     expires: Optional[float]
     retries: Optional[int]

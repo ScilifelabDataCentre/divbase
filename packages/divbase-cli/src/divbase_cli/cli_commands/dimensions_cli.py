@@ -8,6 +8,7 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
+from divbase_lib.schemas.vcf_dimensions import DimensionsShowResult
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def show_dimensions_index(
         divbase_base_url=project_config.divbase_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
-    vcf_dimensions_data = response.json()
+    vcf_dimensions_data = DimensionsShowResult(**response.json())
 
     dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
 
@@ -108,13 +109,12 @@ def show_dimensions_index(
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
 
 
-def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
+def _format_api_response_for_display_in_terminal(api_response: DimensionsShowResult) -> dict:
     """
-    Convert the new API response format to a YAML-like format.
+    Convert the API response to a YAML-like format for display in the user's terminal.
     """
     dimensions_list = []
-
-    for entry in api_response.get("vcf_files", []):
+    for entry in api_response.vcf_files:
         dimensions_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],
@@ -129,7 +129,7 @@ def _format_api_response_for_display_in_terminal(api_response: dict) -> dict:
         dimensions_list.append(dimensions_entry)
 
     skipped_list = []
-    for entry in api_response.get("skipped_files", []):
+    for entry in api_response.skipped_files:
         skipped_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],

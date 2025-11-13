@@ -19,18 +19,21 @@ from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissing
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_lib.schemas.vcf_dimensions import DimensionsShowResult, DimensionUpdateKwargs
 
 logger = logging.getLogger(__name__)
 
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
+@vcf_dimensions_router.get(
+    "/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=DimensionsShowResult
+)
 async def list_vcf_metadata_by_project_name_user_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> DimensionsShowResult:
     """
     Get all VCF metadata entries for a project by project name.
 
@@ -58,14 +61,14 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     if not vcf_files and not skipped_files:
         raise VCFDimensionsEntryMissingError(project_name=project.name)
 
-    return {
-        "project_id": project.id,
-        "project_name": project.name,
-        "vcf_file_count": len(vcf_files),
-        "vcf_files": vcf_files,
-        "skipped_file_count": len(skipped_files),
-        "skipped_files": skipped_files,
-    }
+    return DimensionsShowResult(
+        project_id=project.id,
+        project_name=project.name,
+        vcf_file_count=len(vcf_files),
+        vcf_files=vcf_files,
+        skipped_file_count=len(skipped_files),
+        skipped_files=skipped_files,
+    )
 
 
 @vcf_dimensions_router.put("/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED)
@@ -73,7 +76,7 @@ async def update_vcf_dimensions_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> str:
     """
     Update the VCF dimensions files for the specified project
     """
@@ -82,8 +85,11 @@ async def update_vcf_dimensions_endpoint(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
 
-    task_kwargs = {"bucket_name": project.bucket_name, "project_id": project.id, "user_name": current_user.email}
+    task_kwargs = DimensionUpdateKwargs(
+        bucket_name=project.bucket_name, project_id=project.id, user_name=current_user.email
+    )
 
-    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs)
+    results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs.model_dump())
+
     await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
     return results.id
