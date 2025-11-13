@@ -21,36 +21,40 @@ class FlowerTaskResult(BaseModel):
     """Task details as returned by the Flower API"""
 
     uuid: str
-    name: Optional[str]
-    state: Optional[str]
-    received: Optional[float]
-    sent: Optional[float]
-    started: Optional[float]
-    rejected: Optional[float]
-    succeeded: Optional[float]
-    failed: Optional[float]
-    retried: Optional[float]
-    revoked: Optional[float]
-    args: Optional[str]
-    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, Dict[str, Any]]]
-    eta: Optional[float]
-    expires: Optional[float]
-    retries: Optional[int]
-    result: Optional[Union[BcftoolsQueryTaskResult, SampleMetadataQueryTaskResult, DimensionUpdateTaskResult, str]]
-    exception: Optional[str]
-    timestamp: Optional[float]
-    runtime: Optional[float]
-    traceback: Optional[str]
-    exchange: Optional[str]
-    routing_key: Optional[str]
-    clock: Optional[int]
-    client: Optional[str]
-    root: Optional[str]
-    root_id: Optional[str]
-    parent: Optional[str]
-    parent_id: Optional[str]
-    children: Optional[List[Any]]
-    worker: Optional[str]
+    name: Optional[str] = None
+    state: Optional[str] = None
+    received: Optional[float] = None
+    sent: Optional[float] = None
+    started: Optional[float] = None
+    rejected: Optional[float] = None
+    succeeded: Optional[float] = None
+    failed: Optional[float] = None
+    retried: Optional[float] = None
+    revoked: Optional[float] = None
+    args: Optional[str] = None
+    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, Dict[str, Any]]] = (
+        None
+    )
+    eta: Optional[float] = None
+    expires: Optional[float] = None
+    retries: Optional[int] = None
+    result: Optional[Union[BcftoolsQueryTaskResult, SampleMetadataQueryTaskResult, DimensionUpdateTaskResult, str]] = (
+        None
+    )
+    exception: Optional[str] = None
+    timestamp: Optional[float] = None
+    runtime: Optional[float] = None
+    traceback: Optional[str] = None
+    exchange: Optional[str] = None
+    routing_key: Optional[str] = None
+    clock: Optional[int] = None
+    client: Optional[str] = None
+    root: Optional[str] = None
+    root_id: Optional[str] = None
+    parent: Optional[str] = None
+    parent_id: Optional[str] = None
+    children: Optional[List[Any]] = None
+    worker: Optional[str] = None
 
 
 class TaskHistoryResults(BaseModel):
