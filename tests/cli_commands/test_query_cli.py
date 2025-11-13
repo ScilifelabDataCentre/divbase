@@ -39,20 +39,21 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
 
 def wait_for_task_complete(task_id: str, max_retries: int = 30):
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"query task-status {task_id}"
+    command = f"task-history id {task_id}"
     while max_retries > 0:
         result = runner.invoke(app, command)
-        # Add checks for error keywords
+        output = result.stdout.replace("\n", " ").replace("\r", " ")
         if (
-            "FAILURE" in result.stdout
-            or "SUCCESS" in result.stdout
-            or "'status': 'completed'" in result.stdout
-            or "completed" in result.stdout
-            or "FAIL" in result.stdout
-            or "SidecarInvalidFilterError" in result.stdout
-            or "Unsupported bcftools command" in result.stdout
-            or "Empty command provided" in result.stdout
-            or "'status': 'error'" in result.stdout
+            "FAILURE" in output
+            or "SUCCESS" in output
+            or "'status': 'completed'" in output
+            or "completed" in output
+            or "FAIL" in output
+            or "SidecarInvalidFilterError" in output
+            or "Unsupported bcftools command" in output
+            or "Empty command provided" in output
+            or "'status': 'error'" in output
+            or "Output file ready for download:" in output
         ):
             return result
         time.sleep(1)

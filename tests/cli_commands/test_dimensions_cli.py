@@ -45,7 +45,7 @@ def test_update_vcf_dimensions_task_directly(
     result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
     vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
-    indexed_files = result.get("VCF files that were added to dimensions index by this job", [])
+    indexed_files = result.get("VCF_files_added", [])
 
     for vcf_file in vcf_files:
         assert vcf_file in indexed_files, f"{vcf_file} not found in indexed files: {indexed_files}"
@@ -216,7 +216,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(
 
     result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
-    skipped_files = result.get("VCF files skipped by this job (previous DivBase-generated result VCFs)", [])
+    skipped_files = result.get("VCF_files_skipped", [])
     assert any(divbase_vcf_name in msg for msg in skipped_files), (
         f"Expected that this file was skipped; {divbase_vcf_name}; got: {skipped_files}"
     )
@@ -244,7 +244,7 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
     assert result_first_run["status"] == "completed"
-    added_files = result_first_run["VCF files that were added to dimensions index by this job"]
+    added_files = result_first_run.get("VCF_files_added", [])
     expected_files = PROJECTS["split-scaffold-project"]
     expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
     for vcf in expected_vcfs:
@@ -254,7 +254,6 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
         bucket_name=bucket_name, project_id=project_id, user_name="Test User"
     )
     assert result_second_run["status"] == "completed"
-    assert (
-        "None: no new VCF files or file versions were detected in the project."
-        in result_second_run["VCF files that were added to dimensions index by this job"]
+    assert result_second_run.get("VCF_files_added") is None or result_second_run.get("VCF_files_added") == [], (
+        f"Expected no new files indexed, got: {result_second_run.get('VCF_files_added')}"
     )
