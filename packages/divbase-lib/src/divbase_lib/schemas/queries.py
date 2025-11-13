@@ -2,7 +2,7 @@
 Schemas for query routes.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -45,20 +45,19 @@ class BcftoolsQueryKwargs(BaseModel):
     user_name: str
 
 
-class TaskMetadataQueryResult(BaseModel):
+class SampleMetadataQueryTaskResult(BaseModel):
     """Metadata query task result details. Based on the return of tasks.sample_metadata_query."""
 
     sample_and_filename_subset: List[Dict[str, Any]]
     unique_sample_ids: List[str]
     unique_filenames: List[str]
     query_message: str
-    status: str
+    status: Optional[str] = None
 
 
-# TODO these task results models could be defined elsewhere and used here and by the routes for queries, dimensions, and task_hist
-class TaskBcftoolsQueryResult(BaseModel):
+class BcftoolsQueryTaskResult(BaseModel):
     """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
 
-    status: str
     output_file: str
     submitter: str
+    status: Optional[str] = None

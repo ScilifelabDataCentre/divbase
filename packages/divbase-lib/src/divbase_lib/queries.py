@@ -23,21 +23,9 @@ from divbase_lib.exceptions import (
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
 )
+from divbase_lib.schemas.queries import SampleMetadataQueryTaskResult
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class SidecarQueryResult:
-    """
-    Hold the results of a query run on a sidecar metadata TSV file.
-    """
-
-    # TODO pydantic model instead of dataclass?
-    sample_and_filename_subset: List[Dict[str, str]]
-    unique_sample_ids: List[str]
-    unique_filenames: List[str]
-    query_message: str
 
 
 @dataclass
@@ -56,7 +44,7 @@ def run_sidecar_metadata_query(
     filter_string: str = None,
     project_id: int = None,
     vcf_dimensions_data: dict = None,
-) -> SidecarQueryResult:
+) -> SampleMetadataQueryTaskResult:
     """
     Run a query on a sidecar metadata TSV file and map samples to VCF files.
 
@@ -87,7 +75,7 @@ def run_sidecar_metadata_query(
                 sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
                 unique_filenames.add(filename)
 
-    return SidecarQueryResult(
+    return SampleMetadataQueryTaskResult(
         sample_and_filename_subset=sample_and_filename_subset,
         unique_sample_ids=list(unique_sample_ids),
         unique_filenames=list(unique_filenames),

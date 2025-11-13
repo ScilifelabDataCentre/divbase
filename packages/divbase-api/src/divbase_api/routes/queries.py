@@ -1,11 +1,12 @@
 """
-The API server for DivBase.
+API routes for query operations.
 """
 
 import logging
 import sys
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -25,6 +26,7 @@ from divbase_lib.schemas.queries import (
     BcftoolsQueryRequest,
     SampleMetadataQueryKwargs,
     SampleMetadataQueryRequest,
+    SampleMetadataQueryTaskResult,
 )
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
@@ -34,16 +36,19 @@ logger = logging.getLogger(__name__)
 query_router = APIRouter()
 
 # TODO harmonize function names
-# TODO response_model like in the versioning routes
 
 
-@query_router.post("/sample-metadata/projects/{project_name}", status_code=status.HTTP_200_OK)
+@query_router.post(
+    "/sample-metadata/projects/{project_name}",
+    status_code=status.HTTP_200_OK,
+    response_model=SampleMetadataQueryTaskResult,
+)
 async def sample_metadata_query(
     sample_metadata_query_request: SampleMetadataQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> SampleMetadataQueryTaskResult:
     """
     Submit a sample metadata query for the specified project.
     """
@@ -68,14 +73,11 @@ async def sample_metadata_query(
     if "error" in result_dict:
         error_type = result_dict.get("type", "ServerError")
         error_details = result_dict.get("error", "Unknown error occurred")
-        return {"detail": error_details, "type": error_type}
+        return JSONResponse(
+            status_code=400, content={"detail": error_details, "type": error_type}
+        )  # JSONResponse or HTTPException needed here to avoid fastAPI response model validation error
 
-    return {
-        "sample_and_filename_subset": result_dict["sample_and_filename_subset"],
-        "unique_sample_ids": result_dict["unique_sample_ids"],
-        "unique_filenames": result_dict["unique_filenames"],
-        "query_message": result_dict["query_message"],
-    }
+    return SampleMetadataQueryTaskResult(**result_dict)
 
 
 @query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
@@ -84,7 +86,7 @@ async def create_bcftools_jobs(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> str:
     """
     Create a new bcftools query job for the specified project.
     """

@@ -177,7 +177,8 @@ def sample_metadata_query_task(
         except Exception as e:
             logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
 
-        result = dataclasses.asdict(metadata_result)
+        # Convert to dict since celery serizlizes to JSON when sending back to API layer. Pydantic model serilization is not supported by celery
+        result = metadata_result.model_dump()
         result["status"] = "completed"
         result["task_id"] = task_id
 

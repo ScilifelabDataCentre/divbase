@@ -8,19 +8,19 @@ from pydantic import BaseModel, Field
 
 from divbase_lib.schemas.queries import (
     BcftoolsQueryKwargs,
+    BcftoolsQueryTaskResult,
     SampleMetadataQueryKwargs,
-    TaskBcftoolsQueryResult,
-    TaskMetadataQueryResult,
+    SampleMetadataQueryTaskResult,
 )
 
 # Response Models
 
 
 # TODO move this to a schemas file for dimension tasks
-class TaskDimensionUpdateResult(BaseModel):
+class DimensionUpdateTaskResult(BaseModel):
     """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
 
-    status: str
+    status: Optional[str] = None
     submitter: str
     VCF_files_added: Optional[List[str]] = Field(
         None, description="VCF files that were added to dimensions index by this job"
@@ -54,7 +54,7 @@ class FlowerTaskResult(BaseModel):
     eta: Optional[float]
     expires: Optional[float]
     retries: Optional[int]
-    result: Optional[Union[TaskBcftoolsQueryResult, TaskMetadataQueryResult, TaskDimensionUpdateResult, str]]
+    result: Optional[Union[BcftoolsQueryTaskResult, SampleMetadataQueryTaskResult, DimensionUpdateTaskResult, str]]
     exception: Optional[str]
     timestamp: Optional[float]
     runtime: Optional[float]

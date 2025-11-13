@@ -27,8 +27,7 @@ from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.queries import SidecarQueryResult
-from divbase_lib.schemas.queries import BcftoolsQueryRequest, SampleMetadataQueryRequest
+from divbase_lib.schemas.queries import BcftoolsQueryRequest, SampleMetadataQueryRequest, SampleMetadataQueryTaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,7 @@ def sample_metadata_query(
         # Note: VCFDimensionsEntryMissingError already contains a hint in the detail, so no need for custom hint here.
         return
 
-    results = SidecarQueryResult(**response.json())
+    results = SampleMetadataQueryTaskResult(**response.json())
 
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
