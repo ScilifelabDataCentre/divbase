@@ -16,7 +16,6 @@ runner = CliRunner()
 # multiple users log in and submit tasks before any tests are run.
 
 
-# Autouse fixture that depends on all user fixtures to ensure tasks are submitted
 @pytest.fixture(scope="module", autouse=True)
 def all_users_tasks_submitted(edit_user_with_submitted_tasks, manage_user_with_submitted_tasks):
     """
@@ -73,6 +72,15 @@ def _submit_tasks_for_user(CONSTANTS):
     result_submit = runner.invoke(app, f"query tsv '{query_string}' --project {project_name}")
     assert result_submit.exit_code == 0
 
+    second_project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    result_submit = runner.invoke(
+        app,
+        f"query tsv '{query_string}' --project {second_project_name} --metadata-tsv-name sample_metadata_HOM_chr_split_version.tsv",
+    )
+    assert (
+        result_submit.exit_code == 1
+    )  # should fail due to missing dimensions index, this allows to test task history for fail messages
+
 
 # TODO could make a login and submit task for admin, but admin user does not belong to any projects in the testing stack and can thus not submit tasks
 
@@ -114,7 +122,6 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
 
     assert TEST_USERS["edit user"]["email"] in user_emails
     assert TEST_USERS["manage user"]["email"] not in user_emails
-    assert ADMIN_CREDENTIALS["email"] not in user_emails
 
 
 def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_existing_config):
@@ -130,6 +137,69 @@ def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_exi
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
-    # assert ADMIN_CREDENTIALS["email"] in user_emails
     assert TEST_USERS["edit user"]["email"] in user_emails
     assert TEST_USERS["manage user"]["email"] in user_emails
+
+
+def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in_manage_user_with_existing_config):
+    """Integration test where a manage user can see all tasks of a project they manage."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history project {project_name}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["project_name"] == project_name
+
+    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+
+    assert TEST_USERS["edit user"]["email"] in user_emails
+    assert TEST_USERS["manage user"]["email"] in user_emails
+
+
+def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
+    CONSTANTS, logged_in_edit_user_with_existing_config
+):
+    """Integration test where edit user can filter their own tasks by project."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    omitted_project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history user --project {project_name}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["user_name"] == TEST_USERS["edit user"]["email"]
+    assert captured_manager.command_context["project_name"] == project_name
+
+    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    task_projects = {task.kwargs.bucket_name for task in captured_manager.task_items.values()}
+
+    assert TEST_USERS["edit user"]["email"] in user_emails
+    assert TEST_USERS["manage user"]["email"] not in user_emails
+    assert project_name in task_projects
+    assert omitted_project_name not in task_projects
+
+
+def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_existing_config):
+    """
+    Integration test that read user cannot access the task history, since they cannot subimit tasks.
+    """
+
+    # Without --project flag
+    result_history = runner.invoke(app, "task-history user")
+    assert result_history.exit_code == 1
+    assert "authorization_error" in str(result_history.exception)
+    assert "You do not have access view task history" in str(result_history.exception)
+
+    # With --project flag
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    result_history = runner.invoke(app, f"task-history user --project {project_name}")
+    assert result_history.exit_code == 1
+    assert "authorization_error" in str(result_history.exception)
+    assert "Project not found or you don't have permission to view task history from this project" in str(
+        result_history.exception
+    )

@@ -36,8 +36,6 @@ async def get_allowed_task_ids_for_user(
     """
     Get all task IDs the user has permission to view.
 
-    The query returns [(taskid1,), (taskid2,), (taskid3,)] etc. thus need to extract first element of each tuple.
-
     Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
     """
     if is_admin:
@@ -60,8 +58,6 @@ async def get_allowed_task_ids_for_user_and_project(
 ) -> set[str]:
     """
     Get all task IDs the user has permission to view.
-
-    The query returns [(taskid1,), (taskid2,), (taskid3,)] etc. thus need to extract first element of each tuple.
 
     Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
     """
@@ -108,8 +104,6 @@ async def get_allowed_task_ids_for_project(
 ) -> set[str]:
     """
     Get all task IDs for a project.
-
-    The query returns [(taskid1,), (taskid2,), (taskid3,)] etc. thus need to extract first element of each tuple.
 
     Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
     """
