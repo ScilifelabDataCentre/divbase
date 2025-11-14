@@ -139,8 +139,8 @@ class Settings:
             "FLOWER_USER": self.flower.user,
             "FLOWER_PASSWORD": self.flower.password,
             "JWT_SECRET_KEY": self.jwt.secret_key,
-            "S3_ACCESS_KEY": self.s3.access_key,
-            "S3_SECRET_KEY": self.s3.secret_key,
+            "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
+            "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":

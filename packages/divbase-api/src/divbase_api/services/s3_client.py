@@ -8,7 +8,7 @@ from pathlib import Path
 
 import boto3
 
-from divbase_lib.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
+from divbase_lib.exceptions import ObjectDoesNotExistError
 
 logger = logging.getLogger(__name__)
 
@@ -187,19 +187,10 @@ class S3FileManager:
 
 def create_s3_file_manager(
     url: str,
-    s3_env_access_key_name: str = "DIVBASE_S3_ACCESS_KEY",
-    s3_env_secret_key_name: str = "DIVBASE_S3_SECRET_KEY",
 ) -> S3FileManager:
-    """
-    Creates an S3FileManager instance using credentials from environment variables
-    """
-    access_key = os.getenv(s3_env_access_key_name)
-    secret_key = os.getenv(s3_env_secret_key_name)
-
-    if not access_key or not secret_key:
-        raise DivBaseCredentialsNotFoundError(
-            access_key_name=s3_env_access_key_name, secret_key_name=s3_env_secret_key_name
-        )
+    """Helper function to creates an S3FileManager instance using the S3 service account's credentials"""
+    access_key = os.environ["S3_SERVICE_ACCOUNT_ACCESS_KEY"]
+    secret_key = os.environ["S3_SERVICE_ACCOUNT_SECRET_KEY"]
 
     return S3FileManager(
         url=url,
