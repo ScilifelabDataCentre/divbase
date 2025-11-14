@@ -105,6 +105,18 @@ def logged_in_manage_user_with_existing_config(CONSTANTS):
     yield from _create_logged_in_user_fixture("manage user")(CONSTANTS)
 
 
+@pytest.fixture
+def logged_in_edit_user_query_project_only_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in edit user (who only belongs to query-project) with existing config."""
+    yield from _create_logged_in_user_fixture("edit user query-project only")(CONSTANTS)
+
+
+@pytest.fixture
+def logged_in_manage_user_query_project_only_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in manage user (who only belongs to query-project) with existing config."""
+    yield from _create_logged_in_user_fixture("manage user query-project only")(CONSTANTS)
+
+
 def _create_logged_in_user_fixture(user_type: str):
     """
     Factory function to create a logged-in user fixture for a specific user type.
