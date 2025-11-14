@@ -54,8 +54,8 @@ class S3Settings:
 
     s3_external_url: str = os.getenv("S3_EXTERNAL_URL", "http://localhost:9000")
     s3_internal_url: str = os.getenv("S3_INTERNAL_URL", "http://minio:9000")
-    access_key: SecretStr = SecretStr(os.getenv("S3_ACCESS_KEY", "NOT_SET"))
-    secret_key: SecretStr = SecretStr(os.getenv("S3_SECRET_KEY", "NOT_SET"))
+    access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
+    secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 
 
 @dataclass
