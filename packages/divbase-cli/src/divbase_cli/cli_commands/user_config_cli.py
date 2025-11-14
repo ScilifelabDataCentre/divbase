@@ -42,7 +42,6 @@ def create_user_config_command(
 def add_project_command(
     name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
     divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase API URL associated with this project."),
-    s3_url: str = typer.Option(cli_settings.S3_URL, help="S3 object store URL associated with this project."),
     make_default: bool = typer.Option(
         False,
         "--default",
@@ -56,12 +55,11 @@ def add_project_command(
     project = config.add_project(
         name=name,
         divbase_url=divbase_url,
-        s3_url=s3_url,
         is_default=make_default,
     )
 
     print(f"Project: '{project.name}' added to your config file located at {config_file.resolve()}.")
-    print(f"DivBase URL: {project.divbase_url} and S3 URL: {project.s3_url} were set for this project.")
+    print(f"The URL: {project.divbase_url} was set as the DivBase API URL for this project.")
 
     if make_default:
         print(f"Project '{project.name}' is now set as your default project")
@@ -159,11 +157,10 @@ def show_user_config(
     table = Table(title="\nProjects in your DivBase CLI user config file")
     table.add_column("Bucket Name", style="cyan")
     table.add_column("DivBase URL", style="green")
-    table.add_column("S3 URL", style="green")
     table.add_column("Is default", style="yellow")
 
     for project in config.projects:
         is_default = "Yes" if project.name == config.default_project else ""
-        table.add_row(project.name, project.divbase_url, project.s3_url, is_default)
+        table.add_row(project.name, project.divbase_url, is_default)
 
     console.print(table)

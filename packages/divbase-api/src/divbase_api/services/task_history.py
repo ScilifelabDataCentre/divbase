@@ -11,8 +11,8 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
 )
-from divbase_lib.schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
-from divbase_lib.schemas.task_history import (
+from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
+from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
     FlowerTaskResult,

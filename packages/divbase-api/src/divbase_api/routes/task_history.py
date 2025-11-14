@@ -20,7 +20,7 @@ from divbase_api.services.task_history import (
     get_user_and_project_task_history,
     get_user_task_history,
 )
-from divbase_lib.schemas.task_history import TaskHistoryResults
+from divbase_lib.api_schemas.task_history import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 

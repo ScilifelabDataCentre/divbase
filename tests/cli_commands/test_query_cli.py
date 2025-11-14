@@ -22,10 +22,10 @@ from celery import current_app
 from typer.testing import CliRunner
 
 from divbase_api.services.queries import BcftoolsQueryManager
+from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
-from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -267,7 +267,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 
-        command = f"files upload {test_file}  --project {bucket_name}"
+        command = f"files upload {test_file}  --project {bucket_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0

@@ -14,6 +14,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from divbase_lib.api_schemas.queries import SampleMetadataQueryTaskResult
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -23,7 +24,6 @@ from divbase_lib.exceptions import (
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
 )
-from divbase_lib.schemas.queries import SampleMetadataQueryTaskResult
 
 logger = logging.getLogger(__name__)
 

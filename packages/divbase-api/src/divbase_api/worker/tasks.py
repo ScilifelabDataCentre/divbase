@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
+from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
@@ -29,9 +30,8 @@ from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.exceptions import NoVCFFilesFoundError
-from divbase_lib.s3_client import S3FileManager, create_s3_file_manager
-from divbase_lib.schemas.vcf_dimensions import DimensionUpdateTaskResult
 
 logger = logging.getLogger(__name__)
 

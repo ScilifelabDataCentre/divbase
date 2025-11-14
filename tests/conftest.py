@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
     delete_skipped_vcf,
     delete_vcf_metadata,
@@ -22,7 +23,6 @@ from divbase_api.worker.crud_dimensions import (
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
-from divbase_lib.s3_client import create_s3_file_manager
 from tests.helpers.api_setup import (
     ADMIN_CREDENTIALS,
     TEST_USERS,

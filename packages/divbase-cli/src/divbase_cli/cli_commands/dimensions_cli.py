@@ -8,7 +8,7 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.schemas.vcf_dimensions import DimensionsShowResult
+from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult
 
 logger = logging.getLogger(__name__)
 

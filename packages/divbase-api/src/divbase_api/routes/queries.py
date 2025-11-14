@@ -21,7 +21,7 @@ from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
 )
-from divbase_lib.schemas.queries import (
+from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
     BcftoolsQueryRequest,
     SampleMetadataQueryKwargs,

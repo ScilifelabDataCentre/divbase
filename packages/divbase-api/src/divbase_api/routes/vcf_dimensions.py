@@ -19,7 +19,7 @@ from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissing
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import update_vcf_dimensions_task
-from divbase_lib.schemas.vcf_dimensions import DimensionsShowResult, DimensionUpdateKwargs
+from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult, DimensionUpdateKwargs
 
 logger = logging.getLogger(__name__)
 

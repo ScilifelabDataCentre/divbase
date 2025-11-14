@@ -2,13 +2,15 @@
 An s3FileManager object that lets you do basic operations with a bucket.
 """
 
+import logging
 import os
 from pathlib import Path
 
 import boto3
-import botocore
 
 from divbase_lib.exceptions import DivBaseCredentialsNotFoundError, ObjectDoesNotExistError
+
+logger = logging.getLogger(__name__)
 
 
 class S3FileManager:
@@ -138,7 +140,7 @@ class S3FileManager:
         extra_args = {"VersionId": version_id} if version_id else None
         try:
             self.s3_client.download_file(Bucket=bucket_name, Key=key, Filename=str(dest), ExtraArgs=extra_args)
-        except botocore.exceptions.ClientError as err:
+        except self.s3_client.exceptions.ClientError as err:
             if err.response["Error"]["Code"] == "404":
                 raise ObjectDoesNotExistError(
                     key=key,
@@ -148,6 +150,39 @@ class S3FileManager:
             raise err
 
         return key
+
+    def get_file_checksum(self, bucket_name: str, object_name: str) -> str | None:
+        """
+        Get the MD5 checksum of a file in the bucket, if it exists.
+        Returns None if the file does not exist.
+        """
+        try:
+            response = self.s3_client.head_object(Bucket=bucket_name, Key=object_name)
+        except self.s3_client.exceptions.ClientError as err:
+            if err.response["Error"]["Code"] == "404":
+                return None
+            else:
+                logger.error(
+                    f"Unexpected error getting checksum for object '{object_name}' in bucket '{bucket_name}': {err}"
+                )
+                return None
+        return response.get("ETag", "").strip('"')
+
+    def get_multiple_checksums(self, bucket_name: str, object_names: list[str]) -> dict[str, str]:
+        """
+        Given a list of potential file names in the bucket, return a dict of those that exists with their checksums.
+
+        Note, this is used when uploading multiple files and want to check which already exist in the bucket.
+        So it should not be assumed all files provided actually exist in the bucket.
+        """
+        matches = {}
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key in object_names:
+                    matches[key] = obj.get("ETag", "").strip('"')
+        return matches
 
 
 def create_s3_file_manager(

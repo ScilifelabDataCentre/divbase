@@ -5,7 +5,7 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
-from divbase_lib.schemas.task_history import (
+from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
     SampleMetadataQueryTaskResult,

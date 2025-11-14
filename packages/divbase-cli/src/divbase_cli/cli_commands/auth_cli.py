@@ -11,6 +11,7 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.user_auth import (
     check_existing_session,
     login_to_divbase,
@@ -18,7 +19,6 @@ from divbase_cli.user_auth import (
     make_authenticated_request,
 )
 from divbase_cli.user_config import load_user_config
-from divbase_lib.exceptions import AuthenticationError
 
 auth_app = typer.Typer(
     no_args_is_help=True, help="Login/logout of DivBase server. To register, visit https://divbase.scilifelab.se/."

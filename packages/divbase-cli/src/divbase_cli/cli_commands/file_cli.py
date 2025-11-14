@@ -42,14 +42,16 @@ def list_files(
     if not files:
         print("No files found in the project's storage bucket.")
     else:
-        print(f"Files in bucket '{project_config.bucket_name}':")
+        print(f"Files in the project '{project_config.name}':")
         for file in files:
             print(f"- '{file}'")
 
 
 @file_app.command("download")
 def download_files(
-    files: List[str] = typer.Argument(None, help="Space seperated list of files/objects to download from the bucket."),
+    files: List[str] = typer.Argument(
+        None, help="Space separated list of files/objects to download from the project's bucket."
+    ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     download_dir: str = typer.Option(
         None,
@@ -58,6 +60,15 @@ def download_files(
             If also not specified in your user config, downloads to the current directory.
             You can also specify "." to download to the current directory.""",
     ),
+    disable_verify_checksums: Annotated[
+        bool,
+        typer.Option(
+            "--disable-verify-checksums",
+            help="Turn off checksum verification which is on by default. "
+            "Checksum verification means all downloaded files are verified against their MD5 checksums."
+            "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
+        ),
+    ] = False,
     bucket_version: str = typer.Option(
         default=None, help="Version of the project's storage bucket at which to download the files."
     ),
@@ -89,17 +100,25 @@ def download_files(
         print("No files specified for download.")
         raise typer.Exit(1)
 
-    downloaded_files = download_files_command(
+    download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         all_files=list(all_files),
         download_dir=download_dir_path,
+        verify_checksums=not disable_verify_checksums,
         bucket_version=bucket_version,
     )
 
-    print(f"The following files were downloaded to {download_dir_path.resolve()}:")
-    for file in downloaded_files:
-        print(f"- '{file}'")
+    if download_results.successful:
+        print("[green bold]Successfully downloaded the following files:[/green bold]")
+        for success in download_results.successful:
+            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
+    if download_results.failed:
+        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
+        for failed in download_results.failed:
+            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+
+        raise typer.Exit(1)
 
 
 @file_app.command("upload")
@@ -107,10 +126,14 @@ def upload_files(
     files: List[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
     upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    safe_mode: Annotated[
+    disable_safe_mode: Annotated[
         bool,
         typer.Option(
-            "--safe-mode", help="Check if any of the files you're about to upload already exist and if so don't upload"
+            "--disable-safe-mode",
+            help="Turn off safe mode which is on by default. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload:"
+            "(1) Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process."
+            "(2) Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums)."
+            "It is recommended to leave safe mode enabled unless you have a specific reason to disable it.",
         ),
     ] = False,
     project: str | None = PROJECT_NAME_OPTION,
@@ -145,19 +168,24 @@ def upload_files(
         print("No files specified for upload.")
         raise typer.Exit(1)
 
-    uploaded_files = upload_files_command(
+    uploaded_results = upload_files_command(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
         all_files=list(all_files),
-        safe_mode=safe_mode,
+        safe_mode=not disable_safe_mode,
     )
 
-    if uploaded_files:
-        print("Uploaded files:")
-        for object_name, file_path in uploaded_files.items():
-            print(f"- '{object_name}' created from file at: '{file_path.resolve()}'")
-    else:
-        print("No files were uploaded.")
+    if uploaded_results.successful:
+        print("[green bold] The following files were successfully uploaded: [/green bold]")
+        for object in uploaded_results.successful:
+            print(f"- '{object.object_name}' created from file at: '{object.file_path.resolve()}'")
+
+    if uploaded_results.failed:
+        print("[red bold]ERROR: Failed to upload the following files:[/red bold]")
+        for failed in uploaded_results.failed:
+            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+
+        raise typer.Exit(1)
 
 
 @file_app.command("remove")

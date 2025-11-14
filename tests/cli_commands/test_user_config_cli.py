@@ -59,9 +59,8 @@ def test_add_project_as_default_command(logged_out_user_with_fresh_config):
 def test_add_project_and_specify_urls(logged_out_user_with_fresh_config):
     project_name = "test_project"
     divbase_url = "https://divbasewebsite.com"
-    s3_url = "http://s3.divbasewebsite.com"
 
-    command = f"config add-project {project_name} --divbase-url {divbase_url} --s3-url {s3_url}"
+    command = f"config add-project {project_name} --divbase-url {divbase_url}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -71,7 +70,6 @@ def test_add_project_and_specify_urls(logged_out_user_with_fresh_config):
     assert project is not None
     assert project.name == project_name
     assert project.divbase_url == divbase_url
-    assert project.s3_url == s3_url
 
 
 def test_add_project_that_already_exists(logged_out_user_with_fresh_config):

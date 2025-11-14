@@ -8,8 +8,8 @@ TODO - add some non e2e tests for logging in with expired tokens etc.
 
 from typer.testing import CliRunner
 
+from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import AuthenticationError, DivBaseAPIConnectionError
 
 runner = CliRunner()
 

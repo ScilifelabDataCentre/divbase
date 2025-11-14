@@ -11,11 +11,11 @@ from pathlib import Path
 import typer
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
+from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
-from divbase_lib.exceptions import AuthenticationError
-from divbase_lib.schemas.task_history import TaskHistoryResults
+from divbase_lib.api_schemas.task_history import TaskHistoryResults
 
 logger = logging.getLogger(__name__)
 

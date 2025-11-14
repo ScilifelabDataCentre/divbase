@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from divbase_lib.schemas.queries import (
+from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
     BcftoolsQueryTaskResult,
     SampleMetadataQueryKwargs,
     SampleMetadataQueryTaskResult,
 )
-from divbase_lib.schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
+from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
 
 # Response Models
 

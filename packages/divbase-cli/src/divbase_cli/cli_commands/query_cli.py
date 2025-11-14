@@ -27,7 +27,11 @@ from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.schemas.queries import BcftoolsQueryRequest, SampleMetadataQueryRequest, SampleMetadataQueryTaskResult
+from divbase_lib.api_schemas.queries import (
+    BcftoolsQueryRequest,
+    SampleMetadataQueryRequest,
+    SampleMetadataQueryTaskResult,
+)
 
 logger = logging.getLogger(__name__)
 

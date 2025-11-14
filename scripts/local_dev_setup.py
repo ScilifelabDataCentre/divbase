@@ -31,7 +31,7 @@ from pathlib import Path
 import boto3
 import httpx
 
-from divbase_lib.exceptions import DivBaseAPIError
+from divbase_cli.cli_exceptions import DivBaseAPIError
 
 MINIO_URL = "http://localhost:9000"
 MINIO_FAKE_ACCESS_KEY = "minioadmin"
