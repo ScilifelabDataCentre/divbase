@@ -2,7 +2,7 @@
 Task history DB Model. Summarizes tasks run by Celery without storing all details.
 """
 
-import enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Integer, String
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from divbase_api.models.users import UserDB
 
 
-class TaskStatus(enum.Enum):
+class TaskStatus(StrEnum):
     """
     Helper class that contains the valid Celery task states.
     Used by TaskHistoryDB to set the status column.
