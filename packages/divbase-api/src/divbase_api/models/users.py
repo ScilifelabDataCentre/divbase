@@ -2,9 +2,10 @@
 User DB Model.
 """
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
@@ -30,6 +31,8 @@ class UserDB(BaseDBModel):
     is_active: Mapped[bool] = mapped_column(default=True)
     is_deleted: Mapped[bool] = mapped_column(default=False)
     email_verified: Mapped[bool] = mapped_column(default=False)
+
+    last_password_change: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project_memberships: Mapped[list["ProjectMembershipDB"]] = relationship(
         "ProjectMembershipDB", back_populates="user"

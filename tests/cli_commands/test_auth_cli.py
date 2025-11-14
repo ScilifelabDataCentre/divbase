@@ -8,6 +8,7 @@ TODO - add some non e2e tests for logging in with expired tokens etc.
 
 from typer.testing import CliRunner
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError
 from divbase_cli.divbase_cli import app
 
@@ -148,3 +149,27 @@ def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_fresh_config
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
+
+
+def test_whoami_command_needing_refresh_token(logged_out_user_with_fresh_config):
+    """
+    We simulate that the access token has expired by manually setting it to be expired in the users .secrets file
+
+    This will force the CLI to use the refresh token to get a new access token when running the whoami command.
+    """
+    log_in_as_admin()
+
+    # Overwrite the access_token_expires_at to have expired in 1970 :)
+    with open(cli_settings.TOKENS_PATH, "r") as token_file:
+        lines = token_file.readlines()
+    with open(cli_settings.TOKENS_PATH, "w") as token_file:
+        for line in lines:
+            if line.startswith("access_token_expires_at:"):
+                token_file.write("access_token_expires_at: 1\n")
+            else:
+                token_file.write(line)
+
+    command = "auth whoami"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert admin_credentials["email"] in result.stdout

@@ -9,7 +9,7 @@
         <mj-text>
           Hello,<br/><br/>
           Your email {{ email }} is already verified. You can log in to your DivBase account directly.<br/><br/>
-          If you encounter any issues, please contact our support team.
+          If you encounter any issues, please contact us.
         </mj-text>
       </mj-column>
     </mj-section>

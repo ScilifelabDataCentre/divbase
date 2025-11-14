@@ -13,7 +13,7 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
-from starlette_admin import BaseAdmin, BooleanField, EmailField, IntegerField, StringField, TextAreaField
+from starlette_admin import BaseAdmin, BooleanField, DateTimeField, EmailField, IntegerField, StringField, TextAreaField
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError
@@ -57,6 +57,10 @@ class UserView(ModelView):
         BooleanField("is_active", help_text="Is the user active?"),
         BooleanField("is_deleted", help_text="Is the user deleted?"),
         BooleanField("email_verified", help_text="Has the user verified their email address?"),
+        DateTimeField(
+            "last_password_change",
+            help_text="Timestamp when the user last changed their password.",
+        ),
         "project_memberships",
     ]
 
@@ -65,8 +69,9 @@ class UserView(ModelView):
         "project_memberships",
         "is_deleted",
         "is_active",
+        "last_password_change",
     ]  # hashed_password wont be defined yet but needs to be included.
-    exclude_fields_from_edit = ["project_memberships", "password", "hashed_password"]
+    exclude_fields_from_edit = ["project_memberships", "password", "hashed_password", "last_password_change"]
     exclude_fields_from_detail = ["hashed_password", "password"]
 
     def can_delete(self, request: Request) -> bool:

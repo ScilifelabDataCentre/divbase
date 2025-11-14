@@ -115,3 +115,34 @@ def send_email_already_verified_email(email_to: str) -> None:
         context={"email": email_to},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_password_reset_email(email_to: str, user_id: int) -> None:
+    """
+    Send a password reset email to the specified email address.
+    """
+    subject = "DivBase - reset your password"
+
+    reset_password_token, _ = create_token(subject=user_id, token_type=TokenType.PASSWORD_RESET)
+    reset_password_url = f"{settings.api.frontend_base_url}/auth/reset-password?token={reset_password_token}"
+
+    link_expire_hours = settings.email.password_reset_expires_seconds // 3600
+
+    html_content = render_email_template(
+        template_name="reset_password.html",
+        context={"email": email_to, "password_reset_url": reset_password_url, "link_expire_hours": link_expire_hours},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_password_has_been_reset_email(email_to: str) -> None:
+    """
+    Send a email to tell the user their password has now been reset.
+    """
+    subject = "DivBase - Your password has been reset"
+
+    html_content = render_email_template(
+        template_name="password_was_reset.html",
+        context={"email": email_to},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
