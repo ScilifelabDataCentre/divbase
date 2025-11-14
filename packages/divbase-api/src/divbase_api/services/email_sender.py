@@ -135,7 +135,7 @@ def send_password_reset_email(email_to: str, user_id: int) -> None:
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
 
 
-def send_password_has_been_reset_email(email_to: str, user_id: int) -> None:
+def send_password_has_been_reset_email(email_to: str) -> None:
     """
     Send a email to tell the user their password has now been reset.
     """
