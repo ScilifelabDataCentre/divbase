@@ -17,7 +17,12 @@ runner = CliRunner()
 
 
 @pytest.fixture(scope="module", autouse=True)
-def all_users_tasks_submitted(edit_user_with_submitted_tasks, manage_user_with_submitted_tasks):
+def all_users_tasks_submitted(
+    edit_user_with_submitted_tasks,
+    manage_user_with_submitted_tasks,
+    edit_user_query_project_only_with_submitted_tasks,
+    manage_user_query_project_only_with_submitted_tasks,
+):
     """
     Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It waits for the other fixtures to complete = have reached their yield statement.
     Together with the fixtures below, this results in two tasks being submitted per user. The tests in this module will then make tests based on these submitted tasks and which user they belong to.
@@ -53,6 +58,38 @@ def manage_user_with_submitted_tasks(CONSTANTS):
     and the runs the clean up code after the yield in _create_logged_in_user_fixture.
     """
     factory = _create_logged_in_user_fixture("manage user")(CONSTANTS)
+    next(factory)
+    _submit_tasks_for_user(CONSTANTS)
+    yield
+
+
+@pytest.fixture(scope="module")
+def edit_user_query_project_only_with_submitted_tasks(CONSTANTS):
+    """
+    Module-scoped fixture: login as edit user (query project only) and submit tasks.
+
+    factory is a generator object created, but not executed by _create_logged_in_user_fixture.
+    The next() runs all code before the yield and then waits. This allows for tasks to be
+    submitted for that logged in user. The final yield waits until all tests have been run,
+    and the runs the clean up code after the yield in _create_logged_in_user_fixture.
+    """
+    factory = _create_logged_in_user_fixture("edit user query-project only")(CONSTANTS)
+    next(factory)
+    _submit_tasks_for_user(CONSTANTS)
+    yield
+
+
+@pytest.fixture(scope="module")
+def manage_user_query_project_only_with_submitted_tasks(CONSTANTS):
+    """
+    Module-scoped fixture: login as manage user (query project only) and submit tasks.
+
+    factory is a generator object created, but not executed by _create_logged_in_user_fixture.
+    The next() runs all code before the yield and then waits. This allows for tasks to be
+    submitted for that logged in user. The final yield waits until all tests have been run,
+    and the runs the clean up code after the yield in _create_logged_in_user_fixture.
+    """
+    factory = _create_logged_in_user_fixture("manage user query-project only")(CONSTANTS)
     next(factory)
     _submit_tasks_for_user(CONSTANTS)
     yield
@@ -200,6 +237,47 @@ def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_e
     result_history = runner.invoke(app, f"task-history user --project {project_name}")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
-    assert "Project not found or you don't have permission to view task history from this project" in str(
-        result_history.exception
-    )
+    assert "You do not have access view task history" in str(result_history.exception)
+
+
+def test_edit_user_cannot_see_task_history_for_project_not_member_of(
+    CONSTANTS, logged_in_edit_user_query_project_only_with_existing_config
+):
+    """Integration test where edit user cannot see task history for a project they are not a member of."""
+    non_member_project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
+    assert result_history.exit_code == 1
+    assert "project_not_found_error\nDetails" in str(result_history.exception)
+    assert "Project not found or the user has no access" in str(result_history.exception)
+
+
+def test_manage_user_query_project_only_can_see_all_task_history_for_their_project(
+    CONSTANTS, logged_in_manage_user_query_project_only_with_existing_config
+):
+    """Integration test where a manage user that only belongs to query-project can see all tasks of that project."""
+
+    # Test that user can see all tasks for query-project
+    project_name = CONSTANTS["QUERY_PROJECT"]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history project {project_name}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["project_name"] == project_name
+
+    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+
+    assert TEST_USERS["edit user"]["email"] in user_emails
+    assert TEST_USERS["manage user"]["email"] in user_emails
+    assert TEST_USERS["manage user query-project only"]["email"] in user_emails
+
+    non_member_project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    # Test that user cannot see tasks for a project they do not belong to
+    result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
+    assert result_history.exit_code == 1
+    assert "project_not_found_error\nDetails" in str(result_history.exception)
+    assert "Project not found or the user has no access" in str(result_history.exception)
