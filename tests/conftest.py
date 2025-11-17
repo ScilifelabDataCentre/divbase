@@ -7,7 +7,6 @@ that the imports work correctly.
 """
 
 import logging
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,25 +22,17 @@ from divbase_api.worker.crud_dimensions import (
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
-from tests.helpers.api_setup import (
-    ADMIN_CREDENTIALS,
-    TEST_USERS,
-    get_project_map,
-    setup_api_data,
-)
 from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
-from tests.helpers.minio_setup import (
+from tests.helpers.setup_test_data import (
+    API_ADMIN_CREDENTIALS,
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,
     MINIO_URL,
-    PROJECTS,
-    setup_minio_data,
+    TEST_PROJECTS,
+    TEST_USERS,
+    get_project_map,
+    setup_test_data,
 )
-
-os.environ["DIVBASE_S3_ACCESS_KEY"] = MINIO_FAKE_ACCESS_KEY
-os.environ["DIVBASE_S3_SECRET_KEY"] = MINIO_FAKE_SECRET_KEY
-
-api_base_url = os.environ["DIVBASE_API_URL"]
 
 runner = CliRunner()
 
@@ -69,19 +60,29 @@ def clean_tmp_config_token_dir():
 
 @pytest.fixture(scope="session")
 def CONSTANTS():
+    project_name_bucket_map = {
+        project_name: project_data["bucket_name"] for project_name, project_data in TEST_PROJECTS.items()
+    }
+    project_name_files_map = {
+        project_name: project_data["files"] for project_name, project_data in TEST_PROJECTS.items()
+    }
+
     return {
         "BAD_ACCESS_KEY": MINIO_FAKE_ACCESS_KEY,
         "BAD_SECRET_KEY": MINIO_FAKE_SECRET_KEY,
         "MINIO_URL": MINIO_URL,
+        # Project names
         "DEFAULT_PROJECT": "project1",
         "NON_DEFAULT_PROJECT": "project2",
         "QUERY_PROJECT": "query-project",
         "SPLIT_SCAFFOLD_PROJECT": "split-scaffold-project",
         "CLEANED_PROJECT": "cleaned-project",
         "EMPTY_PROJECT": "empty-project",
-        "PROJECT_CONTENTS": PROJECTS,
+        # Mappings of project names to S3 bucket names
+        "PROJECT_TO_BUCKET_MAP": project_name_bucket_map,
+        "PROJECT_CONTENTS": project_name_files_map,
         "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
-        "ADMIN_CREDENTIALS": ADMIN_CREDENTIALS,
+        "ADMIN_CREDENTIALS": API_ADMIN_CREDENTIALS,
         "TEST_USERS": TEST_USERS,
     }
 
@@ -93,8 +94,7 @@ def docker_testing_stack():
     """
     try:
         start_compose_stack()
-        setup_minio_data()
-        setup_api_data()
+        setup_test_data()
         yield
     finally:
         stop_compose_stack()
