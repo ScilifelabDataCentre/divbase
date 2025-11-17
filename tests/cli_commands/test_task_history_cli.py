@@ -256,21 +256,21 @@ def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
 
 def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_existing_config):
     """
-    Integration test that read user cannot access the task history, since they cannot subimit tasks.
+    Integration test that read user cannot access the task history, since they cannot submit tasks.
     """
 
     # Without --project flag
     result_history = runner.invoke(app, "task-history user")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
-    assert "You do not have access view task history" in str(result_history.exception)
+    assert "You do not have access view to task history" in str(result_history.exception)
 
     # With --project flag
     project_name = CONSTANTS["QUERY_PROJECT"]
     result_history = runner.invoke(app, f"task-history user --project {project_name}")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
-    assert "You do not have access view task history" in str(result_history.exception)
+    assert "You do not have access view to task history" in str(result_history.exception)
 
 
 def test_edit_user_cannot_see_task_history_for_project_not_member_of(

@@ -178,7 +178,7 @@ def sample_metadata_query_task(
         except Exception as e:
             logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
 
-        # Convert to dict since celery serizlizes to JSON when sending back to API layer. Pydantic model serilization is not supported by celery
+        # Convert to dict since celery serializes to JSON when sending back to API layer. Pydantic model serialization is not supported by celery
         result = metadata_result.model_dump()
         result["status"] = "completed"
         result["task_id"] = task_id
@@ -418,7 +418,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
         VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
     )
 
-    # Convert to dict since celery serizlizes to JSON when writing to results backend. Pydantic model serilization is not supported by celery
+    # Convert to dict since celery serializes to JSON when writing to results backend. Pydantic model serialization is not supported by celery
     return result.model_dump()
 
 

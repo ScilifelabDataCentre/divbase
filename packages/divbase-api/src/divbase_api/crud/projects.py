@@ -217,7 +217,7 @@ async def check_if_user_is_not_only_read_user_in_all_their_projects(db: AsyncSes
     Check if a user has any project where they have at least an EDIT role.
 
     Users with a READ role should not be able to view tasks from a project (since they cannot submit task there in the first place).
-    But if there is no project where the have a role with higher permissions that READ, they should not be able to see the task history
+    But if there is no project where they have a role with higher permissions than READ, they should not be able to see the task history
     at all. Instead of just returning an empty task history table, they should get a special error message informing them of this.
     """
 

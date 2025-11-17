@@ -114,7 +114,7 @@ class TaskHistoryDisplayManager:
         """
         Extract submitter from task kwargs.
         """
-        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookupin the task_history db table would maybe make more sense?
+        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookup in the task_history db table would maybe make more sense?
         kwargs = task.kwargs
         if kwargs is None:
             return "Unknown"

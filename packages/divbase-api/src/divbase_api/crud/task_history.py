@@ -128,9 +128,9 @@ async def check_user_can_view_task_id(
 
     Admin is allowed to view all task IDs.
     Manage user is allowed to see all task IDs for the project the they manage.
-    Edit user is only allowed see task IDs for tasks they submitted themselves.
+    Edit user is only allowed to see task IDs for tasks they submitted themselves.
 
-    Uses explicit joins the two tables to be joined share a foreign key to a third table,
+    Uses explicit joins because the two tables being joined share a foreign key to a third table,
     but no direct FK between them.
     """
 

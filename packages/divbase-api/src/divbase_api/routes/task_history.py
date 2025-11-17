@@ -43,7 +43,7 @@ async def get_all_tasks_for_user(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view task history from any projects.")
+            raise AuthorizationError("You do not have access view to task history from any projects.")
 
     result = await get_user_task_history(
         db=db,
@@ -76,7 +76,7 @@ async def get_all_tasks_for_user_and_project(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view task history from any projects.")
+            raise AuthorizationError("You do not have access view to task history from any projects.")
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError(
@@ -111,7 +111,7 @@ async def get_task_by_id(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view task history from any projects.")
+            raise AuthorizationError("You do not have access view to task history from any projects.")
 
     return await get_task_history_by_id(
         db=db,
@@ -140,7 +140,7 @@ async def get_project_tasks(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view task history from any projects.")
+            raise AuthorizationError("You do not have access view to task history from any projects.")
 
     if not has_required_role(role, ProjectRoles.MANAGE):
         raise AuthorizationError(
