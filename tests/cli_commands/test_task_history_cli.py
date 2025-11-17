@@ -80,6 +80,17 @@ def edit_user_query_project_only_with_submitted_tasks(CONSTANTS):
 
 
 @pytest.fixture(scope="module")
+def logged_in_admin_for_task_ids(CONSTANTS):
+    """
+    Module-scoped fixture: login as admin to query all task IDs. Not used to submit tasks, but to
+    get the tasks IDs later on with the submitted_task_ids() fixture, since admins can see all tasks.
+    """
+    factory = _create_logged_in_user_fixture("admin")(CONSTANTS)
+    next(factory)
+    yield
+
+
+@pytest.fixture(scope="module")
 def manage_user_query_project_only_with_submitted_tasks(CONSTANTS):
     """
     Module-scoped fixture: login as manage user (query project only) and submit tasks.
@@ -142,6 +153,28 @@ def capture_task_history_manager():
         yield lambda: captured_manager
 
     assert captured_manager is not None, "No TaskHistoryDisplayManager was captured"
+
+
+@pytest.fixture(scope="module")
+def submitted_task_ids(all_users_tasks_submitted, CONSTANTS, logged_in_admin_for_task_ids):
+    """
+    Fixture that provides task IDs for the tasks submitted by the test users in the setup fixtures.
+    Intended for tests that use the `divbase task-history id` CLI command.
+    Uses the admin test user to get all submitted tasks.
+    """
+
+    with capture_task_history_manager() as get_manager:
+        runner.invoke(app, "task-history user")
+        captured_manager = get_manager()
+
+    task_ids_by_user = {}
+    for task_id, task_result in captured_manager.task_items.items():
+        user_email = task_result.kwargs.user_name
+        if user_email not in task_ids_by_user:
+            task_ids_by_user[user_email] = []
+        task_ids_by_user[user_email].append(task_id)
+
+    return task_ids_by_user
 
 
 def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit_user_with_existing_config):
@@ -281,3 +314,59 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
     assert result_history.exit_code == 1
     assert "project_not_found_error\nDetails" in str(result_history.exception)
     assert "Project not found or the user has no access" in str(result_history.exception)
+
+
+def test_manage_user_can_get_task_id_from_project_even_when_they_did_not_submit_task(
+    CONSTANTS,
+    logged_in_manage_user_query_project_only_with_existing_config,
+    submitted_task_ids,
+):
+    """
+    Integration test where a manage user that only belongs to query-project can see task IDs of tasks
+    submitted by other users in that project. Since task ID are UUID assigned at task submission, first
+    get a list of all tasks submitted to the project, then extract a task submitted by an edit user. The
+    Manage user should be able to access that task ID.
+    """
+
+    submitting_user = TEST_USERS["edit user query-project only"]["email"]
+    edit_user_task_id = submitted_task_ids[submitting_user][0]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history id {edit_user_task_id}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["task_id"] == edit_user_task_id
+
+
+def test_edit_user_can_only_get_task_ids_they_submitted(
+    CONSTANTS,
+    logged_in_edit_user_query_project_only_with_existing_config,
+    submitted_task_ids,
+):
+    """
+    Integration test where an edit user that only belongs to query-project can only access tasks by ID for
+    tasks that they submitted themselves.
+    """
+    submitting_user = TEST_USERS["edit user query-project only"]["email"]
+    manage_user = TEST_USERS["manage user query-project only"]["email"]
+    edit_user_task_id = submitted_task_ids[submitting_user][0]
+    manage_user_task_id = submitted_task_ids[manage_user][0]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history id {edit_user_task_id}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.command_context["task_id"] == edit_user_task_id
+    assert captured_manager.task_items[edit_user_task_id].kwargs.user_name == submitting_user
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.task_items == {}
