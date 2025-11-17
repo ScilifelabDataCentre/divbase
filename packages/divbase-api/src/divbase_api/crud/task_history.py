@@ -7,7 +7,7 @@ import logging
 from sqlalchemy import join, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.models.projects import ProjectDB
+from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -115,3 +115,46 @@ async def get_allowed_task_ids_for_project(
     for row in rows:
         allowed_task_ids.add(row[0])
     return allowed_task_ids
+
+
+async def check_user_can_view_task_id(
+    db: AsyncSession,
+    task_id: str,
+    user_id: int,
+    is_admin: bool,
+) -> bool:
+    """
+    Check if a user has permission to view the task history for a specific task ID.
+
+    Admin is allowed to view all task IDs.
+    Manage user is allowed to see all task IDs for the project the they manage.
+    Edit user is only allowed see task IDs for tasks they submitted themselves.
+
+    Uses explicit joins the two tables to be joined share a foreign key to a third table,
+    but no direct FK between them.
+    """
+
+    if is_admin:
+        return True
+
+    # Case: submitting user
+    stmt = select(TaskHistoryDB.task_id).where(
+        TaskHistoryDB.task_id == task_id,
+        TaskHistoryDB.user_id == user_id,
+    )
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none():
+        return True
+
+    # Case: manager user
+    stmt = (
+        select(TaskHistoryDB.task_id)
+        .join(ProjectMembershipDB, TaskHistoryDB.project_id == ProjectMembershipDB.project_id)
+        .where(
+            TaskHistoryDB.task_id == task_id,
+            ProjectMembershipDB.user_id == user_id,
+            ProjectMembershipDB.role == ProjectRoles.MANAGE,
+        )
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None

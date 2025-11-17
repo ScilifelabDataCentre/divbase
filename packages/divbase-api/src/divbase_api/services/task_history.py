@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.task_history import (
+    check_user_can_view_task_id,
     get_allowed_task_ids_for_project,
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
@@ -113,9 +114,12 @@ async def get_task_history_by_id(
     """
     Get the task history from the Flower API for a specific task ID.
     """
-    allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
 
-    if task_id not in allowed_task_ids:
+    user_is_allowed_to_access_task_id = await check_user_can_view_task_id(
+        db=db, task_id=task_id, user_id=user_id, is_admin=is_admin
+    )
+
+    if not user_is_allowed_to_access_task_id:
         return TaskHistoryResults(tasks={})
 
     request_url = f"{settings.flower.url}/api/task/info/{task_id}"
