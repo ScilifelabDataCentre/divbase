@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 # TODO ideally, the flower API could be queried with a list of tasks, but that seem not to be the case. for now, set a limit of 500 tasks to not put a lot of overhead on the call
-API_LIMIT = min(100, 500)
+API_LIMIT = 500
 REQUEST_URL_WITH_LIMIT = f"{settings.flower.url}/api/tasks?limit={API_LIMIT}"
 
 # TODO make a workaround to check if all allowed ids were returned? could call the Flower API task_ID by task_ID... but it would be inefficient
@@ -89,7 +89,7 @@ async def get_project_task_history(
     project_id: int,
 ) -> TaskHistoryResults:
     """
-    Get the the task history of a project from the Flower API.
+    Get the task history of a project from the Flower API.
 
     """
 
