@@ -47,13 +47,14 @@ class S3Settings:
     """
     S3 configuration settings.
 
-    External is used by the API to generate pre-signed URLs for end users.
-    Internal is used by the backend to communicate with S3 directly.
-    (This wont be needed later when S3 is moved outside of local docker network).
+    - S3_endpoint_url is for DivBase Server to directly interact with S3.
+    - S3_presigning_url is used to generate pre-signed URLs for end users.
+    These may or may not be the same URL depending on the setup.
     """
 
-    s3_external_url: str = os.getenv("S3_EXTERNAL_URL", "http://localhost:9000")
-    s3_internal_url: str = os.getenv("S3_INTERNAL_URL", "http://minio:9000")
+    # TODO make these not have a default.
+    s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
+    s3_presigning_url: str = os.getenv("S3_PRESIGNING_URL", "http://localhost:9000")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 

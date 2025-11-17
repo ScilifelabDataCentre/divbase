@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
 
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
@@ -83,7 +84,7 @@ def sample_metadata_query_task(
     task_id = sample_metadata_query_task.request.id
 
     try:
-        s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+        s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
         metadata_path = _download_sample_metadata(
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
@@ -149,7 +150,7 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
 
-    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -233,7 +234,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
     """
     task_id = update_vcf_dimensions_task.request.id
 
-    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]

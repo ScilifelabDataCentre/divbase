@@ -160,7 +160,7 @@ def create_bucket_version_manager(bucket_name: str) -> BucketVersionManager:
     If doesn't exist, create an empty version info dict.
     """
     s3_file_manager = S3FileManager(
-        url=settings.s3.s3_internal_url,
+        url=settings.s3.s3_endpoint_url,
         access_key=settings.s3.access_key.get_secret_value(),
         secret_key=settings.s3.secret_key.get_secret_value(),
     )
