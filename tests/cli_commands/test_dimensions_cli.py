@@ -4,7 +4,6 @@ Tests for the "divbase-cli dimensions" subcommand
 
 import ast
 import gzip
-import os
 import re
 from unittest.mock import patch
 
@@ -18,11 +17,8 @@ from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import NoVCFFilesFoundError
-from tests.helpers.minio_setup import PROJECTS
 
 runner = CliRunner()
-
-api_base_url = os.environ["DIVBASE_API_URL"]
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -40,12 +36,13 @@ def test_update_vcf_dimensions_task_directly(
     """
     Test that runs the update task and verifies all VCF files are indexed via the API.
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
 
     result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
-    vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+    vcf_files = [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     indexed_files = result.get("VCF files that were added to dimensions index by this job", [])
 
     for vcf_file in vcf_files:
@@ -62,13 +59,14 @@ def test_show_vcf_dimensions_task(
     """
     Test the CLI show command after indexing dimensions via the API.
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
 
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
 
     # Basic version of command
-    command = f"dimensions show --project {bucket_name}"
+    command = f"dimensions show --project {project_name}"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
@@ -76,13 +74,13 @@ def test_show_vcf_dimensions_task(
     assert isinstance(dimensions_info, dict), f"Expected dict, got: {type(dimensions_info)}"
     indexed_files = dimensions_info.get("indexed_files", [])
 
-    vcf_files = [f for f in PROJECTS[bucket_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+    vcf_files = [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     found_files = [entry.get("filename") for entry in indexed_files]
     for vcf_file in vcf_files:
         assert vcf_file in found_files, f"{vcf_file} not found in CLI output:\n{cli_result.stdout}"
 
     # Unique-scaffolds version of command
-    command = f"dimensions show --project {bucket_name} --unique-scaffolds"
+    command = f"dimensions show --project {project_name} --unique-scaffolds"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0
 
@@ -96,7 +94,7 @@ def test_show_vcf_dimensions_task(
 
     # Filename version of command
     for vcf_file in vcf_files:
-        command = f"dimensions show --project {bucket_name} --filename {vcf_file}"
+        command = f"dimensions show --project {project_name} --filename {vcf_file}"
         cli_result = runner.invoke(app, command)
         assert cli_result.exit_code == 0
         entry = yaml.safe_load(cli_result.stdout)
@@ -136,8 +134,8 @@ def test_get_dimensions_info_returns_empty(
     """
     Test that get_dimensions_info returns empty when no dimensions are indexed in the database.
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[project_name]
 
     result = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert result["vcf_files"] == []
@@ -152,8 +150,9 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
     Test that the update task raises an error when the bucket has no VCF files.
     """
     test_minio_url = CONSTANTS["MINIO_URL"]
-    bucket_name = "empty-project"
-    project_id = project_map[bucket_name]
+    project_name = "empty-project"
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
 
     with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
@@ -169,8 +168,8 @@ def test_remove_VCF_and_update_dimension_entry(
     """
     Test removing a VCF metadata entry
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[project_name]
     vcf_file = "HOM_20ind_17SNPs.8.vcf.gz"
 
     delete_vcf_metadata(db=db_session_sync, vcf_file_s3_key=vcf_file, project_id=project_id)
@@ -193,8 +192,9 @@ def test_update_dimensions_skips_divbase_generated_vcf(
     """
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
 
     divbase_vcf_name = "merged_test_divbase_result.vcf.gz"
     vcf_path = tmp_path / divbase_vcf_name
@@ -239,14 +239,15 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     """
     mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
 
     result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
 
     assert result_first_run["status"] == "completed"
     added_files = result_first_run["VCF files that were added to dimensions index by this job"]
-    expected_files = PROJECTS["split-scaffold-project"]
+    expected_files = CONSTANTS["PROJECT_CONTENTS"]["split-scaffold-project"]
     expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
     for vcf in expected_vcfs:
         assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"

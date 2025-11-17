@@ -23,6 +23,7 @@ def test_bcftools_pipe_task_with_real_worker(
     run_update_dimensions,
     db_session_sync,
     project_map,
+    CONSTANTS,
 ):
     """
     Integration test in which bcftools_pipe_task is run with a real Celery worker.
@@ -36,8 +37,9 @@ def test_bcftools_pipe_task_with_real_worker(
 
     """
 
-    bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
-    project_id = project_map[bucket_name]
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
     bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
