@@ -21,7 +21,7 @@ def check_files_already_exist_by_checksum(
     on the number of files in the bucket vs those being checked and how relatively slow the s3 operations are.
     """
     s3_file_manager = S3FileManager(
-        url=settings.s3.s3_endpoint_url,
+        url=settings.s3.endpoint_url,
         access_key=settings.s3.access_key.get_secret_value(),
         secret_key=settings.s3.secret_key.get_secret_value(),
     )

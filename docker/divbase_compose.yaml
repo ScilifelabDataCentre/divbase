@@ -58,6 +58,8 @@ services:
       - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
       - FIRST_ADMIN_EMAIL=admin@divbase.com
       - FIRST_ADMIN_PASSWORD=badpassword
+      - S3_ENDPOINT_URL=http://host.docker.internal:9000
+      - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
       - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     develop: &watch-celery-src
@@ -189,6 +191,8 @@ services:
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
+    - S3_ENDPOINT_URL=http://host.docker.internal:9000
+    - S3_PRESIGNING_URL=http://localhost:9000
     - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
     - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     depends_on:

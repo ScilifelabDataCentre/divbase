@@ -53,8 +53,8 @@ class S3Settings:
     """
 
     # TODO make these not have a default.
-    s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
-    s3_presigning_url: str = os.getenv("S3_PRESIGNING_URL", "http://localhost:9000")
+    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "NOT_SET")
+    presigning_url: str = os.getenv("S3_PRESIGNING_URL", "NOT_SET")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 
@@ -140,6 +140,8 @@ class Settings:
             "FLOWER_USER": self.flower.user,
             "FLOWER_PASSWORD": self.flower.password,
             "JWT_SECRET_KEY": self.jwt.secret_key,
+            "S3_ENDPOINT_URL": self.s3.endpoint_url,
+            "S3_PRESIGNING_URL": self.s3.presigning_url,
             "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }

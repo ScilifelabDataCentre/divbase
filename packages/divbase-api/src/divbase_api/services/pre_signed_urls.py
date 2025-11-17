@@ -28,7 +28,7 @@ class S3PreSignedService:
     def __init__(self):
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.s3.s3_presigning_url,
+            endpoint_url=settings.s3.presigning_url,
             aws_access_key_id=settings.s3.access_key.get_secret_value(),
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
         )
