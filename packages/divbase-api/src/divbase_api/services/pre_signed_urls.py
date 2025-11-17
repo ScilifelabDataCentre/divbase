@@ -59,32 +59,36 @@ class S3PreSignedService:
         )
 
     def create_presigned_url_for_upload(
-        self, bucket_name: str, object_name: str, md5_hash: str | None = None
+        self, bucket_name: str, object_name: str, content_length: int, md5_hash: str | None = None
     ) -> PreSignedUploadResponse:
         """
-        Generate a presigned S3 POST URL to upload a file.
+        Generate a presigned S3 PUT URL to upload a file to S3.
+        The reponse object contains the object name, pre-signed URL, and any headers that must be included in the PUT request.
 
-        Notes:
-        :param fields: Dictionary of prefilled form fields
-        :param conditions: List of conditions to include in the policy
-
-        Returns a dictionary with two elements: url and fields. Url is the url to post to.
-        Fields is a dictionary filled with the form fields and respective values
-        to use when submitting the post.
+        NOTE:
+        - If the headers are not included then S3 will return a 403 Forbidden error due to signature mismatch.
+        - An initial attempt to use pre-signed POST URLs was given up on due to NetApp not seeming to support them.
         """
-        fields, conditions = {}, []
-        if md5_hash:
-            fields["Content-MD5"] = md5_hash
-            conditions.append({"Content-MD5": md5_hash})
+        put_headers: dict[str, str] = {}
+        upload_args: dict[str, str | int] = {"Bucket": bucket_name, "Key": object_name}
 
-        response = self.s3_client.generate_presigned_post(
-            Bucket=bucket_name,
-            Key=object_name,
-            Fields=fields,
-            Conditions=conditions,
+        upload_args["ContentType"] = "application/octet-stream"
+        put_headers["Content-Type"] = "application/octet-stream"
+
+        upload_args["ContentLength"] = content_length  # boto3 expects this as an int.
+        put_headers["Content-Length"] = str(content_length)
+
+        if md5_hash:
+            upload_args["ContentMD5"] = md5_hash
+            put_headers["Content-MD5"] = md5_hash
+
+        pre_signed_url = self.s3_client.generate_presigned_url(
+            HttpMethod="PUT",
+            ClientMethod="put_object",
+            Params=upload_args,
             ExpiresIn=3600 * 24,  # 24 hours
         )
-        return PreSignedUploadResponse(name=object_name, post_url=response["url"], fields=response["fields"])
+        return PreSignedUploadResponse(name=object_name, pre_signed_url=pre_signed_url, put_headers=put_headers)
 
 
 @lru_cache()

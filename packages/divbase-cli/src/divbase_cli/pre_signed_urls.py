@@ -134,10 +134,10 @@ def upload_multiple_pre_signed_urls(
         for obj in pre_signed_urls:
             result = _upload_single_pre_signed_url(
                 httpx_client=client,
-                pre_signed_url=obj.post_url,
-                fields=obj.fields,
+                pre_signed_url=obj.pre_signed_url,
                 file_path=file_map[obj.name],
                 object_name=obj.name,
+                headers=obj.put_headers,
             )
 
             if isinstance(result, SuccessfulUpload):
@@ -151,18 +151,17 @@ def upload_multiple_pre_signed_urls(
 def _upload_single_pre_signed_url(
     httpx_client: httpx.Client,
     pre_signed_url: str,
-    fields: dict,
     file_path: Path,
     object_name: str,
+    headers: dict[str, str],
 ) -> SuccessfulUpload | FailedUpload:
     """
-    Upload a single file using a pre-signed POST URL.
+    Upload a single file using a pre-signed PUT URL.
     Helper function, do not call directly from outside this module.
     """
     with open(file_path, "rb") as file:
-        files = {"file": (object_name, file, "application/octet-stream")}
-        response = httpx_client.post(pre_signed_url, data=fields, files=files)
         try:
+            response = httpx_client.put(pre_signed_url, content=file, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as err:
             return FailedUpload(object_name=object_name, file_path=file_path, exception=err)

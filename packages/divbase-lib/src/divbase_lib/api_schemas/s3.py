@@ -24,15 +24,16 @@ class UploadObjectRequest(BaseModel):
     """Request model to upload a single object using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be uploaded")
-    md5_hash: str | None = Field(..., description="Optional MD5 hash of the object for integrity check")
+    content_length: int = Field(..., description="Size of the file in bytes")
+    md5_hash: str | None = Field(None, description="Optional MD5 hash of the object for integrity check")
 
 
 class PreSignedUploadResponse(BaseModel):
-    """Response model to upload a single object using the pre-signed URL and field data."""
+    """Response model to upload a single object using the pre-signed URL using PUT."""
 
     name: str = Field(..., description="Name of the object to be uploaded")
-    post_url: str = Field(..., description="Pre-signed URL to which the file should be uploaded")
-    fields: dict = Field(..., description="Fields required for the POST request")
+    pre_signed_url: str = Field(..., description="Pre-signed URL to which the file should be uploaded")
+    put_headers: dict[str, str] = Field(..., description="Headers to be included in the PUT request")
 
 
 class CheckFileExistsRequest(BaseModel):

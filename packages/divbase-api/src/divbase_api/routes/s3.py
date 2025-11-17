@@ -113,6 +113,7 @@ async def generate_upload_url(
             bucket_name=project.bucket_name,
             object_name=obj.name,
             md5_hash=obj.md5_hash,
+            content_length=obj.content_length,
         )
         response.append(pre_signed_response)
 
