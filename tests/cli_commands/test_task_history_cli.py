@@ -363,10 +363,9 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
     assert captured_manager.command_context["task_id"] == edit_user_task_id
     assert captured_manager.task_items[edit_user_task_id].kwargs.user_name == submitting_user
 
-    with capture_task_history_manager() as get_manager:
-        result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
-        assert result_history.exit_code == 0
-
-        captured_manager = get_manager()
-
-    assert captured_manager.task_items == {}
+    result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
+    assert result_history.exit_code == 1
+    assert "authorization_error\nDetails" in str(result_history.exception)
+    assert "Task ID not found or you don't have permission to view the history for this task ID." in str(
+        result_history.exception
+    )

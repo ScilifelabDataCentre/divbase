@@ -12,6 +12,7 @@ from divbase_api.crud.task_history import (
     get_allowed_task_ids_for_user,
     get_allowed_task_ids_for_user_and_project,
 )
+from divbase_api.exceptions import AuthorizationError
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -120,7 +121,7 @@ async def get_task_history_by_id(
     )
 
     if not user_is_allowed_to_access_task_id:
-        return TaskHistoryResults(tasks={})
+        raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
 
     request_url = f"{settings.flower.url}/api/task/info/{task_id}"
     task_data = _make_flower_request(request_url)
