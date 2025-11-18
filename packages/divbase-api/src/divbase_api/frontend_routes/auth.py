@@ -364,18 +364,6 @@ async def get_reset_password_page(
         )
 
     user = await get_user_by_id_or_raise(db=db, id=user_id)
-
-    if current_user and current_user.id != user_id:
-        # logged in as a different user, force them to logout first
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={
-                "current_user": current_user,
-                "error": "It seems like you're trying to change the password for a different account than the one you're logged into. If this is not a mistake, please log out and try again.",
-            },
-        )
-
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/reset_password.html",
