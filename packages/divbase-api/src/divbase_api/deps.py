@@ -21,14 +21,13 @@ from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import user_account_valid
+from divbase_api.crud.auth import verify_user_from_access_token, verify_user_from_refresh_token
 from divbase_api.crud.projects import get_project_id_from_name, get_project_with_user_role
-from divbase_api.crud.users import get_user_by_id
 from divbase_api.db import get_db
 from divbase_api.exceptions import AuthenticationError, AuthorizationError, ProjectNotFoundError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.security import TokenType, create_token, verify_token
+from divbase_api.security import TokenType, create_token
 
 logger = logging.getLogger(__name__)
 
@@ -52,24 +51,16 @@ async def _authenticate_frontend_user_from_tokens(
         return None
 
     if access_token:
-        user_id = verify_token(token=access_token, desired_token_type=TokenType.ACCESS)
-        if user_id:
-            user = await get_user_by_id(db=db, id=user_id)
-            if not user:
-                return None
+        user = await verify_user_from_access_token(db=db, token=access_token)
+        if user:
             return user
 
     # now try refresh token, if this is valid, we will give the user a new access token
     if not refresh_token:
         return None
 
-    user_id = verify_token(token=refresh_token, desired_token_type=TokenType.REFRESH)
-    if not user_id:
-        return None
-    user = await get_user_by_id(db=db, id=user_id)
+    user = await verify_user_from_refresh_token(db=db, token=refresh_token)
     if not user:
-        return None
-    if not user_account_valid(user):
         return None
 
     if response:
@@ -142,6 +133,9 @@ async def get_project_member_from_cookie(
     return project, current_user, user_role
 
 
+#### Dependencies for direct API access routes (using bearer tokens below ####
+
+
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: AsyncSession = Depends(get_db)) -> UserDB:
     """
     Get current user from JWT Access token
@@ -151,18 +145,9 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: As
     If wondering why no refresh token handling here like in the frontend:
     - The CLI can send the refresh token to "auth/refresh" endpoint instead to get a new access token.
     """
-    user_id = verify_token(token, desired_token_type=TokenType.ACCESS)
-    if user_id is None:
-        raise AuthenticationError("Authentication required")
-
-    user = await get_user_by_id(db=db, id=user_id)
-    if not user or not user.is_active or user.is_deleted:
-        raise AuthenticationError("Account does not exist or is inactive or is deleted")
-    if not user.email_verified:
-        raise AuthenticationError(
-            "Email address not verified, check your inbox or visit the website to resend a verification email."
-        )
-
+    user = await verify_user_from_access_token(db=db, token=token)
+    if user is None:
+        raise AuthenticationError("Invalid access token")
     return user
 
 
@@ -188,6 +173,7 @@ async def get_project_member(
     This function checks that the user is a member of the project and
     returns the project, user and their role.
     """
+    # TODO - the 2 below can be 1 db query
     project_id = await get_project_id_from_name(db=db, project_name=project_name)
     if not project_id:
         raise ProjectNotFoundError()

@@ -33,7 +33,6 @@ from divbase_api.frontend_routes.core import templates
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import UserProjectResponse
-from divbase_api.schemas.users import UserResponse
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +47,15 @@ async def get_user_projects_endpoint(
 ):
     """Render the user's projects page showing all projects they're a member of."""
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
-    user_project_responses = create_user_project_responses(user_projects)
+    projects = create_user_project_responses(user_projects)
 
     return templates.TemplateResponse(
         request=request,
         name="project_pages/index.html",
         context={
             "request": request,
-            "current_user": UserResponse.model_validate(current_user),
-            "projects": [UserProjectResponse.model_validate(project) for project in user_project_responses],
+            "current_user": current_user,
+            "projects": projects,
         },
     )
 
@@ -93,8 +92,8 @@ async def get_project_detail_endpoint(
         name="project_pages/detail.html",
         context={
             "request": request,
-            "current_user": UserResponse.model_validate(current_user),
-            "project": UserProjectResponse.model_validate(project_response),
+            "current_user": current_user,
+            "project": project_response,
             "members": members,
         },
     )
@@ -112,7 +111,7 @@ async def add_project_member_endpoint(
     project, current_user, user_role = project_and_user_and_role
 
     if not has_required_role(user_role, ProjectRoles.MANAGE):
-        raise AuthorizationError("You don't have permission to access this project.")
+        raise AuthorizationError("You don't have permission to manage this project.")
 
     user_to_add = await get_user_by_email(db=db, email=user_email.lower())
     if not user_to_add:
