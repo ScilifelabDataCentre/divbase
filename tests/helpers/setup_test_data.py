@@ -1,7 +1,8 @@
 """
 Provides the docker testing stack with test data.
 
-Creates test users with different roles and projects with different test files stored in their respective Minio buckets
+Creates test projects and users with different access roles to those projects
+Assigns each project an S3 (MinIO) bucket and populates those buckets with different test files
 """
 
 from pathlib import Path

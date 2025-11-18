@@ -76,7 +76,7 @@ class FilesAlreadyInBucketError(FileExistsError):
         files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_objects)
         error_message = (
             f"For the project: '{project_name}'\n"
-            "The following objects that you're trying to upload already exist in the project's bucket:\n"
+            "The exact versions of the following objects that you're trying to upload already exist in the project's bucket:\n"
             f"{files_list}."
         )
         super().__init__(error_message)

@@ -302,7 +302,7 @@ async def get_forgot_password_page(
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/forgot_password.html",
-        context={"current_user": current_user},
+        context={"current_user": current_user, "email": current_user.email if current_user else ""},
     )
 
 
@@ -364,18 +364,6 @@ async def get_reset_password_page(
         )
 
     user = await get_user_by_id_or_raise(db=db, id=user_id)
-
-    if current_user and current_user.id != user_id:
-        # logged in as a different user, force them to logout first
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={
-                "current_user": current_user,
-                "error": "It seems like you're trying to change the password for a different account than the one you're logged into. If this is not a mistake, please log out and try again.",
-            },
-        )
-
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/reset_password.html",
@@ -424,7 +412,7 @@ async def post_reset_password_form(
             },
         )
     user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
-    background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email, user_id=user.id)
+    background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email)
     logger.info(f"User {user.email} has reset their password.")
 
     # log the user out after successful password reset
