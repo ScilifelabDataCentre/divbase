@@ -127,7 +127,7 @@ async def check_user_can_view_task_id(
     Check if a user has permission to view the task history for a specific task ID.
 
     Admin is allowed to view all task IDs.
-    Manage user is allowed to see all task IDs for the project the they manage.
+    Manage user is allowed to see all task IDs for the project they manage.
     Edit user is only allowed to see task IDs for tasks they submitted themselves.
 
     Uses explicit joins because the two tables being joined share a foreign key to a third table,
