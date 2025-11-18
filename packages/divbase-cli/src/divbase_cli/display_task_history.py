@@ -1,4 +1,3 @@
-import ast
 import datetime
 import logging
 
@@ -102,18 +101,6 @@ class TaskHistoryDisplayManager:
         """
         Extract submitter from task kwargs.
         """
-        kwargs = task.kwargs or "{}"
-        try:
-            parsed_kwargs = ast.literal_eval(kwargs)
-            return parsed_kwargs.get("user_name", "Unknown")
-        except ValueError as e:
-            logger.warning(f"Could not parse kwargs: {e}")
-            return "Unknown"
-
-    def _get_submitter_from_task_kwargs(self, task):
-        """
-        Extract submitter from task kwargs.
-        """
         # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookup in the task_history db table would maybe make more sense?
         kwargs = task.kwargs
         if kwargs is None:
@@ -122,7 +109,7 @@ class TaskHistoryDisplayManager:
         if user_name:
             return user_name
         if isinstance(kwargs, dict):
-            return kwargs.get("user_name", "Unknown")  # TODO the dimensions task is yet to return kwargs as a dict
+            return kwargs.get("user_name", "Unknown")
         return "Unknown"
 
     def _format_result(self, task, state):
