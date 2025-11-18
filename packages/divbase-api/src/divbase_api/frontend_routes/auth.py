@@ -424,7 +424,7 @@ async def post_reset_password_form(
             },
         )
     user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
-    background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email, user_id=user.id)
+    background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email)
     logger.info(f"User {user.email} has reset their password.")
 
     # log the user out after successful password reset
