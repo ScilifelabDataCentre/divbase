@@ -302,7 +302,7 @@ async def get_forgot_password_page(
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/forgot_password.html",
-        context={"current_user": current_user},
+        context={"current_user": current_user, "email": current_user.email if current_user else ""},
     )
 
 
