@@ -61,7 +61,7 @@ class S3PreSignedService:
     ) -> PreSignedUploadResponse:
         """
         Generate a presigned S3 PUT URL to upload a file to S3.
-        The reponse object contains the object name, pre-signed URL, and any headers that must be included in the PUT request.
+        The response object contains the object name, pre-signed URL, and any headers that must be included in the PUT request.
 
         NOTE:
         - If the headers are not included then S3 will return a 403 Forbidden error due to signature mismatch.

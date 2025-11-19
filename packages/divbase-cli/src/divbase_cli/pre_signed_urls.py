@@ -124,7 +124,7 @@ def upload_multiple_pre_signed_urls(
     pre_signed_urls: list[PreSignedUploadResponse], all_files: list[Path]
 ) -> UploadOutcome:
     """
-    Upload files using pre-signed POST URLs.
+    Upload files using pre-signed PUT URLs.
     Returns a UploadResults object containing the results of the upload attempts.
     """
     file_map = {file.name: file for file in all_files}
@@ -163,7 +163,7 @@ def _upload_single_pre_signed_url(
         try:
             response = httpx_client.put(pre_signed_url, content=file, headers=headers)
             response.raise_for_status()
-        except httpx.HTTPStatusError as err:
+        except httpx.HTTPError as err:
             return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
 
     return SuccessfulUpload(file_path=file_path, object_name=object_name)
