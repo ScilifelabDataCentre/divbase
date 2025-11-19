@@ -282,6 +282,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "bucket_name": bucket_name,
             "user_name": "test-user",
             "project_id": project_id,
+            "project_name": project_name,
         }
         with pytest.raises(ValueError) as excinfo:
             bcftools_pipe_task(**params)
@@ -308,7 +309,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             False,
             ["Starting bcftools_pipe_task"],
             [
-                "The VCF dimensions index in project 'divbase-local-split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
+                "The VCF dimensions index in project 'split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
             ],
         ),
         # Case 1: expected to be sucessful, should lead to concat
@@ -506,7 +507,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     params["bucket_name"] = bucket_name
     project_id = project_map[project_name]
     params["project_id"] = project_id
-    del params["project_name"]
 
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)

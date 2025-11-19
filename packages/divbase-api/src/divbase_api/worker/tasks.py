@@ -142,6 +142,7 @@ def bcftools_pipe_task(
     metadata_tsv_name: str,
     bucket_name: str,
     project_id: int,
+    project_name: str,
     user_name: str,
 ):
     """
@@ -158,7 +159,7 @@ def bcftools_pipe_task(
     if not vcf_dimensions_data.get("vcf_files"):
         # TODO - should this return a dict with status error instead?
         raise ValueError(
-            f"The VCF dimensions index in project '{bucket_name}' is missing or empty. "
+            f"The VCF dimensions index in project '{project_name}' is missing or empty. "
             "Please ensure that there are VCF files in the project and run:\n"
             "'divbase-cli dimensions update --project <project_name>'\n"
         )

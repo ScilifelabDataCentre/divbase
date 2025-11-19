@@ -89,6 +89,7 @@ def create_bcftools_jobs(
         "metadata_tsv_name": metadata_tsv_name,
         "bucket_name": project.bucket_name,
         "project_id": project.id,
+        "project_name": project.name,
         "user_name": current_user.email,
     }
 

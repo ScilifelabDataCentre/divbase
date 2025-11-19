@@ -187,6 +187,7 @@ def bcftools_pipe_kwargs_fixture():
         "command": "view -s SAMPLES; view -r 21:15000000-25000000",
         "bucket_name": "divbase-local-query-project",
         "user_name": "Default User",
+        "project_name": "query-project",
     }
 
 
