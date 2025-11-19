@@ -31,18 +31,33 @@
 a {
   color: var(--scilife-teal);
 }
-
-
 body {
   font-family: "Roboto", Arial, sans-serif;
 }
 
 
 
+/* navbar control */
+.navbar-brand {
+  padding-top: auto;
+  padding-bottom: 0;
+}
+
+.scilife-navbar-logo {
+    height: clamp(2rem, 2vw, 3rem);
+}
+
+.scilife-nav-link {
+  color: var(--scilife-dark-grey);
+  font-size: 1.50rem;
+  font-weight: 500;
+  letter-spacing: 0.045rem;
+}
+
+
 
 
 /* footer control */
-
 footer {
     background-color: #ebebeb;
 }
