@@ -52,7 +52,6 @@ class S3Settings:
     These may or may not be the same URL depending on the setup.
     """
 
-    # TODO make these not have a default.
     endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "NOT_SET")
     presigning_url: str = os.getenv("S3_PRESIGNING_URL", "NOT_SET")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
