@@ -5,10 +5,12 @@ The API server for DivBase.
 import logging
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from divbase_api.admin_panel import register_admin_panel
 from divbase_api.api_config import settings
@@ -77,6 +79,9 @@ app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=
 
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
+
+static_dir_path = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
 
 
 # TODO - move below routes into routes dir when ready.
