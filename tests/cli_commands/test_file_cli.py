@@ -34,7 +34,9 @@ def start_with_clean_project(CONSTANTS):
     )
 
     # pylance does not understand boto3 resource returns types, hence ignore below
-    bucket = s3_resource.Bucket(CONSTANTS["CLEANED_PROJECT"])  # type: ignore
+    cleaned_project_bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][CONSTANTS["CLEANED_PROJECT"]]
+
+    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
     bucket.object_versions.delete()
 
     yield

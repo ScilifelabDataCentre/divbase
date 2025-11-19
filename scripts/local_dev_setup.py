@@ -52,12 +52,11 @@ USERS_TO_CREATE = [
     {"name": "Diana", "email": "diana@example.com", "password": "badpassword"},
 ]
 
-# TODO: When swap to pre-signed urls complete, make it so bucket and project names are not the same.
 PROJECTS = [
     {
         "name": "local-project-1",
         "description": "First test project for local development",
-        "bucket_name": "local-project-1",
+        "bucket_name": "divbase-local-1",
         "storage_quota_bytes": 10737418240,
         "files": [
             "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
@@ -68,14 +67,14 @@ PROJECTS = [
     {
         "name": "local-project-2",
         "description": "Second test project for local development",
-        "bucket_name": "local-project-2",
+        "bucket_name": "divbase-local-2",
         "storage_quota_bytes": 10737418240,
         "files": ["sample_metadata.tsv"],
     },
     {
         "name": "local-project-3",
         "description": "Third test project for local development",
-        "bucket_name": "local-project-3",
+        "bucket_name": "divbase-local-3",
         "storage_quota_bytes": 10737418240,
         "files": [
             "HOM_20ind_17SNPs.1.vcf.gz",
@@ -96,7 +95,7 @@ PROJECTS = [
     {
         "name": "local-project-4",
         "description": "Fourth test project for local development",
-        "bucket_name": "local-project-4",
+        "bucket_name": "divbase-local-4",
         "storage_quota_bytes": 10737418240,
         "files": [
             "HOM_20ind_17SNPs.1.vcf.gz",

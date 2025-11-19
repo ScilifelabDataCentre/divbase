@@ -179,7 +179,6 @@ def upload_files_command(
         for file in all_files:
             file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
 
-    if safe_mode:
         files_to_check = []
         for file in all_files:
             files_to_check.append({"object_name": file.name, "md5_checksum": file_checksums_hex[file.name]})
@@ -198,12 +197,16 @@ def upload_files_command(
 
     objects_to_upload = []
     for file in all_files:
+        upload_object = {
+            "name": file.name,
+            "content_length": file.stat().st_size,
+        }
         if safe_mode:
             hex_checksum = file_checksums_hex[file.name]
             base64_checksum = convert_checksum_hex_to_base64(hex_checksum)
-            objects_to_upload.append({"name": file.name, "md5_hash": base64_checksum})
-        else:
-            objects_to_upload.append({"name": file.name, "md5_hash": None})
+            upload_object["md5_hash"] = base64_checksum
+
+        objects_to_upload.append(upload_object)
 
     response = make_authenticated_request(
         method="POST",

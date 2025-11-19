@@ -10,10 +10,14 @@ services:
     tmpfs:
       - /data/
   worker-quick:
+    environment:
+      - S3_ENDPOINT_URL=http://host.docker.internal:9002
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset [] # no compose watch when running tests
   worker-long:
+    environment:
+      - S3_ENDPOINT_URL=http://host.docker.internal:9002
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
@@ -36,8 +40,8 @@ services:
     ports: !override
       - 8001:8000
     environment:
-      - S3_EXTERNAL_URL=http://localhost:9002
-      - S3_INTERNAL_URL=http://minio:9000
+      - S3_ENDPOINT_URL=http://host.docker.internal:9002
+      - S3_PRESIGNING_URL=http://localhost:9002
   postgres:
     ports: !override
       - "5433:5432"
