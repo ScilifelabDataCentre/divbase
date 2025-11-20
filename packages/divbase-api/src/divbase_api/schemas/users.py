@@ -35,12 +35,10 @@ class UserCreate(UserBase):
     password: SecretStr = Field(..., min_length=8, max_length=100)
 
 
-class UserUpdate(UserBase):
+class UserUpdate(BaseModel):
     """Schema for a user to update their own profile."""
 
-    # TODO - Email should not be allowed to be changed here without email re-verification
-
-    pass
+    name: str = Field(..., min_length=3, max_length=100)
 
 
 class UserPasswordUpdate(BaseModel):

@@ -105,16 +105,8 @@ async def revert_soft_delete_user(db: AsyncSession, user_id: int) -> UserDB:
 
 
 async def update_user_profile(db: AsyncSession, user_data: UserUpdate, user_id: int) -> UserDB:
-    """Used by a regular user to update their own profile."""
+    """Used by a regular user to update their own profile information."""
     user = await get_user_by_id_or_raise(db=db, id=user_id)
-
-    if user_data.email and user_data.email != user.email:
-        existing_user = await get_user_by_email(db=db, email=user_data.email)
-        if existing_user:
-            raise UserRegistrationError(
-                internal_logging_message=f"Attempt to change email to existing email: {user_data.email}",
-                user_message="Account update failed, please try again later.",
-            )
 
     update_data = user_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
