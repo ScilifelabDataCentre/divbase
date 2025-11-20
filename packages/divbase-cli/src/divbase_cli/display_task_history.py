@@ -46,7 +46,7 @@ class TaskHistoryDisplayManager:
     def print_task_history(self) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].state or "", reverse=True)
+        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].received or "", reverse=True)
         display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
