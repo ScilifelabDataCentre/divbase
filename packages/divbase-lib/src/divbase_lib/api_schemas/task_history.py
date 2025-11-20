@@ -2,7 +2,7 @@
 Schemas for task history routes.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -32,7 +32,7 @@ class FlowerTaskResult(BaseModel):
     retried: Optional[float] = None
     revoked: Optional[float] = None
     args: Optional[str] = None
-    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, Dict[str, Any]]] = (
+    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, dict[str, Any]]] = (
         None
     )
     eta: Optional[float] = None
@@ -53,7 +53,7 @@ class FlowerTaskResult(BaseModel):
     root_id: Optional[str] = None
     parent: Optional[str] = None
     parent_id: Optional[str] = None
-    children: Optional[List[Any]] = None
+    children: Optional[list[Any]] = None
     worker: Optional[str] = None
 
 

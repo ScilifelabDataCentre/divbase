@@ -2,7 +2,7 @@
 Schemas for VCF dimensions routes.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,13 +20,13 @@ class DimensionUpdateTaskResult(BaseModel):
 
     status: Optional[str] = None
     submitter: str
-    VCF_files_added: Optional[List[str]] = Field(
+    VCF_files_added: Optional[list[str]] = Field(
         None, description="VCF files that were added to dimensions index by this job"
     )
-    VCF_files_skipped: Optional[List[str]] = Field(
+    VCF_files_skipped: Optional[list[str]] = Field(
         None, description="VCF files skipped by this job (previous DivBase-generated result VCFs)"
     )
-    VCF_files_deleted: Optional[List[str]] = Field(
+    VCF_files_deleted: Optional[list[str]] = Field(
         None, description="VCF files that have been deleted from the project and thus have been dropped from the index"
     )
 
@@ -37,6 +37,6 @@ class DimensionsShowResult(BaseModel):
     project_id: int
     project_name: str
     vcf_file_count: int
-    vcf_files: List[dict]
+    vcf_files: list[dict]
     skipped_file_count: int
-    skipped_files: List[dict]
+    skipped_files: list[dict]

@@ -10,7 +10,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -34,9 +34,9 @@ class BCFToolsInput:
     Contains the inputs required to run a bcftools query.
     """
 
-    sample_and_filename_subset: List[Dict[str, str]]
-    sampleIDs: List[str]
-    filenames: List[str]
+    sample_and_filename_subset: list[dict[str, str]]
+    sampleIDs: list[str]
+    filenames: list[str]
 
 
 def run_sidecar_metadata_query(
@@ -162,8 +162,8 @@ class BcftoolsQueryManager:
                 self.cleanup_temp_files(self.temp_files)
 
     def build_commands_config(
-        self, command: str, bcftools_inputs: Dict[str, Any], identifier: str = None
-    ) -> List[Dict[str, Any]]:
+        self, command: str, bcftools_inputs: dict[str, Any], identifier: str = None
+    ) -> list[dict[str, Any]]:
         """
         Method that builds a configuration structure for the bcftools commands based on the provided command string and inputs.
         The command string is expected to be a semicolon-separated list of bcftools commands.
@@ -215,7 +215,7 @@ class BcftoolsQueryManager:
 
         return commands_config_structure
 
-    def process_bcftools_commands(self, commands_config: List[Dict[str, Any]], identifier: str) -> str:
+    def process_bcftools_commands(self, commands_config: list[dict[str, Any]], identifier: str) -> str:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
         the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
@@ -239,7 +239,7 @@ class BcftoolsQueryManager:
 
             return output_file
 
-    def run_current_command(self, cmd_config: Dict[str, Any]) -> List[str]:
+    def run_current_command(self, cmd_config: dict[str, Any]) -> list[str]:
         """
         Method that handles the inner loop of the merge-last strategy: for each command pass from the outer loop,
         it processes all given input VCF files individually by running the command on each file using run_bcftools().
@@ -322,7 +322,7 @@ class BcftoolsQueryManager:
             index_command = f"index -f {file}"
             self.run_bcftools(command=index_command)
 
-    def merge_or_concat_bcftools_temp_files(self, output_temp_files: List[str], identifier: str) -> str:
+    def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
 
@@ -406,7 +406,7 @@ class BcftoolsQueryManager:
 
         return output_file
 
-    def cleanup_temp_files(self, output_temp_files: List[str]) -> None:
+    def cleanup_temp_files(self, output_temp_files: list[str]) -> None:
         """
         Helper method that handles deletion of all temporary files and their associated .csi index files
         that were generated during the pipe_query_command execution.
@@ -439,7 +439,7 @@ class BcftoolsQueryManager:
             logger.error(f"Docker command failed: {e}")
             raise BcftoolsEnvironmentError(container_name) from e
 
-    def _get_all_sample_names_from_vcf_files(self, output_temp_files: List[str]) -> dict[str, list[str]]:
+    def _get_all_sample_names_from_vcf_files(self, output_temp_files: list[str]) -> dict[str, list[str]]:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
         If they do, bcftools concat is needed instead of bcftools merge.
