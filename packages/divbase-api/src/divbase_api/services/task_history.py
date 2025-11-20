@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.api_config import settings
 from divbase_api.crud.task_history import (
     check_user_can_view_task_id,
-    get_allowed_task_ids_for_project,
-    get_allowed_task_ids_for_user,
-    get_allowed_task_ids_for_user_and_project,
+    get_task_ids_for_project,
+    get_task_ids_for_user,
+    get_task_ids_for_user_and_project,
 )
 from divbase_api.exceptions import AuthorizationError
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
@@ -45,7 +45,7 @@ async def get_user_task_history(
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
 
-    allowed_task_ids = await get_allowed_task_ids_for_user(db, user_id, is_admin)
+    allowed_task_ids = await get_task_ids_for_user(db, user_id, is_admin)
 
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
@@ -71,7 +71,7 @@ async def get_user_and_project_task_history(
     allowed_task_ids uses a db lookup, but all_tasks is fetched from the Flower API.
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
-    allowed_task_ids = await get_allowed_task_ids_for_user_and_project(db, user_id, project_id, is_admin)
+    allowed_task_ids = await get_task_ids_for_user_and_project(db, user_id, project_id, is_admin)
 
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
@@ -93,7 +93,7 @@ async def get_project_task_history(
 
     """
 
-    allowed_task_ids = await get_allowed_task_ids_for_project(db, project_id)
+    allowed_task_ids = await get_task_ids_for_project(db, project_id)
 
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})

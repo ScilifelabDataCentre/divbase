@@ -28,7 +28,7 @@ async def record_pending_task(db: AsyncSession, task_id: str, user_id: int, proj
     await db.refresh(entry)
 
 
-async def get_allowed_task_ids_for_user(
+async def get_task_ids_for_user(
     db: AsyncSession,
     user_id: int,
     is_admin: bool,
@@ -50,7 +50,7 @@ async def get_allowed_task_ids_for_user(
     return allowed_task_ids
 
 
-async def get_allowed_task_ids_for_user_and_project(
+async def get_task_ids_for_user_and_project(
     db: AsyncSession,
     user_id: int,
     project_id: int,
@@ -98,7 +98,7 @@ async def filter_task_ids_by_project_name(db: AsyncSession, task_ids: set[str], 
     return allowed_task_ids
 
 
-async def get_allowed_task_ids_for_project(
+async def get_task_ids_for_project(
     db: AsyncSession,
     project_id: int,
 ) -> set[str]:
