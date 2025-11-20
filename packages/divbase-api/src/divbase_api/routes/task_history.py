@@ -38,7 +38,13 @@ async def get_all_tasks_for_user(
     Get the task history for the current user. Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
 
-    if not current_user.is_admin:
+    result = await get_user_task_history(
+        db=db,
+        user_id=current_user.id,
+        is_admin=current_user.is_admin,
+    )
+
+    if result.tasks == {}:
         user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
             db=db,
             user_id=current_user.id,
@@ -46,12 +52,6 @@ async def get_all_tasks_for_user(
 
         if not user_has_at_least_one_edit_role:
             raise AuthorizationError(READ_USER_ERROR_MSG)
-
-    result = await get_user_task_history(
-        db=db,
-        user_id=current_user.id,
-        is_admin=current_user.is_admin,
-    )
 
     result.user_email = current_user.email
     return result
@@ -71,15 +71,6 @@ async def get_all_tasks_for_user_and_project(
 
     project, current_user, role = project_and_user_and_role
 
-    if not current_user.is_admin:
-        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        if not user_has_at_least_one_edit_role:
-            raise AuthorizationError(READ_USER_ERROR_MSG)
-
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError(
             "Project not found or you don't have permission to view task history from this project."
@@ -91,6 +82,15 @@ async def get_all_tasks_for_user_and_project(
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
+
+    if result.tasks == {}:
+        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
+            db=db,
+            user_id=current_user.id,
+        )
+
+        if not user_has_at_least_one_edit_role:
+            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     result.user_email = current_user.email
     return result
@@ -106,7 +106,14 @@ async def get_task_by_id(
     Get the history of a specific task ID. Admin users can view any task (even if not member of the projects), non-admin users can only view their own tasks.
     """
 
-    if not current_user.is_admin:
+    result = await get_task_history_by_id(
+        db=db,
+        task_id=task_id,
+        user_id=current_user.id,
+        is_admin=current_user.is_admin,
+    )
+
+    if result.tasks == {}:
         user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
             db=db,
             user_id=current_user.id,
@@ -115,12 +122,7 @@ async def get_task_by_id(
         if not user_has_at_least_one_edit_role:
             raise AuthorizationError(READ_USER_ERROR_MSG)
 
-    return await get_task_history_by_id(
-        db=db,
-        task_id=task_id,
-        user_id=current_user.id,
-        is_admin=current_user.is_admin,
-    )
+    return result
 
 
 @task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
@@ -135,7 +137,17 @@ async def get_project_tasks(
 
     project, current_user, role = project_and_user_and_role
 
-    if not current_user.is_admin:
+    if not has_required_role(role, ProjectRoles.MANAGE) and not current_user.is_admin:
+        raise AuthorizationError(
+            "Project not found or you don't have permission to view task history for this whole project."
+        )
+
+    result = await get_project_task_history(
+        db=db,
+        project_id=project.id,
+    )
+
+    if result.tasks == {}:
         user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
             db=db,
             user_id=current_user.id,
@@ -144,12 +156,4 @@ async def get_project_tasks(
         if not user_has_at_least_one_edit_role:
             raise AuthorizationError(READ_USER_ERROR_MSG)
 
-    if not has_required_role(role, ProjectRoles.MANAGE):
-        raise AuthorizationError(
-            "Project not found or you don't have permission to view task history for this whole project."
-        )
-
-    return await get_project_task_history(
-        db=db,
-        project_id=project.id,
-    )
+    return result
