@@ -130,5 +130,30 @@ footer {
 }
 
 
+/* General text control */
+.scilife-subsection h2 {
+  color: var(--scilife-teal);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
 
+.scilife-subsection h3 {
+  color: var(--scilife-teal);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
 
+.scilife-subsection h4 {
+  color: var(--scilife-teal);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
+
+.scilife-subsection p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
+}
