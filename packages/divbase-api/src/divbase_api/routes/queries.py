@@ -5,8 +5,7 @@ API routes for query operations.
 import logging
 import sys
 
-from fastapi import APIRouter, Depends, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -73,9 +72,9 @@ async def sample_metadata_query(
     if "error" in result_dict:
         error_type = result_dict.get("type", "ServerError")
         error_details = result_dict.get("error", "Unknown error occurred")
-        return JSONResponse(
-            status_code=400, content={"detail": error_details, "type": error_type}
-        )  # JSONResponse or HTTPException needed here to avoid fastAPI response model validation error
+        raise HTTPException(
+            status_code=500, detail={"error": error_details, "type": error_type}
+        )  # HTTPException or JSONResponse needed here to avoid fastAPI response model validation error
 
     return SampleMetadataQueryTaskResult(**result_dict)
 

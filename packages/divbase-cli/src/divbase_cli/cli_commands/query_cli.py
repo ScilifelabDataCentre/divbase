@@ -25,6 +25,7 @@ from rich import print
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.queries import (
@@ -90,23 +91,30 @@ def sample_metadata_query(
 
     request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
 
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
-        json=request_data.model_dump(),
-    )
+    try:
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
+            json=request_data.model_dump(),
+        )
 
-    data = response.json()
+    except DivBaseAPIError as e:
+        error_details = e.error_details
+        error_type = e.error_type.lower()
 
-    if "detail" in data or "error" in data:
-        error_msg = data.get("detail") or data.get("error")
-        error_type = data.get("type", "").lower()
-        print(f"Error: {error_msg}")
+        if isinstance(error_details, dict):
+            error_msg = error_details.get("error", str(error_details))
+            error_type = error_details.get("type", error_type).lower()
+        else:
+            error_msg = str(error_details)
+
+        print(f"[red]Error:[/red] {error_msg}")
+
         if "objectdoesnotexist" in error_type:
-            print("Hint: Upload the metadata file with:")
-            print(f"divbase-cli files upload {metadata_tsv_name} --project {project}")
-        # Note: VCFDimensionsEntryMissingError already contains a hint in the detail, so no need for custom hint here.
+            print("\n[yellow]Hint:[/yellow] Upload the metadata file with:")
+            print(f"[cyan]divbase-cli files upload {metadata_tsv_name} --project {project}[/cyan]")
+
         return
 
     results = SampleMetadataQueryTaskResult(**response.json())
