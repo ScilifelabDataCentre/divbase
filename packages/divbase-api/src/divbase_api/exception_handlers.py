@@ -15,6 +15,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException
 
+from divbase_api.db import get_db
+from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -29,6 +31,7 @@ from divbase_api.exceptions import (
     VCFDimensionsEntryMissingError,
 )
 from divbase_api.frontend_routes.core import templates
+from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +41,34 @@ def is_api_request(request: Request) -> bool:
     return request.url.path.startswith("/api/")
 
 
-def render_error_page(request: Request, message: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR):
+async def get_current_user_from_request_object(request: Request) -> UserDB | None:
+    """Helper function to get current user from request object"""
+    access_token = request.cookies.get("access_token")
+    refresh_token = request.cookies.get("refresh_token")
+    if not access_token and not refresh_token:
+        return None
+
+    async for db in get_db():
+        user = await _authenticate_frontend_user_from_tokens(
+            access_token=access_token, refresh_token=refresh_token, db=db
+        )
+    return user
+
+
+async def render_error_page(
+    request: Request,
+    message: str,
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
+):
     """Helper function to render the generic error page for frontend requests."""
+    current_user = await get_current_user_from_request_object(request)
     return templates.TemplateResponse(
         request=request,
         name="error.html",
         context={
             "request": request,
             "error_message": message,
+            "current_user": current_user,
         },
         status_code=status_code,
     )
@@ -118,7 +141,9 @@ async def project_not_found_error_handler(request: Request, exc: ProjectNotFound
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, "Project not found or you don't have access.", status_code=exc.status_code)
+        return await render_error_page(
+            request, "Project not found or you don't have access.", status_code=exc.status_code
+        )
 
 
 async def project_member_not_found_error_handler(request: Request, exc: ProjectMemberNotFoundError):
@@ -155,7 +180,7 @@ async def too_many_objects_in_request_error_handler(request: Request, exc: TooMa
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=exc.status_code)
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def bucket_versioning_file_exists_error_handler(request: Request, exc: BucketVersioningFileAlreadyExistsError):
@@ -170,7 +195,7 @@ async def bucket_versioning_file_exists_error_handler(request: Request, exc: Buc
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=exc.status_code)
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def bucket_version_exists_error_handler(request: Request, exc: BucketVersionAlreadyExistsError):
@@ -185,7 +210,7 @@ async def bucket_version_exists_error_handler(request: Request, exc: BucketVersi
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=exc.status_code)
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def bucket_version_not_found_error_handler(request: Request, exc: BucketVersionNotFoundError):
@@ -198,7 +223,7 @@ async def bucket_version_not_found_error_handler(request: Request, exc: BucketVe
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=exc.status_code)
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def generic_http_exception_handler(request: Request, exc: HTTPException):
@@ -221,17 +246,20 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException):
 
     # (Frontend request)
     if exc.status_code == 404:
+        current_user = await get_current_user_from_request_object(request)
         return templates.TemplateResponse(
             request=request,
             name="404.html",
-            context={"request": request},
+            context={"request": request, "current_user": current_user},
             status_code=status.HTTP_404_NOT_FOUND,
         )
     else:
         logger.error(
             f"HTTP {exc.status_code} error for {request.method} {request.url.path}: {exc.detail}", exc_info=True
         )
-        return render_error_page(request, "An unexpected error occurred. Please try again later.", exc.status_code)
+        return await render_error_page(
+            request, "An unexpected error occurred. Please try again later.", exc.status_code
+        )
 
 
 async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFDimensionsEntryMissingError):
@@ -244,7 +272,7 @@ async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFD
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=exc.status_code)
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

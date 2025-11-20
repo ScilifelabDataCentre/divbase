@@ -42,20 +42,15 @@ body {
   padding-top: auto;
   padding-bottom: 0;
 }
-
 .scilife-navbar-logo {
     height: clamp(2rem, 2vw, 3rem);
 }
-
 .scilife-nav-link {
   color: var(--scilife-dark-grey);
   font-size: 1.50rem;
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
-
-
-
 
 /* footer control */
 footer {
@@ -88,3 +83,52 @@ footer {
     max-width: 150px;
   }
 }
+
+/* projects card control */
+.scilife-project-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0.1rem solid var(--scilife-medium-grey);
+  box-shadow: 0 0 0.2rem 0.2rem rgba(0, 0, 0, 0.08);
+}
+.scilife-project-card h2 {
+  color: #222;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  margin-top: auto;
+}
+.scilife-project-card h3 {
+  color: var(--scilife-dark-grey);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+}
+.scilife-project-button {
+  font-size: 1.2rem;
+  align-self: flex-end;
+  margin-left: auto;
+  color: var(--scilife-aqua);
+  background-color: white;
+  border-color: var(--scilife-aqua);
+}
+.scilife-project-button:hover,
+.scilife-project-button:focus,
+.scilife-project-button:active,
+.scilife-project-button:active:focus {
+  color: white;
+  background-color: var(--scilife-aqua);
+  border-color: var(--scilife-aqua);
+}
+
+/* numb project control */
+.scilife-numb-project-badge {
+  font-size: 1.25rem;
+  background-color: var(--scilife-grape-075);
+  color: white; 
+}
+
+
+
+
