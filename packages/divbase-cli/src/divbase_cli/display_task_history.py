@@ -27,15 +27,27 @@ class TaskHistoryDisplayManager:
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: dict, command_context: dict):
+    def __init__(
+        self,
+        task_items: dict,
+        user_name: str | None,
+        project_name: str | None,
+        task_id: str | None,
+        mode: str,
+        display_limit: int,
+    ):
         self.task_items = task_items
-        self.command_context = command_context
+        self.user_name = user_name
+        self.project_name = project_name
+        self.task_id = task_id
+        self.mode = mode
+        self.display_limit = display_limit
 
     def print_task_history(self) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
         sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].state or "", reverse=True)
-        display_limit = self.command_context.get("display_limit", 10)
+        display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
@@ -76,14 +88,16 @@ class TaskHistoryDisplayManager:
         Use the Rich library to initiate a table for displaying task history.
         """
         title_prefix = "DivBase Task History"
-        if self.command_context.get("mode") == "user":
-            title = f"{title_prefix} for User: {self.command_context.get('user_name', 'Unknown')}"
-        elif self.command_context.get("mode") == "user_project":
-            title = f"{title_prefix} for User: {self.command_context.get('user_name', 'Unknown')} and Project: {self.command_context.get('project_name', 'Unknown')}"
-        elif self.command_context.get("mode") == "id":
-            title = f"{title_prefix} for Task ID: {self.command_context.get('task_id', 'Unknown')}"
-        elif self.command_context.get("mode") == "project":
-            title = f"{title_prefix} for Project: {self.command_context.get('project_name', 'Unknown')}"
+        if self.mode == "user":
+            title = f"{title_prefix} for User: {self.user_name or 'Unknown'}"
+        elif self.mode == "user_project":
+            title = (
+                f"{title_prefix} for User: {self.user_name or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
+            )
+        elif self.mode == "id":
+            title = f"{title_prefix} for Task ID: {self.task_id or 'Unknown'}"
+        elif self.mode == "project":
+            title = f"{title_prefix} for Project: {self.project_name or 'Unknown'}"
         else:
             title = title_prefix
 

@@ -63,13 +63,11 @@ def list_task_history_for_user(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data.tasks,
-        command_context={
-            "user_name": task_history_data.user_email,
-            "project_name": project,
-            "task_id": None,
-            "mode": "user_project" if project else "user",
-            "display_limit": limit,
-        },
+        user_name=task_history_data.user_email,
+        project_name=project,
+        task_id=None,
+        mode="user_project" if project else "user",
+        display_limit=limit,
     ).print_task_history()
 
 
@@ -98,13 +96,11 @@ def task_history_by_id(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data.tasks,
-        command_context={
-            "user_name": None,
-            "project_name": None,
-            "task_id": task_id,
-            "mode": "id",
-            "display_limit": None,
-        },
+        user_name=None,
+        project_name=None,
+        task_id=task_id,
+        mode="id",
+        display_limit=None,
     ).print_task_history()
 
 
@@ -137,11 +133,9 @@ def list_task_history_for_project(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data.tasks,
-        command_context={
-            "user_name": None,
-            "project_name": project,
-            "task_id": None,
-            "mode": "project",
-            "display_limit": limit,
-        },
+        user_name=None,
+        project_name=project,
+        task_id=None,
+        mode="project",
+        display_limit=limit,
     ).print_task_history()
