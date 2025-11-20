@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 task_history_router = APIRouter()
 
+READ_USER_ERROR_MSG = "You do not have access view to task history from any projects. You need to have at least one project where you have an EDIT role or higher."
+
 
 @task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
 async def get_all_tasks_for_user(
@@ -43,7 +45,7 @@ async def get_all_tasks_for_user(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view to task history from any projects.")
+            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     result = await get_user_task_history(
         db=db,
@@ -76,7 +78,7 @@ async def get_all_tasks_for_user_and_project(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view to task history from any projects.")
+            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError(
@@ -111,7 +113,7 @@ async def get_task_by_id(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view to task history from any projects.")
+            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     return await get_task_history_by_id(
         db=db,
@@ -140,7 +142,7 @@ async def get_project_tasks(
         )
 
         if not user_has_at_least_one_edit_role:
-            raise AuthorizationError("You do not have access view to task history from any projects.")
+            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     if not has_required_role(role, ProjectRoles.MANAGE):
         raise AuthorizationError(
