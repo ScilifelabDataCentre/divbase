@@ -316,8 +316,8 @@ async def post_forgot_password_form(
 ):
     """Handle forgot password form submission to send a password reset email."""
     RESET_LINK_SENT_MSG = (
-        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. \n Please check your inbox."
-        + f"\nThe email will be sent from {settings.email.from_email}."
+        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. Please check your inbox."
+        + f"The email will be sent from {settings.email.from_email}."
     )
 
     user = await get_user_by_email(db=db, email=email)

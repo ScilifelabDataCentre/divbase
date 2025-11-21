@@ -51,6 +51,15 @@ body {
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
+.scilife-nav-dropdown-item {
+  color: var(--scilife-dark-grey);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.045rem;
+}
+
+
+
 
 /* footer control */
 footer {
@@ -190,4 +199,24 @@ footer {
   font-size: 1.125rem;
   font-weight: 400;
   line-height: 1.7rem;
+}
+
+
+
+
+.scilife-confirm-button {
+  font-size: 1.2rem;
+  align-self: flex-end;
+  margin-left: auto;
+  color: white;
+  background-color: var(--scilife-lime-075);
+  border-color: var(--scilife-lime-075);
+}
+.scilife-confirm-button:hover,
+.scilife-confirm-button:focus,
+.scilife-confirm-button:active,
+.scilife-confirm-button:active:focus {
+  color: white;
+  background-color: var(--scilife-lime);
+  border-color: var(--scilife-lime);
 }
