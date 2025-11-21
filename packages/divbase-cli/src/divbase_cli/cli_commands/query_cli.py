@@ -115,7 +115,10 @@ def sample_metadata_query(
             print("\n[yellow]Hint:[/yellow] Upload the metadata file with:")
             print(f"[cyan]divbase-cli files upload {metadata_tsv_name} --project {project}[/cyan]")
 
-        return
+        raise typer.Exit(
+            code=1
+        ) from e  # purpose of this except block is to not give users a full traceback, so instead of doing re-raising with `raise`, exit with code 1.
+        # TODO consider if the exit code could be moved to a typer exception handler instead? [red]Error:[/red] -> code 1.
 
     results = SampleMetadataQueryTaskResult(**response.json())
 
