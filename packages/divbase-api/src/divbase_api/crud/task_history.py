@@ -134,8 +134,11 @@ async def check_user_can_view_task_id(
     but no direct FK between them.
     """
 
+    # Case: admin user, still needs to check that task ID exists
     if is_admin:
-        return True
+        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.task_id == task_id)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
     # Case: submitting user
     stmt = select(TaskHistoryDB.task_id).where(
