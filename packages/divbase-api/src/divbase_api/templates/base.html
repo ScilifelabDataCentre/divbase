@@ -30,7 +30,7 @@
 
 </head>
 
-<body class="d-flex flex-column h-100">
+<body class="d-flex flex-column min-vh-100">
     {% include "components/navbar.html" %}
     
     <main class="flex-shrink-0">
@@ -46,5 +46,8 @@
         integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
         crossorigin="anonymous">
     </script>
+
+    {# Custom JS scripts from static folder #}
+    {% block custom_scripts %}{% endblock %}
 </body>
 </html>

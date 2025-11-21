@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container">
-    <!-- Profile Header -->
+    {# Profile Header #}
     <div class="row">
         <div class="col-md-12">
             <div class="card mb-4">
@@ -18,7 +18,7 @@
                             <i class="bi bi-pencil me-2"></i>Edit Profile
                         </a>
                         <a href="/auth/forgot-password" class="btn btn-warning">
-                            <i class="bi bi-key me-2"></i>Reset Password
+                            <i class="bi bi-key me-2"></i>Request Password Reset Email
                         </a>
                     </div>
                 </div>
@@ -26,7 +26,7 @@
         </div>
     </div>
 
-    <!-- User Information -->
+    {# User Information #}
     <div class="row">
         <div class="col-md-12">
             <div class="card mb-4">
@@ -63,7 +63,6 @@
         </div>
     </div>
 
-    <!-- Project Cards Section -->
     {% include "components/project_cards.html" %}
 </div>
 {% endblock %}
