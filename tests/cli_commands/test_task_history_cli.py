@@ -186,7 +186,7 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["user_name"] == TEST_USERS["edit user"]["email"]
+    assert captured_manager.user_name == TEST_USERS["edit user"]["email"]
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
@@ -203,7 +203,7 @@ def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_exi
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["user_name"] == ADMIN_CREDENTIALS["email"]
+    assert captured_manager.user_name == ADMIN_CREDENTIALS["email"]
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
@@ -221,7 +221,7 @@ def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["project_name"] == project_name
+    assert captured_manager.project_name == project_name
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
@@ -242,8 +242,8 @@ def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["user_name"] == TEST_USERS["edit user"]["email"]
-    assert captured_manager.command_context["project_name"] == project_name
+    assert captured_manager.user_name == TEST_USERS["edit user"]["email"]
+    assert captured_manager.project_name == project_name
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
     task_projects = {task.kwargs.bucket_name for task in captured_manager.task_items.values()}
@@ -259,18 +259,20 @@ def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_e
     Integration test that read user cannot access the task history, since they cannot submit tasks.
     """
 
-    # Without --project flag
+    # Without --project flag, error is about being an only-Read user
     result_history = runner.invoke(app, "task-history user")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
     assert "You do not have access view to task history" in str(result_history.exception)
 
-    # With --project flag
+    # With --project flag, error is about access to this particular project
     project_name = CONSTANTS["QUERY_PROJECT"]
     result_history = runner.invoke(app, f"task-history user --project {project_name}")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
-    assert "You do not have access view to task history" in str(result_history.exception)
+    assert "Project not found or you don't have permission to view task history from this project" in str(
+        result_history.exception
+    )
 
 
 def test_edit_user_cannot_see_task_history_for_project_not_member_of(
@@ -299,7 +301,7 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["project_name"] == project_name
+    assert captured_manager.project_name == project_name
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
@@ -337,7 +339,7 @@ def test_manage_user_can_get_task_id_from_project_even_when_they_did_not_submit_
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["task_id"] == edit_user_task_id
+    assert captured_manager.task_id == edit_user_task_id
 
 
 def test_edit_user_can_only_get_task_ids_they_submitted(
@@ -360,7 +362,7 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
 
         captured_manager = get_manager()
 
-    assert captured_manager.command_context["task_id"] == edit_user_task_id
+    assert captured_manager.task_id == edit_user_task_id
     assert captured_manager.task_items[edit_user_task_id].kwargs.user_name == submitting_user
 
     result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
