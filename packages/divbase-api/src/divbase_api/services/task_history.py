@@ -12,7 +12,7 @@ from divbase_api.crud.task_history import (
     get_task_ids_for_user,
     get_task_ids_for_user_and_project,
 )
-from divbase_api.exceptions import AuthorizationError
+from divbase_api.exceptions import AuthorizationError, TaskNotFoundInBackendError
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -127,10 +127,10 @@ async def get_task_history_by_id(
     task_data = _make_flower_request(request_url)
 
     if not task_data:
-        return TaskHistoryResults(tasks={})
-    else:
-        task_data = _assign_response_models_to_flower_task_fields(task_data)
-        return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
+        raise TaskNotFoundInBackendError()
+
+    task_data = _assign_response_models_to_flower_task_fields(task_data)
+    return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
 
 
 def _make_flower_request(request_url: str) -> dict[str, Any]:
@@ -149,6 +149,10 @@ def _make_flower_request(request_url: str) -> dict[str, Any]:
                 settings.flower.password.get_secret_value(),
             ),
         )
+
+    # Workaround: Handle 404 from Flower API (task not found or no tasks exist) as empty dict and let layers above handle this with a custom error
+    if response.status_code == 404:
+        return {}
 
     if response.status_code != 200:
         raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")

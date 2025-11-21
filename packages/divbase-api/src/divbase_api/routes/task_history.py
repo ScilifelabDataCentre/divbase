@@ -104,25 +104,16 @@ async def get_task_by_id(
 ) -> TaskHistoryResults:
     """
     Get the history of a specific task ID. Admin users can view any task (even if not member of the projects), non-admin users can only view their own tasks.
+
+    Exception handlers are used for permission, and ID missing in results backend errors.
     """
 
-    result = await get_task_history_by_id(
+    return await get_task_history_by_id(
         db=db,
         task_id=task_id,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
-
-    if result.tasks == {}:
-        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        if not user_has_at_least_one_edit_role:
-            raise AuthorizationError(READ_USER_ERROR_MSG)
-
-    return result
 
 
 @task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
