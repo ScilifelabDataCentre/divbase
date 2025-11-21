@@ -21,6 +21,7 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.tasks import bcftools_pipe_task
@@ -656,7 +657,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             ),
         ):
             if not expect_success:
-                with pytest.raises(ValueError) as e:
+                with pytest.raises((VCFDimensionsEntryMissingError, ValueError)) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
                     assert msg.replace("\n", "") in str(e.value).replace("\n", "")

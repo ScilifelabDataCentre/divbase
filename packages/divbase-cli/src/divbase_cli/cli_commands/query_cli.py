@@ -111,9 +111,7 @@ def sample_metadata_query(
 
         print(f"[red]Error:[/red] {error_msg}")
 
-        if "objectdoesnotexist" in error_type:
-            print("\n[yellow]Hint:[/yellow] Upload the metadata file with:")
-            print(f"[cyan]divbase-cli files upload {metadata_tsv_name} --project {project}[/cyan]")
+        # TODO before there was a hint here to help users with how to upload the sample metadata file. that type of UX could be useful to implement
 
         raise typer.Exit(
             code=1

@@ -16,6 +16,7 @@ from celery.signals import (
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
+from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
@@ -150,57 +151,42 @@ def sample_metadata_query_task(
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
 
+    s3_file_manager = create_s3_file_manager(url="http://minio:9000")
+
+    metadata_path = _download_sample_metadata(
+        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
+
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+    if not vcf_dimensions_data.get("vcf_files"):
+        raise VCFDimensionsEntryMissingError(project_name=bucket_name)
+
+    metadata_result = run_sidecar_metadata_query(
+        file=metadata_path,
+        filter_string=tsv_filter,
+        project_id=project_id,
+        vcf_dimensions_data=vcf_dimensions_data,
+    )
+
     try:
-        s3_file_manager = create_s3_file_manager(url="http://minio:9000")
-
-        metadata_path = _download_sample_metadata(
-            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-        )
-
-        with SyncSessionLocal() as db:
-            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-        if not vcf_dimensions_data.get("vcf_files"):
-            return {
-                "status": "error",
-                "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
-                "type": "VCFDimensionsMissingError",
-                "task_id": task_id,
-            }
-
-        metadata_result = run_sidecar_metadata_query(
-            file=metadata_path,
-            filter_string=tsv_filter,
-            project_id=project_id,
-            vcf_dimensions_data=vcf_dimensions_data,
-        )
-
-        try:
-            os.remove(metadata_path)
-            logger.info(f"Deleted metadata file {metadata_path} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
-
-        # Convert to dict since celery serializes to JSON when sending back to API layer. Pydantic model serialization is not supported by celery
-        result = metadata_result.model_dump()
-        result["status"] = "completed"
-        result["task_id"] = task_id
-
-        logger.info(
-            f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
-            f"mapped to {len(metadata_result.unique_filenames)} VCF files"
-        )
-
-        return result
-
+        os.remove(metadata_path)
+        logger.info(f"Deleted metadata file {metadata_path} from worker.")
     except Exception as e:
-        logger.error(f"Error in sample_metadata_query_task: {str(e)}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "type": type(e).__name__,
-            "task_id": task_id,
-        }
+        logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
+
+    # Convert to dict since celery serializes to JSON when sending back to API layer. Pydantic model serialization is not supported by celery
+    result = metadata_result.model_dump()
+    result["status"] = "completed"
+    result["task_id"] = task_id
+
+    logger.info(
+        f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
+        f"mapped to {len(metadata_result.unique_filenames)} VCF files"
+    )
+
+    return result
 
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
@@ -224,12 +210,7 @@ def bcftools_pipe_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        # TODO - should this return a dict with status error instead?
-        raise ValueError(
-            f"The VCF dimensions index in project '{bucket_name}' is missing or empty. "
-            "Please ensure that there are VCF files in the project and run:\n"
-            "'divbase-cli dimensions update --project <project_name>'\n"
-        )
+        raise VCFDimensionsEntryMissingError(project_name=bucket_name)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
