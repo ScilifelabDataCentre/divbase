@@ -47,7 +47,7 @@ body {
 }
 .scilife-nav-link {
   color: var(--scilife-dark-grey);
-  font-size: 1.50rem;
+  font-size: 1.35rem;
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
@@ -84,6 +84,35 @@ footer {
   }
 }
 
+
+
+/* profile card control */
+.scilife-profile-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0.1rem solid var(--scilife-medium-grey);
+  box-shadow: 0 0 0.2rem 0.2rem rgba(0, 0, 0, 0.08);
+}
+.scilife-profile-card h2 {
+  color: #222;
+  font-size: 1.20rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  margin-top: auto;
+}
+.scilife-profile-card h3 {
+  color: var(--scilife-dark-grey);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+}
+.scilife-profile-card p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
+}
+
 /* projects card control */
 .scilife-project-card {
   display: flex;
@@ -94,7 +123,7 @@ footer {
 }
 .scilife-project-card h2 {
   color: #222;
-  font-size: 1.25rem;
+  font-size: 1.20rem;
   font-weight: 700;
   letter-spacing: 0.0625rem;
   margin-top: auto;
@@ -104,6 +133,11 @@ footer {
   font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: 0.0625rem;
+}
+.scilife-project-card p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
 }
 .scilife-project-button {
   font-size: 1.2rem;
