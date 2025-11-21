@@ -14,6 +14,7 @@ from celery.signals import (
     task_success,
 )
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
@@ -132,6 +133,8 @@ def _update_task_status_in_pg(task_id: str, status: TaskStatus, error_msg: str =
                 logger.debug(f"Updated task {task_id} to status {status}")
             else:
                 logger.warning(f"Task {task_id} not found in database")
+    except OperationalError as e:
+        logger.error(f"Database connection error when trying updating task {task_id}: {e}")
     except Exception as e:
         logger.error(f"Failed to update task status for {task_id}: {e}")
 
