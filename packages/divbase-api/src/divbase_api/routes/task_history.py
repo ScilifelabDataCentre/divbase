@@ -83,15 +83,6 @@ async def get_all_tasks_for_user_and_project(
         is_admin=current_user.is_admin,
     )
 
-    if result.tasks == {}:
-        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        if not user_has_at_least_one_edit_role:
-            raise AuthorizationError(READ_USER_ERROR_MSG)
-
     result.user_email = current_user.email
     return result
 
@@ -137,14 +128,5 @@ async def get_project_tasks(
         db=db,
         project_id=project.id,
     )
-
-    if result.tasks == {}:
-        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        if not user_has_at_least_one_edit_role:
-            raise AuthorizationError(READ_USER_ERROR_MSG)
 
     return result
