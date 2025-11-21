@@ -1,17 +1,21 @@
-import ast
 import datetime
 import logging
 
 from rich.console import Console
 from rich.table import Table
 
+from divbase_lib.api_schemas.task_history import (
+    BcftoolsQueryTaskResult,
+    DimensionUpdateTaskResult,
+    SampleMetadataQueryTaskResult,
+)
+
 logger = logging.getLogger(__name__)
 
 
-class TaskHistoryManager:
+class TaskHistoryDisplayManager:
     """
-    A class that manages interactions with the Flower API.
-    It filters, and displays the task history based on the current user.
+    A class that manages displaying task history results to the user's terminal.
     """
 
     STATE_COLOURS = {
@@ -19,51 +23,56 @@ class TaskHistoryManager:
         "FAILURE": "red",
         "PENDING": "yellow",
         "STARTED": "blue",
-        "PROGRESS": "blue",
+        "RETRY": "blue",
         "REVOKED": "magenta",
     }
 
-    def __init__(self, task_items: list, divbase_user: str = None):
+    def __init__(
+        self,
+        task_items: dict,
+        user_name: str | None,
+        project_name: str | None,
+        task_id: str | None,
+        mode: str,
+        display_limit: int,
+    ):
         self.task_items = task_items
-        self.current_divbase_user = divbase_user
+        self.user_name = user_name
+        self.project_name = project_name
+        self.task_id = task_id
+        self.mode = mode
+        self.display_limit = display_limit
 
-    def print_task_history(self, display_limit: int = 10) -> None:
-        """Display the task history fetched from the Flowwre APIin a formatted table."""
+    def print_task_history(self) -> None:
+        """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items, key=lambda x: x[2], reverse=True)
+        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].received or "", reverse=True)
+        display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
-        table = self.create_task_history_table()
+        table = self._create_task_history_table()
 
-        for id, task, _ in limited_tasks:
-            state = task.get("state", "N/A")
+        for task_id, task in limited_tasks:
+            state = task.state or "N/A"
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = self.get_submitter_from_kwargs(task)
+            submitter = self._get_submitter_from_task_kwargs(task)
+            result = self._format_result(task, state)
 
-            result = self.format_result(task, state)
-
-            if self.permission_to_view_task(submitter):
-                table.add_row(
-                    submitter,
-                    id,
-                    state_with_colour,
-                    self.format_unix_timestamp(task.get("received", "N/A")),
-                    self.format_unix_timestamp(task.get("started", "N/A")),
-                    str(task.get("runtime", "N/A")),
-                    result,
-                )
+            table.add_row(
+                submitter,
+                task_id,
+                state_with_colour,
+                self._format_unix_timestamp(task.received),
+                self._format_unix_timestamp(task.started),
+                str(task.runtime if task.runtime is not None else "N/A"),
+                result,
+            )
         console = Console()
         console.print(table)
 
-    def sort_tasks_by_runtime(self, tasks):
-        """
-        Sort tasks by their runtime in descending order.
-        """
-        return sorted(tasks, key=lambda x: x.get("runtime", 0), reverse=True)
-
-    def format_unix_timestamp(self, timestamp):
+    def _format_unix_timestamp(self, timestamp):
         """
         The flower task status API returns timestamps as integers or floats.
         This function formats them into a human-readable string.
@@ -74,11 +83,25 @@ class TaskHistoryManager:
             return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {local_timezone}"
         return str(timestamp)
 
-    def create_task_history_table(self):
+    def _create_task_history_table(self):
         """
         Use the Rich library to initiate a table for displaying task history.
         """
-        table = Table(title=f"DivBase Task Status for user: {self.current_divbase_user}", show_lines=True)
+        title_prefix = "DivBase Task History"
+        if self.mode == "user":
+            title = f"{title_prefix} for User: {self.user_name or 'Unknown'}"
+        elif self.mode == "user_project":
+            title = (
+                f"{title_prefix} for User: {self.user_name or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
+            )
+        elif self.mode == "id":
+            title = f"{title_prefix} for Task ID: {self.task_id or 'Unknown'}"
+        elif self.mode == "project":
+            title = f"{title_prefix} for Project: {self.project_name or 'Unknown'}"
+        else:
+            title = title_prefix
+
+        table = Table(title=title, show_lines=True)
         table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
         table.add_column("State", width=8)
@@ -88,28 +111,50 @@ class TaskHistoryManager:
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
 
-    def get_submitter_from_kwargs(self, task):
+    def _get_submitter_from_task_kwargs(self, task):
         """
         Extract submitter from task kwargs.
         """
-        kwargs = task.get("kwargs", "{}")
-        # TODO, look into literal_eval.
-        kwargs_dict = ast.literal_eval(kwargs)
-        return kwargs_dict.get("submitter", "Unknown")
+        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookup in the task_history db table would maybe make more sense?
+        kwargs = task.kwargs
+        if kwargs is None:
+            return "Unknown"
+        user_name = getattr(kwargs, "user_name", None)
+        if user_name:
+            return user_name
+        if isinstance(kwargs, dict):
+            return kwargs.get("user_name", "Unknown")
+        return "Unknown"
 
-    def format_result(self, task, state):
+    def _format_result(self, task, state):
         """
-        Format the result message based on the task state.
+        Format the result message based on the task state and type.
         """
+        colour = self.STATE_COLOURS.get(state, "white")
         if state == "FAILURE":
-            exception_message = task.get("exception", "Unknown error")
-            return f"[red]{exception_message}[/red]"
-        else:
-            result_message = str(task.get("result", "N/A"))
-            return f"[green]{result_message}[/green]"
+            exception_message = task.exception or "Unknown error"
+            return f"[{colour}]{exception_message}[/{colour}]"
 
-    def permission_to_view_task(self, submitter) -> bool:
-        """
-        Check if current user has permission to view this task
-        """
-        return self.current_divbase_user == submitter or self.current_divbase_user == "divbase_admin"
+        if isinstance(task.result, BcftoolsQueryTaskResult):
+            result_message = f"Output file ready for download: {task.result.output_file}"
+            return f"[{colour}]{result_message}[/{colour}]"
+            # TODO this should maybe say which project?
+
+        elif isinstance(task.result, SampleMetadataQueryTaskResult):
+            result_message = (
+                f"Unique sample IDs:\n  {task.result.unique_sample_ids}\n"
+                f"VCF files containing the sample IDs:\n  {task.result.unique_filenames}\n"
+                f"Sample metadata query:\n  {task.result.query_message}"
+            )
+            return f"[{colour}]{result_message}[/{colour}]"
+
+        elif isinstance(task.result, DimensionUpdateTaskResult):
+            result_message = (
+                f"VCF file dimensions index added or updated:\n  {task.result.VCF_files_added}\n"
+                f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
+                f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
+            )
+            return f"[{colour}]{result_message}[/{colour}]"
+
+        result_message = str(task.result)
+        return f"[{colour}]{result_message}[/{colour}]"

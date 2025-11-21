@@ -1,0 +1,44 @@
+sequenceDiagram
+    title Task status list: sequence diagram
+    participant User
+    participant CLI
+    participant API
+    participant DB as DB (postgreSQL)
+    participant Flower
+    participant Redis as Redis (Celery Results Backend)
+
+    User->>CLI: Run "divbase-cli task-history id <id>"
+    CLI->>API: HTTP GET /api/v1/task-history/list/<task_id>
+    API->>DB: Query allowed task IDs for user
+    DB-->>API: Return allowed task IDs
+
+    alt User not allowed to view task
+        API-->>CLI: Return empty result
+        CLI->>User: Display empty result
+    else User allowed to view task
+        API->>Flower: HTTP GET /api/task/info/<task_id>
+        Flower->>Redis: Fetch task data
+        Redis-->>Flower: Return task data
+        Flower-->>API: Return task info
+
+        alt Task not found in Flower/Redis
+            API-->>CLI: Return empty result
+            CLI->>User: Display empty result
+        else Task found
+            API-->>CLI: Return task info
+            CLI->>User: Display task info
+        end
+    end
+
+%% Version without early-exit ALT sequences
+    %% User->>CLI: Run "divbase-cli query task-status TODO ID"
+    %% CLI->>API: HTTP GET /api/v1/task-history/list{task_id}
+    %% API->>DB: Query allowed task IDs for user/project
+    %% DB-->>API: Return allowed task IDs
+    %% API->>Flower: HTTP GET /api/task/info/{task_id}
+    %% Flower->>Redis: Fetch task data
+    %% Redis-->>Flower: Return task data
+    %% Flower-->>API: Return all tasks
+    %% API->>API: Filter tasks by allowed IDs and project
+    %% API-->>CLI: Return filtered TaskHistoryResults
+    %% CLI->>User: Display results in terminal

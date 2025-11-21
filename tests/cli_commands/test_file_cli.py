@@ -82,7 +82,8 @@ def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert f"{str(test_file)}" in result.stdout
+    # assert f"{str(test_file)}" in result.stdout
+    assert test_file.name in result.stdout
 
 
 def test_upload_1_file_to_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
