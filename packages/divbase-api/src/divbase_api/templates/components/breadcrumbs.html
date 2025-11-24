@@ -1,0 +1,26 @@
+{# Auto generates breadcrumbs based on the current URL path #}
+{% if request.url.path != '/' %}
+<div class="container">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            {% set segments = request.url.path.strip('/').split('/') %}
+            {% set base_url = '' %}
+
+            <li class="breadcrumb-item">
+                <a href="/">Home</a>
+            </li>
+
+            {% for segment in segments %}
+                {% set base_url = base_url + '/' + segment %}
+                {% if not loop.last %}
+                    <li class="breadcrumb-item">
+                        <a href="{{ base_url }}">{{ segment|replace('_', ' ')|title }}</a>
+                    </li>
+                {% else %}
+                    <li class="breadcrumb-item active" aria-current="page">{{ segment|replace('_', ' ')|title }}</li>
+                {% endif %}
+            {% endfor %}
+        </ol>
+    </nav>
+</div>
+{% endif %}
