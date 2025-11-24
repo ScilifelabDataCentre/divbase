@@ -7,7 +7,7 @@
             Click the button below to confirm your email address <em>{{ email }}</em>` and complete the verification process.
         </p>
         
-        <form method="post" action="/auth/confirm-email-verification">
+        <form method="post" action="/confirm-email-verification">
             <input type="hidden" name="token" value="{{ token }}">
             <button type="submit" class="btn scilife-confirm-button">Confirm My Email Address</button>
         </form>

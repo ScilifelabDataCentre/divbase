@@ -67,7 +67,7 @@ app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(bucket_version_router, prefix="/api/v1/bucket-versions", tags=["bucket-versioning"])
 
 
-app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)
+app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)

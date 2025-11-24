@@ -84,7 +84,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
             headers=exc.headers,
         )
     else:
-        return RedirectResponse(url="/auth/login", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
 
 async def authorization_error_handler(request: Request, exc: AuthorizationError):
@@ -96,7 +96,7 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
             headers=exc.headers,
         )
     else:
-        return RedirectResponse(url="/auth/login", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
 
 async def user_registration_error_handler(request: Request, exc: UserRegistrationError):

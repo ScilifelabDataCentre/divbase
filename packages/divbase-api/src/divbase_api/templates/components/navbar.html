@@ -40,7 +40,7 @@
                         {% endif %}
                         <li><hr class="dropdown-divider"></li>
                         <li>
-                            <form method="post" action="/auth/logout" class="d-inline">
+                            <form method="post" action="/logout" class="d-inline">
                                 <button type="submit" class="dropdown-item scilife-nav-dropdown-item">
                                     <i class="bi bi-box-arrow-right me-2"></i>Logout
                                 </button>
@@ -50,12 +50,12 @@
                 </li>
                 {% else %}
                 <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/auth/login">
+                    <a class="nav-link scilife-nav-link" href="/login">
                         <i class="bi bi-box-arrow-in-right me-1"></i>Log in
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/auth/register">
+                    <a class="nav-link scilife-nav-link" href="/register">
                         <i class="bi bi-person-plus me-1"></i>Create Account
                     </a>
                 </li>
