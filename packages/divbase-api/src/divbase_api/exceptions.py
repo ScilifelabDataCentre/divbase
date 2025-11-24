@@ -100,3 +100,13 @@ class VCFDimensionsEntryMissingError(DivBaseAPIException):
             "'divbase-cli dimensions update --project <project_name>'\n"
         )
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class TaskNotFoundInBackendError(DivBaseAPIException):
+    """Raised when a task ID exists in the task_history table in the database but not in the results backend."""
+
+    def __init__(
+        self,
+        message: str = "Task ID not found in results backend. It may have been purged during cleanup of old task records.",
+    ):
+        super().__init__(message=message, status_code=status.HTTP_410_GONE)

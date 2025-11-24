@@ -21,11 +21,12 @@ import pytest
 from celery import current_app
 from typer.testing import CliRunner
 
+from divbase_api.exceptions import VCFDimensionsEntryMissingError
+from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
-from divbase_lib.queries import BcftoolsQueryManager
 from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
@@ -39,20 +40,23 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
 
 def wait_for_task_complete(task_id: str, max_retries: int = 30):
     """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"query task-status {task_id}"
+    command = f"task-history id {task_id}"
     while max_retries > 0:
         result = runner.invoke(app, command)
-        # Add checks for error keywords
+        output = result.stdout.replace("\n", " ").replace("\r", " ")
+        formatted_output = " ".join(output.split())  # handle multiline and irregular spaces in output
         if (
-            "FAILURE" in result.stdout
-            or "SUCCESS" in result.stdout
-            or "'status': 'completed'" in result.stdout
-            or "completed" in result.stdout
-            or "FAIL" in result.stdout
-            or "SidecarInvalidFilterError" in result.stdout
-            or "Unsupported bcftools command" in result.stdout
-            or "Empty command provided" in result.stdout
-            or "'status': 'error'" in result.stdout
+            "FAILURE" in formatted_output
+            or "SUCCESS" in formatted_output
+            or "'status': 'completed'" in formatted_output
+            or "completed" in formatted_output
+            or "FAIL" in formatted_output
+            or "SidecarInvalidFilterError" in formatted_output
+            or "Unsupported bcftools command" in formatted_output
+            or "Empty command provided" in formatted_output
+            or "'status': 'error'" in formatted_output
+            or "Output file ready for download" in formatted_output
+            or ".vcf.gz" in formatted_output
         ):
             return result
         time.sleep(1)
@@ -634,23 +638,26 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         with (
             patch("boto3.client", side_effect=patched_boto3_client),
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
-            patch("divbase_lib.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
+            patch("divbase_api.services.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_lib.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
-            patch("divbase_lib.queries.BcftoolsQueryManager.temp_file_management", new=patched_temp_file_management),
+            patch("divbase_api.services.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
             patch(
-                "divbase_lib.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
+                "divbase_api.services.queries.BcftoolsQueryManager.temp_file_management",
+                new=patched_temp_file_management,
+            ),
+            patch(
+                "divbase_api.services.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
             patch("divbase_api.worker.tasks._upload_results_file", new=patched_upload_results_file),
             patch("divbase_api.worker.tasks._delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
             patch(
-                "divbase_lib.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
+                "divbase_api.services.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
             ),
         ):
             if not expect_success:
-                with pytest.raises(ValueError) as e:
+                with pytest.raises((VCFDimensionsEntryMissingError, ValueError)) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
                     assert msg.replace("\n", "") in str(e.value).replace("\n", "")

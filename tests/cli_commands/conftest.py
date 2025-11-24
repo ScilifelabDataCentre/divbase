@@ -82,40 +82,85 @@ def logged_out_user_with_existing_config(CONSTANTS):
 
 
 @pytest.fixture
+def logged_in_admin_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in admin user with existing config."""
+    yield from _create_logged_in_user_fixture("admin")(CONSTANTS)
+
+
+@pytest.fixture
+def logged_in_read_user_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in read user with existing config."""
+    yield from _create_logged_in_user_fixture("read user")(CONSTANTS)
+
+
+@pytest.fixture
 def logged_in_edit_user_with_existing_config(CONSTANTS):
-    """
-    Fixture to provide a logged in user with edit access and "existing" user configuration file with
-    some existing projects and a default project set.
-    """
-    # ensure no config or tokens file exist before test
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+    """Fixture to provide a logged in edit user with existing config."""
+    yield from _create_logged_in_user_fixture("edit user")(CONSTANTS)
 
-    create_command = "config create"
-    result = runner.invoke(app, create_command)
-    assert result.exit_code == 0
-    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
-    for project in CONSTANTS["PROJECT_CONTENTS"]:
-        add_command = f"config add-project {project}"
-        result = runner.invoke(app, add_command)
+@pytest.fixture
+def logged_in_manage_user_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in manage user with existing config."""
+    yield from _create_logged_in_user_fixture("manage user")(CONSTANTS)
+
+
+@pytest.fixture
+def logged_in_edit_user_query_project_only_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in edit user (who only belongs to query-project) with existing config."""
+    yield from _create_logged_in_user_fixture("edit user query-project only")(CONSTANTS)
+
+
+@pytest.fixture
+def logged_in_manage_user_query_project_only_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in manage user (who only belongs to query-project) with existing config."""
+    yield from _create_logged_in_user_fixture("manage user query-project only")(CONSTANTS)
+
+
+def _create_logged_in_user_fixture(user_type: str):
+    """
+    Factory function to create a logged-in user fixture for a specific user type.
+
+    Args:
+        user_type: One of "admin", "read user", "edit user", "manage user"
+    """
+
+    def factory(CONSTANTS):
+        # ensure no config or tokens file exist before test
+        cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+        create_command = "config create"
+        result = runner.invoke(app, create_command)
+        assert result.exit_code == 0
+        assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
+
+        for project in CONSTANTS["PROJECT_CONTENTS"]:
+            add_command = f"config add-project {project}"
+            result = runner.invoke(app, add_command)
+            assert result.exit_code == 0
+
+        set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']}"
+        result = runner.invoke(app, set_default_command)
         assert result.exit_code == 0
 
-    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']}"
-    result = runner.invoke(app, set_default_command)
-    assert result.exit_code == 0
+        # Get credentials based on user type
+        if user_type == "admin":
+            user_creds = CONSTANTS["ADMIN_CREDENTIALS"]
+        else:
+            user_creds = CONSTANTS["TEST_USERS"][user_type]
 
-    edit_user_creds = CONSTANTS["TEST_USERS"]["edit user"]
+        login_command = f"auth login {user_creds['email']} --password {user_creds['password']}"
+        result = runner.invoke(app, login_command)
+        assert result.exit_code == 0, f"Login failed: {result.output}"
 
-    login_command = f"auth login {edit_user_creds['email']} --password {edit_user_creds['password']}"
-    result = runner.invoke(app, login_command)
-    assert result.exit_code == 0, f"Login failed: {result.output}"
+        yield
 
-    yield
+        # clean up after test, delete config and tokens file
+        cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
-    # clean up after test, delete config and tokens file
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+    return factory
 
 
 # @pytest.fixture
