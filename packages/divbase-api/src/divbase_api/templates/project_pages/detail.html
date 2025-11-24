@@ -79,7 +79,7 @@
                     </div>
                 </div>
             </div>
-            <!-- Code block to add this project to divbase-cli config file -->
+            {# Copy to clipboard for adding project to CLI config #}
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card">
@@ -88,7 +88,18 @@
                         </div>
                         <div class="card-body">
                             <p class="text-muted">To configure the <code>divbase-cli</code> tool to use this project, run the following command to add this project to your local configuration file:</p>
-                            <pre class="bg-light p-3 rounded"><code> divbase-cli config add-project {{ project.name }} </code></pre>
+                            <div class="clipboard me-2">
+                                <button class="clipboard-button copy-button" type="button">
+                                    <span>Copy </span>
+                                    <i class="bi bi-clipboard me-2"></i>
+                                </button>
+                                <button class="clipboard-button copied-button" type="button" style="display: none;">
+                                    <span>Copied </span>
+                                    <i class="bi bi-clipboard-check me-2"></i>
+                                </button>
+                            </div>
+                            <pre id="cliCommand"><code>divbase-cli config add-project {{ project.name }}</code></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -103,4 +114,8 @@
             
     </div>
 </div>
+{% endblock %}
+
+{% block custom_scripts %}
+<script src="/static/js/copy_to_clipboard.js"></script>
 {% endblock %}

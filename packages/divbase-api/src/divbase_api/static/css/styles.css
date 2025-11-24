@@ -220,3 +220,49 @@ footer {
   background-color: var(--scilife-lime);
   border-color: var(--scilife-lime);
 }
+
+
+
+/* Control the copy to clipboard button */
+.clipboard {
+  display: flex;
+  justify-content: flex-end;
+}
+p + .clipboard {
+  margin-top: -1rem; 
+}
+.clipboard-button {
+  padding: 2px 7px 5px 7px;
+  margin-bottom: 0.2rem;
+  color: var(--scilife-dark-grey);
+  background-color: #ededed;
+  border: 1px solid var(--scilife-dark-grey);
+  border-radius: 10px;
+  font-size: 1rem;
+  transition: 0.1s;
+}
+.clipboard-button:hover {
+  cursor: pointer;
+  background-color: #e0e0e0;
+}
+.clipboard-button:focus {
+  outline: 0;
+}
+code {
+  color: black;
+  background-color: var(--scilife-light-grey);
+  border-radius: 5px;
+  padding: 2px;
+}
+
+pre {
+  color: black;
+  background-color: var(--scilife-light-grey);
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  border: 1px solid var(--scilife-dark-grey);
+  border-radius: 10px;
+  line-height: 1.5;
+  padding: 5px;
+}
