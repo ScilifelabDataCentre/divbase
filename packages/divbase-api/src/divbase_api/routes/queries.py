@@ -74,8 +74,7 @@ async def sample_metadata_query(
         raise VCFDimensionsEntryMissingError(project_name=project.name) from None
     except Exception as e:
         error_msg = str(e)
-        error_type = type(e).__name__
-        raise HTTPException(status_code=500, detail={"error": error_msg, "type": error_type}) from e
+        raise HTTPException(status_code=500, detail=error_msg) from e
 
     return SampleMetadataQueryTaskResult(**result_dict)
 
