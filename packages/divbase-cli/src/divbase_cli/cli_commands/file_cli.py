@@ -5,7 +5,6 @@ TODO - support for specifying versions of files when downloading files?
 """
 
 from pathlib import Path
-from typing import List
 
 import typer
 from rich import print
@@ -49,7 +48,7 @@ def list_files(
 
 @file_app.command("download")
 def download_files(
-    files: List[str] = typer.Argument(
+    files: list[str] = typer.Argument(
         None, help="Space separated list of files/objects to download from the project's bucket."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
@@ -123,7 +122,7 @@ def download_files(
 
 @file_app.command("upload")
 def upload_files(
-    files: List[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
+    files: list[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
     upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     disable_safe_mode: Annotated[
@@ -190,7 +189,7 @@ def upload_files(
 
 @file_app.command("remove")
 def remove_files(
-    files: List[str] | None = typer.Argument(
+    files: list[str] | None = typer.Argument(
         None, help="Space seperated list of files/objects in the project's storage bucket to delete."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),

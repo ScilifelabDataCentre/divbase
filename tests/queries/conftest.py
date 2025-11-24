@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from celery import current_app
 
-from divbase_lib.queries import BcftoolsQueryManager, SidecarQueryManager
+from divbase_api.services.queries import BcftoolsQueryManager, SidecarQueryManager
 
 
 @pytest.fixture

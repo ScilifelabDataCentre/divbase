@@ -19,17 +19,19 @@ TODO:
 import logging
 from pathlib import Path
 
-import httpx
 import typer
 from rich import print
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.config_resolver import resolve_divbase_api_url, resolve_project
-from divbase_cli.display_task_history import TaskHistoryManager
+from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.queries import SidecarQueryResult
+from divbase_lib.api_schemas.queries import (
+    BcftoolsQueryRequest,
+    SampleMetadataQueryRequest,
+    SampleMetadataQueryTaskResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,29 +85,19 @@ def sample_metadata_query(
     look for files there? For now this code just uses file.parent as the download directory.
     TODO: handle when the name of the sample column is something other than Sample_ID
     """
+
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {"tsv_filter": filter, "metadata_tsv_name": metadata_tsv_name, "project_name": project_config.name}
+    request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
+
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=project_config.divbase_url,
-        api_route="v1/query/sample-metadata/",
-        params=params,
+        api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
+        json=request_data.model_dump(),
     )
 
-    data = response.json()
-
-    if "detail" in data or "error" in data:
-        error_msg = data.get("detail") or data.get("error")
-        error_type = data.get("type", "").lower()
-        print(f"Error: {error_msg}")
-        if "objectdoesnotexist" in error_type:
-            print("Hint: Upload the metadata file with:")
-            print(f"divbase-cli files upload {metadata_tsv_name} --project {project}")
-        # Note: VCFDimensionsEntryMissingError already contains a hint in the detail, so no need for custom hint here.
-        return
-
-    results = SidecarQueryResult(**response.json())
+    results = SampleMetadataQueryTaskResult(**response.json())
 
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
@@ -138,43 +130,14 @@ def pipe_query(
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
 
-    params = {
-        "tsv_filter": tsv_filter,
-        "command": command,
-        "metadata_tsv_name": metadata_tsv_name,
-        "project_name": project_config.name,
-    }
+    request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
+
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=project_config.divbase_url,
-        api_route="v1/query/bcftools-pipe/",
-        params=params,
+        api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
+        json=request_data.model_dump(),
     )
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
-
-
-@query_app.command("task-status")
-def check_status(
-    task_id: str | None = typer.Argument(None, help="Optional task id to check the status of a specific query job."),
-    divbase_url: str | None = typer.Option(
-        None,
-        help="Optional DivBase URL to use for the query. If not provided the default project's DivBase URL from your config file will be used.",
-    ),
-    config_file: Path = CONFIG_FILE_OPTION,
-):
-    """
-    Check status of all query jobs submitted by the user.
-
-    TODO - non bcftools query jobs should not show up here (but this should be handled by the API).
-    TODO - Consider if representation of single task should be different from the list of tasks.
-    """
-    divbase_url = resolve_divbase_api_url(url=divbase_url, config_path=config_file)
-
-    if task_id:
-        task_items = httpx.get(f"{divbase_url}/v1/query/{task_id}").json()
-    else:
-        task_items = httpx.get(f"{divbase_url}/v1/query/").json()
-    task_history_manager = TaskHistoryManager(task_items=task_items, divbase_user="divbase_admin")
-    task_history_manager.print_task_history()
