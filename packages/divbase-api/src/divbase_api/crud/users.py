@@ -2,6 +2,8 @@
 CRUD operations for users.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,6 +91,7 @@ async def soft_delete_user(db: AsyncSession, user_id: int) -> UserDB:
     user = await get_user_by_id_or_raise(db=db, id=user_id)
     user.is_deleted = True
     user.is_active = False  # also deactivate as deleted users should not be active
+    user.date_deleted = datetime.now(tz=timezone.utc)
     await db.commit()
     await db.refresh(user)
     return user
@@ -99,22 +102,15 @@ async def revert_soft_delete_user(db: AsyncSession, user_id: int) -> UserDB:
     user = await get_user_by_id_or_raise(db=db, id=user_id)
     user.is_deleted = False
     user.is_active = True  # reactivate the user if deactivated too.
+    user.date_deleted = None
     await db.commit()
     await db.refresh(user)
     return user
 
 
 async def update_user_profile(db: AsyncSession, user_data: UserUpdate, user_id: int) -> UserDB:
-    """Used by a regular user to update their own profile."""
+    """Used by a regular user to update their own profile information."""
     user = await get_user_by_id_or_raise(db=db, id=user_id)
-
-    if user_data.email and user_data.email != user.email:
-        existing_user = await get_user_by_email(db=db, email=user_data.email)
-        if existing_user:
-            raise UserRegistrationError(
-                internal_logging_message=f"Attempt to change email to existing email: {user_data.email}",
-                user_message="Account update failed, please try again later.",
-            )
 
     update_data = user_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():

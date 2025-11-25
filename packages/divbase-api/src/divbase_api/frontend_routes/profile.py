@@ -64,11 +64,10 @@ async def get_edit_user_profile_endpoint(
 @fr_profile_router.post("/edit", response_class=HTMLResponse)
 async def post_edit_user_profile_endpoint(
     name: str = Form(...),
-    email: str = Form(...),
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
 ):
     """Handle the submission of the edit user's profile form."""
-    user_data = UserUpdate(name=name, email=email)
+    user_data = UserUpdate(name=name)
     _ = await update_user_profile(db=db, user_id=current_user.id, user_data=user_data)
     return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)

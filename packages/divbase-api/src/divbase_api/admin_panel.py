@@ -6,6 +6,7 @@ These overrides are on methods inside BaseModelView (parent of ModelView, which 
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, Response
@@ -38,7 +39,7 @@ class UserView(ModelView):
     - To handle password hashing, we override the create method to hash the password before calling the original create method.
     - Deletion of users is disabled, you can still mark a user as soft deleted though.
     - Adding/editing project memberships is disabled in this view, they should be handled in the ProjectMembership view.
-    - Changing password for existing user is not supported: We will support a custom password reset flow instead.
+    - Changing password for existing user is not supported: Users should use the email password reset flow instead.
     """
 
     page_size_options = PAGINATION_DEFAULTS
@@ -60,6 +61,12 @@ class UserView(ModelView):
         DateTimeField(
             "last_password_change",
             help_text="Timestamp when the user last changed their password.",
+            disabled=True,
+        ),
+        DateTimeField(
+            "date_deleted",
+            help_text="Timestamp when the user was soft deleted (else None). Value determined by system, cannot be edited.",
+            disabled=True,
         ),
         "project_memberships",
     ]
@@ -70,6 +77,7 @@ class UserView(ModelView):
         "is_deleted",
         "is_active",
         "last_password_change",
+        "date_deleted",
     ]  # hashed_password wont be defined yet but needs to be included.
     exclude_fields_from_edit = ["project_memberships", "password", "hashed_password", "last_password_change"]
     exclude_fields_from_detail = ["hashed_password", "password"]
@@ -86,7 +94,22 @@ class UserView(ModelView):
         hashed_password = get_password_hash(SecretStr(password))
         data["hashed_password"] = hashed_password
 
-        return await super().create(request, data)
+        return await super().create(request=request, data=data)
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a users soft deletion status is changed.
+        """
+        logger.info(f"Editing user with pk={pk}, data={data}")
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+        logger.info(f"Editing user with pk={pk}, data={data}")
+
+        return await super().edit(request=request, pk=pk, data=data)
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a user cannot be both active and deleted at the same time."""
@@ -94,11 +117,11 @@ class UserView(ModelView):
         # creation route does not set is_active/is_deleted fields, so we skip this check there
         # (otherwise keyerror)
         if "is_active" not in data or "is_deleted" not in data:
-            return await super().validate(request, data)
+            return await super().validate(request=request, data=data)
 
         if data["is_active"] and data["is_deleted"]:
             raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
-        return await super().validate(request, data)
+        return await super().validate(request=request, data=data)
 
     def handle_exception(self, exc: Exception) -> None:
         """
@@ -164,7 +187,7 @@ class ProjectView(ModelView):
         if len(data["bucket_name"]) < 3 or len(data["bucket_name"]) > 63:
             raise FormValidationError(errors={"bucket_name": "Bucket name must be between 3 and 63 characters long."})
 
-        return await super().validate(request, data)
+        return await super().validate(request=request, data=data)
 
     def handle_exception(self, exc: Exception) -> None:
         """

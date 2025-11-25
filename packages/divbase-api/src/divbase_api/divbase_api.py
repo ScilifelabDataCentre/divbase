@@ -5,10 +5,12 @@ The API server for DivBase.
 import logging
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from divbase_api.admin_panel import register_admin_panel
 from divbase_api.api_config import settings
@@ -65,7 +67,7 @@ app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(bucket_version_router, prefix="/api/v1/bucket-versions", tags=["bucket-versioning"])
 
 
-app.include_router(fr_auth_router, prefix="/auth", include_in_schema=False)
+app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
@@ -78,6 +80,9 @@ app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["ta
 
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
+
+static_dir_path = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
 
 
 # TODO - move below routes into routes dir when ready.

@@ -69,18 +69,6 @@
     </div>
 </div>
 
-<script>
-// Bootstrap form validation
-document.addEventListener('DOMContentLoaded', function() {
-    const forms = document.querySelectorAll('.needs-validation');
-    Array.from(forms).forEach(form => {
-        form.addEventListener('submit', event => {
-            if (!form.checkValidity()) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            form.classList.add('was-validated');
-        });
-    });
-});
-</script>
+{% block custom_scripts %}
+<script src="/static/js/add_user_to_project.js"></script>
+{% endblock %}

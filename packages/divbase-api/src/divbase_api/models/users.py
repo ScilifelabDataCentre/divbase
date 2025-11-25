@@ -33,6 +33,7 @@ class UserDB(BaseDBModel):
     is_deleted: Mapped[bool] = mapped_column(default=False)
     email_verified: Mapped[bool] = mapped_column(default=False)
 
+    date_deleted: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     last_password_change: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project_memberships: Mapped[list["ProjectMembershipDB"]] = relationship(

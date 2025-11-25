@@ -1,0 +1,268 @@
+/* Brand colors */
+:root {
+  --scilife-lime: #a7c947;
+  --scilife-lime-075: #BDD775;
+  --scilife-lime-050: #D3E4A3;
+  --scilife-lime-025: #E9F2D1;
+
+  /* Grape should be used modestly as a 'color pop' or on smaller details */
+  --scilife-grape: #491F53;
+  --scilife-grape-075: #77577E;
+  --scilife-grape-050: #A48FA9;
+  --scilife-grape-025: #D2C7D4;
+
+  --scilife-teal: #045C64;
+  --scilife-teal-075: #43858B;
+  --scilife-teal-050: #82AEB2;
+  --scilife-teal-025: #C0D6D8;
+  --scilife-teal-light: #E6F2F3;
+
+  --scilife-aqua: #4C979F;
+  --scilife-aqua-075: #79B1B7;
+  --scilife-aqua-050: #A6CBCF;
+  --scilife-aqua-025: #D2E5E7;
+
+  --scilife-light-grey: #E5E5E5;
+  --scilife-medium-grey: #A6A6A6;
+  --scilife-contrast-okay-grey: #727272;
+  --scilife-dark-grey: #3F3F3F;
+}
+
+a {
+  color: var(--scilife-teal);
+}
+body {
+  font-family: "Roboto", Arial, sans-serif;
+}
+
+
+
+/* navbar control */
+.navbar-brand {
+  padding-top: auto;
+  padding-bottom: 0;
+}
+.scilife-navbar-logo {
+    height: clamp(2rem, 2vw, 3rem);
+}
+.scilife-nav-link {
+  color: var(--scilife-dark-grey);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.045rem;
+}
+.scilife-nav-dropdown-item {
+  color: var(--scilife-dark-grey);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.045rem;
+}
+
+
+
+
+/* footer control */
+footer {
+    background-color: #ebebeb;
+}
+.scilife-footer-text a {
+  color: var(--scilife-teal);
+  font-size: 1.00rem;
+  font-weight: 500;
+  letter-spacing: 0.045rem;
+  text-decoration: none;
+}
+.scilife-footer-titles {
+  color: var(--scilife-dark-grey);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  margin-bottom: 0.5rem;
+}
+.scilife-footer-img {
+  max-width: 150px;
+}
+@media (min-width: 1200px) {
+  .scilife-footer-img {
+    max-width: 140px;
+  }
+}
+@media (min-width: 1400px) {
+  .scilife-footer-img {
+    max-width: 150px;
+  }
+}
+
+
+
+/* profile card control */
+.scilife-profile-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0.1rem solid var(--scilife-medium-grey);
+  box-shadow: 0 0 0.2rem 0.2rem rgba(0, 0, 0, 0.08);
+}
+.scilife-profile-card h2 {
+  color: #222;
+  font-size: 1.20rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  margin-top: auto;
+}
+.scilife-profile-card h3 {
+  color: var(--scilife-dark-grey);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+}
+.scilife-profile-card p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
+}
+
+/* projects card control */
+.scilife-project-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0.1rem solid var(--scilife-medium-grey);
+  box-shadow: 0 0 0.2rem 0.2rem rgba(0, 0, 0, 0.08);
+}
+.scilife-project-card h2 {
+  color: #222;
+  font-size: 1.20rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  margin-top: auto;
+}
+.scilife-project-card h3 {
+  color: var(--scilife-dark-grey);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+}
+.scilife-project-card p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
+}
+.scilife-project-button {
+  font-size: 1.2rem;
+  align-self: flex-end;
+  margin-left: auto;
+  color: var(--scilife-aqua);
+  background-color: white;
+  border-color: var(--scilife-aqua);
+}
+.scilife-project-button:hover,
+.scilife-project-button:focus,
+.scilife-project-button:active,
+.scilife-project-button:active:focus {
+  color: white;
+  background-color: var(--scilife-aqua);
+  border-color: var(--scilife-aqua);
+}
+
+/* numb project control */
+.scilife-numb-project-badge {
+  font-size: 1.25rem;
+  background-color: var(--scilife-grape-075);
+  color: white; 
+}
+
+
+/* General text control */
+.scilife-subsection h2 {
+  color: var(--scilife-teal);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
+
+.scilife-subsection h3 {
+  color: var(--scilife-teal);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
+
+.scilife-subsection h4 {
+  color: var(--scilife-teal);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04rem;
+}
+
+.scilife-subsection p {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.7rem;
+}
+
+
+
+
+.scilife-confirm-button {
+  font-size: 1.2rem;
+  align-self: flex-end;
+  margin-left: auto;
+  color: white;
+  background-color: var(--scilife-lime-075);
+  border-color: var(--scilife-lime-075);
+}
+.scilife-confirm-button:hover,
+.scilife-confirm-button:focus,
+.scilife-confirm-button:active,
+.scilife-confirm-button:active:focus {
+  color: white;
+  background-color: var(--scilife-lime);
+  border-color: var(--scilife-lime);
+}
+
+
+
+/* Control the copy to clipboard button */
+.clipboard {
+  display: flex;
+  justify-content: flex-end;
+}
+p + .clipboard {
+  margin-top: -1rem; 
+}
+.clipboard-button {
+  padding: 2px 7px 5px 7px;
+  margin-bottom: 0.2rem;
+  color: var(--scilife-dark-grey);
+  background-color: #ededed;
+  border: 1px solid var(--scilife-dark-grey);
+  border-radius: 10px;
+  font-size: 1rem;
+  transition: 0.1s;
+}
+.clipboard-button:hover {
+  cursor: pointer;
+  background-color: #e0e0e0;
+}
+.clipboard-button:focus {
+  outline: 0;
+}
+code {
+  color: black;
+  background-color: var(--scilife-light-grey);
+  border-radius: 5px;
+  padding: 2px;
+}
+
+pre {
+  color: black;
+  background-color: var(--scilife-light-grey);
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  border: 1px solid var(--scilife-dark-grey);
+  border-radius: 10px;
+  line-height: 1.5;
+  padding: 5px;
+}

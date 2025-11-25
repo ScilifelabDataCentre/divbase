@@ -106,7 +106,7 @@
                                             <li><hr class="dropdown-divider"></li>
                                             <li>
                                                 <button class="dropdown-item text-danger" type="button" 
-                                                        onclick="confirmRemoveMember('{{ member.user_id }}', '{{ member.user_name }}')">
+                                                        onclick="confirmRemoveMember('{{ member.user_id }}', '{{ member.user_name }}', '{{ project.id }}')">
                                                     <i class="bi bi-person-dash me-2"></i>Remove Member
                                                 </button>
                                             </li>
@@ -127,14 +127,10 @@
 </div>
 
 {% if project.user_role == 'manage' %}
+
 <form id="removeMemberForm" method="post" style="display: none;"></form>
-<script>
-function confirmRemoveMember(userId, userName) {
-    if (confirm(`Are you sure you want to remove ${userName} from this project?`)) {
-        const form = document.getElementById('removeMemberForm');
-        form.action = `/projects/{{ project.id }}/members/${userId}/remove`;
-        form.submit();
-    }
-}
-</script>
+{% block custom_scripts %}
+<script src="/static/js/project_members.js"></script>
+{% endblock %}
+
 {% endif %}
