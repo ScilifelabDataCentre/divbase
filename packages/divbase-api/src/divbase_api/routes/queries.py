@@ -4,8 +4,11 @@ API routes for query operations.
 
 import logging
 import sys
+import textwrap
 
+import celery
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -69,10 +72,20 @@ async def sample_metadata_query(
     await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
 
     try:
-        result_dict = results.get(timeout=10)
+        result_dict = await run_in_threadpool(results.get, timeout=10)
+        # TODO - consider if we split this into 2 routes to handle time out issues on CLI side.
+        # Route 1, create job and get back job id.
+        # Route 2, get job result by id (with status etc), CLI can poll until done.
     except VCFDimensionsEntryMissingError:
         # Catch and raise anew to avoid duplications in the error message
         raise VCFDimensionsEntryMissingError(project_name=project.name) from None
+    except celery.exceptions.TimeoutError:  # type: ignore
+        error_message = textwrap.dedent(f"""
+            The query is still being processed and has Task ID: {results.id}. Please check back later for the results.
+            To check the status of the query you can use the following command: 
+            divbase-cli task-history id {results.id}
+        """)
+        raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail=error_message) from None
     except Exception as e:
         error_msg = str(e)
         raise HTTPException(status_code=500, detail=error_msg) from e
