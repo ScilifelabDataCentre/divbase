@@ -4,7 +4,6 @@ API routes for query operations.
 
 import logging
 import sys
-import textwrap
 
 import celery
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -80,11 +79,12 @@ async def sample_metadata_query(
         # Catch and raise anew to avoid duplications in the error message
         raise VCFDimensionsEntryMissingError(project_name=project.name) from None
     except celery.exceptions.TimeoutError:  # type: ignore
-        error_message = textwrap.dedent(f"""
-            The query is still being processed and has Task ID: {results.id}. Please check back later for the results.
-            To check the status of the query you can use the following command: 
-            divbase-cli task-history id {results.id}
-        """)
+        error_message = (
+            f"The query is still being processed and has Task ID: {results.id}. \n"
+            f"Please check back later for the results. \n"
+            f"To check the status of the query you can use the following command: \n"
+            f"divbase-cli task-history id {results.id}"
+        )
         raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail=error_message) from None
     except Exception as e:
         error_msg = str(e)
