@@ -45,7 +45,7 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
     broker_url = current_app.conf.broker_url
@@ -140,7 +140,7 @@ def test_task_routing(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     task_kwargs["project_id"] = project_id
     task_kwargs["user_name"] = "Test User"
 

@@ -147,6 +147,7 @@ def sample_metadata_query_task(
     metadata_tsv_name: str,
     bucket_name: str,
     project_id: int,
+    project_name: str,
     user_name: str,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
@@ -162,7 +163,7 @@ def sample_metadata_query_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(project_name=bucket_name)
+        raise VCFDimensionsEntryMissingError(project_name=project_name)
 
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
@@ -318,7 +319,7 @@ def bcftools_pipe_task(
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str) -> dict:
+def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str, project_name: str) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
     """
@@ -331,7 +332,7 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
 
     if not vcf_files:
         raise NoVCFFilesFoundError(
-            f"VCF dimensions file could not be generated since no VCF files were found in the project: {bucket_name}. "
+            f"VCF dimensions file could not be generated since no VCF files were found in the project: {project_name}."
             "Please upload at least one VCF file and run this command again."
         )
 

@@ -92,7 +92,7 @@ def test_sample_metadata_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -120,7 +120,7 @@ def test_bcftools_pipe_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -187,7 +187,7 @@ def test_bcftools_pipe_query_errors(
         command = "view -s SAMPLES"
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -248,7 +248,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):
@@ -636,7 +636,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
 
     if ensure_dimensions_file:
-        run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+        run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     try:
         current_app.conf.update(
             task_always_eager=True,

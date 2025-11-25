@@ -148,13 +148,15 @@ def clean_vcf_dimensions():
 def run_update_dimensions(CONSTANTS):
     """
     Factory fixture that runs update_vcf_dimensions_task.
-    Usage: run_update_dimensions(bucket_name)
+    Usage: run_update_dimensions(bucket_name, project_id, project_name)
     """
 
-    def _update(bucket_name="split-scaffold-project", project_id=None, user_name="Test User"):
+    def _update(bucket_name="split-scaffold-project", project_id=None, user_name="Test User", project_name=None):
         with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
-            result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name=user_name)
+            result = update_vcf_dimensions_task(
+                bucket_name=bucket_name, project_id=project_id, user_name=user_name, project_name=project_name
+            )
         return result
 
     return _update

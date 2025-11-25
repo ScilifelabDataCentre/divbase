@@ -86,7 +86,10 @@ async def update_vcf_dimensions_endpoint(
         raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
 
     task_kwargs = DimensionUpdateKwargs(
-        bucket_name=project.bucket_name, project_id=project.id, user_name=current_user.email
+        bucket_name=project.bucket_name,
+        project_id=project.id,
+        user_name=current_user.email,
+        project_name=project.name,
     )
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs.model_dump())
