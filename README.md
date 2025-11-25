@@ -117,13 +117,25 @@ uv run scripts/local_dev_setup.py # make sure the compose stack is running
 
 ### 5. Running tests
 
-We use docker-compose to setup a testing environment. The testing stack contains a MinIO instance which is populated with some default buckets and data and provided to each test.
+- Tests are written using Pytest. Tests are split at the top folder level into `unit` and `e2e_integration` tests (alongside some shared fixtures).
+- The distinction between `unit` and `e2e_integration` here is any test that requires some/all of the docker compose testing stack to be running is considered an end-to-end/integration test.
+- Note that there maybe "unit like" tests inside the `e2e_integration` dir, primarily for convenience/legacy reasons (before this top level split was made).
+- Unit tests should follow the pattern `tests/unit/<package>/<module>/<test_file_name>.py` (i.e. match the module structure of the packages in the codebase).
+
+To run all tests:
 
 ```bash
 pytest # you may want to append the -s flag to print standard output.
 ```
 
-**The tests will be slower the first time you run them as the docker images will need to be downloaded and built.**
+To run only unit or e2e_integration tests:
+
+```bash
+pytest tests/unit
+pytest tests/e2e_integration
+```
+
+**The e2e_integration tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker compose building steps.**
 
 ## Queries
 
