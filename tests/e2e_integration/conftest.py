@@ -22,8 +22,8 @@ from divbase_api.worker.crud_dimensions import (
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
-from tests.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
-from tests.helpers.setup_test_data import (
+from tests.e2e_integration.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
+from tests.e2e_integration.helpers.setup_test_data import (
     API_ADMIN_CREDENTIALS,
     MINIO_FAKE_ACCESS_KEY,
     MINIO_FAKE_SECRET_KEY,

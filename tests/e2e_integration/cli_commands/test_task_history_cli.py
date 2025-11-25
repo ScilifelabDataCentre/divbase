@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.divbase_cli import app
-from tests.cli_commands.conftest import _create_logged_in_user_fixture
+from tests.e2e_integration.cli_commands.conftest import _create_logged_in_user_fixture
 
 runner = CliRunner()
 

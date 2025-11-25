@@ -166,4 +166,4 @@ def _create_logged_in_user_fixture(user_type: str):
 @pytest.fixture
 def fixtures_dir():
     """Path to the fixtures directory."""
-    return Path(__file__).parent.parent / "fixtures"
+    return Path(__file__).parent.parent.parent / "fixtures"

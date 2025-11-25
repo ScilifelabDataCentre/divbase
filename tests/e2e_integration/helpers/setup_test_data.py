@@ -16,7 +16,7 @@ MINIO_URL = "http://localhost:9002"
 MINIO_FAKE_ACCESS_KEY = "minioadmin"  # we need to use admin credentials here to create buckets
 MINIO_FAKE_SECRET_KEY = "badpassword"
 
-FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 API_ADMIN_CREDENTIALS = {"email": "admin@divbase.com", "password": "badpassword"}
 
