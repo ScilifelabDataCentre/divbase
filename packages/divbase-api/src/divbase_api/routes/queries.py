@@ -62,6 +62,7 @@ async def sample_metadata_query(
         bucket_name=project.bucket_name,
         project_id=project.id,
         user_name=current_user.email,
+        project_name=project.name,
     )
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs.model_dump())
@@ -101,6 +102,7 @@ async def create_bcftools_jobs(
         bucket_name=project.bucket_name,
         project_id=project.id,
         user_name=current_user.email,
+        project_name=project.name,
     )
 
     results = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())

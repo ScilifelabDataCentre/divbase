@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.divbase_cli import app
 from tests.cli_commands.conftest import _create_logged_in_user_fixture
-from tests.helpers.api_setup import ADMIN_CREDENTIALS, TEST_USERS
 
 runner = CliRunner()
 
@@ -186,12 +185,12 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
 
         captured_manager = get_manager()
 
-    assert captured_manager.user_name == TEST_USERS["edit user"]["email"]
+    assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
-    assert TEST_USERS["edit user"]["email"] in user_emails
-    assert TEST_USERS["manage user"]["email"] not in user_emails
+    assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user"]["email"] not in user_emails
 
 
 def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_existing_config):
@@ -203,12 +202,12 @@ def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_exi
 
         captured_manager = get_manager()
 
-    assert captured_manager.user_name == ADMIN_CREDENTIALS["email"]
+    assert captured_manager.user_name == CONSTANTS["ADMIN_CREDENTIALS"]["email"]
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
-    assert TEST_USERS["edit user"]["email"] in user_emails
-    assert TEST_USERS["manage user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
 
 
 def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in_manage_user_with_existing_config):
@@ -225,8 +224,8 @@ def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
-    assert TEST_USERS["edit user"]["email"] in user_emails
-    assert TEST_USERS["manage user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
 
 
 def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
@@ -242,14 +241,14 @@ def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
 
         captured_manager = get_manager()
 
-    assert captured_manager.user_name == TEST_USERS["edit user"]["email"]
+    assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
     assert captured_manager.project_name == project_name
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
-    task_projects = {task.kwargs.bucket_name for task in captured_manager.task_items.values()}
+    task_projects = {task.kwargs.project_name for task in captured_manager.task_items.values()}
 
-    assert TEST_USERS["edit user"]["email"] in user_emails
-    assert TEST_USERS["manage user"]["email"] not in user_emails
+    assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user"]["email"] not in user_emails
     assert project_name in task_projects
     assert omitted_project_name not in task_projects
 
@@ -305,9 +304,9 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
 
     user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
 
-    assert TEST_USERS["edit user"]["email"] in user_emails
-    assert TEST_USERS["manage user"]["email"] in user_emails
-    assert TEST_USERS["manage user query-project only"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
+    assert CONSTANTS["TEST_USERS"]["manage user query-project only"]["email"] in user_emails
 
     non_member_project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
 
@@ -330,7 +329,7 @@ def test_manage_user_can_get_task_id_from_project_even_when_they_did_not_submit_
     Manage user should be able to access that task ID.
     """
 
-    submitting_user = TEST_USERS["edit user query-project only"]["email"]
+    submitting_user = CONSTANTS["TEST_USERS"]["edit user query-project only"]["email"]
     edit_user_task_id = submitted_task_ids[submitting_user][0]
 
     with capture_task_history_manager() as get_manager:
@@ -351,8 +350,8 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
     Integration test where an edit user that only belongs to query-project can only access tasks by ID for
     tasks that they submitted themselves.
     """
-    submitting_user = TEST_USERS["edit user query-project only"]["email"]
-    manage_user = TEST_USERS["manage user query-project only"]["email"]
+    submitting_user = CONSTANTS["TEST_USERS"]["edit user query-project only"]["email"]
+    manage_user = CONSTANTS["TEST_USERS"]["manage user query-project only"]["email"]
     edit_user_task_id = submitted_task_ids[submitting_user][0]
     manage_user_task_id = submitted_task_ids[manage_user][0]
 

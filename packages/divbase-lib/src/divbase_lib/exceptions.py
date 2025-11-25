@@ -88,26 +88,6 @@ class FilesAlreadyInBucketError(FileExistsError):
         return self.error_message
 
 
-class DivBaseCredentialsNotFoundError(Exception):
-    """
-    Raised when the credentials for accessing DivBase API, which are stored as enviroment variables are not found.
-    """
-
-    def __init__(self, access_key_name: str, secret_key_name: str):
-        error_message = (
-            "Your DivBase Access and/or secret key was not found in your enviroment variables'.\n"
-            f"Please ensure that the environment variables '{access_key_name}' and '{secret_key_name}' are set.\n"
-            f"The simplest way to do this is to create a .env file in the directory you run your commands from.\n"
-        )
-        super().__init__(error_message)
-        self.access_key_name = access_key_name
-        self.secret_key_name = secret_key_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
 class ProjectNameNotSpecifiedError(Exception):
     """
     Raised when the project name is not specified in the command line arguments, and

@@ -27,7 +27,6 @@ from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import ProjectNotInConfigError
-from tests.helpers.minio_setup import MINIO_URL
 
 runner = CliRunner()
 
@@ -75,7 +74,9 @@ def reset_query_projects_bucket(CONSTANTS):
     )
 
     # pylance does not understand boto3 resource returns types, hence ignore below
-    bucket = s3_resource.Bucket(CONSTANTS["QUERY_PROJECT"])  # type: ignore
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    bucket = s3_resource.Bucket(bucket_name)  # type: ignore
     bucket.object_versions.filter(Prefix="merged.vcf.gz").delete()
     yield
 
@@ -90,7 +91,8 @@ def test_sample_metadata_query(
     """Test running a sample metadata query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
-    run_update_dimensions(bucket_name=project_name, project_id=project_id)
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -117,7 +119,8 @@ def test_bcftools_pipe_query(
     """Test running a bcftools pipe query using the CLI."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
-    run_update_dimensions(bucket_name=project_name, project_id=project_id)
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -183,7 +186,8 @@ def test_bcftools_pipe_query_errors(
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
     project_id = project_map[project_name]
-    run_update_dimensions(bucket_name=project_name, project_id=project_id)
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -241,9 +245,10 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
     because the dimensions file expects an older version of the VCF file.
     """
-    bucket_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[bucket_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):
@@ -268,7 +273,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     ):
         test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
 
-        command = f"files upload {test_file}  --project {bucket_name} --disable-safe-mode"
+        command = f"files upload {test_file}  --project {project_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0
@@ -278,9 +283,10 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "tsv_filter": "Area:West of Ireland;Sex:F",
             "command": "view -s SAMPLES; view -r 1,4,6,21,24",
             "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-            "bucket_name": "split-scaffold-project",
+            "bucket_name": bucket_name,
             "user_name": "test-user",
             "project_id": project_id,
+            "project_name": project_name,
         }
         with pytest.raises(ValueError) as excinfo:
             bcftools_pipe_task(**params)
@@ -300,7 +306,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:West of Ireland;Sex:F",
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "bucket_name": "split-scaffold-project",
+                "project_name": "split-scaffold-project",
                 "user_name": "test-user",
             },
             False,
@@ -316,7 +322,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:West of Ireland;Sex:F",
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "bucket_name": "split-scaffold-project",
+                "project_name": "split-scaffold-project",
                 "user_name": "test-user",
             },
             True,
@@ -338,7 +344,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:West of Ireland;Sex:F",
                 "command": "view -s SAMPLES; view -r 31,34,36,321,324",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "bucket_name": "split-scaffold-project",
+                "project_name": "split-scaffold-project",
                 "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
@@ -357,7 +363,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "",
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "bucket_name": "split-scaffold-project",
+                "project_name": "split-scaffold-project",
                 "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
@@ -385,7 +391,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:Northern Portugal",
                 "command": "view -s SAMPLES; view -r 21:15000000-25000000",
                 "metadata_tsv_name": "sample_metadata.tsv",
-                "bucket_name": "query-project",
+                "project_name": "query-project",
                 "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
@@ -410,7 +416,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:Northern Spanish shelf",
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
-                "bucket_name": "mixed-concat-merge-project",
+                "project_name": "mixed-concat-merge-project",
                 "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
@@ -440,7 +446,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "tsv_filter": "Area:Northern Spanish shelf,Iceland",
                 "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
-                "bucket_name": "mixed-concat-merge-project",
+                "project_name": "mixed-concat-merge-project",
                 "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
@@ -500,8 +506,10 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     The benefit of all this patching is that now it is possible to parameterize the test for expected (worker) log outcomes!
 
     """
-    bucket_name = params["bucket_name"]
-    project_id = project_map[bucket_name]
+    project_name = params["project_name"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    params["bucket_name"] = bucket_name
+    project_id = project_map[project_name]
     params["project_id"] = project_id
 
     root_logger = logging.getLogger()
@@ -617,7 +625,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
     def patched_boto3_client(service_name, **kwargs):
         if service_name == "s3":
-            kwargs["endpoint_url"] = MINIO_URL
+            kwargs["endpoint_url"] = CONSTANTS["MINIO_URL"]
         return original_boto3_client(service_name, **kwargs)
 
     def patched_prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
@@ -628,7 +636,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
 
     if ensure_dimensions_file:
-        run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+        run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     try:
         current_app.conf.update(
             task_always_eager=True,

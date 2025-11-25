@@ -1,4 +1,10 @@
 name: divbase
+networks:
+  # Simulate S3 living outside remainder of services
+  internal:
+    driver: bridge
+  external-s3:
+    driver: bridge
 services:
   rabbitmq:
     image: "rabbitmq:alpine"
@@ -11,6 +17,8 @@ services:
       - 5672:5672
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
+    networks: &internal-network
+      - internal 
   redis:
     image: redis:alpine
     healthcheck:
@@ -23,6 +31,7 @@ services:
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
+    networks: *internal-network
   worker-quick:
     build: &worker-build
       context: .. 
@@ -33,16 +42,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    depends_on: &worker-depends
+    depends_on: &worker-api-depends
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DIVBASE_S3_ACCESS_KEY=minioadmin
-      - DIVBASE_S3_SECRET_KEY=badpassword
       - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
       - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
       - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
@@ -51,8 +62,10 @@ services:
       - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
       - FIRST_ADMIN_EMAIL=admin@divbase.com
       - FIRST_ADMIN_PASSWORD=badpassword
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=badpassword
+      - S3_ENDPOINT_URL=http://host.docker.internal:9000
+      - S3_PRESIGNING_URL=http://localhost:9000
+      - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
+      - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     develop: &watch-celery-src
       watch:
         - action: sync+restart
@@ -64,13 +77,15 @@ services:
         - action: rebuild
           path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
+    networks: *internal-network
   worker-long:
     build: *worker-build
     healthcheck: *worker-healthcheck
-    depends_on: *worker-depends
+    depends_on: *worker-api-depends
     environment: *worker-env
     develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
+    networks: *internal-network
   flower:
     build:
       context: ..
@@ -82,7 +97,7 @@ services:
       retries: 5
     ports:
       - 5555:5555
-    depends_on: *worker-depends
+    depends_on: *worker-api-depends
     environment:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -96,12 +111,13 @@ services:
       - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
       - FIRST_ADMIN_EMAIL=admin@divbase.com
       - FIRST_ADMIN_PASSWORD=badpassword
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=badpassword
+      - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
+      - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     develop: *watch-celery-src
     command: ["flower", "--persistent=True", "--db=/data/flower.db"]
     volumes:
       - flower-data:/data
+    networks: *internal-network  
   minio:
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     ports:
@@ -121,6 +137,29 @@ services:
       - minio-data:/data
       - minio-bitnami-data:/bitnami/minio/data #to avoid anonymous volumes being created
       - minio-certs:/certs #to avoid anonymous volumes being created
+    networks: &s3-network
+      - external-s3
+  minio-setup: # Create the service account 
+    image: bitnamilegacy/minio-client:2025.7.21-debian-12-r3
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=badpassword
+      - SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
+      - SERVICE_ACCOUNT_SECRET_KEY=badpassword
+    volumes:
+      - ./s3_service_account_policy.json:/tmp/minio-policy.json:ro
+    networks: *s3-network
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 minioadmin badpassword;
+      mc admin policy create minio divbase-policy /tmp/minio-policy.json;
+      mc admin user add minio s3-service-account badpassword;
+      mc admin policy attach minio divbase-policy --user s3-service-account;
+      "
   fastapi:
     build:
       context: ..
@@ -157,15 +196,12 @@ services:
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
-    - S3_ACCESS_KEY=minioadmin
-    - S3_SECRET_KEY=badpassword
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+    - S3_ENDPOINT_URL=http://host.docker.internal:9000
+    - S3_PRESIGNING_URL=http://localhost:9000
+    - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
+    - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
+    depends_on: *worker-api-depends
+    networks: *internal-network
   postgres:
     image: postgres:17
     ports:
@@ -184,6 +220,7 @@ services:
       - POSTGRES_USER=divbase_user
       - POSTGRES_DB=divbase_db
       - POSTGRES_PASSWORD=badpassword
+    networks: *internal-network
   mailpit:
     image: axllent/mailpit:v1.27
     ports:
@@ -196,6 +233,7 @@ services:
       retries: 3
     volumes:
       - mailpit-data:/data
+    networks: *internal-network
 volumes:
   rabbitmq-data:
   redis-data:

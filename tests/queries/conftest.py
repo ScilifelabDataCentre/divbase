@@ -174,7 +174,8 @@ def sample_metadata_query_kwargs_fixture():
     return {
         "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
         "metadata_tsv_name": "sample_metadata.tsv",
-        "bucket_name": "query-project",
+        "bucket_name": "divbase-local-query-project",
+        "project_name": "query-project",
     }
 
 
@@ -185,8 +186,9 @@ def bcftools_pipe_kwargs_fixture():
         "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
         "metadata_tsv_name": "sample_metadata.tsv",
         "command": "view -s SAMPLES; view -r 21:15000000-25000000",
-        "bucket_name": "query-project",
+        "bucket_name": "divbase-local-query-project",
         "user_name": "Default User",
+        "project_name": "query-project",
     }
 
 

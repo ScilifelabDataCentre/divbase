@@ -24,6 +24,7 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     run_update_dimensions,
     db_session_sync,
     project_map,
+    CONSTANTS,
 ):
     """
     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
@@ -41,10 +42,10 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
 
     NOTE! This test is potentially flaky since it is dependent on timings. If the completion time for the task is less than 0.01 (which does not seem to be the case during the local dev so far), this test will likely fail.
     """
-
-    bucket_name = bcftools_pipe_kwargs_fixture["bucket_name"]
-    project_id = project_map[bucket_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
     broker_url = current_app.conf.broker_url
@@ -105,6 +106,7 @@ def test_task_routing(
     run_update_dimensions,
     db_session_sync,
     project_map,
+    CONSTANTS,
 ):
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
@@ -135,9 +137,10 @@ def test_task_routing(
     request is a pytest built-in fixture that allows the value of a fixtures to be accessed by calling the fixture name.
     """
     task_kwargs = request.getfixturevalue(kwargs_fixture)
-    bucket_name = task_kwargs["bucket_name"]
-    project_id = project_map[bucket_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     task_kwargs["project_id"] = project_id
     task_kwargs["user_name"] = "Test User"
 

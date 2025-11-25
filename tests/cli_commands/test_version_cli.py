@@ -28,14 +28,15 @@ def clean_versions(logged_in_edit_user_with_existing_config, CONSTANTS):
     Remove the versioning file and create a new one before each test.
     Used in all tests in this module.
     """
-    for project_name in CONSTANTS["PROJECT_CONTENTS"]:
+
+    for bucket_name in CONSTANTS["PROJECT_TO_BUCKET_MAP"].values():
         s3_client = boto3.client(
             "s3",
             endpoint_url=CONSTANTS["MINIO_URL"],
             aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
             aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
         )
-        s3_client.delete_object(Bucket=project_name, Key=VERSION_FILE_NAME)
+        s3_client.delete_object(Bucket=bucket_name, Key=VERSION_FILE_NAME)
 
     command = "version create"
     result = runner.invoke(app, command)
