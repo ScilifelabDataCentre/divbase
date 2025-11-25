@@ -26,6 +26,7 @@ from divbase_api.exceptions import (
     ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
+    TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
     VCFDimensionsEntryMissingError,
@@ -275,11 +276,27 @@ async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFD
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
+async def task_not_found_in_backend_error_handler(request: Request, exc: TaskNotFoundInBackendError):
+    logger.warning(
+        f"Task ID not found in results backend for {request.method} {request.url.path}: {exc.message}", exc_info=True
+    )
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=status.HTTP_410_GONE,
+            content={"detail": exc.message, "type": "task_not_found_in_backend_error"},
+            headers=exc.headers,
+        )
+    else:
+        return render_error_page(request, exc.message, status_code=status.HTTP_410_GONE)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with FastAPI app.
 
     Type errors ignored (https://github.com/fastapi/fastapi/discussions/11741)
+
+    NOTE: error handlers need to be defined above this function, otherwise they will not work.
     """
     app.add_exception_handler(AuthenticationError, authentication_error_handler)  # type: ignore
     app.add_exception_handler(AuthorizationError, authorization_error_handler)  # type: ignore
@@ -293,3 +310,4 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
+    app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore

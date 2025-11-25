@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from celery import current_app
 
-from divbase_lib.queries import BcftoolsQueryManager, SidecarQueryManager
+from divbase_api.services.queries import BcftoolsQueryManager, SidecarQueryManager
 
 
 @pytest.fixture
@@ -175,6 +175,7 @@ def sample_metadata_query_kwargs_fixture():
         "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
         "metadata_tsv_name": "sample_metadata.tsv",
         "bucket_name": "divbase-local-query-project",
+        "project_name": "query-project",
     }
 
 

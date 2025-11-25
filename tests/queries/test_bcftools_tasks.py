@@ -40,7 +40,7 @@ def test_bcftools_pipe_task_with_real_worker(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
     bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
     broker_url = current_app.conf.broker_url

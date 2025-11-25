@@ -12,6 +12,7 @@ from divbase_api.models.base import BaseDBModel
 
 if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectMembershipDB
+    from divbase_api.models.task_history import TaskHistoryDB
 
 
 class UserDB(BaseDBModel):
@@ -38,6 +39,7 @@ class UserDB(BaseDBModel):
     project_memberships: Mapped[list["ProjectMembershipDB"]] = relationship(
         "ProjectMembershipDB", back_populates="user"
     )
+    task_history: Mapped[list["TaskHistoryDB"]] = relationship("TaskHistoryDB", back_populates="user")
 
     def __repr__(self) -> str:
         return f"<UserDB id={self.id}, name={self.name}, email={self.email}, is_admin={self.is_admin}>"

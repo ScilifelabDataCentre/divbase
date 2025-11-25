@@ -40,10 +40,10 @@ def test_update_vcf_dimensions_task_directly(
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
 
-    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     vcf_files = [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
-    indexed_files = result.get("VCF files that were added to dimensions index by this job", [])
+    indexed_files = result.get("VCF_files_added", [])
 
     for vcf_file in vcf_files:
         assert vcf_file in indexed_files, f"{vcf_file} not found in indexed files: {indexed_files}"
@@ -63,7 +63,7 @@ def test_show_vcf_dimensions_task(
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
 
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     # Basic version of command
     command = f"dimensions show --project {project_name}"
@@ -157,7 +157,9 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
     with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
-            update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
+            update_vcf_dimensions_task(
+                bucket_name=bucket_name, project_id=project_id, user_name="Test User", project_name=project_name
+            )
 
 
 def test_remove_VCF_and_update_dimension_entry(
@@ -215,9 +217,11 @@ def test_update_dimensions_skips_divbase_generated_vcf(
         bucket_name=bucket_name,
     )
 
-    result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
+    result = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, user_name="Test User", project_name=project_name
+    )
 
-    skipped_files = result.get("VCF files skipped by this job (previous DivBase-generated result VCFs)", [])
+    skipped_files = result.get("VCF_files_skipped", [])
     assert any(divbase_vcf_name in msg for msg in skipped_files), (
         f"Expected that this file was skipped; {divbase_vcf_name}; got: {skipped_files}"
     )
@@ -243,20 +247,21 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
 
-    result_first_run = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, user_name="Test User")
+    result_first_run = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, user_name="Test User", project_name=project_name
+    )
 
     assert result_first_run["status"] == "completed"
-    added_files = result_first_run["VCF files that were added to dimensions index by this job"]
+    added_files = result_first_run.get("VCF_files_added", [])
     expected_files = CONSTANTS["PROJECT_CONTENTS"]["split-scaffold-project"]
     expected_vcfs = [f for f in expected_files if f.endswith(".vcf.gz")]
     for vcf in expected_vcfs:
         assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
 
     result_second_run = update_vcf_dimensions_task(
-        bucket_name=bucket_name, project_id=project_id, user_name="Test User"
+        bucket_name=bucket_name, project_id=project_id, user_name="Test User", project_name=project_name
     )
     assert result_second_run["status"] == "completed"
-    assert (
-        "None: no new VCF files or file versions were detected in the project."
-        in result_second_run["VCF files that were added to dimensions index by this job"]
+    assert result_second_run.get("VCF_files_added") is None or result_second_run.get("VCF_files_added") == [], (
+        f"Expected no new files indexed, got: {result_second_run.get('VCF_files_added')}"
     )

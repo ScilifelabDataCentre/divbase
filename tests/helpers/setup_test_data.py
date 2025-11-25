@@ -24,7 +24,10 @@ TEST_USERS = {
     "read user": {"email": "read@divbase.se", "password": "badpassword"},
     "edit user": {"email": "edit@divbase.se", "password": "badpassword"},
     "manage user": {"email": "manage@divbase.se", "password": "badpassword"},
+    "edit user query-project only": {"email": "edit_query_project_only@divbase.se", "password": "badpassword"},
+    "manage user query-project only": {"email": "manage_query_project_only@divbase.se", "password": "badpassword"},
 }
+
 
 TEST_PROJECTS = {
     "project1": {
@@ -105,6 +108,14 @@ USER_ROLES = {
 }
 
 ROLE_ASSIGNMENTS = {project: [(email, role) for email, role in USER_ROLES.items()] for project in TEST_PROJECTS}
+
+# Add two special users that only belong to query-project
+ROLE_ASSIGNMENTS["query-project"].extend(
+    [
+        ("edit_query_project_only@divbase.se", "edit"),
+        ("manage_query_project_only@divbase.se", "manage"),
+    ]
+)
 
 _PROJECT_MAP_CACHE: dict[str, int] | None = None
 

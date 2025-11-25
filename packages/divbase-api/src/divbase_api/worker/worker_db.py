@@ -11,5 +11,5 @@ from sqlalchemy.orm import sessionmaker
 logger = logging.getLogger(__name__)
 
 WORKER_DATABASE_URL = os.getenv("WORKER_DATABASE_URL", "NOT_SET")
-sync_engine = create_engine(WORKER_DATABASE_URL, echo=False)
+sync_engine = create_engine(WORKER_DATABASE_URL, echo=False, pool_pre_ping=True)
 SyncSessionLocal = sessionmaker(bind=sync_engine)

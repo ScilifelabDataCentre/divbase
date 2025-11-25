@@ -25,12 +25,12 @@ from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
-from divbase_api.get_task_history import get_task_history
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
 from divbase_api.routes.bucket_versions import bucket_version_router
 from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
+from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
@@ -76,6 +76,7 @@ app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
 
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
 
+app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
@@ -88,21 +89,6 @@ app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-
-
-@app.get("/api/v1/query/")
-def get_jobs_by_user(user_name: str = "Default User"):
-    """
-    TODO: user_name would later be determined by the authentication system.
-    """
-    task_items = get_task_history()
-    return task_items
-
-
-@app.get("/api/v1/query/{task_id}")
-def get_task_by_id(task_id: str):
-    task_items = get_task_history(task_id=task_id)
-    return task_items
 
 
 def main():
