@@ -32,7 +32,7 @@ def test_register_new_user_complete_flow(page: Page, mailpit_page: Page):
     login_via_login_form(page, test_email, test_password)
     expect(page.get_by_text(EMAIL_NOT_VERIFIED_MESSAGE)).to_be_visible()
 
-    # Check that verification email is received and click it
+    # Check that verification email is received, open it and click on verification link
     email_link = mailpit_page.get_by_role("link", name=f"DivBase To: {test_email}")
     expect(email_link).to_be_visible()
     email_link.click()
