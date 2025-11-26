@@ -10,17 +10,17 @@ from .conftest import FRONTEND_BASE_URL, is_logged_in_as, login_via_login_form, 
 LOGIN_FAILED_MESSAGE = "Invalid email or password or user account does not exist"
 
 
-@pytest.mark.parametrize("user_type", ["ADMIN_USER", "READ_USER", "EDIT_USER", "MANAGE_USER"])
-def test_user_login_success(CREDENTIALS, page: Page, user_type: str):
-    """Test successful login for all user types."""
+@pytest.mark.parametrize("user", ["ADMIN_USER", "READ_USER", "EDIT_USER", "MANAGE_USER"])
+def test_user_login_success(EXISTING_ACCOUNTS, page: Page, user: str):
+    """Test successful login for all users"""
     navigate_to(page, "/login")
     expect(page).to_have_url(f"{FRONTEND_BASE_URL}/login")
 
     expect(page.locator('input[type="email"], input[name="email"]')).to_be_visible()
     expect(page.locator('input[type="password"], input[name="password"]')).to_be_visible()
 
-    user_email = CREDENTIALS[user_type]["email"]
-    user_password = CREDENTIALS[user_type]["password"]
+    user_email = EXISTING_ACCOUNTS[user]["email"]
+    user_password = EXISTING_ACCOUNTS[user]["password"]
 
     login_via_login_form(page=page, email=user_email, password=user_password)
     assert is_logged_in_as(page=page, email=user_email)
