@@ -181,15 +181,15 @@ async def get_verify_email(
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
             context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/email_verification_confirm.html",
@@ -206,15 +206,15 @@ async def confirm_email_verification(
     """
     Confirm email verification after user explicitly clicks a button.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
             context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
-    already_verified = await check_user_email_verified(db=db, id=user_id)
+    already_verified = await check_user_email_verified(db=db, id=token_data.user_id)
     if already_verified:
         return templates.TemplateResponse(
             request=request,
@@ -222,7 +222,7 @@ async def confirm_email_verification(
             context={"info": "Your email has already been verified, you can log in to DivBase directly."},
         )
 
-    user = await confirm_user_email(db=db, id=user_id)
+    user = await confirm_user_email(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/login.html",
@@ -355,15 +355,15 @@ async def get_reset_password_page(
     To access this endpoint a user receives an email with link to reset their password.
     The link contains a JWT as query param in the URL.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
             context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/reset_password.html",
@@ -385,8 +385,8 @@ async def post_reset_password_form(
     """
     Handle reset password form submission.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
@@ -411,7 +411,7 @@ async def post_reset_password_form(
                 "error": str(error_msg),
             },
         )
-    user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
+    user = await update_user_password(db=db, user_id=token_data.user_id, password_data=password_data)
     background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email)
     logger.info(f"User {user.email} has reset their password.")
 
