@@ -12,6 +12,7 @@ import httpx
 import yaml
 from pydantic import SecretStr
 
+from divbase_api.schemas.auth import LogoutRequest
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.user_config import load_user_config
@@ -118,10 +119,25 @@ def login_to_divbase(
 def logout_of_divbase(
     token_path: Path = cli_settings.TOKENS_PATH, config_path: Path = cli_settings.CONFIG_PATH
 ) -> None:
-    """Log out of the DivBase server."""
-    token_path.unlink(missing_ok=True)
-
+    """
+    Log out of the DivBase server.
+    We send the refresh token to DivBase to be revoked server-side.
+    """
     config = load_user_config(config_path)
+    if not config.logged_in_url:
+        raise AuthenticationError("You are not logged in.")
+
+    token_data = load_user_tokens(token_path=token_path)
+    request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
+
+    make_authenticated_request(
+        method="POST",
+        divbase_base_url=config.logged_in_url,
+        api_route="v1/auth/logout",
+        json=request_data.model_dump(),
+    )
+
+    token_path.unlink(missing_ok=True)
     config.set_logged_in_url(None)
     config.dump_config()
 

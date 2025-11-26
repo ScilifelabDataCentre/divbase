@@ -15,17 +15,19 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import authenticate_user, verify_user_from_refresh_token
+from divbase_api.crud.revoked_tokens import revoke_token_on_logout
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.auth import (
     CLILoginResponse,
+    LogoutRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
 from divbase_api.schemas.users import UserResponse
-from divbase_api.security import TokenType, create_token
+from divbase_api.security import TokenType, create_token, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -69,14 +71,15 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
     if not user:
         raise AuthenticationError(message="Invalid or expired refresh token, please log in again")
 
-    access_token, expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
-    return RefreshTokenResponse(access_token=access_token, expires_at=expires_at)
+    token_data = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    return RefreshTokenResponse(access_token=token_data.token, expires_at=token_data.expires_at)
 
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout_endpoint():
-    # TODO
-    pass
+async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depends(get_db)):
+    token_data = verify_token(logout_request.refresh_token, TokenType.REFRESH)
+    if token_data:
+        await revoke_token_on_logout(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
 
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.revoked_tokens import token_is_revoked
 from divbase_api.crud.users import get_user_by_email, get_user_by_id, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
@@ -83,7 +84,12 @@ async def verify_user_from_refresh_token(db: AsyncSession, token: str) -> UserDB
             f"Refresh token issued before last password change for user: {user.email} (id: {user.id}). Rejecting token."
         )
         return None
-    # TODO - check for revoked tokens
+
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked refresh token with jti: {token_data.jti} for user id: {token_data.user_id}"
+        )
+        return None
     return user
 
 

@@ -17,7 +17,7 @@ from divbase_api.crud.auth import (
     delete_auth_cookies,
     update_user_password,
 )
-from divbase_api.crud.revoked_tokens import revoke_used_password_reset_token, token_is_revoked
+from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_password_reset_token, token_is_revoked
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
@@ -105,8 +105,20 @@ async def post_login(
 
 
 @fr_auth_router.post("/logout", response_class=HTMLResponse)
-async def post_logout(request: Request):
-    """Handle logout form submission."""
+async def post_logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle logout form submission.
+
+    We delete auth cookies (access + refresh tokens) and revoke the refresh token.
+    """
+    refresh_token = request.cookies.get(TokenType.REFRESH.value)
+    token_data = verify_token(refresh_token, TokenType.REFRESH) if refresh_token else None
+    if token_data:
+        await revoke_token_on_logout(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
+
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     return delete_auth_cookies(response=response)
 
