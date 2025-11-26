@@ -17,6 +17,7 @@ from divbase_api.crud.auth import (
     delete_auth_cookies,
     update_user_password,
 )
+from divbase_api.crud.revoked_tokens import revoke_used_password_reset_token, token_is_revoked
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
@@ -362,6 +363,15 @@ async def get_reset_password_page(
             name="auth_pages/forgot_password.html",
             context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
 
     user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
@@ -393,6 +403,16 @@ async def post_reset_password_form(
             context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
+
     # Client side validation should mean these are never raised, but always have to check on server side.
     try:
         password_data = UserPasswordUpdate(password=SecretStr(password), confirm_password=SecretStr(confirm_password))
@@ -411,7 +431,9 @@ async def post_reset_password_form(
                 "error": str(error_msg),
             },
         )
+
     user = await update_user_password(db=db, user_id=token_data.user_id, password_data=password_data)
+    await revoke_used_password_reset_token(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
     background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email)
     logger.info(f"User {user.email} has reset their password.")
 

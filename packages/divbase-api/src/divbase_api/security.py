@@ -61,7 +61,7 @@ class VerifiedTokenData:
 
     user_id: int
     issued_at: datetime
-    jti: str | None = None
+    jti: str
 
 
 def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
