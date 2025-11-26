@@ -91,8 +91,8 @@ def send_verification_email(email_to: str, user_id: int) -> None:
     """
     subject = "DivBase - verify your email address"
 
-    verification_token, _ = create_token(subject=user_id, token_type=TokenType.EMAIL_VERIFICATION)
-    verification_url = f"{settings.api.frontend_base_url}/verify-email?token={verification_token}"
+    token_data = create_token(subject=user_id, token_type=TokenType.EMAIL_VERIFICATION)
+    verification_url = f"{settings.api.frontend_base_url}/verify-email?token={token_data.token}"
 
     link_expire_hours = settings.email.email_verify_expires_seconds // 3600
 
@@ -123,8 +123,8 @@ def send_password_reset_email(email_to: str, user_id: int) -> None:
     """
     subject = "DivBase - reset your password"
 
-    reset_password_token, _ = create_token(subject=user_id, token_type=TokenType.PASSWORD_RESET)
-    reset_password_url = f"{settings.api.frontend_base_url}/reset-password?token={reset_password_token}"
+    token_data = create_token(subject=user_id, token_type=TokenType.PASSWORD_RESET)
+    reset_password_url = f"{settings.api.frontend_base_url}/reset-password?token={token_data.token}"
 
     link_expire_hours = settings.email.password_reset_expires_seconds // 3600
 

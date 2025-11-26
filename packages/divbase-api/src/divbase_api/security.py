@@ -6,8 +6,10 @@ FastAPI recommend using pwdlib and argon2 for password hashing (https://fastapi.
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import jwt
@@ -28,7 +30,7 @@ def get_password_hash(password: SecretStr) -> str:
     return password_hash.hash(password.get_secret_value())
 
 
-class TokenType(str, Enum):
+class TokenType(StrEnum):
     """Types of JWT tokens used for e.g. auth or email verification/password reset."""
 
     ACCESS = "access_token"
@@ -45,7 +47,24 @@ token_expires_delta: dict[TokenType, timedelta] = {
 }
 
 
-def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
+@dataclass
+class TokenData:
+    """Returned when creating a JWT."""
+
+    token: str
+    expires_at: int
+
+
+@dataclass
+class VerifiedTokenData:
+    """Returned after verifying and decoding a JWT."""
+
+    user_id: int
+    issued_at: datetime
+    jti: str | None = None
+
+
+def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
     """
     Create a JWT token for access, refresh, email verification or password reset.
 
@@ -55,21 +74,27 @@ def create_token(subject: str | Any, token_type: TokenType) -> tuple[str, int]:
     so we can validate an access token is not used for e.g. password reset.
     """
     expire = datetime.now(timezone.utc) + token_expires_delta[token_type]
-    to_encode = {"exp": expire, "iat": datetime.now(timezone.utc), "sub": str(subject), "type": token_type.value}
+    jti = str(uuid.uuid4())
+
+    to_encode = {
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "jti": jti,
+        "sub": str(subject),
+        "type": token_type.value,
+    }
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
-    return encoded_jwt, int(expire.timestamp())
+    return TokenData(token=encoded_jwt, expires_at=int(expire.timestamp()))
 
 
-def verify_token(token: str, desired_token_type: TokenType) -> int | None:
+def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData | None:
     """
-    Verify and decode JWT token. If successful return the user id, else None.
+    Verify and decode JWT token. If successful return the user id,verified token data else None.
 
     If verification fails we should pass not any error information/context back.
 
     Expiration time is automatically verified in jwt.decode() -> raises jwt.ExpiredSignatureError
     """
-    if desired_token_type == TokenType.REFRESH:
-        raise ValueError("Use verify_refresh_token() for refresh tokens.")
     try:
         payload = jwt.decode(
             jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
@@ -79,33 +104,15 @@ def verify_token(token: str, desired_token_type: TokenType) -> int | None:
 
     if payload.get("type") != desired_token_type:
         return None
-    return int(payload.get("sub"))
+
+    return VerifiedTokenData(
+        user_id=int(payload.get("sub")),
+        issued_at=datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc),
+        jti=payload.get("jti"),
+    )
 
 
-def verify_refresh_token(token: str) -> tuple[int, datetime] | None:
-    """
-    Verify and decode a JWT token of TokenType type "refresh".
-
-    This is implemented separately to normal verify_token() because we also want to return the "iat" (issued at) time.
-    For a password_last_updated comparison check.
-
-    If successful return the user id and iat, else return None.
-    """
-    try:
-        payload = jwt.decode(
-            jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
-        )
-    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-        return None
-
-    if payload.get("type") != TokenType.REFRESH:
-        return None
-
-    iat = datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc)
-    return int(payload.get("sub")), iat
-
-
-def verify_expired_token(token: str, desired_token_type: TokenType) -> int | None:
+def verify_expired_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData | None:
     """
     Verify and decode a (potentially) expired JWT token. If successful return the user id, else None.
 
@@ -128,4 +135,8 @@ def verify_expired_token(token: str, desired_token_type: TokenType) -> int | Non
 
     if payload.get("type") != desired_token_type:
         return None
-    return int(payload.get("sub"))
+    return VerifiedTokenData(
+        user_id=int(payload.get("sub")),
+        issued_at=datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc),
+        jti=payload.get("jti"),
+    )

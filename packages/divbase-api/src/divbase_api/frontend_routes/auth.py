@@ -79,23 +79,23 @@ async def post_login(
         )
 
     logger.info(f"User {user.email} logged in successfully via frontend.")
-    access_token, access_expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
-    refresh_token, refresh_expires_at = create_token(subject=user.id, token_type=TokenType.REFRESH)
+    access_token_data = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    refresh_token_data = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     response.set_cookie(
         key=TokenType.ACCESS.value,
-        value=access_token,
-        expires=access_expires_at,
+        value=access_token_data.token,
+        expires=access_token_data.expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
     )
     response.set_cookie(
         key=TokenType.REFRESH.value,
-        value=refresh_token,
-        expires=refresh_expires_at,
+        value=refresh_token_data.token,
+        expires=refresh_token_data.expires_at,
         httponly=True,
         secure=True,
         samesite="lax",

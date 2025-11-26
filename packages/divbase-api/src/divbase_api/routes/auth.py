@@ -44,14 +44,14 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
     user = await authenticate_user(db, email=form_data.username, password=form_data.password)
     logger.info(f"User {user.email} logged in successfully.")
 
-    access_token, exp_access = create_token(subject=user.id, token_type=TokenType.ACCESS)
-    refresh_token, exp_refresh = create_token(subject=user.id, token_type=TokenType.REFRESH)
+    access_token_data = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    refresh_token_data = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
     return CLILoginResponse(
-        access_token=access_token,
-        access_token_expires_at=exp_access,
-        refresh_token=refresh_token,
-        refresh_token_expires_at=exp_refresh,
+        access_token=access_token_data.token,
+        access_token_expires_at=access_token_data.expires_at,
+        refresh_token=refresh_token_data.token,
+        refresh_token_expires_at=refresh_token_data.expires_at,
         email=user.email,
     )
 
