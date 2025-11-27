@@ -254,7 +254,10 @@ class DivBaseAuthProvider(AuthProvider):
 
     async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
         """Override the default starlette-admin logout to use our frontend post_logout function/route."""
-        return await post_logout(request)
+        # can't rely on dependency injection here like in FastAPI, so we manually obtain a db session
+        async for db in get_db():
+            logout_response = await post_logout(request, db)
+        return logout_response
 
     async def is_authenticated(self, request: Request) -> bool:
         """
