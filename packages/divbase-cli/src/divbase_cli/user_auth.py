@@ -124,18 +124,17 @@ def logout_of_divbase(
     We send the refresh token to DivBase to be revoked server-side.
     """
     config = load_user_config(config_path)
-    if not config.logged_in_url:
-        raise AuthenticationError("You are not logged in.")
 
-    token_data = load_user_tokens(token_path=token_path)
-    request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
-
-    make_authenticated_request(
-        method="POST",
-        divbase_base_url=config.logged_in_url,
-        api_route="v1/auth/logout",
-        json=request_data.model_dump(),
-    )
+    # the "if" avoids raising an error on a non logged in user trying to logout
+    if config.logged_in_url:
+        token_data = load_user_tokens(token_path=token_path)
+        request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
+        make_authenticated_request(
+            method="POST",
+            divbase_base_url=config.logged_in_url,
+            api_route="v1/auth/logout",
+            json=request_data.model_dump(),
+        )
 
     token_path.unlink(missing_ok=True)
     config.set_logged_in_url(None)

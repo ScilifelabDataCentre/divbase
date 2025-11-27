@@ -75,11 +75,14 @@ async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSe
     return RefreshTokenResponse(access_token=token_data.token, expires_at=token_data.expires_at)
 
 
-@auth_router.post("/logout", status_code=status.HTTP_200_OK)
+@auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depends(get_db)):
+    """Logout endpoint to revoke the refresh token used by CLI/API clients."""
     token_data = verify_token(logout_request.refresh_token, TokenType.REFRESH)
     if token_data:
         await revoke_token_on_logout(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
+    else:
+        logger.warning(f"Logout attempted with invalid/expired refresh token {logout_request.refresh_token}. Ignoring.")
 
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
