@@ -126,10 +126,11 @@ class Settings:
     jwt: JWTSettings = field(default_factory=JWTSettings)
     email: EmailSettings = field(default_factory=EmailSettings)
 
-    def __post_init__(self):
+    def validate_api_settings(self) -> None:
         """
         Validate all required settings are actually set.
-        This means that later on in the codebase we don't have to check for any non set values, we can just assume they are set.
+        This is run on startup of the API which means that later on in the codebase
+        we don't have to check for any non set values, we can just assume they are set.
         """
         required_fields = {
             "DIVBASE_ENV": self.api.environment,
@@ -145,10 +146,15 @@ class Settings:
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
-            if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":
-                raise ValueError(f"A required secret environment variable was not set: {setting_name}")
             if isinstance(setting, str) and setting == "NOT_SET":
-                raise ValueError(f"A required environment variable was not set: {setting_name}")
+                raise ValueError(f"A required environment variable was not set: {setting_name=}")
+            if isinstance(setting, SecretStr):
+                if setting.get_secret_value() == "NOT_SET":
+                    raise ValueError(f"A required environment variable was not set: {setting_name=}")
+                if self.api.environment not in ["local_dev", "test"] and setting.get_secret_value() == "badpassword":
+                    raise ValueError(
+                        f"A secret environment variable was set to badpassword for a non local environment: {setting_name=}"
+                    )
 
 
 # This instance can be imported and used throughout the application.
