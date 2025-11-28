@@ -5,7 +5,6 @@ import pickle
 from typing import Any
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -14,6 +13,7 @@ from divbase_api.crud.task_history import (
     get_task_ids_for_project,
     get_task_ids_for_user,
     get_task_ids_for_user_and_project,
+    get_tasks_by_task_id_pg,
 )
 from divbase_api.exceptions import AuthorizationError, TaskNotFoundInBackendError
 from divbase_api.models.task_history import CeleryTaskMeta
@@ -60,6 +60,28 @@ async def get_user_task_history(
         all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
     )
     return filtered_results
+
+
+async def get_user_task_history_from_postgres(
+    db: AsyncSession,
+    user_id: int,
+    is_admin: bool = False,
+) -> TaskHistoryResults:
+    """Version of get_user_task_history that queries the celery pg backend table"""
+
+    allowed_task_ids = await get_task_ids_for_user(db, user_id, is_admin)
+
+    if not allowed_task_ids:
+        return TaskHistoryResults(tasks={})
+
+    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
+
+    filtered_tasks = {}
+    for task in celery_tasks:
+        deserialized = _deserialize_celery_task_metadata(task)
+        filtered_tasks[task.task_id] = FlowerTaskResult(**deserialized)
+
+    return TaskHistoryResults(tasks=filtered_tasks)
 
 
 async def get_user_and_project_task_history(
@@ -216,18 +238,14 @@ def _assign_response_models_to_flower_task_fields(task_data: dict) -> dict:
     return task_data
 
 
-async def get_task_from_pg_by_task_id(db: AsyncSession, task_id: str):
+def _deserialize_celery_task_metadata(task: CeleryTaskMeta) -> dict:
     """
-    Helper function to lookup and decode tasks from the db CeleryTaskMeta table (SQLalchemy+postgres celery results backend).
+    Helper function to deserialize tasks from the db CeleryTaskMeta table (SQLalchemy+postgres celery results backend).
     The results backend serializes fields controlled by result_extended=True (e.g. args, kwargs) as JSON, but the task results
     as pickle.
-    """
-    stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == task_id)
-    result = await db.execute(stmt)
-    task = result.scalar_one_or_none()
 
-    if not task:
-        return None
+    Handles task args, although the pattern for divbase celery tasks is to use kwargs.
+    """
 
     args = []
     if task.args:
@@ -235,7 +253,7 @@ async def get_task_from_pg_by_task_id(db: AsyncSession, task_id: str):
             args_str = task.args.decode("utf-8") if isinstance(task.args, bytes) else task.args
             args = json.loads(args_str)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to decode args for task {task_id}: {e}")
+            logger.warning(f"Failed to decode args for task {task.task_id}: {e}")
 
     kwargs = {}
     if task.kwargs:
@@ -243,7 +261,7 @@ async def get_task_from_pg_by_task_id(db: AsyncSession, task_id: str):
             kwargs_str = task.kwargs.decode("utf-8") if isinstance(task.kwargs, bytes) else task.kwargs
             kwargs = json.loads(kwargs_str)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to decode kwargs for task {task_id}: {e}")
+            logger.warning(f"Failed to decode kwargs for task {task.task_id}: {e}")
 
     result_data = {}
     if task.result:
@@ -251,16 +269,17 @@ async def get_task_from_pg_by_task_id(db: AsyncSession, task_id: str):
             try:
                 result_data = pickle.loads(task.result)
             except Exception as e:
-                logger.warning(f"Failed to unpickle result for task {task_id}: {e}")
+                logger.warning(f"Failed to unpickle result for task {task.task_id}: {e}")
         else:
             try:
                 result_str = task.result.decode("utf-8") if isinstance(task.result, bytes) else task.result
                 result_data = json.loads(result_str)
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.warning(f"Failed to decode JSON result for task {task_id}: {e}")
+                logger.warning(f"Failed to decode JSON result for task {task.task_id}: {e}")
 
     parsed_result = result_data
     parsed_kwargs = kwargs
+    args_str_for_flower = json.dumps(args) if isinstance(args, list) else str(args)
 
     if task.name == "tasks.sample_metadata_query":
         parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
@@ -272,16 +291,12 @@ async def get_task_from_pg_by_task_id(db: AsyncSession, task_id: str):
         parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
 
     return {
-        "id": task.id,
-        "task_id": task.task_id,
+        "uuid": task.task_id,
         "status": task.status,
         "result": parsed_result,
         "date_done": task.date_done.isoformat() if task.date_done else None,
-        "traceback": task.traceback,
         "name": task.name,
-        "args": args,
+        "args": args_str_for_flower,
         "kwargs": parsed_kwargs,
         "worker": task.worker,
-        "retries": task.retries,
-        "queue": task.queue,
     }

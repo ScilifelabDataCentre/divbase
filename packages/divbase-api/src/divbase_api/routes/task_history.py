@@ -18,7 +18,7 @@ from divbase_api.services.task_history import (
     get_project_task_history,
     get_task_history_by_id,
     get_user_and_project_task_history,
-    get_user_task_history,
+    get_user_task_history_from_postgres,
 )
 from divbase_lib.api_schemas.task_history import TaskHistoryResults
 
@@ -38,7 +38,12 @@ async def get_all_tasks_for_user(
     Get the task history for the current user. Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
 
-    result = await get_user_task_history(
+    # result = await get_user_task_history(
+    #     db=db,
+    #     user_id=current_user.id,
+    #     is_admin=current_user.is_admin,
+    # )
+    result = await get_user_task_history_from_postgres(
         db=db,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
@@ -98,7 +103,6 @@ async def get_task_by_id(
 
     Exception handlers are used for permission, and ID missing in results backend errors.
     """
-
     return await get_task_history_by_id(
         db=db,
         task_id=task_id,

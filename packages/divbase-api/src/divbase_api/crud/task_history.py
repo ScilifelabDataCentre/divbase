@@ -8,7 +8,7 @@ from sqlalchemy import join, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -161,3 +161,13 @@ async def check_user_can_view_task_id(
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None
+
+
+async def get_tasks_by_task_id_pg(db: AsyncSession, task_ids: set[str]) -> list[CeleryTaskMeta]:
+    """
+    Fetch raw CeleryTaskMeta records from PostgreSQL by task IDs.
+    Returns raw database objects without deserialization.
+    """
+    stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(task_ids))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
