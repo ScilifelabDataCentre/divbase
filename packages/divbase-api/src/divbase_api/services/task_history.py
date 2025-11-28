@@ -40,10 +40,13 @@ async def get_user_task_history_from_postgres(
     user_id: int,
     is_admin: bool = False,
 ) -> TaskHistoryResults:
-    """Version of get_user_task_history that queries the celery pg backend table"""
+    """
+    Fetch task history for a user for all their projects.
+    """
 
     allowed_task_ids = await get_task_ids_for_user(db, user_id, is_admin)
-
+    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
+    # TODO this function and get_user_and_project_task_history_postgres are very similar. could consider making it more DRY.
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
@@ -57,7 +60,7 @@ async def get_user_task_history_from_postgres(
     return TaskHistoryResults(tasks=filtered_tasks)
 
 
-async def get_user_and_project_task_history(
+async def get_user_and_project_task_history_postgres(
     db: AsyncSession,
     user_id: int,
     project_id: int | None = None,
@@ -71,16 +74,18 @@ async def get_user_and_project_task_history(
     Thus, if a task is purged in the results backend, it is naturally excluded.
     """
     allowed_task_ids = await get_task_ids_for_user_and_project(db, user_id, project_id, is_admin)
-
+    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
-    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
+    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
 
-    filtered_results = _filter_flower_results_by_allowed_task_ids(
-        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
-    )
-    return filtered_results
+    filtered_tasks = {}
+    for task in celery_tasks:
+        deserialized = _deserialize_celery_task_metadata(task)
+        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
+
+    return TaskHistoryResults(tasks=filtered_tasks)
 
 
 async def get_project_task_history(
@@ -93,16 +98,18 @@ async def get_project_task_history(
     """
 
     allowed_task_ids = await get_task_ids_for_project(db, project_id)
-
+    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
     if not allowed_task_ids:
         return TaskHistoryResults(tasks={})
 
-    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
+    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
 
-    filtered_results = _filter_flower_results_by_allowed_task_ids(
-        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
-    )
-    return filtered_results
+    filtered_tasks = {}
+    for task in celery_tasks:
+        deserialized = _deserialize_celery_task_metadata(task)
+        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
+
+    return TaskHistoryResults(tasks=filtered_tasks)
 
 
 async def get_task_history_by_id(

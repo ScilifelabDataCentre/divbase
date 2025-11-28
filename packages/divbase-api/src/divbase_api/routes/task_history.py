@@ -17,7 +17,7 @@ from divbase_api.models.users import UserDB
 from divbase_api.services.task_history import (
     get_project_task_history,
     get_task_history_by_id,
-    get_user_and_project_task_history,
+    get_user_and_project_task_history_postgres,
     get_user_task_history_from_postgres,
 )
 from divbase_lib.api_schemas.task_history import TaskHistoryResults
@@ -76,7 +76,7 @@ async def get_all_tasks_for_user_and_project(
             "Project not found or you don't have permission to view task history from this project."
         )
 
-    result = await get_user_and_project_task_history(
+    result = await get_user_and_project_task_history_postgres(
         db=db,
         project_id=project.id,
         user_id=current_user.id,
