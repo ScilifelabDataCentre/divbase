@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 # Without the if:
 # - Would have to add the WORKER_DATABASE_URL environment variable to the API and
 # - create the SyncSessionLocal object that would not used by the API.
-# TODO - consider creating SyncSessionLocal object using https://docs.celeryq.dev/en/stable/userguide/signals.html#worker-init instead?
 WORKER_DATABASE_URL = os.getenv("WORKER_DATABASE_URL")
 if WORKER_DATABASE_URL:
     sync_engine = create_engine(WORKER_DATABASE_URL, echo=False, pool_pre_ping=True)
