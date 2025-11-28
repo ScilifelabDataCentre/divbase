@@ -59,7 +59,7 @@ class RevokedTokenDB(BaseDBModel):
         Only allow refresh and password reset tokens to be revoked.
 
         NOTE: Even if an access or email_verify token is added here, it would not have any effect
-        as the is no check against this db when those are used.
+        as there is no check against this db when those are used.
         """
         if value not in {TokenType.REFRESH, TokenType.PASSWORD_RESET}:
             raise ValueError(f"Only refresh and password reset tokens can be revoked, got {value}")

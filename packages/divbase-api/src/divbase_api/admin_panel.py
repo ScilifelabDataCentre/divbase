@@ -250,7 +250,7 @@ class RevokedTokenView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "revoked_reason"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:

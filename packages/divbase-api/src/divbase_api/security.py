@@ -89,9 +89,9 @@ def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
 
 def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData | None:
     """
-    Verify and decode JWT token. If successful return the user id,verified token data else None.
+    Verify and decode JWT token. If successful, return the verified token data; else None.
 
-    If verification fails we should pass not any error information/context back.
+    If verification fails we should not pass any error information/context back.
 
     Expiration time is automatically verified in jwt.decode() -> raises jwt.ExpiredSignatureError
     """

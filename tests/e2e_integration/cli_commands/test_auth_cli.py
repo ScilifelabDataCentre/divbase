@@ -181,12 +181,12 @@ def test_whoami_command_needing_refresh_token(logged_out_user_with_fresh_config)
     assert USER_EMAIL in result.stdout
 
 
-def test_login_with_expired_tokens(logged_in_admin_with_existing_config):
+def test_whoami_with_expired_tokens_fails(logged_in_admin_with_existing_config):
     """
     Simulate that both the access token and refresh token have expired by manually setting them to be expired
-    in the users .secrets file
+    in the users .secrets file.
 
-    This should force the user to log in again when running the whoami command.
+    This should force authentication to fail when running the whoami command, requiring the user to log in again.
     """
     command = "auth whoami"
 

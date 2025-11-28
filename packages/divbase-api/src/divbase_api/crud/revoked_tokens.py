@@ -46,7 +46,7 @@ async def revoke_used_password_reset_token(db: AsyncSession, token_jti: str, use
 async def _revoke_token(
     db: AsyncSession, token_jti: str, token_type: TokenType, user_id: int, reason: TokenRevokeReason
 ) -> None:
-    """Helper fun to add a token to the revoked tokens list."""
+    """Helper function to add a token to the revoked tokens list."""
     logger.info(f"Revoking token jti: {token_jti} of type: {token_type} for user id: {user_id} due to {reason}")
     revoked_token = RevokedTokenDB(
         token_jti=token_jti,
@@ -64,5 +64,5 @@ async def _revoke_token(
         if "token_jti" in error_details and "unique constraint" in error_details:
             logger.warning(f"Token with jti: {token_jti} was already revoked, ignoring duplicate")
         else:
-            logger.error(f"Unexpected integrity error when attempt to revoke token: {e}")
+            logger.error(f"Unexpected integrity error when attempting to revoke token: {e}")
             raise
