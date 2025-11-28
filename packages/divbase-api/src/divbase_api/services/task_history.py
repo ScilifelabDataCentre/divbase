@@ -1,10 +1,7 @@
-import ast
 import json
 import logging
 import pickle
-from typing import Any
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
@@ -138,85 +135,6 @@ async def get_task_history_by_id(
     deserialized = _deserialize_celery_task_metadata(task)
 
     return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**deserialized)})
-
-
-def _make_flower_request(request_url: str) -> dict[str, Any]:
-    """
-    Make a request to the Flower API for info about tasks.
-
-    Returns the JSON response as a dictionary.
-    If multiple tasks returned, you get back a nested dict, where outer keys are task IDs.
-    """
-    with httpx.Client() as client:
-        response = client.get(
-            url=request_url,
-            timeout=3.0,
-            auth=(
-                settings.flower.user,
-                settings.flower.password.get_secret_value(),
-            ),
-        )
-
-    # Workaround: Handle 404 from Flower API (task not found or no tasks exist) as empty dict and let layers above handle this with a custom error
-    if response.status_code == 404:
-        return {}
-
-    if response.status_code != 200:
-        raise ConnectionError(f"Failed to fetch tasks info from Flower API. Status code: {response.status_code}")
-
-    return response.json()
-
-
-def _filter_flower_results_by_allowed_task_ids(
-    all_tasks: dict[str, Any],
-    allowed_task_ids: set[str],
-) -> TaskHistoryResults:
-    """Filter the Flower API results to include only allowed task IDs."""
-
-    filtered_tasks = {}
-    for tid, task_data in all_tasks.items():
-        if tid in allowed_task_ids:
-            task_data = _assign_response_models_to_flower_task_fields(task_data)
-            filtered_tasks[tid] = TaskHistoryResult(**task_data)
-
-    return TaskHistoryResults(tasks=filtered_tasks)
-
-
-def _assign_response_models_to_flower_task_fields(task_data: dict) -> dict:
-    """Parse the 'result' field of a Flower task data dictionary into the appropriate model."""
-    result_raw = task_data.get("result")
-    parsed_result = None
-    if result_raw:
-        try:
-            result_dict = ast.literal_eval(result_raw) if isinstance(result_raw, str) else result_raw
-            if task_data.get("name") == "tasks.sample_metadata_query":
-                parsed_result = SampleMetadataQueryTaskResult(**result_dict)
-            elif task_data.get("name") == "tasks.bcftools_query":
-                parsed_result = BcftoolsQueryTaskResult(**result_dict)
-            elif task_data.get("name") == "tasks.update_vcf_dimensions_task":
-                parsed_result = DimensionUpdateTaskResult(**result_dict)
-            else:
-                parsed_result = result_dict
-        except Exception:
-            parsed_result = result_raw
-
-    kwargs_raw = task_data.get("kwargs")
-    parsed_kwargs = None
-    if kwargs_raw:
-        try:
-            kwargs_dict = ast.literal_eval(kwargs_raw) if isinstance(kwargs_raw, str) else kwargs_raw
-            if task_data.get("name") == "tasks.sample_metadata_query":
-                parsed_kwargs = SampleMetadataQueryKwargs(**kwargs_dict)
-            elif task_data.get("name") == "tasks.bcftools_query":
-                parsed_kwargs = BcftoolsQueryKwargs(**kwargs_dict)
-            else:
-                parsed_kwargs = kwargs_dict
-        except Exception:
-            parsed_kwargs = kwargs_raw
-
-    task_data["result"] = parsed_result
-    task_data["kwargs"] = parsed_kwargs
-    return task_data
 
 
 def _deserialize_celery_task_metadata(task: dict) -> dict:
