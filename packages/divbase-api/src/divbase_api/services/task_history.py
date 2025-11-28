@@ -16,7 +16,6 @@ from divbase_api.crud.task_history import (
     get_tasks_by_task_id_pg,
 )
 from divbase_api.exceptions import AuthorizationError, TaskNotFoundInBackendError
-from divbase_api.models.task_history import CeleryTaskMeta
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -79,7 +78,7 @@ async def get_user_task_history_from_postgres(
     filtered_tasks = {}
     for task in celery_tasks:
         deserialized = _deserialize_celery_task_metadata(task)
-        filtered_tasks[task.task_id] = FlowerTaskResult(**deserialized)
+        filtered_tasks[task["task_id"]] = FlowerTaskResult(**deserialized)
 
     return TaskHistoryResults(tasks=filtered_tasks)
 
@@ -238,7 +237,7 @@ def _assign_response_models_to_flower_task_fields(task_data: dict) -> dict:
     return task_data
 
 
-def _deserialize_celery_task_metadata(task: CeleryTaskMeta) -> dict:
+def _deserialize_celery_task_metadata(task: dict) -> dict:
     """
     Helper function to deserialize tasks from the db CeleryTaskMeta table (SQLalchemy+postgres celery results backend).
     The results backend serializes fields controlled by result_extended=True (e.g. args, kwargs) as JSON, but the task results
@@ -248,55 +247,71 @@ def _deserialize_celery_task_metadata(task: CeleryTaskMeta) -> dict:
     """
 
     args = []
-    if task.args:
+    if task.get("args"):
         try:
-            args_str = task.args.decode("utf-8") if isinstance(task.args, bytes) else task.args
+            args_bytes = task["args"]
+            args_str = args_bytes.decode("utf-8") if isinstance(args_bytes, bytes) else args_bytes
             args = json.loads(args_str)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to decode args for task {task.task_id}: {e}")
+            logger.warning(f"Failed to decode args for task {task.get('task_id')}: {e}")
 
     kwargs = {}
-    if task.kwargs:
+    if task.get("kwargs"):
         try:
-            kwargs_str = task.kwargs.decode("utf-8") if isinstance(task.kwargs, bytes) else task.kwargs
+            kwargs_bytes = task["kwargs"]
+            kwargs_str = kwargs_bytes.decode("utf-8") if isinstance(kwargs_bytes, bytes) else kwargs_bytes
             kwargs = json.loads(kwargs_str)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to decode kwargs for task {task.task_id}: {e}")
+            logger.warning(f"Failed to decode kwargs for task {task.get('task_id')}: {e}")
 
     result_data = {}
-    if task.result:
-        if isinstance(task.result, bytes) and task.result[:1] == b"\x80":
+    if task.get("result"):
+        result_bytes = task["result"]
+        if isinstance(result_bytes, bytes) and result_bytes[:1] == b"\x80":
             try:
-                result_data = pickle.loads(task.result)
+                result_data = pickle.loads(result_bytes)
             except Exception as e:
-                logger.warning(f"Failed to unpickle result for task {task.task_id}: {e}")
+                logger.warning(f"Failed to unpickle result for task {task.get('task_id')}: {e}")
         else:
             try:
-                result_str = task.result.decode("utf-8") if isinstance(task.result, bytes) else task.result
+                result_str = result_bytes.decode("utf-8") if isinstance(result_bytes, bytes) else result_bytes
                 result_data = json.loads(result_str)
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.warning(f"Failed to decode JSON result for task {task.task_id}: {e}")
+                logger.warning(f"Failed to decode JSON result for task {task.get('task_id')}: {e}")
 
     parsed_result = result_data
     parsed_kwargs = kwargs
-    args_str_for_flower = json.dumps(args) if isinstance(args, list) else str(args)
+    task_name = task.get("name")
 
-    if task.name == "tasks.sample_metadata_query":
+    if task_name == "tasks.sample_metadata_query":
         parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
         parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
-    elif task.name == "tasks.bcftools_query":
+    elif task_name == "tasks.bcftools_query":
         parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
         parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
-    elif task.name == "tasks.update_vcf_dimensions_task":
+    elif task_name == "tasks.update_vcf_dimensions_task":
         parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
 
+    args_str_for_flower = json.dumps(args) if isinstance(args, list) else str(args)
+
+    runtime = None
+    started_at = task.get("started_at")
+    completed_at = task.get("completed_at")
+    if started_at and completed_at:
+        runtime = (completed_at - started_at).total_seconds()
+
     return {
-        "uuid": task.task_id,
-        "status": task.status,
+        "uuid": task.get("task_id"),
+        "status": task.get("status"),
         "result": parsed_result,
-        "date_done": task.date_done.isoformat() if task.date_done else None,
-        "name": task.name,
+        "date_done": task.get("date_done").isoformat() if task.get("date_done") else None,
+        "name": task_name,
         "args": args_str_for_flower,
         "kwargs": parsed_kwargs,
-        "worker": task.worker,
+        "worker": task.get("worker"),
+        "received": task.get("created_at").timestamp() if task.get("created_at") else None,
+        "started": started_at.timestamp() if started_at else None,
+        "succeeded": completed_at.timestamp() if completed_at else None,
+        "runtime": runtime,
+        "state": task.get("status"),
     }
