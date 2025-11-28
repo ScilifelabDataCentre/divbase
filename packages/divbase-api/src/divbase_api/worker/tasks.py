@@ -38,7 +38,9 @@ from divbase_lib.exceptions import NoVCFFilesFoundError
 logger = logging.getLogger(__name__)
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
-RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db"
+)
 S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
 
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
