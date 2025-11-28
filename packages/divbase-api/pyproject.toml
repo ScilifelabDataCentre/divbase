@@ -18,8 +18,8 @@ dependencies = [
     "redis>=4.5.0,<5",
     "flower>=2.0.0,<3",
     "divbase-lib",
-    "psycopg[binary]>=3.2.12,<4",
-
+    "psycopg[binary]>=3.2.12,<4", # For worker tasks (sync SQLAlchemy)
+    "psycopg2-binary >= 2.9.11,<3"   # For Celery result backend
 ]
 
 [build-system]
