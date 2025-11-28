@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
@@ -47,7 +48,7 @@ app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Redis-specific config
 app.conf.update(
-    result_expires=2592000,  # 30 days in seconds
+    # result_expires=2592000,  # 30 days in seconds TODO add back in with celery beat
     task_track_started=True,
     task_serializer="json",
     accept_content=["json"],
@@ -95,14 +96,22 @@ app.conf.task_routes = (dynamic_router,)
 @task_prerun.connect
 def task_prerun_handler(sender=None, task_id=None, **kwargs):
     """Called when task starts executing (STARTED state)."""
-    _update_task_status_in_pg(task_id, TaskStatus.STARTED)
+    _update_task_status_in_pg(
+        task_id=task_id,
+        status=TaskStatus.STARTED,
+        set_started_at=True,
+    )
 
 
 @task_success.connect
 def task_success_handler(sender=None, result=None, **kwargs):
     """Called when task completes successfully (SUCCESS state)."""
     task_id = sender.request.id
-    _update_task_status_in_pg(task_id, TaskStatus.SUCCESS)
+    _update_task_status_in_pg(
+        task_id=task_id,
+        status=TaskStatus.SUCCESS,
+        set_completed_at=True,
+    )
 
 
 @task_failure.connect
@@ -110,7 +119,12 @@ def task_failure_handler(
     sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra
 ):
     """Called when task fails (FAILURE state)."""
-    _update_task_status_in_pg(task_id, TaskStatus.FAILURE, error_msg=str(exception)[:500])
+    _update_task_status_in_pg(
+        task_id=task_id,
+        status=TaskStatus.FAILURE,
+        error_msg=str(exception)[:500],
+        set_completed_at=True,
+    )
 
 
 @task_retry.connect
@@ -126,25 +140,46 @@ def task_revoked_handler(sender=None, request=None, terminated=None, signum=None
     task_id = request.id if request else None
     reason = "terminated" if terminated else "expired" if expired else "revoked"
     if task_id:
-        _update_task_status_in_pg(task_id, TaskStatus.REVOKED, error_msg=f"Task {reason}")
+        _update_task_status_in_pg(
+            task_id=task_id,
+            status=TaskStatus.REVOKED,
+            error_msg=f"Task {reason}",
+            set_completed_at=True,
+        )
 
 
-def _update_task_status_in_pg(task_id: str, status: TaskStatus, error_msg: str = None):
+def _update_task_status_in_pg(
+    task_id: str,
+    status: TaskStatus,
+    error_msg: str = None,
+    set_started_at: bool = False,
+    set_completed_at: bool = False,
+):
     """Update task status in database."""
     try:
         with SyncSessionLocal() as db:
             stmt = select(TaskHistoryDB).where(TaskHistoryDB.task_id == str(task_id))
             entry = db.execute(stmt).scalar_one_or_none()
+
             if entry:
                 entry.status = status
+
                 if error_msg:
                     entry.error_message = error_msg
+
+                if set_started_at:
+                    entry.started_at = datetime.now(timezone.utc)
+
+                if set_completed_at:
+                    entry.completed_at = datetime.now(timezone.utc)
+
                 db.commit()
                 logger.debug(f"Updated task {task_id} to status {status}")
             else:
                 logger.warning(f"Task {task_id} not found in database")
+
     except OperationalError as e:
-        logger.error(f"Database connection error when trying updating task {task_id}: {e}")
+        logger.error(f"Database connection error when updating task {task_id}: {e}")
     except Exception as e:
         logger.error(f"Failed to update task status for {task_id}: {e}")
 
