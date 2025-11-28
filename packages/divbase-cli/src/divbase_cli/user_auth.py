@@ -5,6 +5,7 @@ This includes login/logout and the getting, storing, using, and refreshing of ac
 """
 
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -129,12 +130,33 @@ def logout_of_divbase(
     if config.logged_in_url:
         token_data = load_user_tokens(token_path=token_path)
         request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
-        make_authenticated_request(
-            method="POST",
-            divbase_base_url=config.logged_in_url,
-            api_route="v1/auth/logout",
-            json=request_data.model_dump(),
-        )
+
+        # We don't want logout to fail if server is unreachable or gives an error
+        # JWTs are stateless so local logout is sufficient.
+        try:
+            make_authenticated_request(
+                method="POST",
+                divbase_base_url=config.logged_in_url,
+                api_route="v1/auth/logout",
+                json=request_data.model_dump(),
+            )
+        except DivBaseAPIConnectionError as e:
+            warnings.warn(
+                f"Could not contact DivBase server to log out fully: '{e}'.\n\n"
+                "Continuing local logout.\n"
+                "You do not need to do anything, but if you see this message often, please let us know.",
+                stacklevel=2,
+                category=UserWarning,
+            )
+        except DivBaseAPIError as e:
+            warnings.warn(
+                f"Recieved an error message from DivBase server when attempting to logout:"
+                f"'{e.error_message=}'. \n\n"
+                "Continuing local logout.\n"
+                "You do not need to do anything. If you see this message a lot, please let us know.",
+                stacklevel=2,
+                category=UserWarning,
+            )
 
     token_path.unlink(missing_ok=True)
     config.set_logged_in_url(None)
