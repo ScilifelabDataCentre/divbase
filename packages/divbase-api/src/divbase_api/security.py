@@ -105,8 +105,13 @@ def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData
     if payload.get("type") != desired_token_type:
         return None
 
+    # edge case: if we update the JWT structure and these fields are missing
+    # as token issued before the change
+    if not all(payload.get(field) for field in ["sub", "iat", "jti"]):
+        return None
+
     return VerifiedTokenData(
-        user_id=int(payload.get("sub")),
-        issued_at=datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc),
-        jti=payload.get("jti"),
+        user_id=int(payload["sub"]),
+        issued_at=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
+        jti=payload["jti"],
     )
