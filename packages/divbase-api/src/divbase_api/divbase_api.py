@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
     logger.info("Starting up DivBase API...")
 
+    settings.validate_api_settings()
+    logger.info("All API settings are correctly set.")
+
     if not await health_check_db():
         raise ConnectionError("Could not connect to the database or db unhealthy. Exiting...")
     logger.info("Database connection healthy.")

@@ -54,14 +54,9 @@ services:
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
-      - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
-      - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
       - FLOWER_USER=floweradmin
       - FLOWER_PASSWORD=badpassword
-      - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
-      - FIRST_ADMIN_EMAIL=admin@divbase.com
-      - FIRST_ADMIN_PASSWORD=badpassword
+      - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
@@ -102,17 +97,7 @@ services:
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - FLOWER_BASIC_AUTH=floweradmin:badpassword
-      - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
       - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
-      - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
-      - FLOWER_USER=floweradmin
-      - FLOWER_PASSWORD=badpassword
-      - DIVBASE_USER=divbase_user_set_in_compose_file
-      - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
-      - FIRST_ADMIN_EMAIL=admin@divbase.com
-      - FIRST_ADMIN_PASSWORD=badpassword
-      - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
-      - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     develop: *watch-celery-src
     command: ["flower", "--persistent=True", "--db=/data/flower.db"]
     volumes:
@@ -185,14 +170,11 @@ services:
     environment:
     - DIVBASE_ENV=local_dev
     - FRONTEND_BASE_URL=http://localhost:8000
-    - FLOWER_HOST=http://flower:5555 # Use the service name as the host for fastAPI to access Flower
     - FLOWER_USER=floweradmin
     - FLOWER_PASSWORD=badpassword
-    - DIVBASE_USER=divbase_user_set_in_compose_file
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=redis://redis:6379/0
     - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
-    - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
