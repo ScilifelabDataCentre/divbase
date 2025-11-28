@@ -129,14 +129,15 @@ async def get_task_history_by_id(
     if not user_is_allowed_to_access_task_id:
         raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
 
-    request_url = f"{settings.flower.url}/api/task/info/{task_id}"
-    task_data = _make_flower_request(request_url)
+    celery_tasks = await get_tasks_by_task_id_pg(db, {task_id})
 
-    if not task_data:
+    if not celery_tasks:
         raise TaskNotFoundInBackendError()
 
-    task_data = _assign_response_models_to_flower_task_fields(task_data)
-    return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**task_data)})
+    task = celery_tasks[0]
+    deserialized = _deserialize_celery_task_metadata(task)
+
+    return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**deserialized)})
 
 
 def _make_flower_request(request_url: str) -> dict[str, Any]:
