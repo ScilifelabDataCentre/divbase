@@ -26,7 +26,7 @@ def log_in_as_user():
     combined with other fixtures (e.g. ensure_logged_out).
     """
     command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
-    result = runner.invoke(app, command, input="y\n")
+    result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Logged in successfully" in result.stdout
 

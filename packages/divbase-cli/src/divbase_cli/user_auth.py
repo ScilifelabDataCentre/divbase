@@ -221,6 +221,11 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
 
     # Possible if e.g. token revoked on server side.
     if response.status_code == 401:
+        # Clear logged in URL in config as tokens no longer valid.
+        # Prevents user getting warning about being already logged in when they try to log in again.
+        config = load_user_config()
+        config.set_logged_in_url(None)
+        config.dump_config()
         raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
 
     response.raise_for_status()
