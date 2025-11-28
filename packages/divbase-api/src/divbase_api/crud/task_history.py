@@ -4,10 +4,10 @@ CRUD operations for task history.
 
 import logging
 
-from sqlalchemy import join, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -28,145 +28,39 @@ async def record_pending_task(db: AsyncSession, task_id: str, user_id: int, proj
     await db.refresh(entry)
 
 
-async def get_task_ids_for_user(
+async def get_tasks_for_user_pg(
     db: AsyncSession,
     user_id: int,
-    is_admin: bool,
-) -> set[str]:
+    is_admin: bool = False,
+) -> list[dict]:
     """
-    Get all task IDs the user has permission to view.
+    Fetch task data (CeleryTaskMeta + TaskHistoryDB) for a user in a single query.
+    Filters on user_id.
+    """
+    stmt = select(
+        *CeleryTaskMeta.__table__.c,
+        TaskHistoryDB.created_at,
+        TaskHistoryDB.started_at,
+        TaskHistoryDB.completed_at,
+    ).join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
 
-    Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
-    """
-    if is_admin:
-        stmt = select(TaskHistoryDB.task_id)
-    else:
-        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.user_id == user_id)
+    if not is_admin:
+        stmt = stmt.where(TaskHistoryDB.user_id == user_id)
+
     result = await db.execute(stmt)
     rows = result.fetchall()
-    allowed_task_ids = set()
-    for row in rows:
-        allowed_task_ids.add(row[0])
-    return allowed_task_ids
+    return [dict(row._mapping) for row in rows]
 
 
-async def get_task_ids_for_user_and_project(
+async def get_tasks_for_user_and_project_pg(
     db: AsyncSession,
     user_id: int,
     project_id: int,
-    is_admin: bool,
-) -> set[str]:
+    is_admin: bool = False,
+) -> list[dict]:
     """
-    Get all task IDs the user has permission to view.
-
-    Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
-    """
-    if is_admin:
-        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.project_id == project_id)
-    else:
-        stmt = (
-            select(TaskHistoryDB.task_id)
-            .where(TaskHistoryDB.user_id == user_id)
-            .where(TaskHistoryDB.project_id == project_id)
-        )
-    result = await db.execute(stmt)
-    rows = result.fetchall()
-    allowed_task_ids = set()
-    for row in rows:
-        allowed_task_ids.add(row[0])
-    return allowed_task_ids
-
-
-async def filter_task_ids_by_project_name(db: AsyncSession, task_ids: set[str], project_name: str) -> set[str]:
-    """
-    Filter a Set of task IDs by project name. Uses relationship between TaskHistoryDB and ProjectDB to make a single query with a table join.
-
-    Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
-    """
-
-    stmt = (
-        select(TaskHistoryDB.task_id)
-        .select_from(join(TaskHistoryDB, ProjectDB, TaskHistoryDB.project_id == ProjectDB.id))
-        .where(ProjectDB.name == project_name, TaskHistoryDB.task_id.in_(task_ids))
-    )
-    result = await db.execute(stmt)
-
-    rows = result.fetchall()
-    allowed_task_ids = set()
-    for row in rows:
-        allowed_task_ids.add(row[0])
-    return allowed_task_ids
-
-
-async def get_task_ids_for_project(
-    db: AsyncSession,
-    project_id: int,
-) -> set[str]:
-    """
-    Get all task IDs for a project.
-
-    Task IDs are unique keys in the TaskHistoryDB table, so a set is not strictly needed. But a set is used for faster lookup.
-    """
-
-    stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.project_id == project_id)
-    result = await db.execute(stmt)
-    rows = result.fetchall()
-    allowed_task_ids = set()
-    for row in rows:
-        allowed_task_ids.add(row[0])
-    return allowed_task_ids
-
-
-async def check_user_can_view_task_id(
-    db: AsyncSession,
-    task_id: str,
-    user_id: int,
-    is_admin: bool,
-) -> bool:
-    """
-    Check if a user has permission to view the task history for a specific task ID.
-
-    Admin is allowed to view all task IDs.
-    Manage user is allowed to see all task IDs for the project they manage.
-    Edit user is only allowed to see task IDs for tasks they submitted themselves.
-
-    Uses explicit joins because the two tables being joined share a foreign key to a third table,
-    but no direct FK between them.
-    """
-
-    # Case: admin user, still needs to check that task ID exists
-    if is_admin:
-        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.task_id == task_id)
-        result = await db.execute(stmt)
-        return result.scalar_one_or_none() is not None
-
-    # Case: submitting user
-    stmt = select(TaskHistoryDB.task_id).where(
-        TaskHistoryDB.task_id == task_id,
-        TaskHistoryDB.user_id == user_id,
-    )
-    result = await db.execute(stmt)
-    if result.scalar_one_or_none():
-        return True
-
-    # Case: manager user
-    stmt = (
-        select(TaskHistoryDB.task_id)
-        .join(ProjectMembershipDB, TaskHistoryDB.project_id == ProjectMembershipDB.project_id)
-        .where(
-            TaskHistoryDB.task_id == task_id,
-            ProjectMembershipDB.user_id == user_id,
-            ProjectMembershipDB.role == ProjectRoles.MANAGE,
-        )
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none() is not None
-
-
-async def get_tasks_by_task_id_pg(db: AsyncSession, task_ids: set[str]) -> list[dict]:
-    """
-    Fetch all fields from CeleryTaskMeta and the created_at, started_at, completed_at from TaskHistoryDB by task_id.
-    Returns a list of dicts, each containing all columns from CeleryTaskMeta plus the three timestamp fields.
+    Fetch task data (CeleryTaskMeta + TaskHistoryDB) for a user and project in a single query.
+    Filters on user_id and project_id.
     """
     stmt = (
         select(
@@ -176,8 +70,81 @@ async def get_tasks_by_task_id_pg(db: AsyncSession, task_ids: set[str]) -> list[
             TaskHistoryDB.completed_at,
         )
         .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
-        .where(CeleryTaskMeta.task_id.in_(task_ids))
+        .where(TaskHistoryDB.project_id == project_id)
     )
+
+    if not is_admin:
+        stmt = stmt.where(TaskHistoryDB.user_id == user_id)
+
     result = await db.execute(stmt)
     rows = result.fetchall()
     return [dict(row._mapping) for row in rows]
+
+
+async def get_tasks_for_project_pg(
+    db: AsyncSession,
+    project_id: int,
+) -> list[dict]:
+    """
+    Fetch task data (CeleryTaskMeta + TaskHistoryDB) for a project in a single query.
+    API layer handles permission (MANAGE user role required).
+    """
+    stmt = (
+        select(
+            *CeleryTaskMeta.__table__.c,
+            TaskHistoryDB.created_at,
+            TaskHistoryDB.started_at,
+            TaskHistoryDB.completed_at,
+        )
+        .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(TaskHistoryDB.project_id == project_id)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+    return [dict(row._mapping) for row in rows]
+
+
+async def get_task_by_id_if_user_allowed(
+    db: AsyncSession,
+    task_id: str,
+    user_id: int,
+    is_admin: bool,
+) -> dict | None:
+    """
+    Fetch task by ID only if user has permission to view it.
+    Returns task dict if found and allowed, None otherwise.
+
+    This combines permission check and data fetch in a single query.
+    """
+    # TODO move the permissions check up to the routes layer?
+    stmt = (
+        select(
+            *CeleryTaskMeta.__table__.c,
+            TaskHistoryDB.created_at,
+            TaskHistoryDB.started_at,
+            TaskHistoryDB.completed_at,
+        )
+        .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(TaskHistoryDB.task_id == task_id)
+    )
+
+    if is_admin:
+        pass
+    else:
+        # When not admin, must be submitter of Manager user to view task
+        stmt = stmt.where(
+            (TaskHistoryDB.user_id == user_id)
+            | (
+                TaskHistoryDB.project_id.in_(
+                    select(ProjectMembershipDB.project_id).where(
+                        ProjectMembershipDB.user_id == user_id, ProjectMembershipDB.role == ProjectRoles.MANAGE
+                    )
+                )
+            )
+        )
+
+    result = await db.execute(stmt)
+    row = result.first()
+
+    return dict(row._mapping) if row else None

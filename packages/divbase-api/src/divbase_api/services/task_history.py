@@ -4,15 +4,13 @@ import pickle
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import settings
 from divbase_api.crud.task_history import (
-    check_user_can_view_task_id,
-    get_task_ids_for_project,
-    get_task_ids_for_user,
-    get_task_ids_for_user_and_project,
-    get_tasks_by_task_id_pg,
+    get_task_by_id_if_user_allowed,
+    get_tasks_for_project_pg,
+    get_tasks_for_user_and_project_pg,
+    get_tasks_for_user_pg,
 )
-from divbase_api.exceptions import AuthorizationError, TaskNotFoundInBackendError
+from divbase_api.exceptions import AuthorizationError
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -24,10 +22,6 @@ from divbase_lib.api_schemas.task_history import (
 
 logger = logging.getLogger(__name__)
 
-
-# TODO ideally, the flower API could be queried with a list of tasks, but that seem not to be the case. for now, set a limit of 500 tasks to not put a lot of overhead on the call
-API_LIMIT = 500
-REQUEST_URL_WITH_LIMIT = f"{settings.flower.url}/api/tasks?limit={API_LIMIT}"
 
 # TODO make a workaround to check if all allowed ids were returned? could call the Flower API task_ID by task_ID... but it would be inefficient
 
@@ -41,13 +35,10 @@ async def get_user_task_history_from_postgres(
     Fetch task history for a user for all their projects.
     """
 
-    allowed_task_ids = await get_task_ids_for_user(db, user_id, is_admin)
-    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
-    # TODO this function and get_user_and_project_task_history_postgres are very similar. could consider making it more DRY.
-    if not allowed_task_ids:
-        return TaskHistoryResults(tasks={})
+    celery_tasks = await get_tasks_for_user_pg(db, user_id, is_admin)
 
-    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
+    if not celery_tasks:
+        return TaskHistoryResults(tasks={})
 
     filtered_tasks = {}
     for task in celery_tasks:
@@ -64,18 +55,13 @@ async def get_user_and_project_task_history_postgres(
     is_admin: bool = False,
 ) -> TaskHistoryResults:
     """
-    Get a list of the task history from the Flower API for a user and project.
-
-    For the case of a results backend purge (task not in flower API results):
-    allowed_task_ids uses a db lookup, but all_tasks is fetched from the Flower API.
-    Thus, if a task is purged in the results backend, it is naturally excluded.
+    Fetch task history for a user for a specific project they belong to.
     """
-    allowed_task_ids = await get_task_ids_for_user_and_project(db, user_id, project_id, is_admin)
-    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
-    if not allowed_task_ids:
-        return TaskHistoryResults(tasks={})
 
-    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
+    celery_tasks = await get_tasks_for_user_and_project_pg(db, user_id, project_id, is_admin)
+
+    if not celery_tasks:
+        return TaskHistoryResults(tasks={})
 
     filtered_tasks = {}
     for task in celery_tasks:
@@ -94,12 +80,7 @@ async def get_project_task_history(
 
     """
 
-    allowed_task_ids = await get_task_ids_for_project(db, project_id)
-    # TODO this could be combined with get_tasks_by_task_id_pg into a single DB lookup
-    if not allowed_task_ids:
-        return TaskHistoryResults(tasks={})
-
-    celery_tasks = await get_tasks_by_task_id_pg(db, allowed_task_ids)
+    celery_tasks = await get_tasks_for_project_pg(db, project_id)
 
     filtered_tasks = {}
     for task in celery_tasks:
@@ -119,21 +100,12 @@ async def get_task_history_by_id(
     Get the task history from the Flower API for a specific task ID.
     """
 
-    user_is_allowed_to_access_task_id = await check_user_can_view_task_id(
-        db=db, task_id=task_id, user_id=user_id, is_admin=is_admin
-    )
+    celery_task = await get_task_by_id_if_user_allowed(db=db, task_id=task_id, user_id=user_id, is_admin=is_admin)
 
-    if not user_is_allowed_to_access_task_id:
+    if not celery_task:
         raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
 
-    celery_tasks = await get_tasks_by_task_id_pg(db, {task_id})
-
-    if not celery_tasks:
-        raise TaskNotFoundInBackendError()
-
-    task = celery_tasks[0]
-    deserialized = _deserialize_celery_task_metadata(task)
-
+    deserialized = _deserialize_celery_task_metadata(celery_task)
     return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**deserialized)})
 
 
