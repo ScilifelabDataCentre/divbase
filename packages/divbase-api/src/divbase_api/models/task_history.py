@@ -2,6 +2,7 @@
 Task history DB Model. Summarizes tasks run by Celery without storing all details.
 """
 
+from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,9 @@ class TaskHistoryDB(BaseDBModel):
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
     error_message: Mapped[str] = mapped_column(String, nullable=True)
     result_message: Mapped[str] = mapped_column(String, nullable=True)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")
