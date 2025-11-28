@@ -52,6 +52,7 @@ app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
+    result_extended=True,
     # let celery auto-create db tables
     database_table_names={
         "task": "celery_taskmeta",
