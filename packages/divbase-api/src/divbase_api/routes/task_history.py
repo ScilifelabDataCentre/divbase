@@ -38,11 +38,6 @@ async def get_all_tasks_for_user(
     Get the task history for the current user. Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
 
-    # result = await get_user_task_history(
-    #     db=db,
-    #     user_id=current_user.id,
-    #     is_admin=current_user.is_admin,
-    # )
     result = await get_user_task_history_from_postgres(
         db=db,
         user_id=current_user.id,

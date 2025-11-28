@@ -35,32 +35,6 @@ REQUEST_URL_WITH_LIMIT = f"{settings.flower.url}/api/tasks?limit={API_LIMIT}"
 # TODO make a workaround to check if all allowed ids were returned? could call the Flower API task_ID by task_ID... but it would be inefficient
 
 
-async def get_user_task_history(
-    db: AsyncSession,
-    user_id: int,
-    is_admin: bool = False,
-) -> TaskHistoryResults:
-    """
-    Get a list of the task history from the Flower API.
-
-    For the case of a results backend purge (task not in flower API results):
-    allowed_task_ids uses a db lookup, but all_tasks is fetched from the Flower API.
-    Thus, if a task is purged in the results backend, it is naturally excluded.
-    """
-
-    allowed_task_ids = await get_task_ids_for_user(db, user_id, is_admin)
-
-    if not allowed_task_ids:
-        return TaskHistoryResults(tasks={})
-
-    all_tasks = _make_flower_request(REQUEST_URL_WITH_LIMIT)
-
-    filtered_results = _filter_flower_results_by_allowed_task_ids(
-        all_tasks=all_tasks, allowed_task_ids=allowed_task_ids
-    )
-    return filtered_results
-
-
 async def get_user_task_history_from_postgres(
     db: AsyncSession,
     user_id: int,
