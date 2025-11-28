@@ -163,11 +163,21 @@ async def check_user_can_view_task_id(
     return result.scalar_one_or_none() is not None
 
 
-async def get_tasks_by_task_id_pg(db: AsyncSession, task_ids: set[str]) -> list[CeleryTaskMeta]:
+async def get_tasks_by_task_id_pg(db: AsyncSession, task_ids: set[str]) -> list[dict]:
     """
-    Fetch raw CeleryTaskMeta records from PostgreSQL by task IDs.
-    Returns raw database objects without deserialization.
+    Fetch all fields from CeleryTaskMeta and the created_at, started_at, completed_at from TaskHistoryDB by task_id.
+    Returns a list of dicts, each containing all columns from CeleryTaskMeta plus the three timestamp fields.
     """
-    stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(task_ids))
+    stmt = (
+        select(
+            *CeleryTaskMeta.__table__.c,
+            TaskHistoryDB.created_at,
+            TaskHistoryDB.started_at,
+            TaskHistoryDB.completed_at,
+        )
+        .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(CeleryTaskMeta.task_id.in_(task_ids))
+    )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    rows = result.fetchall()
+    return [dict(row._mapping) for row in rows]
