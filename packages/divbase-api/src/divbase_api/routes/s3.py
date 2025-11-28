@@ -5,6 +5,7 @@ NOTE:
 - The project_name needs to be provided to all routes, it is used by the dependency get_project_member
 - Each route can assume the user exists and has access to the project, BUT
 we need to use has_required_role to check if they have permission to do the operation.
+- To avoid blocking the event loop when using the S3 client (boto3 is a sync SDK), we run these operations in a threadpool.
 
 TODO:
 Could be nice to have a detailed list route (so version IDs, sizes, last modified etc).
@@ -14,6 +15,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
+from fastapi.concurrency import run_in_threadpool
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
@@ -90,7 +92,7 @@ async def list_files(
         secret_key=settings.s3.secret_key.get_secret_value(),
     )
 
-    return s3_file_manager.list_files(bucket_name=project.bucket_name)
+    return await run_in_threadpool(s3_file_manager.list_files, bucket_name=project.bucket_name)
 
 
 @s3_router.post("/upload", status_code=status.HTTP_200_OK, response_model=list[PreSignedUploadResponse])
@@ -139,7 +141,9 @@ async def soft_delete_files(
         secret_key=settings.s3.secret_key.get_secret_value(),
     )
 
-    return s3_file_manager.soft_delete_objects(objects=objects, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        s3_file_manager.soft_delete_objects, objects=objects, bucket_name=project.bucket_name
+    )
 
 
 # using POST as GET with body is not considered good practice
@@ -160,4 +164,6 @@ async def check_file_already_exists_by_checksum(
 
     check_too_many_objects_in_request(len(files_to_check))
 
-    return check_files_already_exist_by_checksum(files_to_check=files_to_check, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        check_files_already_exist_by_checksum, files_to_check=files_to_check, bucket_name=project.bucket_name
+    )

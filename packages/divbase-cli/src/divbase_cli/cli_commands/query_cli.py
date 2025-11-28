@@ -95,6 +95,7 @@ def sample_metadata_query(
         divbase_base_url=project_config.divbase_url,
         api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
         json=request_data.model_dump(),
+        timeout=20,  # This is longer than default (5), as api call response is query result, not a task-id.
     )
 
     results = SampleMetadataQueryTaskResult(**response.json())
