@@ -20,8 +20,8 @@ from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQ
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
-    FlowerTaskResult,
     SampleMetadataQueryTaskResult,
+    TaskHistoryResult,
     TaskHistoryResults,
 )
 
@@ -78,7 +78,7 @@ async def get_user_task_history_from_postgres(
     filtered_tasks = {}
     for task in celery_tasks:
         deserialized = _deserialize_celery_task_metadata(task)
-        filtered_tasks[task["task_id"]] = FlowerTaskResult(**deserialized)
+        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
 
     return TaskHistoryResults(tasks=filtered_tasks)
 
@@ -155,7 +155,7 @@ async def get_task_history_by_id(
         raise TaskNotFoundInBackendError()
 
     task_data = _assign_response_models_to_flower_task_fields(task_data)
-    return TaskHistoryResults(tasks={task_id: FlowerTaskResult(**task_data)})
+    return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**task_data)})
 
 
 def _make_flower_request(request_url: str) -> dict[str, Any]:
@@ -195,7 +195,7 @@ def _filter_flower_results_by_allowed_task_ids(
     for tid, task_data in all_tasks.items():
         if tid in allowed_task_ids:
             task_data = _assign_response_models_to_flower_task_fields(task_data)
-            filtered_tasks[tid] = FlowerTaskResult(**task_data)
+            filtered_tasks[tid] = TaskHistoryResult(**task_data)
 
     return TaskHistoryResults(tasks=filtered_tasks)
 
@@ -309,9 +309,8 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
         "args": args_str_for_flower,
         "kwargs": parsed_kwargs,
         "worker": task.get("worker"),
-        "received": task.get("created_at").timestamp() if task.get("created_at") else None,
-        "started": started_at.timestamp() if started_at else None,
-        "succeeded": completed_at.timestamp() if completed_at else None,
+        "created_at": task.get("created_at").timestamp() if task.get("created_at") else None,
+        "started_at": started_at.timestamp() if started_at else None,
+        "completed_at": completed_at.timestamp() if completed_at else None,
         "runtime": runtime,
-        "state": task.get("status"),
     }

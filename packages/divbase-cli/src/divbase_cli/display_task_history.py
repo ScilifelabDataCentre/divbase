@@ -46,14 +46,14 @@ class TaskHistoryDisplayManager:
     def print_task_history(self) -> None:
         """Display the task history fetched from the Flower API in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].received or "", reverse=True)
+        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].created_at or "", reverse=True)
         display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
 
         for task_id, task in limited_tasks:
-            state = task.state or "N/A"
+            state = task.status or "N/A"
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
@@ -64,8 +64,8 @@ class TaskHistoryDisplayManager:
                 submitter,
                 task_id,
                 state_with_colour,
-                self._format_unix_timestamp(task.received),
-                self._format_unix_timestamp(task.started),
+                self._format_unix_timestamp(task.created_at),
+                self._format_unix_timestamp(task.started_at),
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
@@ -105,8 +105,8 @@ class TaskHistoryDisplayManager:
         table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
         table.add_column("State", width=8)
-        table.add_column("Received", style="yellow", width=19, overflow="fold")
-        table.add_column("Started", style="yellow", width=19, overflow="fold")
+        table.add_column("Created at", style="yellow", width=19, overflow="fold")
+        table.add_column("Started at", style="yellow", width=19, overflow="fold")
         table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
