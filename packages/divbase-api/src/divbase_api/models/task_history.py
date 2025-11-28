@@ -5,10 +5,10 @@ Task history DB Model. Summarizes tasks run by Celery without storing all detail
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from divbase_api.models.base import BaseDBModel
+from divbase_api.models.base import Base, BaseDBModel
 
 if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectDB
@@ -47,3 +47,27 @@ class TaskHistoryDB(BaseDBModel):
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")
+
+
+class CeleryTaskMeta(Base):
+    """
+    DB model for the celery_taskmeta table (auto-created by celery in tasks.py in app.conf.update). Not referenced in
+    models.__init__py since celery handles table creation.
+
+    Note: this should not inherit from BaseDBModel, since the db table this is referring to is created by celery
+    """
+
+    __tablename__ = "celery_taskmeta"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(155), unique=True, index=True)
+    status = Column(String(50))
+    result = Column(LargeBinary)
+    date_done = Column(DateTime)
+    traceback = Column(Text)
+    name = Column(String(155))
+    args = Column(LargeBinary)
+    kwargs = Column(LargeBinary)
+    worker = Column(String(155))
+    retries = Column(Integer)
+    queue = Column(String(155))
