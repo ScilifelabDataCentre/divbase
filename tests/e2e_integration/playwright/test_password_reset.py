@@ -164,3 +164,17 @@ def test_password_reset_token_cannot_be_reused(page: Page, mailpit_page: Page, E
     # validate we see error about invalid/expired token and have option to request a new link.
     expect(new_tab.get_by_text(INVALID_EXPIRED_PASSWORD_TOKEN_MSG)).to_be_visible()
     expect(new_tab.get_by_placeholder("Enter your email address")).to_be_visible()
+
+
+def test_password_reset_with_invalid_token(page: Page):
+    """
+    Test going directly to password reset page with an invalid token or no token at all.
+    """
+    # Go to reset password page with no token param set
+    navigate_to(page, "/reset-password")
+    expect(page.get_by_text("Badly formatted request")).to_be_visible()
+
+    # Go to reset password page with invalid token
+    for token_variant in ["", "short", "invalidtoken123", "abcd.efgh.ijkl.mnop.qrstsasassss"]:
+        navigate_to(page, f"/reset-password?token={token_variant}")
+        expect(page.get_by_text(INVALID_EXPIRED_PASSWORD_TOKEN_MSG)).to_be_visible()
