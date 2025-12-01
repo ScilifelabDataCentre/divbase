@@ -6,7 +6,7 @@ import re
 
 from playwright.sync_api import Page, expect
 
-from .conftest import FRONTEND_BASE_URL, is_logged_in_as, login_via_login_form, navigate_to
+from .conftest import is_logged_in_as, login_via_login_form, navigate_to, register_new_user
 
 GENERIC_REGISTRATION_ERROR_MESSAGE = "Registration failed, please try again."
 EMAIL_NOT_VERIFIED_MESSAGE = "Email address not verified"
@@ -18,14 +18,7 @@ def test_register_new_user_complete_flow(page: Page, mailpit_page: Page):
     test_email = "newuser@gmail.com"
     test_password = "badpassword"
 
-    navigate_to(page, "/register")
-    expect(page).to_have_url(f"{FRONTEND_BASE_URL}/register")
-
-    page.get_by_role("textbox", name="Full Name").fill(test_name)
-    page.get_by_role("textbox", name="Email Address").fill(test_email)
-    page.get_by_role("textbox", name="Password", exact=True).fill(test_password)
-    page.get_by_role("textbox", name="Confirm Password").fill(test_password)
-    page.get_by_role("button", name=" Create Account").click()
+    register_new_user(page=page, name=test_name, email=test_email, password=test_password)
 
     # validate logging in now does not work
     navigate_to(page, "/login")
@@ -56,16 +49,8 @@ def test_register_new_user_complete_flow(page: Page, mailpit_page: Page):
 
 def test_register_with_existing_email(page: Page, EXISTING_ACCOUNTS):
     """Test registration with email that already exists, does not tell user that the email already exists."""
-    navigate_to(page, "/register")
-
     existing_email = EXISTING_ACCOUNTS["ADMIN_USER"]["email"]
-
-    page.get_by_role("textbox", name="Full Name").fill("Test User")
-    page.get_by_role("textbox", name="Email Address").fill(existing_email)
-    page.get_by_role("textbox", name="Password", exact=True).fill("newpassword")
-    page.get_by_role("textbox", name="Confirm Password").fill("newpassword")
-    page.get_by_role("button", name=" Create Account").click()
-
+    register_new_user(page=page, name="Test User", email=existing_email, password="newpassword", expect_success=False)
     expect(page.get_by_text(GENERIC_REGISTRATION_ERROR_MESSAGE)).to_be_visible()
 
 
