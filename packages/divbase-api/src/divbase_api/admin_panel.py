@@ -229,6 +229,17 @@ class ProjectMembershipView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        IntegerField("user_id", label="User ID", required=True),
+        IntegerField("project_id", label="Project ID", required=True),
+        HasOne("user", identity="user", label="User"),
+        HasOne("project", identity="project", label="Project"),
+        StringField("role", label="Role", required=True),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
     exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
@@ -319,7 +330,6 @@ class TaskHistoryView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
 
     fields = [
         StringField("task_id", label="Task UUID", disabled=True),
@@ -333,6 +343,8 @@ class TaskHistoryView(ModelView):
         DateTimeField("started_at", label="Started At", disabled=True),
         DateTimeField("completed_at", label="Completed At", disabled=True),
     ]
+
+    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
 
     def can_create(self, request: Request) -> bool:
         """Disable manual creation of task history entries."""
