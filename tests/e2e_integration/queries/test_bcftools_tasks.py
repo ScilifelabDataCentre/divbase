@@ -1,6 +1,5 @@
 import pytest
 from celery import current_app
-from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
 from divbase_api.worker.tasks import (
@@ -28,7 +27,7 @@ def test_bcftools_pipe_task_with_real_worker(
     """
     Integration test in which bcftools_pipe_task is run with a real Celery worker.
     Runs locally using the docker compose testing stack defined and performs a real sidecar and bcftools
-    query by loading VCF files from the tests/fixtures dir. It was designed for having RabbitMQ as the broker, Redis as the backend,
+    query by loading VCF files from the tests/fixtures dir. It was designed for having RabbitMQ as the broker, PostgreSQL as the backend,
     and a custom Celery worker image that has bcftools installed.
     (this test does not download fixture from bucket, since that is handled by the CLI layer)
 
@@ -46,9 +45,6 @@ def test_bcftools_pipe_task_with_real_worker(
     broker_url = current_app.conf.broker_url
     with Connection(broker_url) as conn:
         conn.ensure_connection(max_retries=1)
-
-    if isinstance(current_app.backend, RedisBackend):
-        current_app.backend.client.ping()
 
     async_result = bcftools_pipe_task.apply_async(kwargs=bcftools_pipe_kwargs_fixture)
     task_id = async_result.id

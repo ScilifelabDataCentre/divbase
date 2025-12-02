@@ -4,7 +4,6 @@ from time import sleep
 import httpx
 import pytest
 from celery import current_app
-from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
 
 from divbase_api.worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
@@ -51,9 +50,6 @@ def test_concurrency_of_worker_containers_connected_to_default_queue(
     broker_url = current_app.conf.broker_url
     with Connection(broker_url) as conn:
         conn.ensure_connection(max_retries=1)
-
-    if isinstance(current_app.backend, RedisBackend):
-        current_app.backend.client.ping()
 
     total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
     task_count = total_default_queue_concurrency_on_host + 1
@@ -111,7 +107,7 @@ def test_task_routing(
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
     A worker can be assigned to multiple queues, so the test should check that each task is routed to the correct queue (either via static or dynamic task routing).
-    Getting logs on which worker executeted the task is easiest done via the Flower API.
+    Getting logs on which worker executed the task is easiest done via the Flower API.
 
     The logic of the test is as follows:
     1. Get the current task routes and assert that the task to be tested by the current test parameter is in the current task routes.
@@ -147,9 +143,6 @@ def test_task_routing(
     broker_url = app.conf.broker_url
     with Connection(broker_url) as conn:
         conn.ensure_connection(max_retries=1)
-
-    if isinstance(app.backend, RedisBackend):
-        app.backend.client.ping()
 
     ## Step 1
     current_task_routes = current_app.conf.task_routes
