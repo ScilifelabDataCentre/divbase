@@ -25,7 +25,7 @@ def login_via_login_form(page: Page, email: str, password: str):
 
 def logout_via_user_menu(page: Page):
     page.get_by_role("button", name=re.compile(r"User menu for .*", re.IGNORECASE)).click()
-    page.get_by_role("menuitem", name=re.compile(r"*Logout", re.IGNORECASE)).click()
+    page.get_by_role("menuitem", name="Logout").click()
 
 
 def is_logged_in_as(page: Page, email: str) -> bool:

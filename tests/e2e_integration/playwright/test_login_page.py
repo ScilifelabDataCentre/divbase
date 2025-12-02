@@ -1,4 +1,4 @@
-""" """
+"""Tests for the login page functionality using Playwright."""
 
 import re
 
