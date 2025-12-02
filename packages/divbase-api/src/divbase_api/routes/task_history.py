@@ -16,13 +16,9 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.task_history import (
-    _deserialize_celery_task_metadata,
-    get_project_task_history,
-    get_user_and_project_task_history_postgres,
-    get_user_task_history_from_postgres,
+    deserialize_tasks_to_result,
 )
 from divbase_lib.api_schemas.task_history import (
-    TaskHistoryResult,
     TaskHistoryResults,
 )
 
@@ -42,11 +38,12 @@ async def get_all_tasks_for_user(
     Get the task history for the current user. Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
 
-    result = await get_user_task_history_from_postgres(
+    serialized_tasks = await get_tasks_pg(
         db=db,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
+    result = deserialize_tasks_to_result(serialized_tasks)
 
     if result.tasks == {}:
         user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
@@ -80,13 +77,13 @@ async def get_all_tasks_for_user_and_project(
             "Project not found or you don't have permission to view task history from this project."
         )
 
-    result = await get_user_and_project_task_history_postgres(
+    serialized_tasks = await get_tasks_pg(
         db=db,
-        project_id=project.id,
         user_id=current_user.id,
+        project_id=project.id,
         is_admin=current_user.is_admin,
     )
-
+    result = deserialize_tasks_to_result(serialized_tasks)
     result.user_email = current_user.email
     return result
 
@@ -108,12 +105,8 @@ async def get_project_tasks(
             "Project not found or you don't have permission to view task history for this whole project."
         )
 
-    result = await get_project_task_history(
-        db=db,
-        project_id=project.id,
-    )
-
-    return result
+    serialized_tasks = await get_tasks_pg(db=db, project_id=project.id)
+    return deserialize_tasks_to_result(serialized_tasks)
 
 
 @task_history_router.get("/tasks/{task_id}", status_code=status.HTTP_200_OK, response_model=TaskHistoryResults)
@@ -130,7 +123,7 @@ async def get_task_by_id(
     Since the request body does not include project ID, permissions checks are made in get_tasks_pg.
     """
 
-    celery_task = await get_tasks_pg(
+    serialized_task = await get_tasks_pg(
         db=db,
         task_id=task_id,
         user_id=current_user.id,
@@ -138,8 +131,8 @@ async def get_task_by_id(
         require_manager_role=True,
     )
 
-    if not celery_task:
+    if not serialized_task:
         raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
 
-    deserialized = _deserialize_celery_task_metadata(celery_task)
-    return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**deserialized)})
+    result = deserialize_tasks_to_result([serialized_task])
+    return result

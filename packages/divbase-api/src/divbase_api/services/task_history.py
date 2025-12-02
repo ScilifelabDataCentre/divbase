@@ -2,11 +2,6 @@ import json
 import logging
 import pickle
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from divbase_api.crud.task_history import (
-    get_tasks_pg,
-)
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -19,70 +14,19 @@ from divbase_lib.api_schemas.task_history import (
 logger = logging.getLogger(__name__)
 
 
-# TODO make a workaround to check if all allowed ids were returned? could call the Flower API task_ID by task_ID... but it would be inefficient
-
-
-async def get_user_task_history_from_postgres(
-    db: AsyncSession,
-    user_id: int,
-    is_admin: bool = False,
-) -> TaskHistoryResults:
+def deserialize_tasks_to_result(serialized_tasks: list[dict]) -> TaskHistoryResults:
     """
-    Fetch task history for a user for all their projects.
+    Convert a list of task dicts from the DB into a TaskHistoryResults object.
     """
-
-    celery_tasks = await get_tasks_pg(db=db, user_id=user_id, is_admin=is_admin)
-
-    if not celery_tasks:
+    if not serialized_tasks:
         return TaskHistoryResults(tasks={})
 
-    filtered_tasks = {}
-    for task in celery_tasks:
-        deserialized = _deserialize_celery_task_metadata(task)
-        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
+    deserialized_tasks = {}
+    for task in serialized_tasks:
+        deserialized_task = _deserialize_celery_task_metadata(task)
+        deserialized_tasks[task["task_id"]] = TaskHistoryResult(**deserialized_task)
 
-    return TaskHistoryResults(tasks=filtered_tasks)
-
-
-async def get_user_and_project_task_history_postgres(
-    db: AsyncSession,
-    user_id: int,
-    project_id: int | None = None,
-    is_admin: bool = False,
-) -> TaskHistoryResults:
-    """
-    Fetch task history for a user for a specific project they belong to.
-    """
-
-    celery_tasks = await get_tasks_pg(db=db, user_id=user_id, project_id=project_id, is_admin=is_admin)
-    if not celery_tasks:
-        return TaskHistoryResults(tasks={})
-
-    filtered_tasks = {}
-    for task in celery_tasks:
-        deserialized = _deserialize_celery_task_metadata(task)
-        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
-
-    return TaskHistoryResults(tasks=filtered_tasks)
-
-
-async def get_project_task_history(
-    db: AsyncSession,
-    project_id: int,
-) -> TaskHistoryResults:
-    """
-    Get the task history of a project from the Flower API.
-
-    """
-
-    celery_tasks = await get_tasks_pg(db=db, project_id=project_id)
-
-    filtered_tasks = {}
-    for task in celery_tasks:
-        deserialized = _deserialize_celery_task_metadata(task)
-        filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
-
-    return TaskHistoryResults(tasks=filtered_tasks)
+    return TaskHistoryResults(tasks=deserialized_tasks)
 
 
 def _deserialize_celery_task_metadata(task: dict) -> dict:
