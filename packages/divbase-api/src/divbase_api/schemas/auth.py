@@ -26,3 +26,9 @@ class RefreshTokenResponse(BaseModel):
 
     access_token: str = Field(..., description="Bearer access token for authentication")
     expires_at: int = Field(..., description="Unix timestamp when the access token expires")
+
+
+class LogoutRequest(BaseModel):
+    """Request model for logout endpoint."""
+
+    refresh_token: str = Field(..., description="Bearer refresh token to be revoked on logout")

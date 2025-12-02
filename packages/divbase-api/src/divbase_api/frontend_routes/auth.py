@@ -17,6 +17,7 @@ from divbase_api.crud.auth import (
     delete_auth_cookies,
     update_user_password,
 )
+from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_password_reset_token, token_is_revoked
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
@@ -79,23 +80,23 @@ async def post_login(
         )
 
     logger.info(f"User {user.email} logged in successfully via frontend.")
-    access_token, access_expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
-    refresh_token, refresh_expires_at = create_token(subject=user.id, token_type=TokenType.REFRESH)
+    access_token_data = create_token(subject=user.id, token_type=TokenType.ACCESS)
+    refresh_token_data = create_token(subject=user.id, token_type=TokenType.REFRESH)
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     response.set_cookie(
         key=TokenType.ACCESS.value,
-        value=access_token,
-        expires=access_expires_at,
+        value=access_token_data.token,
+        expires=access_token_data.expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
     )
     response.set_cookie(
         key=TokenType.REFRESH.value,
-        value=refresh_token,
-        expires=refresh_expires_at,
+        value=refresh_token_data.token,
+        expires=refresh_token_data.expires_at,
         httponly=True,
         secure=True,
         samesite="lax",
@@ -104,8 +105,20 @@ async def post_login(
 
 
 @fr_auth_router.post("/logout", response_class=HTMLResponse)
-async def post_logout(request: Request):
-    """Handle logout form submission."""
+async def post_logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle logout form submission.
+
+    We delete auth cookies (access + refresh tokens) and revoke the refresh token.
+    """
+    refresh_token = request.cookies.get(TokenType.REFRESH.value)
+    token_data = verify_token(refresh_token, TokenType.REFRESH) if refresh_token else None
+    if token_data:
+        await revoke_token_on_logout(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
+
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     return delete_auth_cookies(response=response)
 
@@ -181,15 +194,15 @@ async def get_verify_email(
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
             context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/email_verification_confirm.html",
@@ -206,15 +219,15 @@ async def confirm_email_verification(
     """
     Confirm email verification after user explicitly clicks a button.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
+    if not token_data:
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/email_verification.html",
             context={"error": INVALID_EXPIRED_EMAIL_TOKEN_MSG},
         )
 
-    already_verified = await check_user_email_verified(db=db, id=user_id)
+    already_verified = await check_user_email_verified(db=db, id=token_data.user_id)
     if already_verified:
         return templates.TemplateResponse(
             request=request,
@@ -222,7 +235,7 @@ async def confirm_email_verification(
             context={"info": "Your email has already been verified, you can log in to DivBase directly."},
         )
 
-    user = await confirm_user_email(db=db, id=user_id)
+    user = await confirm_user_email(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/login.html",
@@ -355,15 +368,24 @@ async def get_reset_password_page(
     To access this endpoint a user receives an email with link to reset their password.
     The link contains a JWT as query param in the URL.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not token_data:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
+        )
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
             context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
         )
 
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
+    user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/reset_password.html",
@@ -385,8 +407,18 @@ async def post_reset_password_form(
     """
     Handle reset password form submission.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
+    if not token_data:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+        )
+
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
+        )
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/forgot_password.html",
@@ -411,7 +443,9 @@ async def post_reset_password_form(
                 "error": str(error_msg),
             },
         )
-    user = await update_user_password(db=db, user_id=user_id, password_data=password_data)
+
+    user = await update_user_password(db=db, user_id=token_data.user_id, password_data=password_data)
+    await revoke_used_password_reset_token(db=db, token_jti=token_data.jti, user_id=token_data.user_id)
     background_tasks.add_task(send_password_has_been_reset_email, email_to=user.email)
     logger.info(f"User {user.email} has reset their password.")
 

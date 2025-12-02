@@ -23,6 +23,7 @@ from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
+from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
 
@@ -241,6 +242,32 @@ class ProjectMembershipView(ModelView):
         return super().handle_exception(exc)
 
 
+class RevokedTokenView(ModelView):
+    """
+    Custom admin panel View for the RevokedTokenDB model.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = []
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "revoked_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "revoked_reason"]
+    exclude_fields_from_detail = []
+
+    def handle_exception(self, exc: Exception) -> None:
+        """
+        Handles gracefully attempts to create/edit a revoked token entry that would otherwise become a 500 error:
+            - A token_type that is not allowed (only refresh and password reset tokens can be revoked).
+            - violating unique constraint on token_jti
+        """
+        if isinstance(exc, ValueError):  # raised by db models validate_token_type method
+            raise FormValidationError(errors={"token_type": str(exc)})
+
+        if isinstance(exc, IntegrityError):
+            raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+
+        return super().handle_exception(exc)
+
+
 class DivBaseAuthProvider(AuthProvider):
     """
     This class enables starlette-admin to make use of DivBase's pre-existing auth system.
@@ -254,7 +281,10 @@ class DivBaseAuthProvider(AuthProvider):
 
     async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
         """Override the default starlette-admin logout to use our frontend post_logout function/route."""
-        return await post_logout(request)
+        # can't rely on dependency injection here like in FastAPI, so we manually obtain a db session
+        async for db in get_db():
+            logout_response = await post_logout(request, db)
+        return logout_response
 
     async def is_authenticated(self, request: Request) -> bool:
         """
@@ -311,5 +341,6 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
 
     admin.mount_to(app)

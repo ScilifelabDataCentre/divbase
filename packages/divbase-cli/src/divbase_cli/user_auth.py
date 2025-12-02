@@ -5,6 +5,7 @@ This includes login/logout and the getting, storing, using, and refreshing of ac
 """
 
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import httpx
 import yaml
 from pydantic import SecretStr
 
+from divbase_api.schemas.auth import LogoutRequest
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.user_config import load_user_config
@@ -118,10 +120,45 @@ def login_to_divbase(
 def logout_of_divbase(
     token_path: Path = cli_settings.TOKENS_PATH, config_path: Path = cli_settings.CONFIG_PATH
 ) -> None:
-    """Log out of the DivBase server."""
-    token_path.unlink(missing_ok=True)
-
+    """
+    Log out of the DivBase server.
+    We send the refresh token to DivBase to be revoked server-side.
+    """
     config = load_user_config(config_path)
+
+    # the "if" avoids raising an error on a non logged in user trying to logout
+    if config.logged_in_url:
+        token_data = load_user_tokens(token_path=token_path)
+        request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
+
+        # We don't want logout to fail if server is unreachable or gives an error
+        # JWTs are stateless so local logout is sufficient.
+        try:
+            make_authenticated_request(
+                method="POST",
+                divbase_base_url=config.logged_in_url,
+                api_route="v1/auth/logout",
+                json=request_data.model_dump(),
+            )
+        except DivBaseAPIConnectionError as e:
+            warnings.warn(
+                f"Could not contact DivBase server to log out fully: '{e}'.\n\n"
+                "Continuing local logout.\n"
+                "You do not need to do anything, but if you see this message often, please let us know.",
+                stacklevel=2,
+                category=UserWarning,
+            )
+        except DivBaseAPIError as e:
+            warnings.warn(
+                f"Recieved an error message from DivBase server when attempting to logout:"
+                f"'{e.error_message=}'. \n\n"
+                "Continuing local logout.\n"
+                "You do not need to do anything. If you see this message a lot, please let us know.",
+                stacklevel=2,
+                category=UserWarning,
+            )
+
+    token_path.unlink(missing_ok=True)
     config.set_logged_in_url(None)
     config.dump_config()
 
@@ -206,6 +243,11 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
 
     # Possible if e.g. token revoked on server side.
     if response.status_code == 401:
+        # Clear logged in URL in config as tokens no longer valid.
+        # Prevents user getting warning about being already logged in when they try to log in again.
+        config = load_user_config()
+        config.set_logged_in_url(None)
+        config.dump_config()
         raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
 
     response.raise_for_status()
