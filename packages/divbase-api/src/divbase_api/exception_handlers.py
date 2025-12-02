@@ -12,6 +12,7 @@ The idea of centralising this is to:
 import logging
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException
 
@@ -263,6 +264,23 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException):
         )
 
 
+async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+    """When a request contains invalid data, FastAPI internally raises a RequestValidationError"""
+    logger.error(f"Request validation error for {request.method} {request.url.path}: {exc.errors()}", exc_info=True)
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": exc.errors(), "type": "request_validation_error"},
+        )
+    else:
+        return await render_error_page(
+            request=request,
+            message="Badly formatted request. Please check your input and try again.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+
 async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFDimensionsEntryMissingError):
     logger.info(f"VCF dimensions entry missing for {request.method} {request.url.path}: {exc.message}", exc_info=False)
 
@@ -309,5 +327,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(BucketVersionAlreadyExistsError, bucket_version_exists_error_handler)  # type: ignore
     app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
+    app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore

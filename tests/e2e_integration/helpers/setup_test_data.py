@@ -26,6 +26,14 @@ TEST_USERS = {
     "manage user": {"email": "manage@divbase.se", "password": "badpassword"},
     "edit user query-project only": {"email": "edit_query_project_only@divbase.se", "password": "badpassword"},
     "manage user query-project only": {"email": "manage_query_project_only@divbase.se", "password": "badpassword"},
+    "forgot_password user": {
+        "email": "mr_password_resetter@divbase.se",
+        "password": "badpassword",
+    },  # Some tests change this users password
+    "password_reset user": {
+        "email": "password_reset_user@divbase.se",
+        "password": "badpassword",
+    },  # Some tests change this users password
 }
 
 
