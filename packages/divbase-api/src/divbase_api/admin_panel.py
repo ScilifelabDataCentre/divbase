@@ -14,7 +14,17 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
-from starlette_admin import BaseAdmin, BooleanField, DateTimeField, EmailField, IntegerField, StringField, TextAreaField
+from starlette_admin import (
+    BaseAdmin,
+    BooleanField,
+    DateTimeField,
+    EmailField,
+    HasOne,
+    IntegerField,
+    StringField,
+    TextAreaField,
+)
+from starlette_admin._types import RequestAction
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError
@@ -23,7 +33,7 @@ from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
-from divbase_api.models.task_history import TaskHistoryDB
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
 
@@ -309,23 +319,19 @@ class TaskHistoryView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = ["started_at", "completed_at"]
+    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
 
     fields = [
         StringField("task_id", label="Task UUID", disabled=True),
-        StringField("name", label="Task Name", disabled=True),
         StringField("status", label="Status", disabled=True),
         IntegerField("user_id", label="User ID", disabled=True),
         IntegerField("project_id", label="Project ID", disabled=True),
-        TextAreaField("args", label="Args", disabled=True),
-        TextAreaField("kwargs", label="Kwargs", disabled=True),
-        TextAreaField("result", label="Result", disabled=True),
+        HasOne("user", identity="user", label="User"),
+        HasOne("project", identity="project", label="Project"),
+        HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
         DateTimeField("created_at", label="Created At", disabled=True),
         DateTimeField("started_at", label="Started At", disabled=True),
         DateTimeField("completed_at", label="Completed At", disabled=True),
-        StringField("runtime", label="Runtime (s)", disabled=True),
-        DateTimeField("date_done", label="Date Done", disabled=True),
-        StringField("worker", label="Worker", disabled=True),
     ]
 
     def can_create(self, request: Request) -> bool:
@@ -341,15 +347,65 @@ class TaskHistoryView(ModelView):
         return False
 
 
+class CeleryTaskMetaView(ModelView):
+    """
+    Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id", label="Task UUID", disabled=True),
+        StringField("status", label="Celery Status", disabled=True),
+        StringField("name", label="Task Name", disabled=True),
+        StringField("worker", label="Worker", disabled=True),
+        StringField("queue", label="Queue", disabled=True),
+        IntegerField("retries", label="Retries", disabled=True),
+        DateTimeField("date_done", label="Date Done", disabled=True),
+        TextAreaField("args", label="Args", disabled=True),
+        TextAreaField("kwargs", label="Kwargs", disabled=True),
+        TextAreaField("result", label="Result", disabled=True),
+        TextAreaField("traceback", label="Traceback", disabled=True),
+    ]
+
+    def is_accessible(self, request: Request) -> bool:
+        """
+        Hide this view from the navigation menu but allow access via relationships.
+        Based on https://github.com/jowilf/starlette-admin/issues/443
+        Only allow access for detail/edit actions (when accessed via HasOne relationship),
+        block list and create actions.
+        """
+
+        action = getattr(request.state, "action", None)
+        return action in [RequestAction.DETAIL, RequestAction.EDIT]
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Disable editing."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion."""
+        return False
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
     """
     admin = Admin(engine=engine, title="DivBase Admin", auth_provider=DivBaseAuthProvider())
 
-    admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
-    admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
+    admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
+    admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
     admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
+    admin.add_view(
+        CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
+    )
 
     admin.mount_to(app)
