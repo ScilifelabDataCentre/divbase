@@ -19,7 +19,7 @@ from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, Dimens
 class TaskHistoryResult(BaseModel):
     """
     Task details as returned by the DB query.
-    Inspired by the field that the Flower API
+    Inspired by the fields used the Flower API (Celery task monitor).
     """
 
     uuid: str

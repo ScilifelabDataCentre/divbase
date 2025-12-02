@@ -84,7 +84,7 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
     elif task_name == "tasks.update_vcf_dimensions_task":
         parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
 
-    args_str_for_flower = json.dumps(args) if isinstance(args, list) else str(args)
+    args_as_str = json.dumps(args) if isinstance(args, list) else str(args)
 
     runtime = None
     started_at = task.get("started_at")
@@ -98,7 +98,7 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
         "result": parsed_result,
         "date_done": task.get("date_done").isoformat() if task.get("date_done") else None,
         "name": task_name,
-        "args": args_str_for_flower,
+        "args": args_as_str,
         "kwargs": parsed_kwargs,
         "worker": task.get("worker"),
         "created_at": task.get("created_at").timestamp() if task.get("created_at") else None,
