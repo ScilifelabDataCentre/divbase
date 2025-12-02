@@ -39,8 +39,6 @@ services:
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
-      - FLOWER_USER=floweradmin
-      - FLOWER_PASSWORD=badpassword
       - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
@@ -66,28 +64,6 @@ services:
     develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
     networks: *internal-network
-  flower:
-    build:
-      context: ..
-      dockerfile: docker/flower.dockerfile
-    healthcheck:
-      test: ["CMD", "curl", "-f", "-u", "floweradmin:badpassword", "http://localhost:5555/"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - 5555:5555
-    depends_on: *worker-api-depends
-    environment:
-      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
-      - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
-      - FLOWER_BASIC_AUTH=floweradmin:badpassword
-      - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
-    develop: *watch-celery-src
-    command: ["flower", "--persistent=True", "--db=/data/flower.db"]
-    volumes:
-      - flower-data:/data
-    networks: *internal-network  
   minio:
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     ports:
@@ -155,8 +131,6 @@ services:
     environment:
     - DIVBASE_ENV=local_dev
     - FRONTEND_BASE_URL=http://localhost:8000
-    - FLOWER_USER=floweradmin
-    - FLOWER_PASSWORD=badpassword
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
     - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
@@ -203,7 +177,6 @@ services:
     networks: *internal-network
 volumes:
   rabbitmq-data:
-  flower-data:
   minio-data:
   minio-bitnami-data:
   minio-certs:

@@ -15,13 +15,6 @@ services:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
-  flower:
-    ports: !override
-      - 5556:5555
-    volumes: !reset []
-    tmpfs:
-      - /data/
-    develop: !reset [] 
   minio:
     ports: !override
       - "9002:9000"

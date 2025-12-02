@@ -44,7 +44,7 @@ class TaskHistoryDisplayManager:
         self.display_limit = display_limit
 
     def print_task_history(self) -> None:
-        """Display the task history fetched from the Flower API in a formatted table."""
+        """Display the task history fetched from the results backend in a formatted table."""
 
         sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].created_at or "", reverse=True)
         display_limit = self.display_limit or 10
@@ -74,7 +74,7 @@ class TaskHistoryDisplayManager:
 
     def _format_unix_timestamp(self, timestamp):
         """
-        The flower task status API returns timestamps as integers or floats.
+        The results backend task status returns timestamps as integers or floats.
         This function formats them into a human-readable string.
         """
         if isinstance(timestamp, (int, float)):
