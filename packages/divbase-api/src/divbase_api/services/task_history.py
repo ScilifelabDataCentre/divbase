@@ -5,12 +5,8 @@ import pickle
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.task_history import (
-    get_task_by_id_if_user_allowed,
-    get_tasks_for_project_pg,
-    get_tasks_for_user_and_project_pg,
-    get_tasks_for_user_pg,
+    get_tasks_pg,
 )
-from divbase_api.exceptions import AuthorizationError
 from divbase_lib.api_schemas.queries import BcftoolsQueryKwargs, SampleMetadataQueryKwargs
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
@@ -35,7 +31,7 @@ async def get_user_task_history_from_postgres(
     Fetch task history for a user for all their projects.
     """
 
-    celery_tasks = await get_tasks_for_user_pg(db, user_id, is_admin)
+    celery_tasks = await get_tasks_pg(db=db, user_id=user_id, is_admin=is_admin)
 
     if not celery_tasks:
         return TaskHistoryResults(tasks={})
@@ -58,8 +54,7 @@ async def get_user_and_project_task_history_postgres(
     Fetch task history for a user for a specific project they belong to.
     """
 
-    celery_tasks = await get_tasks_for_user_and_project_pg(db, user_id, project_id, is_admin)
-
+    celery_tasks = await get_tasks_pg(db=db, user_id=user_id, project_id=project_id, is_admin=is_admin)
     if not celery_tasks:
         return TaskHistoryResults(tasks={})
 
@@ -80,7 +75,7 @@ async def get_project_task_history(
 
     """
 
-    celery_tasks = await get_tasks_for_project_pg(db, project_id)
+    celery_tasks = await get_tasks_pg(db=db, project_id=project_id)
 
     filtered_tasks = {}
     for task in celery_tasks:
@@ -88,25 +83,6 @@ async def get_project_task_history(
         filtered_tasks[task["task_id"]] = TaskHistoryResult(**deserialized)
 
     return TaskHistoryResults(tasks=filtered_tasks)
-
-
-async def get_task_history_by_id(
-    db: AsyncSession,
-    task_id: str,
-    user_id: int,
-    is_admin: bool = False,
-) -> TaskHistoryResults:
-    """
-    Get the task history from the Flower API for a specific task ID.
-    """
-
-    celery_task = await get_task_by_id_if_user_allowed(db=db, task_id=task_id, user_id=user_id, is_admin=is_admin)
-
-    if not celery_task:
-        raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
-
-    deserialized = _deserialize_celery_task_metadata(celery_task)
-    return TaskHistoryResults(tasks={task_id: TaskHistoryResult(**deserialized)})
 
 
 def _deserialize_celery_task_metadata(task: dict) -> dict:
