@@ -46,7 +46,7 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal
 
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
-# Redis-specific config
+# Celery results backend config
 app.conf.update(
     # result_expires=2592000,  # 30 days in seconds TODO add back in with celery beat
     task_track_started=True,

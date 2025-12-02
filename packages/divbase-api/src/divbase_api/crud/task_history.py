@@ -40,6 +40,8 @@ async def get_tasks_pg(
     Dynamic crud to fetch task history (CeleryTaskMeta + TaskHistoryDB) with different filters.
     If task_id is provided, returns a single dict or None.
     Otherwise, returns a list of dicts.
+
+    Note: Packing of results into a pydantic model happens in during deserialization in the service layer.
     """
     stmt = select(
         *CeleryTaskMeta.__table__.c,

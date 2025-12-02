@@ -19,19 +19,6 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
     networks: &internal-network
       - internal 
-  redis:
-    image: redis:alpine
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - 6379:6379
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
-    networks: *internal-network
   worker-quick:
     build: &worker-build
       context: .. 
@@ -44,8 +31,6 @@ services:
       start_period: 10s
     depends_on: &worker-api-depends
       rabbitmq:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -218,7 +203,6 @@ services:
     networks: *internal-network
 volumes:
   rabbitmq-data:
-  redis-data:
   flower-data:
   minio-data:
   minio-bitnami-data:
