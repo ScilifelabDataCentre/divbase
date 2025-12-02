@@ -5,6 +5,7 @@ The views created for each model rely on overriding some of the default behavior
 These overrides are on methods inside BaseModelView (parent of ModelView, which each custom class is inheriting from).
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -36,6 +37,7 @@ from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
+from divbase_api.services.task_history import _deserialize_celery_task_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +364,9 @@ class TaskHistoryView(ModelView):
 class CeleryTaskMetaView(ModelView):
     """
     Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
+
+    Needs to be defined in order to display the entries in the admin panel, but is
+    intended to only be viewed as a child of TaskHistoryView
     """
 
     page_size_options = PAGINATION_DEFAULTS
@@ -382,6 +387,32 @@ class CeleryTaskMetaView(ModelView):
         TextAreaField("traceback", label="Traceback", disabled=True),
     ]
 
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to deserialize Celery's binary fields for display.
+        Reuses the existing _deserialize_celery_task_metadata function from the task_history service layer.
+
+        NOTE! serialize_field_value is a function in starlett-admin, so for the override to work, it cannot be renamed
+        """
+        # For non-bytes values or fields we don't need to deserialize, use default behavior
+        if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
+            return await super().serialize_field_value(value, field, action, request)
+
+        # _deserialize_celery_task_metadata expects a full task dict, but we only need the specific field
+        task = {field.name: value}
+
+        try:
+            deserialized = _deserialize_celery_task_metadata(task)
+            field_value = deserialized.get(field.name)
+
+            # Format as JSON string for display in the admin panel
+            if isinstance(field_value, (dict, list)):
+                return json.dumps(field_value, indent=2, default=str)
+            return str(field_value) if field_value is not None else "<None>"
+        except Exception as e:
+            logger.warning(f"Failed to deserialize {field.name}: {e}")
+            return f"<Binary data: {len(value)} bytes>"
+
     def is_accessible(self, request: Request) -> bool:
         """
         Hide this view from the navigation menu but allow access via relationships.
@@ -391,7 +422,7 @@ class CeleryTaskMetaView(ModelView):
         """
 
         action = getattr(request.state, "action", None)
-        return action in [RequestAction.DETAIL, RequestAction.EDIT]
+        return action in [RequestAction.DETAIL]
 
     def can_create(self, request: Request) -> bool:
         """Disable manual creation."""
