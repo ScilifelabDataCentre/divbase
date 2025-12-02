@@ -332,7 +332,7 @@ class TaskHistoryView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-
+    fields_default_sort = [("created_at", False)]  # False = descending, True = ascending
     fields = [
         StringField("task_id", label="Task UUID", disabled=True),
         StringField("status", label="Status", disabled=True),
