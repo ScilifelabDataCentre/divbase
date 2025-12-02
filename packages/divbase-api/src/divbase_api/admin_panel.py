@@ -348,6 +348,14 @@ class TaskHistoryView(ModelView):
 
     exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
 
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Overide to render the celery status field in upper case.
+        """
+        if field.name == "status" and isinstance(value, str):
+            return value.upper()
+        return await super().serialize_field_value(value, field, action, request)
+
     def can_create(self, request: Request) -> bool:
         """Disable manual creation of task history entries."""
         return False
