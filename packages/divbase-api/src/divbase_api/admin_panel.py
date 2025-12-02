@@ -23,6 +23,7 @@ from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
+from divbase_api.models.task_history import TaskHistoryDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
 
@@ -302,6 +303,27 @@ class DivBaseAuthProvider(AuthProvider):
         return AdminUser(username=user["name"], photo_url=None)
 
 
+class TaskHistoryView(ModelView):
+    """
+    Custom admin panel View for the TaskHistoryDB model.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["started_at", "completed_at"]
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of task history entries."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Optionally disable editing if task history should be read-only."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Optionally disable deletion if task history should be immutable."""
+        return False
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
@@ -311,5 +333,6 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
 
     admin.mount_to(app)
