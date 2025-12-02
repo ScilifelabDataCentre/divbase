@@ -51,6 +51,11 @@ class TaskHistoryDB(BaseDBModel):
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")
+    celery_meta: Mapped["CeleryTaskMeta"] = relationship(
+        "CeleryTaskMeta",
+        uselist=False,  # one-to-one relationship: one entry in TaskHistoryDB <-> one entry in CeleryTaskMeta
+        viewonly=True,  # Read-only since we don't manage CeleryTaskMeta directly, it is initiated and updated by Celery
+    )
 
 
 class CeleryTaskMeta(Base):
@@ -64,7 +69,7 @@ class CeleryTaskMeta(Base):
     __tablename__ = "celery_taskmeta"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    task_id = Column(String(155), unique=True, index=True)
+    task_id = Column(String(155), ForeignKey("task_history.task_id"), unique=True, index=True)
     status = Column(String(50))
     result = Column(LargeBinary)
     date_done = Column(DateTime)
