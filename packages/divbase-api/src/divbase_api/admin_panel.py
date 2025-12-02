@@ -311,6 +311,23 @@ class TaskHistoryView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     exclude_fields_from_list = ["started_at", "completed_at"]
 
+    fields = [
+        StringField("task_id", label="Task UUID", disabled=True),
+        StringField("name", label="Task Name", disabled=True),
+        StringField("status", label="Status", disabled=True),
+        IntegerField("user_id", label="User ID", disabled=True),
+        IntegerField("project_id", label="Project ID", disabled=True),
+        TextAreaField("args", label="Args", disabled=True),
+        TextAreaField("kwargs", label="Kwargs", disabled=True),
+        TextAreaField("result", label="Result", disabled=True),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("started_at", label="Started At", disabled=True),
+        DateTimeField("completed_at", label="Completed At", disabled=True),
+        StringField("runtime", label="Runtime (s)", disabled=True),
+        DateTimeField("date_done", label="Date Done", disabled=True),
+        StringField("worker", label="Worker", disabled=True),
+    ]
+
     def can_create(self, request: Request) -> bool:
         """Disable manual creation of task history entries."""
         return False
