@@ -200,7 +200,7 @@ def _update_task_status_in_pg(
                 entry = TaskHistoryDB(
                     task_id=str(task_id),
                     user_id=_CRONJOB_USER_ID,
-                    project_id=1,  # First project TODO this should have a system user
+                    project_id=None,  # Cronjob tasks don't belong to any project
                     status=status,
                 )
                 if set_started_at:

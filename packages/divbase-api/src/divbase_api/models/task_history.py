@@ -39,8 +39,11 @@ class TaskHistoryDB(BaseDBModel):
 
     task_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("project.id", ondelete="CASCADE"), nullable=False, index=True
+    project_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,  # nullable so that cronjob tasks can use project_id None
     )
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
     error_message: Mapped[str] = mapped_column(String, nullable=True)
