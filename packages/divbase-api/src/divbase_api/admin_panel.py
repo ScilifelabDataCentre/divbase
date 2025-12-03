@@ -421,17 +421,6 @@ class CeleryTaskMetaView(ModelView):
             logger.warning(f"Failed to deserialize {field.name}: {e}")
             return f"<Binary data: {len(value)} bytes>"
 
-    def is_accessible(self, request: Request) -> bool:
-        """
-        Hide this view from the navigation menu but allow access via relationships.
-        Based on https://github.com/jowilf/starlette-admin/issues/443
-        Only allow access for detail/edit actions (when accessed via HasOne relationship),
-        block list and create actions.
-        """
-
-        action = getattr(request.state, "action", None)
-        return action in [RequestAction.DETAIL]
-
     def can_create(self, request: Request) -> bool:
         """Disable manual creation."""
         return False
