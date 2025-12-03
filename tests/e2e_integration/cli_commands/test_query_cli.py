@@ -16,16 +16,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 import boto3
-import httpx
 import pytest
 from celery import current_app
+from sqlalchemy import select
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
+from divbase_api.services.task_history import _deserialize_celery_task_metadata
 from divbase_api.worker.tasks import bcftools_pipe_task
+from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.divbase_cli import app
+from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.exceptions import ProjectNotInConfigError
 
 runner = CliRunner()
@@ -37,30 +41,43 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
-def wait_for_task_complete(task_id: str, max_retries: int = 30):
-    """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"task-history id {task_id}"
+def wait_for_task_complete(task_id: str, max_retries: int = 30) -> TaskHistoryResult:
+    """
+    For a given task_id, check the status of the task via the PostgreSQL results backend until it is complete or times out.
+    Need to join CeleryTaskMeta with TaskHistoryDB to get timestamps for the mandatory fields of the pydantic model.
+    Deserialization is needed because of how the celery results backed stores fields.
+    """
     while max_retries > 0:
-        result = runner.invoke(app, command)
-        output = result.stdout.replace("\n", " ").replace("\r", " ")
-        formatted_output = " ".join(output.split())  # handle multiline and irregular spaces in output
-        if (
-            "FAILURE" in formatted_output
-            or "SUCCESS" in formatted_output
-            or "'status': 'completed'" in formatted_output
-            or "completed" in formatted_output
-            or "FAIL" in formatted_output
-            or "SidecarInvalidFilterError" in formatted_output
-            or "Unsupported bcftools command" in formatted_output
-            or "Empty command provided" in formatted_output
-            or "'status': 'error'" in formatted_output
-            or "Output file ready for download" in formatted_output
-            or ".vcf.gz" in formatted_output
-        ):
-            return result
+        with SyncSessionLocal() as db:
+            stmt = (
+                select(
+                    *CeleryTaskMeta.__table__.c,
+                    TaskHistoryDB.created_at,
+                    TaskHistoryDB.started_at,
+                    TaskHistoryDB.completed_at,
+                )
+                .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                .where(CeleryTaskMeta.task_id == task_id)
+            )
+
+            result = db.execute(stmt).first()
+
+            if result is None:
+                time.sleep(1)
+                max_retries -= 1
+                continue
+
+            task_dict = dict(result._mapping)
+
+            status = task_dict.get("status")
+            if status in ["SUCCESS", "FAILURE"]:
+                deserialized = _deserialize_celery_task_metadata(task_dict)
+                return TaskHistoryResult(**deserialized)
+
         time.sleep(1)
         max_retries -= 1
-    pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
+
+    pytest.fail(f"Task {task_id} didn't complete within timeout period")
 
 
 @pytest.fixture(autouse=True)
@@ -190,18 +207,35 @@ def test_bcftools_pipe_query_errors(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
-    result = runner.invoke(app, command)
+    response = runner.invoke(app, command)
 
-    task_id = result.stdout.strip().split()[-1]
-    # TODO, assertion below should become 1, when API has the role of validating input.
-    assert result.exit_code == 0
+    task_id = response.stdout.strip().split()[-1]
     result = wait_for_task_complete(task_id=task_id)
-    assert expected_error in result.stdout
+
+    assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
+
+    if isinstance(result.result, dict):
+        error_msg = str(result.result.get("error", ""))
+        exc_type = str(result.result.get("exc_type", ""))
+        exc_message = str(result.result.get("exc_message", ""))
+
+        full_error_msg = f"{error_msg} {exc_type} {exc_message}"
+
+        assert expected_error in full_error_msg, (
+            f"Expected '{expected_error}' in error message, but got:\n"
+            f"  error: {error_msg}\n"
+            f"  exc_type: {exc_type}\n"
+            f"  exc_message: {exc_message}\n"
+            f"  full result: {result.result}"
+        )
+    else:
+        assert expected_error in str(result.result), f"Expected '{expected_error}' in result, got: {result.result}"
 
 
-def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config):
-    """Get the status of a task by its ID. Uses flower API via get_task_history to get the task info.
-    Note that this does not test the CLI command for testing task status.
+def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
+    """
+    Get the status of a task by its ID.
+    Uses the PostgreSQL Celery results backend to get task info.
     """
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
@@ -216,16 +250,15 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
     assert second_task_result.exit_code == 0
     second_task_id = second_task_result.stdout.strip().split()[-1]
 
-    flower_user = os.environ["FLOWER_USER"]
-    flower_password = os.environ["FLOWER_PASSWORD"]
-    flower_base_url = os.environ["FLOWER_BASE_URL"]
+    # Query the PostgreSQL results backend directly
+    with SyncSessionLocal() as db:
+        for task_id in [first_task_id, second_task_id]:
+            stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == task_id)
+            result = db.execute(stmt).scalar_one_or_none()
 
-    for task_id in [first_task_id, second_task_id]:
-        flower_url = f"{flower_base_url}/api/task/info/{task_id}"
-        auth = (flower_user, flower_password)
-        response = httpx.get(flower_url, auth=auth, timeout=3.0)
-        tasks_status = response.json()
-        assert tasks_status.get("uuid") == task_id
+            assert result is not None, f"Task {task_id} not found in results backend"
+            assert result.task_id == task_id
+            assert result.status in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
 
 
 @patch(
