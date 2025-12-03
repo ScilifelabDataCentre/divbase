@@ -134,14 +134,19 @@ class TaskHistoryDisplayManager:
 
         if state == "FAILURE":
             if isinstance(task.result, dict):
-                error_msg = (
-                    task.result.get("error")
-                    or task.result.get("exc_message")
-                    or task.result.get("exc_type")
-                    or "Unknown error"
-                )
+                error_msg = task.result.get("error")
+                if not error_msg:
+                    exc_message = task.result.get("exc_message")
+                    if isinstance(exc_message, list) and exc_message:
+                        error_msg = " ".join(str(msg) for msg in exc_message)
+                    elif exc_message:
+                        error_msg = str(exc_message)
+                if not error_msg:
+                    exc_type = task.result.get("exc_type")
+                    error_msg = exc_type if exc_type else "Unknown error"
             else:
                 error_msg = task.exception or str(task.result) or "Unknown error"
+
             return f"[{colour}]{error_msg}[/{colour}]"
 
         if isinstance(task.result, BcftoolsQueryTaskResult):
@@ -165,7 +170,16 @@ class TaskHistoryDisplayManager:
             return f"[{colour}]{result_message}[/{colour}]"
 
         if isinstance(task.result, dict) and ("exc_type" in task.result or "error" in task.result):
-            error_msg = task.result.get("error") or task.result.get("exc_message") or str(task.result)
+            # Handle any remaining error dicts that weren't caught by FAILURE state check
+            error_msg = task.result.get("error")
+            if not error_msg:
+                exc_message = task.result.get("exc_message")
+                if isinstance(exc_message, list) and exc_message:
+                    error_msg = " ".join(str(msg) for msg in exc_message)
+                elif exc_message:
+                    error_msg = str(exc_message)
+                else:
+                    error_msg = task.result.get("exc_type", "Unknown error")
             return f"[{colour}]{error_msg}[/{colour}]"
 
         result_message = str(task.result)
