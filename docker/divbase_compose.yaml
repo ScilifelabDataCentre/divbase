@@ -54,7 +54,7 @@ services:
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
-    command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
+    command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4","-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
     networks: *internal-network
   worker-long:
     build: *worker-build
