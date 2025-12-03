@@ -51,6 +51,8 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+      db-migrator:
+        condition: service_completed_successfully
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -145,6 +147,17 @@ services:
       mc admin user add minio s3-service-account badpassword;
       mc admin policy attach minio divbase-policy --user s3-service-account;
       "
+  db-migrator: # init container that runs any pending alembic migrations on startup
+    build:
+      context: ..
+      dockerfile: docker/fastapi.dockerfile
+    environment:
+      - SYNC_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
+    command: ["alembic", "--config", "/usr/local/lib/python3.12/site-packages/divbase_api/alembic.ini", "upgrade", "head"]
+    depends_on: 
+      postgres:
+        condition: service_healthy
+    networks: *internal-network
   fastapi:
     build:
       context: ..
