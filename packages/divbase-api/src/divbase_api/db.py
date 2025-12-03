@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 
 from alembic import command
 from alembic.config import Config
-from alembic.util.exc import CommandError
+from alembic.util.exc import DatabaseNotAtHead
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -55,13 +55,15 @@ async def health_check_db() -> bool:
 def check_db_migrations_up_to_date() -> None:
     """
     Checks if the DB is at HEAD (has applied all migrations) and raise an error if not.
+
+    Note that if a migration script has not been made for this change, this function will not catch that.
     """
     alembic_config_path = Path(__file__).parent / "alembic.ini"
     try:
         alembic_cfg = Config(file_=alembic_config_path)
-        command.check(alembic_cfg)
+        command.current(alembic_cfg, check_heads=True)
 
-    except CommandError:
+    except DatabaseNotAtHead:
         logger.error(
             """
             It seems like database migrations are pending. You need to run them before continuing.
@@ -72,8 +74,8 @@ def check_db_migrations_up_to_date() -> None:
             migrations are run in a docker init container
 
             - If you are in production/deployed environments:
-            WARNING: Running migrations in a deployed environment is a dangerous operation. 
-            1. Scale down the API and worker replicas to 0. 
+            WARNING: Running migrations in a deployed environment is a dangerous operation.
+            1. Scale down the API and worker replicas to 0.
             2. Run the migration job (ensure you take a database backup first).
             3. Scale the services back up after the migration is complete.
             Exiting...

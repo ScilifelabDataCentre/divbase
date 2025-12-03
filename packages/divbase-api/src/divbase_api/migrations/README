@@ -13,9 +13,12 @@ This directory contains database migrations for the DivBase API. We use [Alembic
 
 ### Creating a New Migration
 
-"Note: The FastAPI lifespan event checks (but does not apply) if migrations are up to date on startup. To avoid confusion, perform these steps outside of compose watch mode, as restarts triggered by file changes may cause unexpected behavior."
+Note: The FastAPI lifespan event checks (but does not apply them) if all migration scripts have been applied on startup. 
 
-TODO - decided if above is correct and if update commands below if True. 
+This means when you create a new migration script in watch mode, the app will error on restart until the migration is applied.
+If you instead make you changes using compose up, then make sure to restart the stack before generating the migration (step 2) so the changes to your db models are included. 
+
+This is a little awkward, but is primarily for protecting the deployed instances. 
 
 
 1. **Make changes** to the SQLAlchemy models in `packages/divbase-api/src/divbase_api/models/`
@@ -34,11 +37,13 @@ docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/d
 docker compose -f docker/divbase_compose.yaml exec -it fastapi sh 
 
 # Generate migration (use descriptive names)
-alembic revision --autogenerate -m "[write_your_useful_slug_here]"
+alembic revision --autogenerate -m "write_your_useful_slug_here"
 
 # Exit container
 exit
 ```
+
+**NOTE: If you've been using docker compose watch up to this point, it is expected that now the FastAPI service will be in a crashed state due to pending migrations.**
 
 3. **Review the generated migration** file in `packages/divbase-api/src/divbase_api/migrations/versions/` directory
    - The changes made in the container are automatically synced to your host machine.

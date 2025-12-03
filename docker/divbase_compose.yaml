@@ -153,11 +153,14 @@ services:
       dockerfile: docker/fastapi.dockerfile
     environment:
       - SYNC_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
-    command: ["alembic", "--config", "/usr/local/lib/python3.12/site-packages/divbase_api/alembic.ini", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     depends_on: 
       postgres:
         condition: service_healthy
     networks: *internal-network
+    volumes: # read only volumes to get any new migration files (otherwise have to rebuild image to get new migration scripts)
+      - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations:ro
+      - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini:ro
   fastapi:
     build:
       context: ..
@@ -175,7 +178,7 @@ services:
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
-    volumes: 
+    volumes:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
     healthcheck:
