@@ -216,51 +216,12 @@ def sample_metadata_query_task(
     )
 
     try:
-        s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
-
-        metadata_path = _download_sample_metadata(
-            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-        )
-
-        with SyncSessionLocal() as db:
-            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-        if not vcf_dimensions_data.get("vcf_files"):
-            return {
-                "status": "error",
-                "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
-                "type": "VCFDimensionsMissingError",
-                "task_id": task_id,
-            }
-
-        metadata_result = run_sidecar_metadata_query(
-            file=metadata_path,
-            filter_string=tsv_filter,
-            project_id=project_id,
-            vcf_dimensions_data=vcf_dimensions_data,
-        )
-
-        try:
-            os.remove(metadata_path)
-            logger.info(f"Deleted metadata file {metadata_path} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
-
-        result = dataclasses.asdict(metadata_result)
-        result["status"] = "completed"
-        result["task_id"] = task_id
-
-        logger.info(
-            f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
-            f"mapped to {len(metadata_result.unique_filenames)} VCF files"
-        )
-
-        return result
-
+        os.remove(metadata_path)
+        logger.info(f"Deleted metadata file {metadata_path} from worker.")
     except Exception as e:
         logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
 
-    # Convert to dict since celery serializes to JSON when sending back to API layer. Pydantic model serialization is not supported by celery
+    # Convert to dict since celery serializes to JSON when sending back to API layer
     result = metadata_result.model_dump()
     result["status"] = "completed"
     result["task_id"] = task_id
@@ -349,11 +310,9 @@ def bcftools_pipe_task(
         )
     )
 
-    try:
-        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
-    except Exception as e:
-        logger.error(f"Error in bcftools task: {str(e)}")
-        return {"status": "error", "error": str(e), "task_id": task_id}
+    # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
+    # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS¨.
+    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
