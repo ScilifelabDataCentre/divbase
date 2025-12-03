@@ -3,14 +3,17 @@ Handles connection between FastAPI and the postgresql db.
 """
 
 import logging
+from pathlib import Path
 from typing import AsyncGenerator
 
+from alembic import command
+from alembic.config import Config
+from alembic.util.exc import CommandError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from divbase_api.api_config import settings
 from divbase_api.crud.users import create_user, get_all_users
-from divbase_api.models.base import Base
 from divbase_api.schemas.users import UserCreate
 
 logger = logging.getLogger(__name__)
@@ -49,16 +52,34 @@ async def health_check_db() -> bool:
         return False
 
 
-async def create_all_tables() -> None:
-    """Create all tables in the db."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def check_db_migrations_up_to_date() -> None:
+    """
+    Checks if the DB is at HEAD (has applied all migrations) and raise an error if not.
+    """
+    alembic_config_path = Path(__file__).parent / "alembic.ini"
+    try:
+        alembic_cfg = Config(file_=alembic_config_path)
+        command.check(alembic_cfg)
 
+    except CommandError:
+        logger.error(
+            """
+            It seems like database migrations are pending. You need to run them before continuing.
 
-async def drop_all_tables() -> None:
-    """Drop all tables in the db."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+            - If you are doing local development:
+            Restarting the stack will automatically apply the migrations.
+            (Down and up the containers, compose watch does not cover this)
+            migrations are run in a docker init container
+
+            - If you are in production/deployed environments:
+            WARNING: Running migrations in a deployed environment is a dangerous operation. 
+            1. Scale down the API and worker replicas to 0. 
+            2. Run the migration job (ensure you take a database backup first).
+            3. Scale the services back up after the migration is complete.
+            Exiting...
+            """
+        )
+        raise
 
 
 async def create_first_admin_user() -> None:
