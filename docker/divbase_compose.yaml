@@ -162,6 +162,9 @@ services:
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
+    volumes: 
+      - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
+      - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 5s
@@ -175,6 +178,7 @@ services:
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=redis://redis:6379/0
     - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+    - SYNC_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db # TODO same as worker, needs clean up at end. 
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
