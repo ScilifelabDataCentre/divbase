@@ -54,6 +54,7 @@ app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     result_extended=True,
+    timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
     # let celery auto-create db tables
     database_table_names={
         "task": "celery_taskmeta",
@@ -681,3 +682,8 @@ def _check_that_file_versions_match_dimensions_index(
                 "The VCF dimensions file is not up to date with the VCF files in the project. "
                 "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )
+
+
+# Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
+# Alternatively, the cron tasks could be defined in
+from divbase_api.worker import cron_tasks  # noqa: E402, F401
