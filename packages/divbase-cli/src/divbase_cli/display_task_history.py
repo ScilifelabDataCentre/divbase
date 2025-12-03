@@ -131,14 +131,22 @@ class TaskHistoryDisplayManager:
         Format the result message based on the task state and type.
         """
         colour = self.STATE_COLOURS.get(state, "white")
+
         if state == "FAILURE":
-            exception_message = task.exception or "Unknown error"
-            return f"[{colour}]{exception_message}[/{colour}]"
+            if isinstance(task.result, dict):
+                error_msg = (
+                    task.result.get("error")
+                    or task.result.get("exc_message")
+                    or task.result.get("exc_type")
+                    or "Unknown error"
+                )
+            else:
+                error_msg = task.exception or str(task.result) or "Unknown error"
+            return f"[{colour}]{error_msg}[/{colour}]"
 
         if isinstance(task.result, BcftoolsQueryTaskResult):
             result_message = f"Output file ready for download: {task.result.output_file}"
             return f"[{colour}]{result_message}[/{colour}]"
-            # TODO this should maybe say which project?
 
         elif isinstance(task.result, SampleMetadataQueryTaskResult):
             result_message = (
@@ -155,6 +163,10 @@ class TaskHistoryDisplayManager:
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
             return f"[{colour}]{result_message}[/{colour}]"
+
+        if isinstance(task.result, dict) and ("exc_type" in task.result or "error" in task.result):
+            error_msg = task.result.get("error") or task.result.get("exc_message") or str(task.result)
+            return f"[{colour}]{error_msg}[/{colour}]"
 
         result_message = str(task.result)
         return f"[{colour}]{result_message}[/{colour}]"

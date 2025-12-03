@@ -30,9 +30,15 @@ class TaskHistoryResult(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     runtime: Optional[float] = None
-    result: Optional[Union[BcftoolsQueryTaskResult, SampleMetadataQueryTaskResult, DimensionUpdateTaskResult, str]] = (
-        None
-    )
+    result: Optional[
+        Union[
+            BcftoolsQueryTaskResult,
+            SampleMetadataQueryTaskResult,
+            DimensionUpdateTaskResult,
+            dict[str, Any],  # For error results
+            str,
+        ]
+    ] = None
     date_done: Optional[datetime] = None
     name: Optional[str] = None
     args: Optional[str] = None

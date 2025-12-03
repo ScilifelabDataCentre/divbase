@@ -71,18 +71,24 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to decode JSON result for task {task.get('task_id')}: {e}")
 
+    is_error_result = isinstance(result_data, dict) and (
+        "exc_type" in result_data or "exc_message" in result_data or result_data.get("status") == "error"
+    )
+
     parsed_result = result_data
     parsed_kwargs = kwargs
     task_name = task.get("name")
 
-    if task_name == "tasks.sample_metadata_query":
-        parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
-        parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
-    elif task_name == "tasks.bcftools_query":
-        parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
-        parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
-    elif task_name == "tasks.update_vcf_dimensions_task":
-        parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
+    # Only parse into Pydantic models if it's NOT an error result
+    if not is_error_result:
+        if task_name == "tasks.sample_metadata_query":
+            parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
+            parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
+        elif task_name == "tasks.bcftools_query":
+            parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
+            parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
+        elif task_name == "tasks.update_vcf_dimensions_task":
+            parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
 
     args_as_str = json.dumps(args) if isinstance(args, list) else str(args)
 
