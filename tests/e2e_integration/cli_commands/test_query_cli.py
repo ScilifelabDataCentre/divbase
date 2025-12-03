@@ -190,46 +190,40 @@ def test_bcftools_pipe_query_errors(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
 ):
-    """
-    Test bad formatted input raises errors
-
-    TODO - these sorts of errors in the future should be handled by the API, and not sent to Celery.
-    This test will need to be rewritten then, hence why it is quite sloppy now.
-    """
+    """Test that validation errors cause task FAILURE status."""
     if "DEFAULT" in project_name:
         project_name = CONSTANTS["QUERY_PROJECT"]
     if "DEFAULT" in tsv_filter:
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
+
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
-    response = runner.invoke(app, command)
+    command_str = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+    response = runner.invoke(app, command_str)
 
+    assert response.exit_code == 0
     task_id = response.stdout.strip().split()[-1]
     result = wait_for_task_complete(task_id=task_id)
 
     assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
 
-    if isinstance(result.result, dict):
-        error_msg = str(result.result.get("error", ""))
-        exc_type = str(result.result.get("exc_type", ""))
-        exc_message = str(result.result.get("exc_message", ""))
+    assert isinstance(result.result, dict), "Expected error result to be a dict"
 
-        full_error_msg = f"{error_msg} {exc_type} {exc_message}"
+    # Celery stores exceptions with these fields
+    exc_type = str(result.result.get("exc_type", ""))
+    exc_message = str(result.result.get("exc_message", ""))
 
-        assert expected_error in full_error_msg, (
-            f"Expected '{expected_error}' in error message, but got:\n"
-            f"  error: {error_msg}\n"
-            f"  exc_type: {exc_type}\n"
-            f"  exc_message: {exc_message}\n"
-            f"  full result: {result.result}"
-        )
-    else:
-        assert expected_error in str(result.result), f"Expected '{expected_error}' in result, got: {result.result}"
+    full_error = f"{exc_type} {exc_message}"
+    assert expected_error in full_error, (
+        f"Expected '{expected_error}' in error, got:\n"
+        f"  exc_type: {exc_type}\n"
+        f"  exc_message: {exc_message}\n"
+        f"  full result: {result.result}"
+    )
 
 
 def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
