@@ -52,7 +52,6 @@ app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Celery results backend config
 app.conf.update(
-    # result_expires=2592000,  # 30 days in seconds TODO add back in with celery beat
     task_track_started=True,
     task_serializer="json",
     accept_content=["json"],
