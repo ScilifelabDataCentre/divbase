@@ -101,7 +101,10 @@ async def create_first_admin_user() -> None:
 async def create_cronjob_user() -> None:
     """
     Create a system user for Beat-scheduled tasks if it doesn't exist.
-    This user owns all automated/cron tasks.
+    This user owns all automated/cron tasks for the sake of audit trails.
+
+    Should not have admin privileges since it does not submit tasks via the API.
+    The account is deactivated (cronjob_user.is_active = False) after creation to prevent login.
     """
 
     cronjob_user_email = settings.api.cronjob_user_email
@@ -129,8 +132,11 @@ async def create_cronjob_user() -> None:
         cronjob_user = await create_user(
             db=db,
             user_data=user_info,
-            is_admin=True,  # Give admin privileges for accessing all projects
+            is_admin=False,
             email_verified=True,
         )
 
+        cronjob_user.is_active = False
+        await db.commit()
+        await db.refresh(cronjob_user)
         logger.info(f"Created cronjob user with id: {cronjob_user.id}")
