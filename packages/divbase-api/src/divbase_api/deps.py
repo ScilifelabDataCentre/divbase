@@ -64,11 +64,11 @@ async def _authenticate_frontend_user_from_tokens(
         return None
 
     if response:
-        new_access_token, expires_at = create_token(subject=user.id, token_type=TokenType.ACCESS)
+        new_token_data = create_token(subject=user.id, token_type=TokenType.ACCESS)
         response.set_cookie(
             key=TokenType.ACCESS.value,
-            value=new_access_token,
-            expires=expires_at,
+            value=new_token_data.token,
+            expires=new_token_data.expires_at,
             httponly=True,
             secure=True,
             samesite="lax",

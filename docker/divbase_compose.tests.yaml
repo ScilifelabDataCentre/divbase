@@ -27,6 +27,8 @@ services:
     ports: !override
       - 8001:8000
     environment:
+      - DIVBASE_ENV=test
+      - FRONTEND_BASE_URL=http://localhost:8001
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
       - S3_PRESIGNING_URL=http://localhost:9002
   postgres:

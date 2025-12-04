@@ -8,11 +8,12 @@ from datetime import datetime, timezone
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.revoked_tokens import token_is_revoked
 from divbase_api.crud.users import get_user_by_email, get_user_by_id, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserPasswordUpdate
-from divbase_api.security import TokenType, get_password_hash, verify_password, verify_refresh_token, verify_token
+from divbase_api.security import TokenType, get_password_hash, verify_password, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,12 @@ async def verify_user_from_access_token(db: AsyncSession, token: str) -> UserDB 
 
     Returns None if verification fails.
     """
-    user_id = verify_token(token=token, desired_token_type=TokenType.ACCESS)
-    if not user_id:
+    token_data = verify_token(token=token, desired_token_type=TokenType.ACCESS)
+    if not token_data:
         return None
-    user = await get_user_by_id(db=db, id=user_id)
+    user = await get_user_by_id(db=db, id=token_data.user_id)
     if not user:
-        logger.warning(f"A valid access token was used for a non-existent user with id: {user_id}.")
+        logger.warning(f"A valid access token was used for a non-existent user with id: {token_data.user_id}.")
         return None
     return user
 
@@ -67,21 +68,26 @@ async def verify_user_from_refresh_token(db: AsyncSession, token: str) -> UserDB
 
     As a refresh token is long lived (compared to access tokens), we add extra validation checks here.
     """
-    result = verify_refresh_token(token=token)
-    if not result:
+    token_data = verify_token(token=token, desired_token_type=TokenType.REFRESH)
+    if not token_data:
         return None
-    user_id, token_iat = result
 
-    user = await get_user_by_id(db=db, id=user_id)
+    user = await get_user_by_id(db=db, id=token_data.user_id)
     if not user:
-        logger.warning(f"A valid refresh token was used for a non-existent user with id: {user_id}.")
+        logger.warning(f"A valid refresh token was used for a non-existent user with id: {token_data.user_id}.")
         return None
     if not user_account_valid(user):
         logger.warning(f"Attempt to use refresh token for invalid user account: {user.email} (id: {user.id})")
         return None
-    if user.last_password_change and token_iat < user.last_password_change:
+    if user.last_password_change and token_data.issued_at < user.last_password_change:
         logger.info(
             f"Refresh token issued before last password change for user: {user.email} (id: {user.id}). Rejecting token."
+        )
+        return None
+
+    if await token_is_revoked(db=db, token_jti=token_data.jti):
+        logger.warning(
+            f"Attempt to use revoked refresh token with jti: {token_data.jti} for user id: {token_data.user_id}"
         )
         return None
     return user

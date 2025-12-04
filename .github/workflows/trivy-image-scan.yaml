@@ -1,0 +1,38 @@
+name: Run trivy image scan whenever new images are built and published to GHCR
+on:
+  workflow_run:
+    workflows: ["Build and Push images to GitHub Container Registry"]
+    types:
+      - completed
+  schedule:
+    - cron: '15 5 * * 3' # runs at 5:15 AM every Wednesday
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        image-name: [divbase-fastapi, divbase-worker]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "image"
+          image-ref: ghcr.io/scilifelabdatacentre/${{ matrix.image-name }}:latest
+          ignore-unfixed: true
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: trivy
