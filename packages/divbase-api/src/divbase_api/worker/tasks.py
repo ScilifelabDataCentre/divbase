@@ -243,7 +243,6 @@ def sample_metadata_query_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
-    user_name: str,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
@@ -294,7 +293,6 @@ def bcftools_pipe_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
-    user_name: str,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -369,11 +367,15 @@ def bcftools_pipe_task(
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    return {"status": "completed", "output_file": output_file, "submitter": user_name}
+    return {"status": "completed", "output_file": output_file}
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str, project_name: str) -> dict:
+def update_vcf_dimensions_task(
+    bucket_name: str,
+    project_id: int,
+    project_name: str,
+) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
     """
@@ -492,7 +494,6 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
 
     result = DimensionUpdateTaskResult(
         status="completed",
-        submitter=user_name,
         VCF_files_added=files_indexed_by_this_job,
         VCF_files_skipped=divbase_results_files_skipped_by_this_job,
         VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
