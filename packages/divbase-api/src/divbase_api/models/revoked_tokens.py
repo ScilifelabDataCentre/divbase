@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from divbase_api.models.base import BaseDBModel
@@ -45,7 +45,7 @@ class RevokedTokenDB(BaseDBModel):
     token_jti: Mapped[str] = mapped_column(String(36), index=True, unique=True)  # UUIDv4 string
     token_type: Mapped[TokenType] = mapped_column(index=True)
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    revoked_reason: Mapped[TokenRevokeReason] = mapped_column()
+    revoked_reason: Mapped[TokenRevokeReason] = mapped_column(Enum(TokenRevokeReason))
 
     user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=True)
     user: Mapped["UserDB | None"] = relationship("UserDB", back_populates="revoked_tokens")
