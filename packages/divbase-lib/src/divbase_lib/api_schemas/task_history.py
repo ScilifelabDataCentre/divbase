@@ -24,6 +24,7 @@ class TaskHistoryResult(BaseModel):
     uuid: str
     user_id: Optional[int] = None
     project_id: Optional[int] = None
+    submitter_email: str
     status: Optional[str] = None
     created_at: datetime
     started_at: Optional[datetime] = None

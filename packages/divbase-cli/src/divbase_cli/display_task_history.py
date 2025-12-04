@@ -57,7 +57,7 @@ class TaskHistoryDisplayManager:
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = self._get_submitter_from_task_kwargs(task)
+            submitter = task.submitter_email or "Unknown"
             result = self._format_result(task, state)
 
             table.add_row(
@@ -120,21 +120,6 @@ class TaskHistoryDisplayManager:
         table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
-
-    def _get_submitter_from_task_kwargs(self, task):
-        """
-        Extract submitter from task kwargs.
-        """
-        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookup in the task_history db table would maybe make more sense?
-        kwargs = task.kwargs
-        if kwargs is None:
-            return "Unknown"
-        user_name = getattr(kwargs, "user_name", None)
-        if user_name:
-            return user_name
-        if isinstance(kwargs, dict):
-            return kwargs.get("user_name", "Unknown")
-        return "Unknown"
 
     def _format_result(self, task, state):
         """

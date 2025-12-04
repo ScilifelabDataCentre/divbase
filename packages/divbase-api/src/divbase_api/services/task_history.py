@@ -100,6 +100,7 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
 
     return {
         "uuid": task.get("task_id"),
+        "submitter_email": task.get("submitter_email"),
         "status": task.get("status"),
         "result": parsed_result,
         "date_done": task.get("date_done").isoformat() if task.get("date_done") else None,

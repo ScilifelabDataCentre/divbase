@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
+from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,17 @@ async def get_tasks_pg(
 
     Note: Packing of results into a pydantic model happens in during deserialization in the service layer.
     """
-    stmt = select(
-        *CeleryTaskMeta.__table__.c,
-        TaskHistoryDB.created_at,
-        TaskHistoryDB.started_at,
-        TaskHistoryDB.completed_at,
-    ).join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+    stmt = (
+        select(
+            *CeleryTaskMeta.__table__.c,
+            TaskHistoryDB.created_at,
+            TaskHistoryDB.started_at,
+            TaskHistoryDB.completed_at,
+            UserDB.email.label("submitter_email"),
+        )
+        .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
+    )
 
     if not include_system_tasks:
         stmt = stmt.where(TaskHistoryDB.project_id.is_not(None))
