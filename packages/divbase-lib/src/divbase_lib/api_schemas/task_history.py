@@ -2,7 +2,6 @@
 Schemas for task history routes.
 """
 
-from datetime import datetime
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -13,7 +12,7 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryKwargs,
     SampleMetadataQueryTaskResult,
 )
-from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
+from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 
 
 class TaskHistoryResult(BaseModel):
@@ -22,30 +21,32 @@ class TaskHistoryResult(BaseModel):
     """
 
     uuid: str
-    user_id: Optional[int] = None
-    project_id: Optional[int] = None
-    submitter_email: str
+    submitter_email: Optional[str] = None
     status: Optional[str] = None
-    created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    runtime: Optional[float] = None
     result: Optional[
         Union[
-            BcftoolsQueryTaskResult,
+            dict[
+                str, Any
+            ],  # Note! This dict must come first here so that error results are preserved and not incorrectly inserted into the result models
             SampleMetadataQueryTaskResult,
+            BcftoolsQueryTaskResult,
             DimensionUpdateTaskResult,
-            dict[str, Any],  # For error results
-            str,
         ]
     ] = None
-    date_done: Optional[datetime] = None
+    date_done: Optional[str] = None
     name: Optional[str] = None
     args: Optional[str] = None
-    kwargs: Optional[Union[SampleMetadataQueryKwargs, BcftoolsQueryKwargs, DimensionUpdateKwargs, dict[str, Any]]] = (
-        None
-    )
+    kwargs: Optional[
+        Union[
+            SampleMetadataQueryKwargs,
+            BcftoolsQueryKwargs,
+        ]
+    ] = None
     worker: Optional[str] = None
+    created_at: Optional[float] = None
+    started_at: Optional[float] = None
+    completed_at: Optional[float] = None
+    runtime: Optional[float] = None
 
 
 # TODO consider if traceback: Optional[str] = None;     retries: Optional[int] = None;     queue: Optional[str] = None would be relevant?
