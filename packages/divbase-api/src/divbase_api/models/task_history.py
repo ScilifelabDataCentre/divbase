@@ -64,7 +64,7 @@ class TaskHistoryDB(BaseDBModel):
     def runtime_seconds(self) -> float | None:
         """
         Calculate runtime in seconds from started_at and completed_at.
-        This is for the admin panel. The deserizliser calculates this for the task_history CLI seperatelly
+        This is for the admin panel. The deserializer calculates this for the task_history CLI separately
         since property cannot be directly used in the CRUD query.
         """
         if self.started_at and self.completed_at:

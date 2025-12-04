@@ -447,7 +447,7 @@ class CeleryTaskMetaView(ModelView):
         Override to deserialize Celery's binary fields for display.
         Reuses the existing _deserialize_celery_task_metadata function from the task_history service layer.
 
-        NOTE! serialize_field_value is a function in starlett-admin, so for the override to work, it cannot be renamed
+        NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
         """
         # For non-bytes values or fields we don't need to deserialize, use default behavior
         if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:

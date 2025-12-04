@@ -128,14 +128,14 @@ app.conf.beat_schedule = {
         "task": "cron_tasks.cleanup_old_task_history",
         "schedule": crontab(
             hour=5, minute=0
-        ),  # Run daily at 5 AM CET (timezone define in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        ),  # Run daily at 5 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
         "kwargs": {"retention_days": TASK_RETENTION_DAYS},
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",
         "schedule": crontab(
             hour=5, minute=15
-        ),  # Run daily at 5:15 AM CET (timezone define in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        ),  # Run daily at 5:15 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
         "kwargs": {
             "stuck_pending_hours": STUCK_PENDING_STATUS_HOURS,
             "stuck_started_hours": STUCK_STARTED_STATUS_HOURS,
