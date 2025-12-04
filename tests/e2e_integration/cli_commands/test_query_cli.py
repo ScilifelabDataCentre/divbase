@@ -182,8 +182,6 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
-# ...existing code...
-
 def test_bcftools_pipe_query_errors(
     run_update_dimensions,
     db_session_sync,
@@ -250,13 +248,22 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
     assert second_task_result.exit_code == 0
     second_task_id = second_task_result.stdout.strip().split()[-1]
 
-    # Query the PostgreSQL results backend directly
+    max_retries = 10
+    retry_delay = 0.5
+
     with SyncSessionLocal() as db:
         for task_id in [first_task_id, second_task_id]:
-            stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == task_id)
-            result = db.execute(stmt).scalar_one_or_none()
+            result = None
+            for _ in range(max_retries):
+                stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == task_id)
+                result = db.execute(stmt).scalar_one_or_none()
 
-            assert result is not None, f"Task {task_id} not found in results backend"
+                if result is not None:
+                    break
+
+                time.sleep(retry_delay)
+
+            assert result is not None, f"Task {task_id} not found in results backend after {max_retries} retries"
             assert result.task_id == task_id
             assert result.status in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
 

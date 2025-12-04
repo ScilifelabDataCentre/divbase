@@ -12,7 +12,7 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryKwargs,
     SampleMetadataQueryTaskResult,
 )
-from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
+from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
 
 
 class TaskHistoryResult(BaseModel):
@@ -40,6 +40,7 @@ class TaskHistoryResult(BaseModel):
         Union[
             SampleMetadataQueryKwargs,
             BcftoolsQueryKwargs,
+            DimensionUpdateKwargs,
         ]
     ] = None
     worker: Optional[str] = None
