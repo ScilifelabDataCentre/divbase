@@ -19,7 +19,7 @@ dependencies = [
     "flower>=2.0.0,<3",
     "divbase-lib",
     "psycopg[binary]>=3.2.12,<4",
-
+    "alembic>=1.17.2,<2",
 ]
 
 [build-system]
