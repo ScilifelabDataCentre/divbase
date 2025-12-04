@@ -39,7 +39,7 @@ services:
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
-      - WORKER_DATABASE_URL=postgresql+psycopg://divbase_user:badpassword@postgres:5432/divbase_db
+      - WORKER_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account

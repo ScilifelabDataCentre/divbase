@@ -16,8 +16,7 @@ dependencies = [
     "jinja2>=3.1.6,<4",
     "celery>=5.5.3,<6",
     "divbase-lib",
-    "psycopg[binary]>=3.2.12,<4", # For worker tasks (sync SQLAlchemy)
-    "psycopg2-binary >= 2.9.11,<3"   # For Celery result backend
+    "psycopg2-binary >= 2.9.11,<3" 
 ]
 
 [build-system]
