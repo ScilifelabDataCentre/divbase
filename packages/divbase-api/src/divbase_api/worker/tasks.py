@@ -91,6 +91,8 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
         return {"queue": "quick"}
     if name == "tasks.bcftools_query":
         return {"queue": "long"}
+    if name == "tasks.update_vcf_dimensions_task":
+        return {"queue": "long"}  # can take minutes for large VCF files
     return {"queue": "celery"}
 
 
