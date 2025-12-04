@@ -140,7 +140,7 @@ class TaskHistoryDisplayManager:
                     exc_type = task.result.get("exc_type")
                     error_msg = exc_type if exc_type else "Unknown error"
             else:
-                error_msg = task.exception or str(task.result) or "Unknown error"
+                error_msg = str(task.result) or "Unknown error"
 
             return f"[{colour}]{error_msg}[/{colour}]"
 

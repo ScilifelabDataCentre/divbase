@@ -50,9 +50,7 @@ def test_bcftools_pipe_task_with_real_worker(
     task_id = async_result.id
     task_result = wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
-    user_name = bcftools_pipe_kwargs_fixture.get("user_name")
     assert task_result["status"] == "completed"
-    assert task_result["submitter"] == user_name
     assert task_result["output_file"].startswith("merged_") and task_result["output_file"].endswith(".vcf.gz")
 
 

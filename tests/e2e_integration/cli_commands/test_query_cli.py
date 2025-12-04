@@ -23,6 +23,7 @@ from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
+from divbase_api.models.users import UserDB
 from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
@@ -55,8 +56,10 @@ def wait_for_task_complete(task_id: str, max_retries: int = 30) -> TaskHistoryRe
                     TaskHistoryDB.created_at,
                     TaskHistoryDB.started_at,
                     TaskHistoryDB.completed_at,
+                    UserDB.email.label("submitter_email"),
                 )
                 .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
                 .where(CeleryTaskMeta.task_id == task_id)
             )
 
@@ -74,10 +77,10 @@ def wait_for_task_complete(task_id: str, max_retries: int = 30) -> TaskHistoryRe
                 deserialized = _deserialize_celery_task_metadata(task_dict)
                 return TaskHistoryResult(**deserialized)
 
-        time.sleep(1)
-        max_retries -= 1
+            time.sleep(1)
+            max_retries -= 1
 
-    pytest.fail(f"Task {task_id} didn't complete within timeout period")
+    raise TimeoutError(f"Task {task_id} did not complete within the expected time")
 
 
 @pytest.fixture(autouse=True)
@@ -179,6 +182,8 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
         ("DEFAULT", "DEFAULT", "", "Empty"),
     ],
 )
+# ...existing code...
+
 def test_bcftools_pipe_query_errors(
     run_update_dimensions,
     db_session_sync,
@@ -211,19 +216,20 @@ def test_bcftools_pipe_query_errors(
 
     assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
 
-    assert isinstance(result.result, dict), "Expected error result to be a dict"
+    # For failed tasks, result is a dict with exception info
+    full_error = ""
+    if isinstance(result.result, dict):
+        exc_type = str(result.result.get("exc_type", ""))
+        exc_message_list = result.result.get("exc_message", [])
+        if isinstance(exc_message_list, list):
+            exc_message = " ".join(str(msg) for msg in exc_message_list)
+        else:
+            exc_message = str(exc_message_list)
+        full_error = f"{exc_type} {exc_message}"
+    else:
+        full_error = str(result.result)
 
-    # Celery stores exceptions with these fields
-    exc_type = str(result.result.get("exc_type", ""))
-    exc_message = str(result.result.get("exc_message", ""))
-
-    full_error = f"{exc_type} {exc_message}"
-    assert expected_error in full_error, (
-        f"Expected '{expected_error}' in error, got:\n"
-        f"  exc_type: {exc_type}\n"
-        f"  exc_message: {exc_message}\n"
-        f"  full result: {result.result}"
-    )
+    assert expected_error in full_error, f"Expected '{expected_error}' in error message, but got: {full_error}"
 
 
 def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
@@ -311,7 +317,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "command": "view -s SAMPLES; view -r 1,4,6,21,24",
             "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
             "bucket_name": bucket_name,
-            "user_name": "test-user",
             "project_id": project_id,
             "project_name": project_name,
         }
@@ -334,7 +339,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
             },
             False,
             False,
@@ -350,7 +354,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
             },
             True,
             True,
@@ -372,7 +375,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 31,34,36,321,324",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
             False,
@@ -391,7 +393,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
             True,
@@ -419,7 +420,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 21:15000000-25000000",
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "project_name": "query-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
             True,
@@ -444,7 +444,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
             True,
@@ -474,7 +473,6 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
             },
             True,

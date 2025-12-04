@@ -23,7 +23,7 @@ def all_users_tasks_submitted(
     manage_user_query_project_only_with_submitted_tasks,
 ):
     """
-    Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It waits for the other fixtures to complete = have reached their yield statement.
+    Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It wait_for_tasks for the other fixtures to complete = have reached their yield statement.
     Together with the fixtures below, this results in two tasks being submitted per user. The tests in this module will then make tests based on these submitted tasks and which user they belong to.
     Since it is autouse, it will run before any tests in this module.
     """
@@ -168,7 +168,7 @@ def submitted_task_ids(all_users_tasks_submitted, CONSTANTS, logged_in_admin_for
 
     task_ids_by_user = {}
     for task_id, task_result in captured_manager.task_items.items():
-        user_email = task_result.kwargs.user_name
+        user_email = task_result.submitter_email
         if user_email not in task_ids_by_user:
             task_ids_by_user[user_email] = []
         task_ids_by_user[user_email].append(task_id)
@@ -187,7 +187,7 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
 
     assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
 
-    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    user_emails = {task.submitter_email for task in captured_manager.task_items.values()}
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] not in user_emails
@@ -204,7 +204,7 @@ def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_exi
 
     assert captured_manager.user_name == CONSTANTS["ADMIN_CREDENTIALS"]["email"]
 
-    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    user_emails = {task.submitter_email for task in captured_manager.task_items.values()}
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
@@ -222,7 +222,7 @@ def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in
 
     assert captured_manager.project_name == project_name
 
-    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    user_emails = {task.submitter_email for task in captured_manager.task_items.values()}
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
@@ -244,7 +244,7 @@ def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
     assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
     assert captured_manager.project_name == project_name
 
-    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    user_emails = {task.submitter_email for task in captured_manager.task_items.values()}
     task_projects = {task.kwargs.project_name for task in captured_manager.task_items.values()}
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
@@ -302,7 +302,7 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
 
     assert captured_manager.project_name == project_name
 
-    user_emails = {task.kwargs.user_name for task in captured_manager.task_items.values()}
+    user_emails = {task.submitter_email for task in captured_manager.task_items.values()}
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
@@ -362,7 +362,7 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
         captured_manager = get_manager()
 
     assert captured_manager.task_id == edit_user_task_id
-    assert captured_manager.task_items[edit_user_task_id].kwargs.user_name == submitting_user
+    assert captured_manager.task_items[edit_user_task_id].submitter_email == submitting_user
 
     result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
     assert result_history.exit_code == 1
