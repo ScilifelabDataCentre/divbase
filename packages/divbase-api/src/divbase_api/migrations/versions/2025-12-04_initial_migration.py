@@ -1,8 +1,8 @@
 """initial_migration
 
-Revision ID: c7060f86aa37
+Revision ID: c5a18386f0b6
 Revises:
-Create Date: 2025-12-03 10:53:35.032982
+Create Date: 2025-12-04 10:12:56.046720
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "c7060f86aa37"
+revision: str = "c5a18386f0b6"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -203,3 +203,10 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_project_bucket_name"), table_name="project")
     op.drop_table("project")
     # ### end Alembic commands ###
+
+    # Human added, explicitly drop enums
+    # see https://github.com/sqlalchemy/alembic/issues/886
+    op.execute("DROP TYPE IF EXISTS projectroles")
+    op.execute("DROP TYPE IF EXISTS tokentype")
+    op.execute("DROP TYPE IF EXISTS tokenrevokereason")
+    op.execute("DROP TYPE IF EXISTS taskstatus")
