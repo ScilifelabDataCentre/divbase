@@ -20,6 +20,7 @@ from starlette_admin import (
     BooleanField,
     DateTimeField,
     EmailField,
+    FloatField,
     HasOne,
     IntegerField,
     StringField,
@@ -344,14 +345,18 @@ class TaskHistoryView(ModelView):
         DateTimeField("created_at", label="Created At", disabled=True),
         DateTimeField("started_at", label="Started At", disabled=True),
         DateTimeField("completed_at", label="Completed At", disabled=True),
+        FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
     ]
 
     exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
-        Overide to render the celery status field in upper case.
+        Overide to format how values are displayed in the view.
         """
+        if field.name == "runtime_seconds" and value is not None:
+            return f"{value:.2f}"
+
         if field.name == "status" and isinstance(value, str):
             return value.upper()
         return await super().serialize_field_value(value, field, action, request)

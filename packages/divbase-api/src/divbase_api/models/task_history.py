@@ -60,6 +60,17 @@ class TaskHistoryDB(BaseDBModel):
         viewonly=True,  # Read-only since we don't manage CeleryTaskMeta directly, it is initiated and updated by Celery
     )
 
+    @property
+    def runtime_seconds(self) -> float | None:
+        """
+        Calculate runtime in seconds from started_at and completed_at.
+        This is for the admin panel. The deserizliser calculates this for the task_history CLI seperatelly
+        since property cannot be directly used in the CRUD query.
+        """
+        if self.started_at and self.completed_at:
+            return (self.completed_at - self.started_at).total_seconds()
+        return None
+
 
 class CeleryTaskMeta(Base):
     """
