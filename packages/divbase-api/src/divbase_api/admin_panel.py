@@ -394,7 +394,7 @@ class TaskHistoryView(ModelView):
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
-        Overide to format how values are displayed in the view.
+        Override to format how values are displayed in the view.
         """
         if field.name == "runtime_seconds" and value is not None:
             return f"{value:.2f}"

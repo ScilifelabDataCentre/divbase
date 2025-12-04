@@ -23,7 +23,7 @@ def all_users_tasks_submitted(
     manage_user_query_project_only_with_submitted_tasks,
 ):
     """
-    Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It wait_for_tasks for the other fixtures to complete = have reached their yield statement.
+    Ensure all users in the args of this fixture have logged in and submitted tasks before any test runs. It waits for tasks for the other fixtures to complete = have reached their yield statement.
     Together with the fixtures below, this results in two tasks being submitted per user. The tests in this module will then make tests based on these submitted tasks and which user they belong to.
     Since it is autouse, it will run before any tests in this module.
     """
