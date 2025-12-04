@@ -273,9 +273,21 @@ class RevokedTokenView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = []
-    exclude_fields_from_create = ["id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at", "revoked_reason"]
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("token_jti", label="Token JTI", required=True),
+        StringField("token_type", label="Token Type", required=True),
+        DateTimeField("revoked_at", label="Revoked At", disabled=True),
+        StringField("revoked_reason", label="Revoked Reason", required=True),
+        IntegerField("user_id", label="User ID", required=False),
+        HasOne("user", identity="user", label="User"),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
+    exclude_fields_from_list = ["user_id"]
+    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
+    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
