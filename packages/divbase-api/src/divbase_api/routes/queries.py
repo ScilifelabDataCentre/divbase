@@ -63,7 +63,6 @@ async def sample_metadata_query(
         metadata_tsv_name=sample_metadata_query_request.metadata_tsv_name,
         bucket_name=project.bucket_name,
         project_id=project.id,
-        user_name=current_user.email,
         project_name=project.name,
     )
 
@@ -114,7 +113,6 @@ async def create_bcftools_jobs(
         metadata_tsv_name=bcftools_query_request.metadata_tsv_name,
         bucket_name=project.bucket_name,
         project_id=project.id,
-        user_name=current_user.email,
         project_name=project.name,
     )
 

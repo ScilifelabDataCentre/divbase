@@ -37,8 +37,6 @@ jobs:
         include:
           - dockerfile: fastapi.dockerfile
             image_name: divbase-fastapi
-          - dockerfile: flower.dockerfile
-            image_name: divbase-flower
           - dockerfile: worker.dockerfile
             image_name: divbase-worker
             

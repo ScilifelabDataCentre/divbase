@@ -88,7 +88,6 @@ async def update_vcf_dimensions_endpoint(
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,
         project_id=project.id,
-        user_name=current_user.email,
         project_name=project.name,
     )
 

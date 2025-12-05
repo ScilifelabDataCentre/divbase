@@ -5,6 +5,7 @@ The views created for each model rely on overriding some of the default behavior
 These overrides are on methods inside BaseModelView (parent of ModelView, which each custom class is inheriting from).
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -14,7 +15,18 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
-from starlette_admin import BaseAdmin, BooleanField, DateTimeField, EmailField, IntegerField, StringField, TextAreaField
+from starlette_admin import (
+    BaseAdmin,
+    BooleanField,
+    DateTimeField,
+    EmailField,
+    FloatField,
+    HasOne,
+    IntegerField,
+    StringField,
+    TextAreaField,
+)
+from starlette_admin._types import RequestAction
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError
@@ -24,8 +36,10 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
+from divbase_api.services.task_history import _deserialize_celery_task_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +233,15 @@ class ProjectMembershipView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        HasOne("user", identity="user", label="User"),
+        HasOne("project", identity="project", label="Project"),
+        StringField("role", label="Role", required=True),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
     exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
@@ -248,9 +271,21 @@ class RevokedTokenView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = []
-    exclude_fields_from_create = ["id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at", "revoked_reason"]
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("token_jti", label="Token JTI", required=True),
+        StringField("token_type", label="Token Type", required=True),
+        DateTimeField("revoked_at", label="Revoked At", disabled=True),
+        StringField("revoked_reason", label="Revoked Reason", required=True),
+        IntegerField("user_id", label="User ID", required=False),
+        HasOne("user", identity="user", label="User"),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
+    exclude_fields_from_list = ["user_id"]
+    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
+    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
@@ -332,15 +367,129 @@ class DivBaseAuthProvider(AuthProvider):
         return AdminUser(username=user["name"], photo_url=None)
 
 
+class TaskHistoryView(ModelView):
+    """
+    Custom admin panel View for the TaskHistoryDB model.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields_default_sort = [("created_at", False)]  # False = descending, True = ascending
+    fields = [
+        StringField("task_id", label="Task UUID", disabled=True),
+        StringField("status", label="Status", disabled=True),
+        HasOne("user", identity="user", label="User"),
+        HasOne("project", identity="project", label="Project"),
+        HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("started_at", label="Started At", disabled=True),
+        DateTimeField("completed_at", label="Completed At", disabled=True),
+        FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
+    ]
+
+    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to format how values are displayed in the view.
+        """
+        if field.name == "runtime_seconds" and value is not None:
+            return f"{value:.2f}"
+
+        if field.name == "status" and isinstance(value, str):
+            return value.upper()
+        return await super().serialize_field_value(value, field, action, request)
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of task history entries."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Optionally disable editing if task history should be read-only."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Optionally disable deletion if task history should be immutable."""
+        return False
+
+
+class CeleryTaskMetaView(ModelView):
+    """
+    Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
+
+    Needs to be defined in order to display the entries in the admin panel, but is
+    intended to only be viewed as a child of TaskHistoryView
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id", label="Task UUID", disabled=True),
+        StringField("status", label="Celery Status", disabled=True),
+        StringField("name", label="Task Name", disabled=True),
+        StringField("worker", label="Worker", disabled=True),
+        StringField("queue", label="Queue", disabled=True),
+        IntegerField("retries", label="Retries", disabled=True),
+        DateTimeField("date_done", label="Date Done", disabled=True),
+        TextAreaField("args", label="Args", disabled=True),
+        TextAreaField("kwargs", label="Kwargs", disabled=True),
+        TextAreaField("result", label="Result", disabled=True),
+        TextAreaField("traceback", label="Traceback", disabled=True),
+    ]
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to deserialize Celery's binary fields for display.
+        Reuses the existing _deserialize_celery_task_metadata function from the task_history service layer.
+
+        NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
+        """
+        # For non-bytes values or fields we don't need to deserialize, use default behavior
+        if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
+            return await super().serialize_field_value(value, field, action, request)
+
+        # _deserialize_celery_task_metadata expects a full task dict, but we only need the specific field
+        task = {field.name: value}
+
+        try:
+            deserialized = _deserialize_celery_task_metadata(task)
+            field_value = deserialized.get(field.name)
+
+            # Format as JSON string for display in the admin panel
+            if isinstance(field_value, (dict, list)):
+                return json.dumps(field_value, indent=2, default=str)
+            return str(field_value) if field_value is not None else "<None>"
+        except Exception as e:
+            logger.warning(f"Failed to deserialize {field.name}: {e}")
+            return f"<Binary data: {len(value)} bytes>"
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Disable editing."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion."""
+        return False
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
     """
     admin = Admin(engine=engine, title="DivBase Admin", auth_provider=DivBaseAuthProvider())
 
-    admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users"))
-    admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects"))
+    admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
+    admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
     admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
+    admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
+    admin.add_view(
+        CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
+    )
 
     admin.mount_to(app)

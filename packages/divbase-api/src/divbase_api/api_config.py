@@ -34,15 +34,6 @@ class DBSettings:
 
 
 @dataclass
-class FlowerSettings:
-    """Flower configuration settings."""
-
-    user: str = os.getenv("FLOWER_USER", "NOT_SET")
-    password: SecretStr = SecretStr(os.getenv("FLOWER_PASSWORD", "NOT_SET"))
-    url: str = os.getenv("FLOWER_URL", "http://flower:5555")
-
-
-@dataclass
 class S3Settings:
     """
     S3 configuration settings.
@@ -121,7 +112,6 @@ class Settings:
 
     api: APISettings = field(default_factory=APISettings)
     database: DBSettings = field(default_factory=DBSettings)
-    flower: FlowerSettings = field(default_factory=FlowerSettings)
     s3: S3Settings = field(default_factory=S3Settings)
     jwt: JWTSettings = field(default_factory=JWTSettings)
     email: EmailSettings = field(default_factory=EmailSettings)
@@ -136,9 +126,6 @@ class Settings:
             "DIVBASE_ENV": self.api.environment,
             "FRONTEND_BASE_URL": self.api.frontend_base_url,
             "DATABASE_URL": self.database.url,
-            "FLOWER_URL": self.flower.url,
-            "FLOWER_USER": self.flower.user,
-            "FLOWER_PASSWORD": self.flower.password,
             "JWT_SECRET_KEY": self.jwt.secret_key,
             "S3_ENDPOINT_URL": self.s3.endpoint_url,
             "S3_PRESIGNING_URL": self.s3.presigning_url,

@@ -44,28 +44,28 @@ class TaskHistoryDisplayManager:
         self.display_limit = display_limit
 
     def print_task_history(self) -> None:
-        """Display the task history fetched from the Flower API in a formatted table."""
+        """Display the task history fetched from the results backend in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].received or "", reverse=True)
+        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].created_at or "", reverse=True)
         display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
 
         for task_id, task in limited_tasks:
-            state = task.state or "N/A"
+            state = task.status or "N/A"
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = self._get_submitter_from_task_kwargs(task)
+            submitter = task.submitter_email or "Unknown"
             result = self._format_result(task, state)
 
             table.add_row(
                 submitter,
                 task_id,
                 state_with_colour,
-                self._format_unix_timestamp(task.received),
-                self._format_unix_timestamp(task.started),
+                self._format_unix_timestamp(task.created_at),
+                self._format_unix_timestamp(task.started_at),
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
@@ -74,14 +74,24 @@ class TaskHistoryDisplayManager:
 
     def _format_unix_timestamp(self, timestamp):
         """
-        The flower task status API returns timestamps as integers or floats.
+        The results backend task status returns timestamps as integers or floats.
         This function formats them into a human-readable string.
         """
-        if isinstance(timestamp, (int, float)):
-            dt = datetime.datetime.fromtimestamp(timestamp)
-            local_timezone = datetime.datetime.now().astimezone().tzname()
-            return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {local_timezone}"
-        return str(timestamp)
+        if timestamp is None:
+            return "N/A"
+
+        if isinstance(timestamp, datetime.datetime):
+            dt = timestamp.replace(microsecond=0)
+        elif isinstance(timestamp, (int, float)):
+            dt = datetime.datetime.fromtimestamp(timestamp).replace(microsecond=0)
+        else:
+            return str(timestamp)
+
+        if dt.tzinfo is not None:
+            return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        else:
+            local_dt = dt.astimezone()
+            return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def _create_task_history_table(self):
         """
@@ -105,40 +115,38 @@ class TaskHistoryDisplayManager:
         table.add_column("Submitting user", width=12, overflow="fold")
         table.add_column("Task ID", style="cyan")
         table.add_column("State", width=8)
-        table.add_column("Received", style="yellow", width=19, overflow="fold")
-        table.add_column("Started", style="yellow", width=19, overflow="fold")
+        table.add_column("Created at", style="yellow", width=19, overflow="fold")
+        table.add_column("Started at", style="yellow", width=19, overflow="fold")
         table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
-
-    def _get_submitter_from_task_kwargs(self, task):
-        """
-        Extract submitter from task kwargs.
-        """
-        # TODO decide if there are better ways of getting the submitting user than from the task kwargs. a lookup in the task_history db table would maybe make more sense?
-        kwargs = task.kwargs
-        if kwargs is None:
-            return "Unknown"
-        user_name = getattr(kwargs, "user_name", None)
-        if user_name:
-            return user_name
-        if isinstance(kwargs, dict):
-            return kwargs.get("user_name", "Unknown")
-        return "Unknown"
 
     def _format_result(self, task, state):
         """
         Format the result message based on the task state and type.
         """
         colour = self.STATE_COLOURS.get(state, "white")
+
         if state == "FAILURE":
-            exception_message = task.exception or "Unknown error"
-            return f"[{colour}]{exception_message}[/{colour}]"
+            if isinstance(task.result, dict):
+                error_msg = task.result.get("error")
+                if not error_msg:
+                    exc_message = task.result.get("exc_message")
+                    if isinstance(exc_message, list) and exc_message:
+                        error_msg = " ".join(str(msg) for msg in exc_message)
+                    elif exc_message:
+                        error_msg = str(exc_message)
+                if not error_msg:
+                    exc_type = task.result.get("exc_type")
+                    error_msg = exc_type if exc_type else "Unknown error"
+            else:
+                error_msg = str(task.result) or "Unknown error"
+
+            return f"[{colour}]{error_msg}[/{colour}]"
 
         if isinstance(task.result, BcftoolsQueryTaskResult):
             result_message = f"Output file ready for download: {task.result.output_file}"
             return f"[{colour}]{result_message}[/{colour}]"
-            # TODO this should maybe say which project?
 
         elif isinstance(task.result, SampleMetadataQueryTaskResult):
             result_message = (
@@ -155,6 +163,19 @@ class TaskHistoryDisplayManager:
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
             return f"[{colour}]{result_message}[/{colour}]"
+
+        if isinstance(task.result, dict) and ("exc_type" in task.result or "error" in task.result):
+            # Handle any remaining error dicts that weren't caught by FAILURE state check
+            error_msg = task.result.get("error")
+            if not error_msg:
+                exc_message = task.result.get("exc_message")
+                if isinstance(exc_message, list) and exc_message:
+                    error_msg = " ".join(str(msg) for msg in exc_message)
+                elif exc_message:
+                    error_msg = str(exc_message)
+                else:
+                    error_msg = task.result.get("exc_type", "Unknown error")
+            return f"[{colour}]{error_msg}[/{colour}]"
 
         result_message = str(task.result)
         return f"[{colour}]{result_message}[/{colour}]"
