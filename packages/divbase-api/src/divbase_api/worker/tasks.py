@@ -13,14 +13,12 @@ from celery.signals import (
     task_retry,
     task_revoked,
     task_success,
-    worker_process_init,
 )
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
-from divbase_api.models.users import UserDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -45,9 +43,6 @@ RESULT_BACKEND = os.environ.get(
     "CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db"
 )
 S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
-CRONJOB_USER_EMAIL = os.environ.get("CRONJOB_USER_EMAIL", "system@divbase.internal")
-_CRONJOB_USER_ID: int | None = None  # Global cache, initiated on worker_ready signal
-
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 # Celery results backend config
@@ -97,28 +92,6 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 
 
 app.conf.task_routes = (dynamic_router,)
-
-
-@worker_process_init.connect
-def initialize_cronjob_user_id(**kwargs):
-    """
-    Fetch and cache the cronjob user ID when each worker process starts.
-    This runs once per worker process (including forked child processes).
-    """
-    global _CRONJOB_USER_ID
-
-    try:
-        with SyncSessionLocal() as db:
-            stmt = select(UserDB.id).where(UserDB.email == CRONJOB_USER_EMAIL)
-            result = db.execute(stmt).scalar_one_or_none()
-
-            if result:
-                _CRONJOB_USER_ID = result
-                logger.info(f"Cached cronjob user ID: {_CRONJOB_USER_ID} for email: {CRONJOB_USER_EMAIL}")
-            else:
-                logger.error(f"Cronjob user '{CRONJOB_USER_EMAIL}' not found in database at worker startup")
-    except Exception as e:
-        logger.error(f"Failed to cache cronjob user ID at worker startup: {e}")
 
 
 @task_prerun.connect
@@ -195,12 +168,9 @@ def _update_task_status_in_pg(
 
             if not entry:
                 # Beat-scheduled task - create entry with sentinel values
-                if _CRONJOB_USER_ID is None:
-                    logger.error("Cronjob user ID not cached. Cannot create task history entry for Beat task.")
-                    return
                 entry = TaskHistoryDB(
                     task_id=str(task_id),
-                    user_id=_CRONJOB_USER_ID,
+                    user_id=None,  # Cronjob tasks don't belong to any user
                     project_id=None,  # Cronjob tasks don't belong to any project
                     status=status,
                 )

@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from divbase_api.api_config import settings
-from divbase_api.crud.users import create_user, get_all_users, get_user_by_email
+from divbase_api.crud.users import create_user, get_all_users
 from divbase_api.models.base import Base
 from divbase_api.schemas.users import UserCreate
 
@@ -96,47 +96,3 @@ async def create_first_admin_user() -> None:
             email_verified=True,
         )
     logger.info(f"First admin user created with email: {admin_user.email}")
-
-
-async def create_cronjob_user() -> None:
-    """
-    Create a system user for Beat-scheduled tasks if it doesn't exist.
-    This user owns all automated/cron tasks for the sake of audit trails.
-
-    Should not have admin privileges since it does not submit tasks via the API.
-    The account is deactivated (cronjob_user.is_active = False) after creation to prevent login.
-    """
-
-    cronjob_user_email = settings.api.cronjob_user_email
-    cronjob_user_password = settings.api.cronjob_user_password
-
-    if cronjob_user_email == "NOT_SET" or cronjob_user_password.get_secret_value() == "NOT_SET":
-        logger.info(
-            "No cronjob user env vars set (CRONJOB_USER_EMAIL, CRONJOB_USER_PASSWORD), skipping cronjob user creation"
-        )
-        return
-
-    async with AsyncSessionLocal() as db:
-        existing_user = await get_user_by_email(db=db, email=cronjob_user_email)
-
-        if existing_user:
-            logger.info("System user already exists")
-            return
-
-        user_info = UserCreate(
-            name="Cronjob",
-            email=cronjob_user_email,
-            password=cronjob_user_password,  # Cronjob user doesn't need to log in
-        )
-
-        cronjob_user = await create_user(
-            db=db,
-            user_data=user_info,
-            is_admin=False,
-            email_verified=True,
-        )
-
-        cronjob_user.is_active = False
-        await db.commit()
-        await db.refresh(cronjob_user)
-        logger.info(f"Created cronjob user with id: {cronjob_user.id}")
