@@ -235,8 +235,6 @@ class ProjectMembershipView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     fields = [
         IntegerField("id", label="ID", disabled=True),
-        IntegerField("user_id", label="User ID", required=True),
-        IntegerField("project_id", label="Project ID", required=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         StringField("role", label="Role", required=True),
@@ -379,8 +377,6 @@ class TaskHistoryView(ModelView):
     fields = [
         StringField("task_id", label="Task UUID", disabled=True),
         StringField("status", label="Status", disabled=True),
-        IntegerField("user_id", label="User ID", disabled=True),
-        IntegerField("project_id", label="Project ID", disabled=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
