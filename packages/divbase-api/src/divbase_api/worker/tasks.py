@@ -14,7 +14,6 @@ from celery.signals import (
     task_revoked,
     task_success,
 )
-from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -157,48 +156,51 @@ def _update_task_status_in_pg(
     set_completed_at: bool = False,
 ):
     """
-    Update task status in database.
-    Handles user-submitted tasks that have an existing TaskHistoryDB entry (handled by API),
-    as well as beat-scheduled tasks that do not have an existing entry (added to TaskHistoryDB in this function).
+    Update task status in database using upsert to handle race conditions.
+    Handles user-submitted tasks that have an existing TaskHistoryDB entry (created by API),
+    as well as beat-scheduled tasks that do not have an existing entry (created here).
     """
     try:
         with SyncSessionLocal() as db:
-            stmt = select(TaskHistoryDB).where(TaskHistoryDB.task_id == str(task_id))
-            entry = db.execute(stmt).scalar_one_or_none()
+            from sqlalchemy.dialects.postgresql import insert
 
-            if not entry:
-                # Beat-scheduled task - create entry with sentinel values
-                entry = TaskHistoryDB(
-                    task_id=str(task_id),
-                    user_id=None,  # Cronjob tasks don't belong to any user
-                    project_id=None,  # Cronjob tasks don't belong to any project
-                    status=status,
-                )
-                if set_started_at:
-                    entry.started_at = datetime.now(timezone.utc)
-                if set_completed_at:
-                    entry.completed_at = datetime.now(timezone.utc)
-                if error_msg:
-                    entry.error_message = error_msg
+            # Values for INSERT (used only if row doesn't exist - i.e., beat-scheduled tasks)
+            insert_values = {
+                "task_id": str(task_id),
+                "user_id": None,  # Beat-scheduled tasks don't belong to any user
+                "project_id": None,  # Beat-scheduled tasks don't belong to any project
+                "status": status,
+            }
 
-                db.add(entry)
-                db.commit()
-                logger.info(f"Created TaskHistoryDB entry for Beat-scheduled task {task_id}")
-            else:
-                # User-submitted task - update existing entry
-                entry.status = status
+            if set_started_at:
+                insert_values["started_at"] = datetime.now(timezone.utc)
+            if set_completed_at:
+                insert_values["completed_at"] = datetime.now(timezone.utc)
+            if error_msg:
+                insert_values["error_message"] = error_msg
 
-                if error_msg:
-                    entry.error_message = error_msg
+            # Values for UPDATE (used if row exists - i.e., API-submitted tasks)
+            # Only update status and timestamps, preserve user_id/project_id
+            update_values = {"status": status}
 
-                if set_started_at:
-                    entry.started_at = datetime.now(timezone.utc)
+            if error_msg:
+                update_values["error_message"] = error_msg
 
-                if set_completed_at:
-                    entry.completed_at = datetime.now(timezone.utc)
+            if set_started_at:
+                update_values["started_at"] = datetime.now(timezone.utc)
 
-                db.commit()
-                logger.debug(f"Updated task {task_id} to status {status}")
+            if set_completed_at:
+                update_values["completed_at"] = datetime.now(timezone.utc)
+
+            stmt = insert(TaskHistoryDB).values(**insert_values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["task_id"],
+                set_=update_values,
+            )
+
+            db.execute(stmt)
+            db.commit()
+            logger.debug(f"Upserted task {task_id} with status {status}")
 
     except OperationalError as e:
         logger.error(f"Database connection error when updating task {task_id}: {e}")
