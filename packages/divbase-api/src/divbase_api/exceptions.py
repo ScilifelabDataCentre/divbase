@@ -63,31 +63,18 @@ class TooManyObjectsInRequestError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
-class BucketVersioningFileAlreadyExistsError(DivBaseAPIException):
-    """Raised when trying to create a bucket versioning file that already exists for that project"""
+class ProjectVersionCreationError(DivBaseAPIException):
+    """Raised when there is an error creating a new project version."""
 
-    def __init__(self, bucket_name: str):
-        message = (
-            f"The bucket versioning file already exists for the bucket: '{bucket_name}'.\n"
-            "You can already add a new bucket version to this file using the 'add' command"
-        )
-        super().__init__(message, status_code=status.HTTP_400_BAD_REQUEST)
+    def __init__(self, message: str = "Failed to create a new project version"):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
-class BucketVersionAlreadyExistsError(DivBaseAPIException):
-    """Raised when user tries to add new version with version name same as prexisting version."""
+class ProjectVersionNotFoundError(DivBaseAPIException):
+    """Raised when a project version is not found."""
 
-    def __init__(self, version_name: str, bucket_name: str):
-        message = f"You're trying to add a version: '{version_name}' that already exists in the bucket: '{bucket_name}'"
-        super().__init__(message, status_code=status.HTTP_400_BAD_REQUEST)
-
-
-class BucketVersionNotFoundError(DivBaseAPIException):
-    """Raised when the specified bucket version file is not found in the bucket versioning dictionary"""
-
-    def __init__(self, bucket_version: str, bucket_name: str):
-        message = f"The version requested: '{bucket_version}' does not exist in the bucket: '{bucket_name}'."
-        super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
+    def __init__(self, message: str = "Could not find the specified project version"):
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
 class VCFDimensionsEntryMissingError(DivBaseAPIException):

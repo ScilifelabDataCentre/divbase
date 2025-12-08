@@ -21,12 +21,11 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
-    BucketVersionAlreadyExistsError,
-    BucketVersioningFileAlreadyExistsError,
-    BucketVersionNotFoundError,
     ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
+    ProjectVersionCreationError,
+    ProjectVersionNotFoundError,
     TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
@@ -185,43 +184,30 @@ async def too_many_objects_in_request_error_handler(request: Request, exc: TooMa
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-async def bucket_versioning_file_exists_error_handler(request: Request, exc: BucketVersioningFileAlreadyExistsError):
+async def project_version_creation_error_handler(request: Request, exc: ProjectVersionCreationError):
     logger.warning(
-        f"Bucket versioning file already exists for {request.method} {request.url.path}: {exc.message}", exc_info=True
+        f"Project version creation error for {request.method} {request.url.path}: {exc.message}", exc_info=True
     )
 
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_versioning_file_already_exists_error"},
+            content={"detail": exc.message, "type": "project_version_creation_error"},
             headers=exc.headers,
         )
     else:
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-async def bucket_version_exists_error_handler(request: Request, exc: BucketVersionAlreadyExistsError):
+async def project_version_not_found_error_handler(request: Request, exc: ProjectVersionNotFoundError):
     logger.warning(
-        f"Bucket version already exists for {request.method} {request.url.path}: {exc.message}", exc_info=True
+        f"Project version not found error for {request.method} {request.url.path}: {exc.message}", exc_info=True
     )
 
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_version_already_exists_error"},
-            headers=exc.headers,
-        )
-    else:
-        return await render_error_page(request, exc.message, status_code=exc.status_code)
-
-
-async def bucket_version_not_found_error_handler(request: Request, exc: BucketVersionNotFoundError):
-    logger.warning(f"Bucket version not found for {request.method} {request.url.path}: {exc.message}", exc_info=True)
-
-    if is_api_request(request):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_version_not_found_error"},
+            content={"detail": exc.message, "type": "project_version_not_found_error"},
             headers=exc.headers,
         )
     else:
@@ -323,9 +309,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersioningFileAlreadyExistsError, bucket_versioning_file_exists_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersionAlreadyExistsError, bucket_version_exists_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionNotFoundError, project_version_not_found_error_handler)  # type: ignore
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
