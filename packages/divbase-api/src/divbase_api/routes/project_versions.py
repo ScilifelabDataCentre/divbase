@@ -1,9 +1,8 @@
 """
 Routes for users to manage the bucket versioning file in their projects bucket.
+TODO - update doc string.
 
 The BucketVersionManager service handles internal logic and send any changes up to S3.
-
-- To avoid blocking the event loop when using the S3 client (boto3 is a sync SDK, and the `bucket_manager` uses it), we run these operations in a threadpool.
 """
 
 import logging
@@ -17,7 +16,7 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.bucket_versions import create_bucket_version_manager
-from divbase_lib.api_schemas.bucket_versions import (
+from divbase_lib.api_schemas.project_versions import (
     AddVersionRequest,
     AddVersionResponse,
     CreateVersioningFileRequest,
@@ -30,10 +29,12 @@ from divbase_lib.api_schemas.bucket_versions import (
 
 logger = logging.getLogger(__name__)
 
-bucket_version_router = APIRouter()
+project_version_router = APIRouter()
 
 
-@bucket_version_router.post("/create", status_code=status.HTTP_201_CREATED, response_model=CreateVersioningFileResponse)
+@project_version_router.post(
+    "/create", status_code=status.HTTP_201_CREATED, response_model=CreateVersioningFileResponse
+)
 async def create_versioning_file(
     project_name: str,
     version_creation_request: CreateVersioningFileRequest,
@@ -54,7 +55,7 @@ async def create_versioning_file(
     )
 
 
-@bucket_version_router.patch("/add", status_code=status.HTTP_200_OK, response_model=AddVersionResponse)
+@project_version_router.patch("/add", status_code=status.HTTP_200_OK, response_model=AddVersionResponse)
 async def add_version(
     project_name: str,
     version_request: AddVersionRequest,
@@ -73,7 +74,7 @@ async def add_version(
     return bucket_manager.add_version(name=version_request.name, description=version_request.description)
 
 
-@bucket_version_router.get("/list", status_code=status.HTTP_200_OK, response_model=VersionListResponse)
+@project_version_router.get("/list", status_code=status.HTTP_200_OK, response_model=VersionListResponse)
 async def list_versions(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -89,7 +90,7 @@ async def list_versions(
     return await run_in_threadpool(bucket_manager.get_version_info)
 
 
-@bucket_version_router.get("/list_detailed", status_code=status.HTTP_200_OK, response_model=FilesAtVersionResponse)
+@project_version_router.get("/list_detailed", status_code=status.HTTP_200_OK, response_model=FilesAtVersionResponse)
 async def list_files_at_version(
     project_name: str,
     bucket_version: str,
@@ -106,7 +107,7 @@ async def list_files_at_version(
     return await run_in_threadpool(bucket_manager.all_files_at_bucket_version, bucket_version=bucket_version)
 
 
-@bucket_version_router.delete("/delete", status_code=status.HTTP_200_OK, response_model=DeleteVersionResponse)
+@project_version_router.delete("/delete", status_code=status.HTTP_200_OK, response_model=DeleteVersionResponse)
 async def delete_version(
     project_name: str,
     delete_version_request: DeleteVersionRequest,

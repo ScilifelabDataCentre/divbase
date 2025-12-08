@@ -11,7 +11,7 @@ from divbase_cli.pre_signed_urls import (
     upload_multiple_pre_signed_urls,
 )
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.bucket_versions import (
+from divbase_lib.api_schemas.project_versions import (
     AddVersionRequest,
     AddVersionResponse,
     BucketVersionDetail,
