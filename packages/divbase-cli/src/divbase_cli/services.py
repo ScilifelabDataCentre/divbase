@@ -1,9 +1,13 @@
 """
-CLI commands for managing a project's bucket versions.
+Service layer for DivBase CLI project version and S3 file operations.
 """
 
 from pathlib import Path
 
+from divbase_cli.cli_exceptions import (
+    FileDoesNotExistInSpecifiedVersionError,
+    FilesAlreadyInProjectError,
+)
 from divbase_cli.pre_signed_urls import (
     DownloadOutcome,
     UploadOutcome,
@@ -14,33 +18,13 @@ from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.project_versions import (
     AddVersionRequest,
     AddVersionResponse,
-    BucketVersionDetail,
-    CreateVersioningFileRequest,
-    CreateVersioningFileResponse,
     DeleteVersionRequest,
-    DeleteVersionResponse,
-    FilesAtVersionResponse,
-    VersionListResponse,
+    ProjectVersionDetailResponse,
+    ProjectVersionInfo,
+    SoftDeleteVersionResponse,
 )
 from divbase_lib.api_schemas.s3 import ExistingFileResponse, PreSignedDownloadResponse, PreSignedUploadResponse
-from divbase_lib.exceptions import FilesAlreadyInBucketError, ObjectDoesNotExistInSpecifiedVersionError
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, convert_checksum_hex_to_base64
-
-
-def create_version_object_command(
-    project_name: str, divbase_base_url: str, version_name: str, description: str
-) -> CreateVersioningFileResponse:
-    """Create the initial bucket versioning file for a project."""
-    request_data = CreateVersioningFileRequest(name=version_name, description=description)
-
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/bucket-versions/create?project_name={project_name}",
-        json=request_data.model_dump(),
-    )
-
-    return CreateVersioningFileResponse(**response.json())
 
 
 def add_version_command(project_name: str, divbase_base_url: str, name: str, description: str) -> AddVersionResponse:
@@ -50,14 +34,14 @@ def add_version_command(project_name: str, divbase_base_url: str, name: str, des
     response = make_authenticated_request(
         method="PATCH",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/bucket-versions/add?project_name={project_name}",
+        api_route=f"v1/project-versions/add?project_name={project_name}",
         json=request_data.model_dump(),
     )
 
     return AddVersionResponse(**response.json())
 
 
-def list_versions_command(project_name: str, divbase_base_url: str) -> dict[str, BucketVersionDetail]:
+def list_versions_command(project_name: str, divbase_base_url: str) -> list[ProjectVersionInfo]:
     """
     List all versions in the bucket versioning file
     Returns a dict of version names (keys) to details about the versions.
@@ -65,42 +49,46 @@ def list_versions_command(project_name: str, divbase_base_url: str) -> dict[str,
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/bucket-versions/list?project_name={project_name}",
+        api_route=f"v1/project-versions/list?project_name={project_name}",
     )
 
-    response_data = VersionListResponse(**response.json())
+    project_versions = []
+    response_data = response.json()
+    for version in response_data:
+        project_versions.append(ProjectVersionInfo(**version))
 
-    return response_data.versions
+    return project_versions
 
 
-def list_files_at_version_command(project_name: str, divbase_base_url: str, bucket_version: str) -> dict[str, str]:
-    """List all files at a specific version"""
+def get_version_details_command(
+    project_name: str, divbase_base_url: str, version_name: str
+) -> ProjectVersionDetailResponse:
+    """Get details about a specific project version, including all files and their version IDs at that version."""
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/bucket-versions/list_detailed?project_name={project_name}&bucket_version={bucket_version}",
+        api_route=f"v1/project-versions/version_details?project_name={project_name}&version_name={version_name}",
     )
-    response_data = FilesAtVersionResponse(**response.json())
 
-    return response_data.files
+    return ProjectVersionDetailResponse(**response.json())
 
 
-def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
+def soft_delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
     """
-    Delete a version from the bucket versioning file.
+    SoftdDelete a version from the bucket versioning file.
 
-    Returns the deleted version's name.
+    Returns the soft deleted version's name.
     """
     request_data = DeleteVersionRequest(version_name=version_name)
 
     response = make_authenticated_request(
         method="DELETE",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/bucket-versions/delete?project_name={project_name}",
+        api_route=f"v1/project-versions/soft-delete?project_name={project_name}",
         json=request_data.model_dump(),
     )
 
-    response_data = DeleteVersionResponse(**response.json())
+    response_data = SoftDeleteVersionResponse(**response.json())
     return response_data.deleted_version
 
 
@@ -121,7 +109,7 @@ def download_files_command(
     all_files: list[str],
     download_dir: Path,
     verify_checksums: bool,
-    bucket_version: str | None = None,
+    project_version: str | None = None,
 ) -> DownloadOutcome:
     """
     Download files from the given project's S3 bucket.
@@ -131,20 +119,20 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
-    if bucket_version:
-        file_versions_at_desired_state = list_files_at_version_command(
-            project_name=project_name, divbase_base_url=divbase_base_url, bucket_version=bucket_version
+    if project_version:
+        project_version_details = get_version_details_command(
+            project_name=project_name, divbase_base_url=divbase_base_url, version_name=project_version
         )
 
-        # check if all files specified exist for download exist at this bucket version
-        missing_objects = [f for f in all_files if f not in file_versions_at_desired_state]
+        # check if all files specified exist for download exist at this project version
+        missing_objects = [f for f in all_files if f not in project_version_details.files]
         if missing_objects:
-            raise ObjectDoesNotExistInSpecifiedVersionError(
+            raise FileDoesNotExistInSpecifiedVersionError(
                 project_name=project_name,
-                bucket_version=bucket_version,
-                missing_objects=missing_objects,
+                project_version=project_version,
+                missing_files=missing_objects,
             )
-        to_download = {file: file_versions_at_desired_state[file] for file in all_files}
+        to_download = {file: project_version_details.files[file] for file in all_files}
         json_data = [{"name": obj, "version_id": to_download[obj]} for obj in all_files]
     else:
         json_data = [{"name": obj, "version_id": None} for obj in all_files]
@@ -193,7 +181,7 @@ def upload_files_command(
 
         if existing_files:
             existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
-            raise FilesAlreadyInBucketError(existing_objects=existing_object_names, project_name=project_name)
+            raise FilesAlreadyInProjectError(existing_files=existing_object_names, project_name=project_name)
 
     objects_to_upload = []
     for file in all_files:

@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_lib.exceptions import ProjectNotInConfigError
+from divbase_cli.cli_exceptions import ProjectNotInConfigError
 
 
 @dataclass
