@@ -67,7 +67,7 @@ app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
-app.include_router(project_version_router, prefix="/api/v1/bucket-versions", tags=["bucket-versioning"])
+app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
 
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
