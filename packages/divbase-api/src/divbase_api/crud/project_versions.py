@@ -16,7 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.exceptions import ProjectVersionCreationError, ProjectVersionNotFoundError
+from divbase_api.exceptions import (
+    ProjectVersionAlreadyExistsError,
+    ProjectVersionCreationError,
+    ProjectVersionNotFoundError,
+)
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.services.s3_client import S3FileManager
@@ -61,7 +65,7 @@ async def add_project_version(
         await db.rollback()
         error_details = str(e.orig).lower()
         if "project_version_name" in error_details and "unique constraint" in error_details:
-            raise ProjectVersionCreationError(
+            raise ProjectVersionAlreadyExistsError(
                 message=f"A project version with the name '{name}' already exists for this project. Please choose a different name.",
             ) from None
         else:

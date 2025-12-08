@@ -1,12 +1,9 @@
 """
 Tests for the "divbase-cli version" subcommand
-
-NOTE: All tests are run against a MinIO server on localhost from docker-compose.
-NOTE: The clean versions fixture ensures that the versioning file is removed before and after each test,
 """
 
-import boto3
 import pytest
+from sqlalchemy import text
 from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import DivBaseAPIError
@@ -19,49 +16,16 @@ VERSION_1_NAME = "v1.0.0"
 VERSION_2_NAME = "v2.0.0"
 VERSION_3_NAME = "v3.0.0"
 
-VERSION_FILE_NAME = ".bucket_versions.yaml"
-
 
 @pytest.fixture(autouse=True)
-def clean_versions(logged_in_edit_user_with_existing_config, CONSTANTS):
+def clean_versions(db_session_sync):
     """
-    Remove the versioning file and create a new one before each test.
-    Used in all tests in this module.
+    Delete all rows from the project_versions table between each test
     """
-
-    for bucket_name in CONSTANTS["PROJECT_TO_BUCKET_MAP"].values():
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=CONSTANTS["MINIO_URL"],
-            aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-            aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-        )
-        s3_client.delete_object(Bucket=bucket_name, Key=VERSION_FILE_NAME)
-
-    command = "version create"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    assert "Bucket versioning file created" in result.stdout
+    db_session_sync.execute(text("DELETE FROM project_version;"))
+    db_session_sync.commit()
 
     yield
-
-
-def test_create_version_file_fails_if_already_exists(logged_in_edit_user_with_existing_config):
-    command = "version create"
-    result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "bucket_versioning_file_already_exists_error"
-    assert result.exception.status_code == 400
-
-
-def test_create_version_for_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS):
-    project_name = CONSTANTS["NON_DEFAULT_PROJECT"]
-    command = f"version create --project {project_name}"
-    result = runner.invoke(app, command)
-
-    assert result.exit_code == 0
-    assert f"Bucket versioning file created for project: '{project_name}'" in result.stdout
 
 
 def test_add_version(logged_in_edit_user_with_existing_config):
@@ -110,25 +74,8 @@ def test_attempt_add_version_that_already_exists_fails(logged_in_edit_user_with_
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "bucket_version_already_exists_error"
+    assert result.exception.error_type == "project_version_already_exists_error"
     assert result.exception.status_code == 400
-
-
-def test_add_version_works_with_clean_project(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """
-    Using the clean project which has no files at all in the bucket (not even the bucket metadata file)
-    So validating you don't need to run `version create` first.
-    """
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-
-    command = f"version add {VERSION_1_NAME} --project {clean_project}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-
-    command = f"version list --project {clean_project}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    assert VERSION_1_NAME in result.stdout
 
 
 def test_list_versions(logged_in_edit_user_with_existing_config):
@@ -151,7 +98,7 @@ def test_delete_version(logged_in_edit_user_with_existing_config):
     command = f"version delete {VERSION_1_NAME}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
+    assert f"version: '{VERSION_1_NAME}' was soft deleted" in result.stdout
 
     list_cmd = "version list"
     result = runner.invoke(app, list_cmd)
@@ -166,7 +113,7 @@ def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "bucket_version_not_found_error"
+    assert result.exception.error_type == "project_version_not_found_error"
     assert result.exception.status_code == 404
 
 
@@ -195,7 +142,7 @@ def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_wi
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "bucket_version_not_found_error"
+    assert result.exception.error_type == "project_version_not_found_error"
     assert result.exception.status_code == 404
 
 
@@ -203,9 +150,9 @@ def test_get_version_updates_hashes_on_new_upload(logged_in_edit_user_with_exist
     """
     Test a simple protocol where:
     1. upload file
-    2. create a version
+    2. add a version
     3. upload the same file again (disabling the safe mode setting so it can be re-uploaded)
-    4. create another version
+    4. add another version
 
     Validate that the hashes for the uploaded file in each version are different.
     """

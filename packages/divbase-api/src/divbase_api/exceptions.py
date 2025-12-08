@@ -70,6 +70,15 @@ class ProjectVersionCreationError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
+class ProjectVersionAlreadyExistsError(DivBaseAPIException):
+    """Raised when attempting to create a project version that already exists."""
+
+    def __init__(
+        self, message: str = "A project version with the specified name already exists, please choose a different name."
+    ):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
 class ProjectVersionNotFoundError(DivBaseAPIException):
     """Raised when a project version is not found."""
 

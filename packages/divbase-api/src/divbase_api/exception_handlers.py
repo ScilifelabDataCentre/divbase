@@ -24,6 +24,7 @@ from divbase_api.exceptions import (
     ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
+    ProjectVersionAlreadyExistsError,
     ProjectVersionCreationError,
     ProjectVersionNotFoundError,
     TaskNotFoundInBackendError,
@@ -199,6 +200,21 @@ async def project_version_creation_error_handler(request: Request, exc: ProjectV
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
+async def project_version_already_exists_error_handler(request: Request, exc: ProjectVersionAlreadyExistsError):
+    logger.info(
+        f"Project version already exists error for {request.method} {request.url.path}: {exc.message}", exc_info=True
+    )
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "project_version_already_exists_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
 async def project_version_not_found_error_handler(request: Request, exc: ProjectVersionNotFoundError):
     logger.warning(
         f"Project version not found error for {request.method} {request.url.path}: {exc.message}", exc_info=True
@@ -308,6 +324,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectNotFoundError, project_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionAlreadyExistsError, project_version_already_exists_error_handler)  # type: ignore
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionNotFoundError, project_version_not_found_error_handler)  # type: ignore

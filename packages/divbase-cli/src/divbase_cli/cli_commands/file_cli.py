@@ -68,8 +68,9 @@ def download_files(
             "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
         ),
     ] = False,
-    bucket_version: str = typer.Option(
-        default=None, help="Version of the project's storage bucket at which to download the files."
+    project_version: str = typer.Option(
+        default=None,
+        help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
@@ -105,7 +106,7 @@ def download_files(
         all_files=list(all_files),
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
-        bucket_version=bucket_version,
+        project_version=project_version,
     )
 
     if download_results.successful:
