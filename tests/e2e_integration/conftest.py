@@ -6,6 +6,11 @@ It also collects fixtures and constants that are needed across multiple test mod
 that the imports work correctly.
 """
 
+import os
+
+# Set environment variable BEFORE any divbase_api imports. otherwise worker_db.py will set SyncSessionLocal to None due to import timings
+os.environ.setdefault("WORKER_DATABASE_URL", "postgresql+psycopg2://divbase_user:badpassword@localhost:5432/divbase_db")
+
 import logging
 from pathlib import Path
 from unittest.mock import patch
