@@ -37,7 +37,7 @@ class TaskHistoryDB(BaseDBModel):
 
     __tablename__ = "task_history"
 
-    task_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    task_id: Mapped[str] = mapped_column(String, primary_key=True, index=True, unique=True)
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("user.id", ondelete="CASCADE"),
