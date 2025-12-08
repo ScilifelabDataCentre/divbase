@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,17 +28,19 @@ class ProjectVersionDB(BaseDBModel):
 
     __tablename__ = "project_version"
 
-    name: Mapped[str] = mapped_column(String(100), index=True)
+    name: Mapped[str] = mapped_column(String(100), index=True, unique=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     files: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
+    date_deleted: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
     # As versioning on project level, can safely delete entry if project deleted
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"), index=True)
     # But we should allow the user who made this to be deleted without deleting the version entry
     user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), index=True)
 
-    project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="versions")
+    project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="project_versions")
 
     def __repr__(self) -> str:
         return f"<ProjectVersionDB id={self.id}, project_id={self.project_id}, name={self.name}>"
