@@ -89,6 +89,7 @@ async def update_vcf_dimensions_endpoint(
         bucket_name=project.bucket_name,
         project_id=project.id,
         project_name=project.name,
+        user_id=current_user.id,
     )
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs.model_dump())
