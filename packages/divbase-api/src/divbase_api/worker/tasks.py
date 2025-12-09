@@ -94,15 +94,15 @@ app.conf.task_routes = (dynamic_router,)
 
 
 @task_prerun.connect
-def task_prerun_handler(sender=None, task_id=None, **kwargs):
+def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **extra):
     """
     Called when task starts executing (STARTED state).
     user_id and project_id are used to make inital insert to TaskHistoryDB.
     Once the task_id exist in the table, the other celery signal handlers will
     not need the user_id/project_id since they will only update existing rows.
     """
-    user_id = kwargs.get("user_id")
-    project_id = kwargs.get("project_id")
+    user_id = kwargs.get("user_id") if kwargs else None
+    project_id = kwargs.get("project_id") if kwargs else None
 
     _update_task_status_in_pg(
         task_id=task_id,
@@ -117,14 +117,10 @@ def task_prerun_handler(sender=None, task_id=None, **kwargs):
 def task_success_handler(sender=None, result=None, **kwargs):
     """Called when task completes successfully (SUCCESS state)."""
     task_id = sender.request.id
-    user_id = sender.request.kwargs.get("user_id")
-    project_id = sender.request.kwargs.get("project_id")
 
     _update_task_status_in_pg(
         task_id=task_id,
         status=TaskStatus.SUCCESS,
-        user_id=user_id,
-        project_id=project_id,
         set_completed_at=True,
     )
 
