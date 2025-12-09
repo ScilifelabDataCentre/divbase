@@ -8,25 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
 
 logger = logging.getLogger(__name__)
-
-
-async def record_pending_task(db: AsyncSession, task_id: str, user_id: int, project_id: int):
-    """
-    Record a new pending task in the TaskHistoryDB table. Intended to be run when task is submitted to queue.
-    """
-    entry = TaskHistoryDB(
-        task_id=str(task_id),
-        user_id=user_id,
-        project_id=project_id,
-        status=TaskStatus.PENDING,
-    )
-    db.add(entry)
-    await db.commit()
-    await db.refresh(entry)
 
 
 async def get_tasks_pg(

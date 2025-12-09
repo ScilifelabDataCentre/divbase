@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
-from divbase_api.crud.task_history import record_pending_task
 from divbase_api.crud.vcf_dimensions import (
     get_skipped_vcfs_by_project_async,
     get_vcf_metadata_by_project_async,
@@ -93,6 +92,4 @@ async def update_vcf_dimensions_endpoint(
     )
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs.model_dump())
-
-    await record_pending_task(db=db, task_id=results.id, user_id=current_user.id, project_id=project.id)
     return results.id
