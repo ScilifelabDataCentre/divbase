@@ -39,8 +39,10 @@ def test_update_vcf_dimensions_task_directly(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
-
-    result = run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
 
     vcf_files = [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
     indexed_files = result.get("VCF_files_added", [])
@@ -62,8 +64,9 @@ def test_show_vcf_dimensions_task(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
+    user_id = 1
 
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     # Basic version of command
     command = f"dimensions show --project {project_name}"
@@ -153,11 +156,13 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
     project_name = "empty-project"
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
-
+    user_id = 1
     with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
         mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
         with pytest.raises(NoVCFFilesFoundError):
-            update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+            update_vcf_dimensions_task(
+                bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+            )
 
 
 def test_remove_VCF_and_update_dimension_entry(
@@ -195,6 +200,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
+    user_id = 1
 
     divbase_vcf_name = "merged_test_divbase_result.vcf.gz"
     vcf_path = tmp_path / divbase_vcf_name
@@ -215,7 +221,9 @@ def test_update_dimensions_skips_divbase_generated_vcf(
         bucket_name=bucket_name,
     )
 
-    result = update_vcf_dimensions_task(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    result = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
 
     skipped_files = result.get("VCF_files_skipped", [])
     assert any(divbase_vcf_name in msg for msg in skipped_files), (
@@ -242,9 +250,13 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
+    user_id = 1
 
     result_first_run = update_vcf_dimensions_task(
-        bucket_name=bucket_name, project_id=project_id, project_name=project_name
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
     )
 
     assert result_first_run["status"] == "completed"
@@ -255,7 +267,10 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
         assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
 
     result_second_run = update_vcf_dimensions_task(
-        bucket_name=bucket_name, project_id=project_id, project_name=project_name
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
     )
     assert result_second_run["status"] == "completed"
     assert result_second_run.get("VCF_files_added") is None or result_second_run.get("VCF_files_added") == [], (

@@ -135,7 +135,8 @@ def test_task_routing(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     task_kwargs["project_id"] = project_id
 
     broker_url = app.conf.broker_url

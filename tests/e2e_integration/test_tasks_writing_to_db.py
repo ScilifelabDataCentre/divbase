@@ -9,7 +9,7 @@ import threading
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
 from divbase_api.services.s3_client import create_s3_file_manager
@@ -19,11 +19,12 @@ from divbase_api.worker.worker_db import SyncSessionLocal
 
 @pytest.fixture
 def clean_task_history(db_session_sync):
-    """Remove all task history entries before each test."""
+    """
+    Remove all task history entries before each test. Use raw SQL for celery_taskmeta table since it is created and managed by Celery and not by the SQLAlchemy ORM.
+    """
     db_session_sync.query(TaskHistoryDB).delete()
     db_session_sync.commit()
-    yield
-    db_session_sync.query(TaskHistoryDB).delete()
+    db_session_sync.execute(text("DELETE FROM celery_taskmeta"))
     db_session_sync.commit()
 
 

@@ -112,7 +112,8 @@ def test_sample_metadata_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -140,7 +141,8 @@ def test_bcftools_pipe_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -203,7 +205,8 @@ def test_bcftools_pipe_query_errors(
 
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     command_str = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     response = runner.invoke(app, command_str)
@@ -288,7 +291,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):
@@ -326,6 +330,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "bucket_name": bucket_name,
             "project_id": project_id,
             "project_name": project_name,
+            "user_id": 1,
         }
         with pytest.raises(ValueError) as excinfo:
             bcftools_pipe_task(**params)
@@ -346,6 +351,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
+                "user_id": 1,
             },
             False,
             False,
@@ -361,6 +367,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
+                "user_id": 1,
             },
             True,
             True,
@@ -383,6 +390,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             False,
             True,
@@ -401,6 +409,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -428,6 +437,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "project_name": "query-project",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -452,6 +462,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -481,6 +492,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
