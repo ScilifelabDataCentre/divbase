@@ -95,10 +95,20 @@ app.conf.task_routes = (dynamic_router,)
 
 @task_prerun.connect
 def task_prerun_handler(sender=None, task_id=None, **kwargs):
-    """Called when task starts executing (STARTED state)."""
+    """
+    Called when task starts executing (STARTED state).
+    user_id and project_id are used to make inital insert to TaskHistoryDB.
+    Once the task_id exist in the table, the other celery signal handlers will
+    not need the user_id/project_id since they will only update existing rows.
+    """
+    user_id = kwargs.get("user_id")
+    project_id = kwargs.get("project_id")
+
     _update_task_status_in_pg(
         task_id=task_id,
         status=TaskStatus.STARTED,
+        user_id=user_id,
+        project_id=project_id,
         set_started_at=True,
     )
 
@@ -107,9 +117,14 @@ def task_prerun_handler(sender=None, task_id=None, **kwargs):
 def task_success_handler(sender=None, result=None, **kwargs):
     """Called when task completes successfully (SUCCESS state)."""
     task_id = sender.request.id
+    user_id = sender.request.kwargs.get("user_id")
+    project_id = sender.request.kwargs.get("project_id")
+
     _update_task_status_in_pg(
         task_id=task_id,
         status=TaskStatus.SUCCESS,
+        user_id=user_id,
+        project_id=project_id,
         set_completed_at=True,
     )
 
@@ -151,6 +166,8 @@ def task_revoked_handler(sender=None, request=None, terminated=None, signum=None
 def _update_task_status_in_pg(
     task_id: str,
     status: TaskStatus,
+    user_id: int = None,
+    project_id: int = None,
     error_msg: str = None,
     set_started_at: bool = False,
     set_completed_at: bool = False,
@@ -159,16 +176,18 @@ def _update_task_status_in_pg(
     Update task status in database using upsert to handle race conditions.
     Handles user-submitted tasks that have an existing TaskHistoryDB entry (created by API),
     as well as beat-scheduled tasks that do not have an existing entry (created here).
+
+    Beat-scheduled tasks don't belong to any user or to any project.
     """
     try:
         with SyncSessionLocal() as db:
             from sqlalchemy.dialects.postgresql import insert
 
-            # Values for INSERT (used only if row doesn't exist - i.e., beat-scheduled tasks)
+            # Values for INSERT (used only if row doesn't exist)
             insert_values = {
                 "task_id": str(task_id),
-                "user_id": None,  # Beat-scheduled tasks don't belong to any user
-                "project_id": None,  # Beat-scheduled tasks don't belong to any project
+                "user_id": user_id,
+                "project_id": project_id,
                 "status": status,
             }
 
@@ -179,7 +198,7 @@ def _update_task_status_in_pg(
             if error_msg:
                 insert_values["error_message"] = error_msg
 
-            # Values for UPDATE (used if row exists - i.e., API-submitted tasks)
+            # Values for UPDATE (used if row exists)
             # Only update status and timestamps, preserve user_id/project_id
             update_values = {"status": status}
 
@@ -215,6 +234,7 @@ def sample_metadata_query_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
@@ -265,6 +285,7 @@ def bcftools_pipe_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -347,6 +368,7 @@ def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
