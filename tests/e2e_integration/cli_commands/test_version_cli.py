@@ -98,7 +98,7 @@ def test_delete_version(logged_in_edit_user_with_existing_config):
     command = f"version delete {VERSION_1_NAME}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    assert f"version: '{VERSION_1_NAME}' was soft deleted" in result.stdout
+    assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
 
     list_cmd = "version list"
     result = runner.invoke(app, list_cmd)

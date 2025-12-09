@@ -86,7 +86,7 @@ def delete_version_command(project_name: str, divbase_base_url: str, version_nam
     response = make_authenticated_request(
         method="DELETE",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/project-versions/soft-delete?project_name={project_name}",
+        api_route=f"v1/project-versions/delete?project_name={project_name}",
         json=request_data.model_dump(),
     )
 
