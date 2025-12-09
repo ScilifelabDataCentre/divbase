@@ -8,6 +8,7 @@ from pathlib import Path
 
 from celery import Celery
 from celery.signals import (
+    after_task_publish,
     task_failure,
     task_prerun,
     task_retry,
@@ -93,6 +94,35 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 app.conf.task_routes = (dynamic_router,)
 
 
+@after_task_publish.connect
+def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
+    """
+    Called when task is published to broker (PENDING state).
+    This celery signal fires immediately when .apply_async() is called, before any worker picks it up.
+    That means that it is the fastAPI container executes this and recieves any logging messages from this signal handler.
+
+    Body structure: [args: list, kwargs: dict, embed: optional]
+    According to Celery protocol v2: https://docs.celeryq.dev/en/stable/internals/protocol.html#message-protocol-task-v2
+    """
+    task_id = headers.get("id")
+
+    task_kwargs = {}
+    if body and len(body) > 1 and isinstance(body[1], dict):
+        task_kwargs = body[1]
+
+    user_id = task_kwargs.get("user_id")
+    project_id = task_kwargs.get("project_id")
+
+    logger.debug(f"Extracted user_id={user_id}, project_id={project_id} from task_kwargs={task_kwargs}")
+
+    _update_task_status_in_pg(
+        task_id=task_id,
+        status=TaskStatus.PENDING,
+        user_id=user_id,
+        project_id=project_id,
+    )
+
+
 @task_prerun.connect
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **extra):
     """
@@ -101,14 +131,9 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
     Once the task_id exist in the table, the other celery signal handlers will
     not need the user_id/project_id since they will only update existing rows.
     """
-    user_id = kwargs.get("user_id") if kwargs else None
-    project_id = kwargs.get("project_id") if kwargs else None
-
     _update_task_status_in_pg(
         task_id=task_id,
         status=TaskStatus.STARTED,
-        user_id=user_id,
-        project_id=project_id,
         set_started_at=True,
     )
 
