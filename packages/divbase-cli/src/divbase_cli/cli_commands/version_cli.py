@@ -12,9 +12,9 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.services import (
     add_version_command,
+    delete_version_command,
     get_version_details_command,
     list_versions_command,
-    soft_delete_version_command,
 )
 
 PROJECT_NAME_OPTION = typer.Option(
@@ -86,26 +86,6 @@ def list_versions(
     console.print(table)
 
 
-@version_app.command("delete")
-def soft_delete_version(
-    name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
-    project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
-):
-    """
-    Soft delete an entry in the project versioning table.
-    TODO - entries older than X days will be permanently deleted? You can ask a DivBase admin to restore a deleted version within that time period.
-    This does not delete the files themselves.
-    """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
-
-    deleted_version = soft_delete_version_command(
-        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
-    )
-    print(f"The version: '{deleted_version}' was soft deleted from the project: '{project_config.name}'")
-
-
 @version_app.command("info")
 def get_version_info(
     version: str = typer.Argument(help="Specific version to retrieve information for"),
@@ -124,3 +104,23 @@ def get_version_info(
     print(f"Created at: {format_timestamp(files_at_version.created_at)}")
     for object_name, hash in files_at_version.files.items():
         print(f"- '{object_name}' : '{hash}'")
+
+
+@version_app.command("delete")
+def delete_version(
+    name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Delete a version entry in the project versioning table. This does not delete the files themselves.
+    Deleted version entries older than 30 days will be permanently deleted.
+    You can ask a DivBase admin to restore a deleted version within that time period.
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    deleted_version = delete_version_command(
+        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
+    )
+    print(f"The version: '{deleted_version}' was deleted from the project: '{project_config.name}'")

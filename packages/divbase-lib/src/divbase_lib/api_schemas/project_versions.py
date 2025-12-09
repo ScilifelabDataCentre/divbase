@@ -49,5 +49,7 @@ class ProjectVersionDetailResponse(ProjectBasicInfo):
     files: dict[str, str] = Field(..., description="Mapping of file names to their version IDs")
 
 
-class SoftDeleteVersionResponse(BaseModel):
-    deleted_version: str = Field(..., description="Name of the version that was soft eleted")
+class DeleteVersionResponse(BaseModel):
+    """Response model for deleting a version."""
+
+    deleted_version: str = Field(..., description="Name of the version that was deleted")

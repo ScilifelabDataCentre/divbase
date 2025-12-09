@@ -28,9 +28,9 @@ from divbase_lib.api_schemas.project_versions import (
     AddVersionRequest,
     AddVersionResponse,
     DeleteVersionRequest,
+    DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
-    SoftDeleteVersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,22 +113,22 @@ async def project_version_details_endpoint(
     )
 
 
-@project_version_router.delete("/soft-delete", status_code=status.HTTP_200_OK, response_model=SoftDeleteVersionResponse)
-async def soft_delete_version_endpoint(
+@project_version_router.delete("/delete", status_code=status.HTTP_200_OK, response_model=DeleteVersionResponse)
+async def delete_version_endpoint(
     project_name: str,
     delete_version_request: DeleteVersionRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Soft delete an entry in the project versioning database.
-    The record is not removed from the database, but marked as deleted.
-    Does not delete the associated files either.
+    Delete a version entry in the project versioning table.
+    This does not delete the files themselves.
+    Deleted version entries older than 30 days will be permanently deleted.
+    You can ask a DivBase admin to restore a deleted version within that time period.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to soft delete a project version for this project.")
-
+        raise AuthorizationError("You don't have permission to delete a project version for this project.")
     return await soft_delete_version(
         db=db,
         project_id=project.id,

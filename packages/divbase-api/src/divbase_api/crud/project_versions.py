@@ -26,9 +26,9 @@ from divbase_api.models.projects import ProjectDB
 from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.project_versions import (
     AddVersionResponse,
+    DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
-    SoftDeleteVersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,9 +127,10 @@ async def soft_delete_version(
     db: AsyncSession,
     project_id: int,
     version_name: str,
-) -> SoftDeleteVersionResponse:
-    """Soft delete a project version entry.
-    TODO - decide how to hard delete and entry - when project is deleted or time period?
+) -> DeleteVersionResponse:
+    """
+    Soft delete a project version entry.
+    A cron job is responsible for permanently deleting soft deleted versions after a grace period.
     """
     stmt = select(ProjectVersionDB).where(
         ProjectVersionDB.project_id == project_id,
@@ -146,4 +147,4 @@ async def soft_delete_version(
     version_entry.date_deleted = datetime.now(tz=timezone.utc)
     await db.commit()
     await db.refresh(version_entry)
-    return SoftDeleteVersionResponse(deleted_version=version_name)
+    return DeleteVersionResponse(deleted_version=version_name)

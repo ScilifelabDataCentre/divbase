@@ -19,9 +19,9 @@ from divbase_lib.api_schemas.project_versions import (
     AddVersionRequest,
     AddVersionResponse,
     DeleteVersionRequest,
+    DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
-    SoftDeleteVersionResponse,
 )
 from divbase_lib.api_schemas.s3 import ExistingFileResponse, PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, convert_checksum_hex_to_base64
@@ -73,11 +73,13 @@ def get_version_details_command(
     return ProjectVersionDetailResponse(**response.json())
 
 
-def soft_delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
+def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
     """
-    SoftdDelete a version from the bucket versioning file.
+    Delete a version from the bucket versioning file.
+    This marks the version as (soft) deleted server side,
+    and it will eventually be permanently deleted (after some grace period).
 
-    Returns the soft deleted version's name.
+    Returns the deleted version's name.
     """
     request_data = DeleteVersionRequest(version_name=version_name)
 
@@ -88,7 +90,7 @@ def soft_delete_version_command(project_name: str, divbase_base_url: str, versio
         json=request_data.model_dump(),
     )
 
-    response_data = SoftDeleteVersionResponse(**response.json())
+    response_data = DeleteVersionResponse(**response.json())
     return response_data.deleted_version
 
 
