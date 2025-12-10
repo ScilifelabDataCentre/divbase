@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm.session import Session
 
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB
@@ -67,36 +68,29 @@ def get_vcf_metadata_by_keys(db: Session, vcf_file_s3_key: str, project_id: int)
 
 def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: dict) -> None:
     """
-    Upsert (update or insert) VCF metadata entry.
-    Called by workers after processing VCF file dimensions.
+    Upsert (insert or update) a VCF metadata entry in the database.
 
-    Args:
-        db: Database session
-        vcf_metadata_data: Dictionary with VCF metadata fields:
-            - vcf_file_s3_key: str (required)
-            - project_id: int (required)
-            - s3_version_id: str
-            - samples: list[str]
-            - scaffolds: list[str]
-            - variant_count: int
-            - sample_count: int
-            - file_size_bytes: int
+    This function uses PostgreSQL's ON CONFLICT DO UPDATE to ensure that if a VCF metadata entry
+    with the same (vcf_file_s3_key, project_id) already exists, it will be updated with the new data.
+    Otherwise, INSERT a new entry.
     """
-    existing_entry = get_vcf_metadata_by_keys(db, vcf_metadata_data["vcf_file_s3_key"], vcf_metadata_data["project_id"])
+    stmt = insert(VCFMetadataDB).values(**vcf_metadata_data)
 
-    if existing_entry:
-        for key, value in vcf_metadata_data.items():
-            if key not in ["vcf_file_s3_key", "project_id"]:
-                setattr(existing_entry, key, value)
-        dimensions_entry = existing_entry
-    else:
-        dimensions_entry = VCFMetadataDB(**vcf_metadata_data)
-        db.add(dimensions_entry)
+    update_dict = {}
+    for entry_index, entry_value in vcf_metadata_data.items():
+        if entry_index not in ["vcf_file_s3_key", "project_id"]:
+            update_dict[entry_index] = entry_value
 
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["vcf_file_s3_key", "project_id"],
+        set_=update_dict,
+    )
+
+    db.execute(stmt)
     db.commit()
-    db.refresh(dimensions_entry)
     logger.info(
-        f"VCF metadata created/updated for {dimensions_entry.vcf_file_s3_key} in project {dimensions_entry.project_id}"
+        f"VCF metadata created/updated for {vcf_metadata_data['vcf_file_s3_key']} "
+        f"in project {vcf_metadata_data['project_id']}"
     )
 
 
@@ -126,35 +120,26 @@ def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) 
 
 def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> SkippedVCFDB:
     """
-    Upsert (update or insert) skipped VCF entry.
-
-    Called by workers when a VCF file is identified as a DivBase result file based on its header.
-
-    Args:
-        db: Database session
-        skipped_vcf_data: Dictionary with fields:
-            - vcf_file_s3_key: str (required)
-            - project_id: int (required)
-            - s3_version_id: str
-            - skip_reason: str (e.g., "divbase_generated")
+    Upsert (update or insert) skipped VCF entry. Similar to create_or_update_vcf_metadata but for tracking the skipped VCF files (=old divbase results VCF files).
     """
-    existing_entry = get_skipped_vcf_by_keys(db, skipped_vcf_data["vcf_file_s3_key"], skipped_vcf_data["project_id"])
+    stmt = insert(SkippedVCFDB).values(**skipped_vcf_data)
 
-    if existing_entry:
-        for key, value in skipped_vcf_data.items():
-            if key not in ["vcf_file_s3_key", "project_id"]:
-                setattr(existing_entry, key, value)
-        skipped_entry = existing_entry
-    else:
-        skipped_entry = SkippedVCFDB(**skipped_vcf_data)
-        db.add(skipped_entry)
+    update_dict = {}
+    for entry_index, entry_value in skipped_vcf_data.items():
+        if entry_index not in ["vcf_file_s3_key", "project_id"]:
+            update_dict[entry_index] = entry_value
 
-    db.commit()
-    db.refresh(skipped_entry)
-    logger.info(
-        f"Skipped VCF entry {'created' if not existing_entry else 'updated'} for {skipped_entry.vcf_file_s3_key} in project {skipped_entry.project_id}"
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["vcf_file_s3_key", "project_id"],
+        set_=update_dict,
     )
-    return skipped_entry
+
+    db.execute(stmt)
+    db.commit()
+
+    logger.info(
+        f"Skipped VCF entry created/updated for {skipped_vcf_data['vcf_file_s3_key']} in project {skipped_vcf_data['project_id']}"
+    )
 
 
 def delete_skipped_vcf(db: Session, vcf_file_s3_key: str, project_id: int) -> None:
