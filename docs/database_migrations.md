@@ -10,6 +10,7 @@ The directory `packages/divbase-api/src/divbase_api/migrations` contains databas
 - **In production/deployed enviroments**, migrations should be applied as part of the deployment process - multi step and not automatic, see below.
 - **FastAPI's lifespan event automatically checks** if migrations are up to date during startup. - will raise an error if not.
 - **`pytest test/migrations`** can run tests to ensure all migrations can be applied cleanly to a fresh database.
+- **Celery managed tables** (`celery_taskmeta` and `celery_groupmeta`) are excluded from alembic (see the `migrations/env.py`), as Celery handles their creation and updates. Keep this in mind when creating migrations.
 
 ### Creating a New Migration
 
@@ -75,6 +76,12 @@ docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/d
 
 This will make the db-migrator init-container run the migrations, and then start fastapi and workers if successful.
 If issues check the db-migrator logs.
+
+You can also run the `pytest-alembic` tests to further validate the newly created migration script.
+
+```bash
+pytest tests/migrations
+```
 
 ## Production Deployment
 
