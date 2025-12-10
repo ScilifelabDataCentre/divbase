@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: 
       - main
+      - sqlalchemy-pg-as-results-backend # TODO - temp for testing the action during PR, rm before merge. 
     paths:
       - 'packages/divbase-api/src/divbase_api/migrations/**'
       - 'packages/divbase-api/src/divbase_api/models/**'
