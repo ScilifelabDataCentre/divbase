@@ -36,6 +36,8 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+      db-migrator:
+        condition: service_completed_successfully
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
@@ -106,6 +108,20 @@ services:
       mc admin user add minio s3-service-account badpassword;
       mc admin policy attach minio divbase-policy --user s3-service-account;
       "
+  db-migrator: # init container that runs any pending alembic migrations on startup
+    build:
+      context: ..
+      dockerfile: docker/fastapi.dockerfile
+    environment:
+      - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
+    command: ["alembic", "upgrade", "head"]
+    depends_on: 
+      postgres:
+        condition: service_healthy
+    networks: *internal-network
+    volumes: # read only volumes to get any new migration files (otherwise have to rebuild image to get new migration scripts)
+      - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations:ro
+      - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini:ro
   fastapi:
     build:
       context: ..
@@ -123,6 +139,9 @@ services:
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
+    volumes:
+      - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
+      - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 5s
@@ -134,6 +153,7 @@ services:
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
     - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
+    - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
