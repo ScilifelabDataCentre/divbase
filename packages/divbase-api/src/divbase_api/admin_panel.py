@@ -324,7 +324,6 @@ class ProjectVersionsView(ModelView):
     Custom admin panel View for the ProjectVersionDB model.
     """
 
-    # disable edit fields: files and project
     fields = [
         "id",
         StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
@@ -332,7 +331,7 @@ class ProjectVersionsView(ModelView):
         HasOne("project", identity="project", label="Project"),
         IntegerField(
             "user_id", label="User ID"
-        ),  # No relationship created for this field in db model as this is for auditing only
+        ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
         BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
         DateTimeField(
             "date_deleted",
@@ -354,7 +353,7 @@ class ProjectVersionsView(ModelView):
 
     page_size_options = PAGINATION_DEFAULTS
     exclude_fields_from_list = ["files"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at", "date_deleted", "files", "project", "user_id"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "files", "project", "user_id"]
     exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
