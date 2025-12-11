@@ -329,8 +329,10 @@ class ProjectVersionsView(ModelView):
         "id",
         StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
         TextAreaField("description", required=False, label="Description"),
-        "project",
-        "user_id",
+        HasOne("project", identity="project", label="Project"),
+        IntegerField(
+            "user_id", label="User ID"
+        ),  # No relationship created for this field in db model as this is for auditing only
         BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
         DateTimeField(
             "date_deleted",
