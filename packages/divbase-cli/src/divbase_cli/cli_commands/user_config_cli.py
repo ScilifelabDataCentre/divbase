@@ -155,7 +155,7 @@ def show_user_config(
         return
 
     table = Table(title="\nProjects in your DivBase CLI user config file")
-    table.add_column("Bucket Name", style="cyan")
+    table.add_column("Project Name", style="cyan")
     table.add_column("DivBase URL", style="green")
     table.add_column("Is default", style="yellow")
 

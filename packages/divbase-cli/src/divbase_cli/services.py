@@ -28,7 +28,7 @@ from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, 
 
 
 def add_version_command(project_name: str, divbase_base_url: str, name: str, description: str) -> AddVersionResponse:
-    """Add a new version to the bucket versioning file"""
+    """Add a new version to the project versions table stored on the divbase server"""
     request_data = AddVersionRequest(name=name, description=description)
 
     response = make_authenticated_request(
@@ -43,7 +43,7 @@ def add_version_command(project_name: str, divbase_base_url: str, name: str, des
 
 def list_versions_command(project_name: str, divbase_base_url: str) -> list[ProjectVersionInfo]:
     """
-    List all versions in the bucket versioning file
+    List all versions in the project versions table stored on the divbase server.
     Returns a dict of version names (keys) to details about the versions.
     """
     response = make_authenticated_request(
@@ -75,7 +75,7 @@ def get_version_details_command(
 
 def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
     """
-    Delete a version from the bucket versioning file.
+    Delete a version from the project versions table stored on the divbase server.
     This marks the version as (soft) deleted server side,
     and it will eventually be permanently deleted (after some grace period).
 
@@ -210,7 +210,7 @@ def upload_files_command(
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
     """
-    Soft delete objects from the project's S3 bucket.
+    Soft delete objects from the project's bucket.
     Returns a list of the soft deleted objects
     """
     response = make_authenticated_request(
