@@ -57,6 +57,7 @@ app.conf.update(
         "task": "celery_taskmeta",
         "group": "celery_groupmeta",
     },
+    result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
 
