@@ -31,8 +31,8 @@ class SampleMetadataQueryKwargs(BaseModel):
     metadata_tsv_name: str
     bucket_name: str
     project_id: int
-    user_name: str
     project_name: str
+    user_id: int
 
 
 class BcftoolsQueryKwargs(BaseModel):
@@ -43,8 +43,8 @@ class BcftoolsQueryKwargs(BaseModel):
     metadata_tsv_name: str
     bucket_name: str
     project_id: int
-    user_name: str
     project_name: str
+    user_id: int
 
 
 class SampleMetadataQueryTaskResult(BaseModel):
@@ -61,5 +61,4 @@ class BcftoolsQueryTaskResult(BaseModel):
     """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
 
     output_file: str
-    submitter: str
     status: Optional[str] = None

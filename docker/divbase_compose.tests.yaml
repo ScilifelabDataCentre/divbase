@@ -3,12 +3,6 @@ services:
   rabbitmq:
     ports: !override # port mapping is additive when merging compose files, unless overridden like this
       - 5673:5672 #host:container. for the testing env, it's enough to change the host port. The container port remains the same since it is for internal container communication.
-  redis:
-    ports: !override
-      - 6380:6379
-    volumes: !reset [] # reset to avoid conflicts with the redis settings in the main compose file
-    tmpfs:
-      - /data/
   worker-quick:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
@@ -21,13 +15,6 @@ services:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
-  flower:
-    ports: !override
-      - 5556:5555
-    volumes: !reset []
-    tmpfs:
-      - /data/
-    develop: !reset [] 
   minio:
     ports: !override
       - "9002:9000"

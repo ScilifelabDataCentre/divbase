@@ -1,13 +1,11 @@
-import os
-from time import sleep
-
-import httpx
 import pytest
 from celery import current_app
-from celery.backends.redis import RedisBackend
 from kombu.connection import Connection
+from sqlalchemy import select
 
+from divbase_api.models.task_history import CeleryTaskMeta
 from divbase_api.worker.tasks import app, bcftools_pipe_task, sample_metadata_query_task
+from divbase_api.worker.worker_db import SyncSessionLocal
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -16,69 +14,68 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
-@pytest.mark.integration
-def test_concurrency_of_worker_containers_connected_to_default_queue(
-    wait_for_celery_task_completion,
-    concurrency_of_default_queue,
-    bcftools_pipe_kwargs_fixture,
-    run_update_dimensions,
-    db_session_sync,
-    project_map,
-    CONSTANTS,
-):
-    """
-    This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
-    unless specifically set when initiating the celery app, the concurrency of the worker is based on the number of CPUs available on the host machine.
-    If there are multiple worker (containers) running, the concurrency is the sum of the concurrency of each worker.
+#### FLAKY TEST - DISABLED FOR NOW ####
+# TODO - Reimplement this at a later stage. Challenge is that the concurrency limits and worker scaling might handled differently in local dev than in k8s deployments
+# @pytest.mark.integration
+# def test_concurrency_of_worker_containers_connected_to_default_queue(
+#     wait_for_celery_task_completion,
+#     concurrency_of_default_queue,
+#     bcftools_pipe_kwargs_fixture,
+#     run_update_dimensions,
+#     db_session_sync,
+#     project_map,
+#     CONSTANTS,
+# ):
+#     """
+#     This test checks that multiple tasks can run concurrently on the worker container. Each Celery worker can run multiple tasks concurrently and
+#     unless specifically set when initiating the celery app, the concurrency of the worker is based on the number of CPUs available on the host machine.
+#     If there are multiple worker (containers) running, the concurrency is the sum of the concurrency of each worker.
 
-    Then submit multiple tasks to the worker and check that they are running concurrently. Specifically, submit 1 more task than the total concurrency of the worker containers.
-    By timing the sleep cycle of the task itself and the how long we wait for the tasks to complete, we can check that multiple tasks are running concurrently and that the one task
-    that exceeds the concurrency limit is PENDING until one of the other tasks finishes.
+#     Then submit multiple tasks to the worker and check that they are running concurrently. Specifically, submit 1 more task than the total concurrency of the worker containers.
+#     By timing the sleep cycle of the task itself and the how long we wait for the tasks to complete, we can check that multiple tasks are running concurrently and that the one task
+#     that exceeds the concurrency limit is PENDING until one of the other tasks finishes.
 
-    Note! This test specifically looks for the 'celery' queue, which is the default queue for Celery tasks. Multiple workers can be assigned to the 'celery' queue,
-    and the test should be able to accomodate for that case. However, celery does not automatically adjust the max possible concurrency across containers so there is a risk
-    that when multiple workers are assigned to the 'celery' queue (without specifying the concurrency parameter in the container), the concurrency will be higher than the CPU count
-    of the host machine, which could lead to excessive load on the host machine and potentially cause the test to fail.
+#     Note! This test specifically looks for the 'celery' queue, which is the default queue for Celery tasks. Multiple workers can be assigned to the 'celery' queue,
+#     and the test should be able to accomodate for that case. However, celery does not automatically adjust the max possible concurrency across containers so there is a risk
+#     that when multiple workers are assigned to the 'celery' queue (without specifying the concurrency parameter in the container), the concurrency will be higher than the CPU count
+#     of the host machine, which could lead to excessive load on the host machine and potentially cause the test to fail.
 
-    NOTE! This test is potentially flaky since it is dependent on timings. If the completion time for the task is less than 0.01 (which does not seem to be the case during the local dev so far), this test will likely fail.
-    """
-    project_name = CONSTANTS["QUERY_PROJECT"]
-    project_id = project_map[project_name]
-    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
-    bcftools_pipe_kwargs_fixture["project_id"] = project_id
+#     NOTE! This test is potentially flaky since it is dependent on timings. If the completion time for the task is less than 0.01 (which does not seem to be the case during the local dev so far), this test will likely fail.
+#     """
+#     project_name = CONSTANTS["QUERY_PROJECT"]
+#     project_id = project_map[project_name]
+#     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+#     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+#     bcftools_pipe_kwargs_fixture["project_id"] = project_id
 
-    broker_url = current_app.conf.broker_url
-    with Connection(broker_url) as conn:
-        conn.ensure_connection(max_retries=1)
+#     broker_url = current_app.conf.broker_url
+#     with Connection(broker_url) as conn:
+#         conn.ensure_connection(max_retries=1)
 
-    if isinstance(current_app.backend, RedisBackend):
-        current_app.backend.client.ping()
+#     total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
+#     task_count = total_default_queue_concurrency_on_host + 1
 
-    total_default_queue_concurrency_on_host = sum(concurrency_of_default_queue.values())
-    task_count = total_default_queue_concurrency_on_host + 1
+#     async_results = [
+#         bcftools_pipe_task.apply_async(kwargs=bcftools_pipe_kwargs_fixture, queue="celery") for _ in range(task_count)
+#     ]
 
-    async_results = [
-        bcftools_pipe_task.apply_async(kwargs=bcftools_pipe_kwargs_fixture, queue="celery") for _ in range(task_count)
-    ]
+#     wait_time = 0.01
+#     sleep(wait_time)
 
-    wait_time = 0.01
-    sleep(wait_time)
+#     states = [result.state for result in async_results]
 
-    states = [result.state for result in async_results]
+#     started_count = states.count("STARTED")
+#     pending_count = states.count("PENDING")
+#     assert started_count > 1, "Expected multiple tasks to run concurrently"
+#     assert started_count <= total_default_queue_concurrency_on_host, (
+#         f"Expected at most {total_default_queue_concurrency_on_host} concurrent tasks on the current machine"
+#     )
+#     assert pending_count == task_count - started_count, (
+#         "Expected more tasks to be pending when concurrency limit is exceeded"
+#     )
 
-    started_count = states.count("STARTED")
-    pending_count = states.count("PENDING")
-    assert started_count > 1, "Expected multiple tasks to run concurrently"
-    assert started_count <= total_default_queue_concurrency_on_host, (
-        f"Expected at most {total_default_queue_concurrency_on_host} concurrent tasks on the current machine"
-    )
-    assert pending_count == task_count - started_count, (
-        "Expected more tasks to be pending when concurrency limit is exceeded"
-    )
-
-    for result in async_results:
-        wait_for_celery_task_completion(task_id=result.id, max_wait=30)
+#     for result in async_results:
+#         wait_for_celery_task_completion(task_id=result.id, max_wait=30)
 
 
 @pytest.mark.integration
@@ -111,7 +108,6 @@ def test_task_routing(
     """
     This test checks that the task routing is set up correctly for the tasks in the test parameter.
     A worker can be assigned to multiple queues, so the test should check that each task is routed to the correct queue (either via static or dynamic task routing).
-    Getting logs on which worker executeted the task is easiest done via the Flower API.
 
     The logic of the test is as follows:
     1. Get the current task routes and assert that the task to be tested by the current test parameter is in the current task routes.
@@ -119,9 +115,8 @@ def test_task_routing(
        - If static routing is used, the task should be in the current task routes dictionary.
        - If dynamic routing is used, the current task routes is a tuple of functions that each can be called to return a dictionary with routing information.
     2. Get the active queues of the workers and create a mapping of queues to workers.
-    3. Submit a task that is routed to go to the to the queue defined in the router in tasks.py (and registered in the app.conf.task_routes).
-    4. Use the Flower API to get the task result and check which worker executed the task and assert that the worker is in the list of workers assigned to the
-       expected_queue of the current test parameter
+    3. Submit a task that is routed to go to the queue defined in the router in tasks.py (and registered in the app.conf.task_routes).
+    4. Query the PostgreSQL results backend to verify the task was executed by a worker assigned to the expected queue.
 
     More details on the logic for asserting static vs dynamic routing for tasks in step 1:
     - if static routing is used, current_task_routes is a dict. the functions in the test parameter tasks_to_test are celery tasks and thus have a .name attribute
@@ -140,16 +135,13 @@ def test_task_routing(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     task_kwargs["project_id"] = project_id
-    task_kwargs["user_name"] = "Test User"
 
     broker_url = app.conf.broker_url
     with Connection(broker_url) as conn:
         conn.ensure_connection(max_retries=1)
-
-    if isinstance(app.backend, RedisBackend):
-        app.backend.client.ping()
 
     ## Step 1
     current_task_routes = current_app.conf.task_routes
@@ -187,22 +179,14 @@ def test_task_routing(
     ## Step 4
     wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
-    flower_user = os.environ.get("FLOWER_USER")
-    flower_password = os.environ.get("FLOWER_PASSWORD")
-    flower_base_url = os.environ.get("FLOWER_BASE_URL")
+    with SyncSessionLocal() as db:
+        stmt = select(CeleryTaskMeta.worker).where(CeleryTaskMeta.task_id == task_id)
+        worker = db.execute(stmt).scalar_one_or_none()
 
-    flower_url = f"{flower_base_url}/api/tasks"
-    auth = (flower_user, flower_password)
+    assert worker is not None, f"Task {task_id} not found in results backend"
 
-    try:
-        response = httpx.get(flower_url, auth=auth, timeout=3.0)
-    except httpx.RequestError as e:
-        pytest.fail(f"Could not connect to Flower API: {e}")
-
-    if response.is_success:
-        worker = response.json().get(task_id, {}).get("worker")
-        assert worker in current_queue_to_workers_assignment.get(expected_queue), (
-            f"Expected task {task_id} to be executed by a worker in the {expected_queue} queue, but got {worker}"
-        )
-    else:
-        raise AssertionError(f"Task {task_id} not found in Flower. Response: {response.text}")
+    expected_workers = current_queue_to_workers_assignment.get(expected_queue, [])
+    assert worker in expected_workers, (
+        f"Expected task {task_id} to be executed by a worker in the {expected_queue} queue "
+        f"(workers: {expected_workers}), but got {worker}"
+    )
