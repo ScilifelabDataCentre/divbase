@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 # TODO decide if these should be defined in the env var or implemented in another way. right now they fallback on the default values
 TASK_RETENTION_DAYS = int(os.environ.get("TASK_RETENTION_DAYS", "30"))
-STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "24"))
-STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "48"))
+STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
+STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
