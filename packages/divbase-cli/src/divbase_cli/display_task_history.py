@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 from rich.console import Console
@@ -72,34 +71,13 @@ class TaskHistoryDisplayManager:
                 submitter,
                 task_id,
                 state_with_colour,
-                self._format_unix_timestamp(task.created_at),
-                self._format_unix_timestamp(task.started_at),
+                str(task.created_at or "N/A"),
+                str(task.started_at or "N/A"),
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
         console = Console()
         console.print(table)
-
-    def _format_unix_timestamp(self, timestamp):
-        """
-        The results backend task status returns timestamps as integers or floats.
-        This function formats them into a human-readable string.
-        """
-        if timestamp is None:
-            return "N/A"
-
-        if isinstance(timestamp, datetime.datetime):
-            dt = timestamp.replace(microsecond=0)
-        elif isinstance(timestamp, (int, float)):
-            dt = datetime.datetime.fromtimestamp(timestamp).replace(microsecond=0)
-        else:
-            return str(timestamp)
-
-        if dt.tzinfo is not None:
-            return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        else:
-            local_dt = dt.astimezone()
-            return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def _create_task_history_table(self):
         """

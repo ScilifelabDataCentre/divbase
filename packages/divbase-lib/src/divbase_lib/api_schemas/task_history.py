@@ -44,9 +44,9 @@ class TaskHistoryResult(BaseModel):
         ]
     ] = None
     worker: Optional[str] = None
-    created_at: Optional[float] = None
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
     runtime: Optional[float] = None
 
 

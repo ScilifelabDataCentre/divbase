@@ -1,6 +1,7 @@
 import json
 import logging
 import pickle
+from datetime import datetime, timezone
 
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -115,8 +116,19 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
         "args": args_as_str,
         "kwargs": parsed_kwargs,
         "worker": task.get("worker"),
-        "created_at": task.get("created_at").timestamp() if task.get("created_at") else None,
-        "started_at": started_at.timestamp() if started_at else None,
-        "completed_at": completed_at.timestamp() if completed_at else None,
+        "created_at": _format_timestamp(task.get("created_at")),
+        "started_at": _format_timestamp(started_at),
+        "completed_at": _format_timestamp(completed_at),
         "runtime": runtime,
     }
+
+
+def _format_timestamp(timestamp: datetime) -> str | None:
+    """
+    Format datetime to string with timezone. Celery uses UTC by default.
+    """
+    if timestamp is None:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")
