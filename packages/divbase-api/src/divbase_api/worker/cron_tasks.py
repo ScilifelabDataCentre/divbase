@@ -21,6 +21,8 @@ TASK_RETENTION_DAYS = int(os.environ.get("TASK_RETENTION_DAYS", "30"))
 STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "24"))
 STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "48"))
 
+# TODO NEW QUERY LOGIC NEEDED TO GET PENDING STATUS FROM HERE
+
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
 def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):

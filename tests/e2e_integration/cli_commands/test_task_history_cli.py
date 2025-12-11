@@ -1,5 +1,8 @@
+import datetime
+import re
 from contextlib import contextmanager
 from time import sleep
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -370,3 +373,63 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
     assert "Task ID not found or you don't have permission to view the history for this task ID." in str(
         result_history.exception
     )
+
+
+def test_display_queuing_state_when_queue_full():
+    """
+    Unit test that TaskHistoryDisplayManager displays 'QUEUING' state for tasks
+    that do not have a known Celery worker state (i.e., are still queued).
+    """
+    # Simulate a started task (should not be QUEUING)
+    started_task_id = "started-task-123"
+    started_task = SimpleNamespace()
+    started_task.status = "STARTED"
+    started_task.submitter_email = "user2@example.com"
+    started_task.created_at = datetime.datetime.now()
+    started_task.started_at = datetime.datetime.now()
+    started_task.runtime = 5.0
+    started_task.result = None
+
+    # Simulate a queued task (no status)
+    queuing_task_id = "queued-task-456"
+    queuing_task = SimpleNamespace()
+    queuing_task.status = None
+    queuing_task.submitter_email = "user@example.com"
+    queuing_task.created_at = datetime.datetime.now()
+    queuing_task.started_at = None
+    queuing_task.runtime = None
+    queuing_task.result = None
+
+    # Simulate a queued task (PENDING status not in CELERY_STATES_EXCLUDING_PENDING)
+    queuing_task_2_id = "queued-task-789"
+    queuing_task_2 = SimpleNamespace()
+    queuing_task_2.status = "PENDING"
+    queuing_task_2.submitter_email = "user@example.com"
+    queuing_task_2.created_at = datetime.datetime.now()
+    queuing_task_2.started_at = None
+    queuing_task_2.runtime = None
+    queuing_task_2.result = None
+
+    task_items = {
+        started_task_id: started_task,
+        queuing_task_id: queuing_task,
+        queuing_task_2_id: queuing_task_2,
+    }
+
+    manager = TaskHistoryDisplayManager(
+        task_items=task_items,
+        user_name="user@example.com",
+        project_name=None,
+        task_id=None,
+        mode="user",
+        display_limit=10,
+    )
+
+    with patch("rich.table.Table.add_row") as mock_add_row, patch("rich.console.Console.print"):
+        manager.print_task_history()
+
+    state_columns = [call_args[0][2] for call_args in mock_add_row.call_args_list]
+    state_columns_clean = [re.sub(r"\[.*?\]", "", s).strip() for s in state_columns]
+
+    assert "QUEUING" in state_columns_clean
+    assert "STARTED" in state_columns_clean

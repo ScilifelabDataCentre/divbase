@@ -368,25 +368,17 @@ class DivBaseAuthProvider(AuthProvider):
 
 
 class TaskHistoryView(ModelView):
-    """
-    Custom admin panel View for the TaskHistoryDB model.
-    """
-
     page_size_options = PAGINATION_DEFAULTS
-    fields_default_sort = [("created_at", False)]  # False = descending, True = ascending
+
     fields = [
-        StringField("task_id", label="Task UUID", disabled=True),
-        StringField("status", label="Status", disabled=True),
+        StringField("task_id"),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("started_at", label="Started At", disabled=True),
-        DateTimeField("completed_at", label="Completed At", disabled=True),
+        DateTimeField("created_at"),
         FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
     ]
-
-    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
+    fields_default_sort = [("created_at", True)]  # False = descending, True = ascending
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
@@ -394,9 +386,6 @@ class TaskHistoryView(ModelView):
         """
         if field.name == "runtime_seconds" and value is not None:
             return f"{value:.2f}"
-
-        if field.name == "status" and isinstance(value, str):
-            return value.upper()
         return await super().serialize_field_value(value, field, action, request)
 
     def can_create(self, request: Request) -> bool:
@@ -421,6 +410,7 @@ class CeleryTaskMetaView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
     exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
 
     fields = [

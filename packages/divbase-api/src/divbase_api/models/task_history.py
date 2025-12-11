@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, LargeBinary, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import Base, BaseDBModel
@@ -50,7 +50,6 @@ class TaskHistoryDB(BaseDBModel):
         nullable=True,  # nullable so that cronjob tasks can use project_id None
         index=True,
     )
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
     error_message: Mapped[str] = mapped_column(String, nullable=True)
     result_message: Mapped[str] = mapped_column(String, nullable=True)
 
