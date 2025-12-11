@@ -50,9 +50,6 @@ class TaskHistoryDB(BaseDBModel):
         nullable=True,  # nullable so that cronjob tasks can use project_id None
         index=True,
     )
-    error_message: Mapped[str] = mapped_column(String, nullable=True)
-    result_message: Mapped[str] = mapped_column(String, nullable=True)
-
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 

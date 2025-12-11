@@ -21,14 +21,13 @@ async def get_tasks_pg(
     task_id: str | None = None,
     is_admin: bool = False,
     require_manager_role: bool = False,
-    include_system_tasks: bool = False,
 ) -> list[dict] | dict | None:
     """
     Dynamic crud to fetch task history (CeleryTaskMeta + TaskHistoryDB) with different filters.
     If task_id is provided, returns a single dict or None.
     Otherwise, returns a list of dicts.
 
-    System tasks (project_id=NULL) are excluded by default unless explicitly requested with include_system_tasks.
+    System tasks (project_id=NULL) are excluded by default.
 
     Note: Packing of results into a pydantic model happens in during deserialization in the service layer.
     """
@@ -44,8 +43,6 @@ async def get_tasks_pg(
         .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
     )
 
-    if not include_system_tasks:
-        stmt = stmt.where(TaskHistoryDB.project_id.is_not(None))
     if task_id:
         stmt = stmt.where(TaskHistoryDB.task_id == task_id)
     if project_id is not None:

@@ -27,7 +27,7 @@ class TaskHistoryDisplayManager:
         "REVOKED": "magenta",
     }
     # These are the states known by the worker. The state when a task is in the queue is handled by the broker and PENDING is typically used
-    # To avoid having separate logic for the enqueued state, check task status against the worker state and return QUEUED to user's terminal.
+    # To avoid having separate CRUD logic for the enqueued state, check task status against the worker state and return QUEUING to user's terminal.
     CELERY_STATES_EXCLUDING_PENDING = {"STARTED", "SUCCESS", "FAILURE", "RETRY", "REVOKED"}
 
     def __init__(
