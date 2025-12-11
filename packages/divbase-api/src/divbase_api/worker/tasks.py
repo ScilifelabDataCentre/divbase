@@ -2,12 +2,17 @@ import dataclasses
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
 from celery import Celery
 from celery.signals import (
     after_task_publish,
+    task_failure,
+    task_prerun,
+    task_revoked,
+    task_success,
 )
 from sqlalchemy.dialects.postgresql import insert
 
@@ -92,7 +97,10 @@ app.conf.task_routes = (dynamic_router,)
 def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
     """
     Create TaskHistoryDB entry when task is published to broker.
-    Only creates the entry if it does not exist.
+
+    Only creates the entry if it does not exist. If other signal handlers have
+    happened to create the entry before this signal handler (=race condition),
+    this function just updates user_id and project_id.
     """
     task_id = headers.get("id")
 
@@ -104,12 +112,83 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
     project_id = task_kwargs.get("project_id")
 
     with SyncSessionLocal() as db:
-        stmt = insert(TaskHistoryDB).values(
-            task_id=task_id,
-            user_id=user_id,
-            project_id=project_id,
+        insert_values = {
+            "task_id": task_id,
+            "user_id": user_id,
+            "project_id": project_id,
+        }
+        update_values = {}
+        if user_id is not None:
+            update_values["user_id"] = user_id
+        if project_id is not None:
+            update_values["project_id"] = project_id
+
+        stmt = insert(TaskHistoryDB).values(**insert_values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["task_id"],
+            set_=update_values,
         )
-        stmt = stmt.on_conflict_do_nothing(index_elements=["task_id"])
+        db.execute(stmt)
+        db.commit()
+
+
+@task_prerun.connect
+def handle_task_started(sender=None, task_id=None, **kwargs):
+    """
+    Signal handler that updates the started_at timestamp in TaskHistoryDB
+    for the given task_id.
+    """
+    _upsert_task_timestamps(task_id=task_id, set_started_at=True)
+
+
+@task_success.connect
+def handle_task_success(sender=None, **kwargs):
+    """
+    Signal handler that updates the completed_at timestamp in TaskHistoryDB
+    for the given task_id upon task success.
+    """
+    task_id = sender.request.id
+    _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
+
+
+@task_failure.connect
+def handle_task_failure(sender=None, task_id=None, **kwargs):
+    """
+    Signal handler that updates the completed_at timestamp in TaskHistoryDB
+    for the given task_id upon task failure.
+    """
+    _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
+
+
+@task_revoked.connect
+def handle_task_revoked(sender=None, request=None, **kwargs):
+    """
+    Signal handler that updates the completed_at timestamp in TaskHistoryDB
+    for the given task_id when a task is revoked.
+    """
+    task_id = request.id if request else None
+    if task_id:
+        _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
+
+
+def _upsert_task_timestamps(task_id: str, set_started_at=False, set_completed_at=False):
+    """
+    Helper function that UPSERTs timestamps in TaskHistoryDB based on the signal handlers
+    that calls it. If the task_pending_handler signal handler have not created the entry
+    before this signal handler (=race condition), this function creates the entry and the
+    timestamps, but leaves user_id and project_id to the other function.
+    """
+    with SyncSessionLocal() as db:
+        upsert_values = {"task_id": task_id}
+        if set_started_at:
+            upsert_values["started_at"] = datetime.now(timezone.utc)
+        if set_completed_at:
+            upsert_values["completed_at"] = datetime.now(timezone.utc)
+        stmt = insert(TaskHistoryDB).values(**upsert_values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["task_id"],
+            set_=upsert_values,
+        )
         db.execute(stmt)
         db.commit()
 

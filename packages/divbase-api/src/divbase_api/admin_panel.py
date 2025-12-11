@@ -410,7 +410,6 @@ class CeleryTaskMetaView(ModelView):
     """
 
     page_size_options = PAGINATION_DEFAULTS
-    fields_default_sort = [("id", True)]  # False = descending, True = ascending
     exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
 
     fields = [
@@ -427,6 +426,7 @@ class CeleryTaskMetaView(ModelView):
         TextAreaField("result", label="Result", disabled=True),
         TextAreaField("traceback", label="Traceback", disabled=True),
     ]
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
