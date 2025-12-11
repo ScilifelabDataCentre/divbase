@@ -23,15 +23,11 @@ from starlette_admin import (
     FloatField,
     HasOne,
     IntegerField,
-    StringField,
-    TextAreaField,
-)
-from starlette_admin._types import RequestAction
-    IntegerField,
     JSONField,
     StringField,
     TextAreaField,
 )
+from starlette_admin._types import RequestAction
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError
