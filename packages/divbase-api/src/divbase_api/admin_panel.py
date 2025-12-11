@@ -9,6 +9,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Response
 from pydantic import SecretStr
@@ -44,6 +45,13 @@ from divbase_api.services.task_history import _deserialize_celery_task_metadata
 logger = logging.getLogger(__name__)
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
+
+
+def _format_cet_datetime(value: Any, field: Any, field_names: list[str]) -> str | None:
+    if isinstance(value, datetime) and field.name in field_names:
+        cet_dt = value.astimezone(ZoneInfo("Europe/Stockholm"))
+        return cet_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+    return None
 
 
 class UserView(ModelView):
@@ -147,6 +155,12 @@ class UserView(ModelView):
         if isinstance(exc, IntegrityError):
             raise FormValidationError(errors={"email": "A user with this email already exists"})
         return super().handle_exception(exc)
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["last_password_change", "date_deleted"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
 
 
 class ProjectView(ModelView):
@@ -264,6 +278,12 @@ class ProjectMembershipView(ModelView):
 
         return super().handle_exception(exc)
 
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["last_password_change", "date_deleted"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
 
 class RevokedTokenView(ModelView):
     """
@@ -301,6 +321,12 @@ class RevokedTokenView(ModelView):
             raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
 
         return super().handle_exception(exc)
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
 
 
 class DivBaseAuthProvider(AuthProvider):
@@ -386,6 +412,10 @@ class TaskHistoryView(ModelView):
         """
         if field.name == "runtime_seconds" and value is not None:
             return f"{value:.2f}"
+        if isinstance(value, datetime) and field.name in ["created_at"]:
+            formatted = _format_cet_datetime(value, field, ["created_at"])
+            if formatted is not None:
+                return formatted
         return await super().serialize_field_value(value, field, action, request)
 
     def can_create(self, request: Request) -> bool:
@@ -435,6 +465,11 @@ class CeleryTaskMetaView(ModelView):
 
         NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
         """
+        if isinstance(value, datetime) and field.name == "date_done":
+            formatted = _format_cet_datetime(value, field, ["date_done"])
+            if formatted is not None:
+                return formatted
+
         # For non-bytes values or fields we don't need to deserialize, use default behavior
         if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
             return await super().serialize_field_value(value, field, action, request)
