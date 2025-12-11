@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from rich.console import Console
 from rich.table import Table
@@ -71,8 +73,8 @@ class TaskHistoryDisplayManager:
                 submitter,
                 task_id,
                 state_with_colour,
-                str(task.created_at or "N/A"),
-                str(task.started_at or "N/A"),
+                self._to_cet(task.created_at),
+                self._to_cet(task.started_at),
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
@@ -165,3 +167,16 @@ class TaskHistoryDisplayManager:
 
         result_message = str(task.result)
         return f"[{colour}]{result_message}[/{colour}]"
+
+    def _to_cet(self, timestamp_str):
+        """
+        Convert a UTC timestamp string in '%Y-%m-%d %H:%M:%S UTC' format to CET.
+        """
+        if not timestamp_str or timestamp_str == "N/A":
+            return "N/A"
+        try:
+            dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S %Z")
+            cet_dt = dt.astimezone(ZoneInfo("Europe/Stockholm"))
+            return cet_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        except Exception:
+            return timestamp_str

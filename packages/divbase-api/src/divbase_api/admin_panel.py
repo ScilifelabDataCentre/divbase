@@ -48,9 +48,18 @@ PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 
 
 def _format_cet_datetime(value: Any, field: Any, field_names: list[str]) -> str | None:
+    """
+    Helper function that can be called by overiding 'async def serialize_field_value()'
+    for views that display datetimes.
+    To change timezone, use patterns like this:
+    dt = value.astimezone(timezone.utc) - displays UTC
+    OR
+    from zoneinfo import ZoneInfo
+    dt = value.astimezone(ZoneInfo("Europe/Stockholm")) - displays CET
+    """
     if isinstance(value, datetime) and field.name in field_names:
-        cet_dt = value.astimezone(ZoneInfo("Europe/Stockholm"))
-        return cet_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        dt = value.astimezone(ZoneInfo("Europe/Stockholm"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
     return None
 
 
@@ -279,7 +288,7 @@ class ProjectMembershipView(ModelView):
         return super().handle_exception(exc)
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        formatted = _format_cet_datetime(value, field, ["last_password_change", "date_deleted"])
+        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
         if formatted is not None:
             return formatted
         return await super().serialize_field_value(value, field, action, request)
