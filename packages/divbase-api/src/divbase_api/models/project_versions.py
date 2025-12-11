@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,7 +28,7 @@ class ProjectVersionDB(BaseDBModel):
 
     __tablename__ = "project_version"
 
-    name: Mapped[str] = mapped_column(String(100), index=True, unique=True)
+    name: Mapped[str] = mapped_column(String(100), index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     files: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
@@ -41,6 +41,8 @@ class ProjectVersionDB(BaseDBModel):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), index=True)
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="project_versions")
+
+    __table_args__ = (UniqueConstraint("name", "project_id", name="unique_name_project"),)
 
     def __repr__(self) -> str:
         return f"<ProjectVersionDB id={self.id}, project_id={self.project_id}, name={self.name}>"
