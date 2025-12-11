@@ -7,9 +7,9 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from celery.schedules import crontab
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.worker.tasks import app
 from divbase_api.worker.worker_db import SyncSessionLocal
 
@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 TASK_RETENTION_DAYS = int(os.environ.get("TASK_RETENTION_DAYS", "30"))
 STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "24"))
 STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "48"))
-
-# TODO NEW QUERY LOGIC NEEDED TO GET PENDING STATUS FROM HERE
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
@@ -71,11 +69,8 @@ def cleanup_stuck_tasks_task(
     Periodic task to clean up tasks stuck in PENDING or STARTED status from
     TaskHistoryDB and CeleryTaskMeta.
 
-    Tasks stuck in PENDING for more than stuck_pending_hours are likely orphaned
-    (worker never picked them up or queue issue).
-
-    Tasks stuck in STARTED for more than stuck_started_hours are likely from
-    worker crashes where the task started but never completed.
+    Joins TaskHistoryDB and CeleryTaskMeta, finds tasks stuck in PENDING or STARTED
+    for longer than the configured threshold, and deletes them from both tables.
     """
     try:
         now = datetime.now(timezone.utc)
@@ -83,29 +78,43 @@ def cleanup_stuck_tasks_task(
         started_cutoff = now - timedelta(hours=stuck_started_hours)
 
         with SyncSessionLocal() as db:
-            stuck_pending = db.execute(
-                delete(TaskHistoryDB)
-                .where(TaskHistoryDB.status == TaskStatus.PENDING)
-                .where(TaskHistoryDB.created_at < pending_cutoff)
-                .returning(TaskHistoryDB.task_id)
-            ).fetchall()
+            # Find stuck PENDING tasks
+            stuck_pending_ids = [
+                row[0]
+                for row in db.execute(
+                    text("""
+                    SELECT th.task_id
+                    FROM task_history th
+                    JOIN celery_taskmeta cm ON th.task_id = cm.task_id
+                    WHERE cm.status = 'PENDING'
+                    AND th.created_at < :pending_cutoff
+                    """),
+                    {"pending_cutoff": pending_cutoff},
+                ).fetchall()
+            ]
 
-            stuck_pending_ids = [row[0] for row in stuck_pending]
+            # Find stuck STARTED tasks
+            stuck_started_ids = [
+                row[0]
+                for row in db.execute(
+                    text("""
+                    SELECT th.task_id
+                    FROM task_history th
+                    JOIN celery_taskmeta cm ON th.task_id = cm.task_id
+                    WHERE cm.status = 'STARTED'
+                    AND th.started_at IS NOT NULL
+                    AND th.started_at < :started_cutoff
+                    """),
+                    {"started_cutoff": started_cutoff},
+                ).fetchall()
+            ]
 
-            stuck_started = db.execute(
-                delete(TaskHistoryDB)
-                .where(TaskHistoryDB.status == TaskStatus.STARTED)
-                .where(TaskHistoryDB.started_at < started_cutoff)
-                .returning(TaskHistoryDB.task_id)
-            ).fetchall()
+            all_stuck_ids = stuck_pending_ids + stuck_started_ids
 
-            stuck_started_ids = [row[0] for row in stuck_started]
-
-            if stuck_pending_ids or stuck_started_ids:
-                all_stuck_ids = stuck_pending_ids + stuck_started_ids
+            if all_stuck_ids:
+                db.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(all_stuck_ids)))
                 db.execute(delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(all_stuck_ids)))
-
-            db.commit()
+                db.commit()
 
             logger.info(
                 f"Cleaned up {len(stuck_pending_ids)} PENDING tasks older than {stuck_pending_hours}h "

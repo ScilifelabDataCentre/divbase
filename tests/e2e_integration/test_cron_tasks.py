@@ -64,7 +64,6 @@ def create_task_entry(db_session_sync, project_map):
             task_id=task_id,
             user_id=user_id,
             project_id=project_id,
-            status=status,
             created_at=created_at,
             started_at=started_at,
             completed_at=completed_at,
