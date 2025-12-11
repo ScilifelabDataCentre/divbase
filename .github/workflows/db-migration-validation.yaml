@@ -17,7 +17,7 @@ on:
       - 'tests/migrations/**'
 
 jobs:
-  uv-example:
+  test-migration-scripts-with-pytest-alembic:
     name: python
     runs-on: ubuntu-latest
     steps:
@@ -32,5 +32,5 @@ jobs:
       - name: Install the project
         run: uv sync --locked --dev
 
-      - name: Run tests
+      - name: Run pytest-alembic tests
         run: uv run pytest tests/migrations
