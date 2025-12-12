@@ -142,12 +142,13 @@ def show_user_config(
         dload_dir_info = "Working directory of wherever you run the download command from."
     else:
         dload_dir_info = config.default_download_dir
-    console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+    console.print(f"[bold]Default Download Directory:[/bold] '{dload_dir_info}'")
 
-    if config.logged_in_url:
-        console.print(f"[bold]You're logged into DivBase API at URL:[/bold] {config.logged_in_url}")
+    if config.logged_in_url and config.logged_in_email:
+        console.print(f"[bold]You're logged into a DivBase server at URL:[/bold] '{config.logged_in_url}'")
+        console.print(f"[bold]Logged in with email:[/bold] '{config.logged_in_email}'")
     else:
-        console.print("[bold]Not currently logged into any DivBase API URL.[/bold]")
+        console.print("[bold]You're not logged into to any DivBase server.[/bold]")
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
