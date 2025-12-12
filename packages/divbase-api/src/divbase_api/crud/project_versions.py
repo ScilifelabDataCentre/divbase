@@ -64,7 +64,7 @@ async def add_project_version(
     except IntegrityError as e:
         await db.rollback()
         error_details = str(e.orig).lower()
-        if "project_version_name" in error_details and "unique constraint" in error_details:
+        if "unique_name_project" in error_details and "unique constraint" in error_details:
             raise ProjectVersionAlreadyExistsError(
                 message=f"A project version with the name '{name}' already exists for this project. Please choose a different name.",
             ) from None
