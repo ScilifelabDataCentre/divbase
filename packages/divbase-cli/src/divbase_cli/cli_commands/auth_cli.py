@@ -56,7 +56,7 @@ def login(
                 return
 
     login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url)
-    config.set_logged_in_url(divbase_url)
+    config.set_login_status(url=divbase_url, email=email)
     print(f"Logged in successfully as: {email}")
 
 
