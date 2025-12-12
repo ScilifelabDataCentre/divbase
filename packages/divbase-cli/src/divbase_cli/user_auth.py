@@ -139,9 +139,12 @@ def logout_of_divbase(
                 api_route="v1/auth/logout",
                 json=request_data.model_dump(),
             )
+        except AuthenticationError:
+            # Tokens already expired/invalid/revoked etc...
+            pass
         except DivBaseAPIConnectionError as e:
             warnings.warn(
-                f"Could not contact DivBase server to log out fully: '{e}'.\n\n"
+                f"Could not connect to DivBase server to log out fully: '{e}'.\n\n"
                 "Continuing local logout.\n"
                 "You do not need to do anything, but if you see this message often, please let us know.",
                 stacklevel=2,
@@ -149,7 +152,7 @@ def logout_of_divbase(
             )
         except DivBaseAPIError as e:
             warnings.warn(
-                f"Recieved an error message from DivBase server when attempting to logout:"
+                f"Received an error message from DivBase server when attempting to logout:"
                 f"'{e.error_message=}'. \n\n"
                 "Continuing local logout.\n"
                 "You do not need to do anything. If you see this message a lot, please let us know.",
