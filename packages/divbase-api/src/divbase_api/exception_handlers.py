@@ -76,6 +76,20 @@ async def render_error_page(
     )
 
 
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Handle unexpected exceptions globally. - in the ideal world this is never be triggered
+    """
+    logger.error(f"Unexpected Error occured for: {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An unexpected error occurred. Please try again later.",
+            "type": "server_error",
+        },
+    )
+
+
 async def authentication_error_handler(request: Request, exc: AuthenticationError):
     logger.info(f"Authentication failed for {request.method} {request.url.path}: {exc.message}", exc_info=False)
 
@@ -328,7 +342,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionNotFoundError, project_version_not_found_error_handler)  # type: ignore
-    app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore
+
+    # These cover more generic/unexpected HTTP errors - the exceptions above take precedence
+    app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
+    app.add_exception_handler(Exception, global_exception_handler)  # type: ignore
