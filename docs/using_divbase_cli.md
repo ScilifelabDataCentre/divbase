@@ -69,38 +69,61 @@ divbase-cli config show-default
 
 ## 3. Versioning the projects state
 
-The DivBase server uses S3 buckets to store project files. Each project has its own assigned bucket. These buckets support versioning of files natively via S3. So individual files can be restored to prior versions if needed.
+DivBase allows you to create named versions of your project's state at specific points in time. This is useful for tracking changes, ensuring reproducibility, and marking important milestones (e.g., when running analysis for a publication).
 
-On top of this we also support versioning of the entire project's state via a special file stored in the bucket. This allows users to create named versions of the entire project at a given timepoint.
+This means you can save the current state of your project as a named version, and later retrieve files as they were at that specific version (so you don't have to worry about having later updated files).
 
-One potential use case for this could be:
+### Add a new version
 
-- Marking a time point when you did analysis for the a publication.
-
-At a later date, you could then download/upload all files from/to the bucket as they were at that timepoint to ensure reproducibility of results.
-
-If you're in a new project, you can create the bucket versioning file by running
+To save the current state of your project run:
 
 ```bash
-divbase-cli version create
+divbase-cli version add NAME [OPTIONS]
 ```
 
-This will create a file in the bucket called `.bucket_versions.yaml`
+- Replace `NAME` with a unique name for the version (e.g., v1.0.0).
+- You can optionally add a description using the --description flag.
 
-An already existing bucket likely has this file, we can see the contents of this file by running:
+**Note:** Versions are project wide, so you share them with all other members of the same project.
+
+### Listing Versions
+
+To see all existing versions of your project, run:
 
 ```bash
 divbase-cli version list
 ```
 
-If after working with the bucket for a while you want to version the current state of the bucket, you can run:
+This will display a list of all saved versions, including their names, descriptions, and creation dates.
+
+### Specific Version Details
+
+To get detailed information about a specific version, use:
 
 ```bash
-divbase-cli version add [OPTIONS] NAME
+divbase-cli version info NAME
 ```
 
-To download files from bucket at a specific bucket version/state, we can use the --bucket-version option and specify the version name we want to download from:
+This view will also include all the files associated with that version.
+
+### Deleting Versions
+
+To delete a specific version from your project, run:
 
 ```bash
-divbase-cli files download file1.vcf.gz file2.vcf.gz --bucket-version=v0.1.0
+divbase-cli version delete NAME
 ```
+
+This will delete the version entry from the project. Deleted versions older than 30 days will be permanently deleted. You can ask a DivBase admin to restore a deleted version within that time period.
+
+**NOTE:** The files associated with the version are never deleted by this operation.
+
+### Downloading files from a specific version
+
+To download files from your project as they were at a specific version, use the --project-version option:
+
+```bash
+divbase-cli files download file1.vcf.gz file2.vcf.gz --project-version=NAME
+```
+
+Replacing `NAME` with the name of the version you want to download files from.

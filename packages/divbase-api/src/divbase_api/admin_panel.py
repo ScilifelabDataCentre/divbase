@@ -24,6 +24,7 @@ from starlette_admin import (
     FloatField,
     HasOne,
     IntegerField,
+    JSONField,
     StringField,
     TextAreaField,
 )
@@ -35,6 +36,7 @@ from starlette_admin.exceptions import FormValidationError
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
+from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
@@ -101,6 +103,14 @@ class UserView(ModelView):
             disabled=True,
         ),
         "project_memberships",
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
     ]
 
     exclude_fields_from_list = ["hashed_password", "password"]
@@ -133,13 +143,11 @@ class UserView(ModelView):
         Override the default edit method to ensure that the `date_deleted` field is updated
         when/if a users soft deletion status is changed.
         """
-        logger.info(f"Editing user with pk={pk}, data={data}")
         if "is_deleted" in data:
             if data["is_deleted"]:
                 data["date_deleted"] = datetime.now(tz=timezone.utc)
             else:
                 data["date_deleted"] = None
-        logger.info(f"Editing user with pk={pk}, data={data}")
 
         return await super().edit(request=request, pk=pk, data=data)
 
@@ -203,6 +211,14 @@ class ProjectView(ModelView):
             help_text="Current storage usage for this project in bytes.",
         ),
         BooleanField("is_active", required=True, label="Is Active", help_text="Mark the project as active or not."),
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
     ]
 
     exclude_fields_from_list = ["description", "storage_used_bytes"]
@@ -336,6 +352,65 @@ class RevokedTokenView(ModelView):
         if formatted is not None:
             return formatted
         return await super().serialize_field_value(value, field, action, request)
+
+
+class ProjectVersionsView(ModelView):
+    """
+    Custom admin panel View for the ProjectVersionDB model.
+    """
+
+    fields = [
+        "id",
+        StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
+        TextAreaField("description", required=False, label="Description"),
+        HasOne("project", identity="project", label="Project"),
+        IntegerField(
+            "user_id", label="User ID"
+        ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
+        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
+        DateTimeField(
+            "date_deleted",
+            help_text="Timestamp when the user was soft deleted (else None). Value determined by system, cannot be edited.",
+            disabled=True,
+        ),
+        JSONField(
+            "files", required=True, label="Files", help_text="Mapping of file names to version IDs.", disabled=True
+        ),
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
+    ]
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["files"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "files", "project", "user_id"]
+    exclude_fields_from_detail = []
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion of project versions. Project versions can be soft deleted instead."""
+        return False
+
+    def can_create(self, request: Request) -> bool:
+        """Disable creation of project versions. This is something users can create instead."""
+        return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a users soft deletion status is changed.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
 
 
 class DivBaseAuthProvider(AuthProvider):
@@ -525,5 +600,6 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
     )
+    admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
 
     admin.mount_to(app)

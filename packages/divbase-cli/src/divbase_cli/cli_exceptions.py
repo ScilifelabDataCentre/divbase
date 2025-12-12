@@ -2,6 +2,10 @@
 Custom exceptions for the divbase CLI.
 """
 
+from pathlib import Path
+
+from divbase_lib.api_schemas.s3 import ExistingFileResponse
+
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -47,7 +51,7 @@ class DivBaseAPIError(DivBaseCLIError):
         self.http_method = http_method
         self.url = url
 
-        self.error_message = (
+        error_message = (
             f"DivBase Server returned an error response:\n"
             f"HTTP Status code: {status_code}\n"
             f"HTTP method: {http_method}\n"
@@ -55,7 +59,77 @@ class DivBaseAPIError(DivBaseCLIError):
             f"Error type: {error_type}\n"
             f"Details: {error_details}\n"
         )
-        super().__init__(self.error_message)
+        super().__init__(error_message)
 
-    def __str__(self):
-        return self.error_message
+
+class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
+    """Raised when a file does not exist in the project at the specified project version"""
+
+    def __init__(self, project_name: str, project_version: str, missing_files: list[str]):
+        missing_files_str = "\n".join(f"- '{name}'" for name in missing_files)
+        self.project_name = project_name
+        self.project_version = project_version
+        self.missing_files = missing_files
+
+        error_message = (
+            f"For the project: '{project_name}'\n"
+            f"And project version you specified: '{project_version}':\n"
+            "The following file(s) could not be found:\n"
+            f"{missing_files_str}"
+            "\n Maybe they only existed in a later version of the project?"
+        )
+        super().__init__(error_message)
+
+
+class FilesAlreadyInProjectError(DivBaseCLIError):
+    """
+    Raised when trying to upload file(s) that already exists in the project
+    and the user does not want to accidently create a new version of any file.
+    """
+
+    def __init__(self, existing_files: list[ExistingFileResponse], project_name: str):
+        files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_files)
+        self.existing_files = existing_files
+        self.project_name = project_name
+
+        error_message = (
+            f"For the project: '{project_name}'\n"
+            "The exact version of the following file(s) that you're trying to upload already exist inside the project:\n"
+            f"{files_list}."
+        )
+        super().__init__(error_message)
+
+
+class ProjectNameNotSpecifiedError(DivBaseCLIError):
+    """
+    Raised when the project name is not specified in the command line arguments, and
+    no default project is set in the user config file.
+    """
+
+    def __init__(self, config_path: Path):
+        self.config_path = config_path
+        error_message = (
+            "No project name provided. \n"
+            f"Please either set a default project in your user configuration file at '{config_path.resolve()}'.\n"
+            f"or pass the flag '--project <project_name>' to this command.\n"
+        )
+        super().__init__(error_message)
+
+
+class ProjectNotInConfigError(DivBaseCLIError):
+    """
+    Raised when the project name was
+        1. specified in the command line arguments OR
+        2. set as the default project in the user config file.
+    But info about the project could not be obtained from the user config file.
+    """
+
+    def __init__(self, config_path: Path, project_name: str):
+        self.config_path = config_path
+        self.project_name = project_name
+        error_message = (
+            f"Couldn't get information about the project named: '{project_name}' \n"
+            f"Please check the project is included in '{config_path.resolve()}'.\n"
+            f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
+        )
+        super().__init__(error_message)

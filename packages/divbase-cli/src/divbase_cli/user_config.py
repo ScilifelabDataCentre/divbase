@@ -2,9 +2,6 @@
 Handles the user's configuration file for the divbase-cli package.
 User configuration is stored in a local file.
 By default the config will be stored at: "~/.config/divbase/config.yaml"
-
-Not to be confused with the bucket versioning files, which is stored in the project's bucket
-and versions the state of all files in the bucket at given timestamps.
 """
 
 import warnings
@@ -14,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_lib.exceptions import ProjectNotInConfigError
+from divbase_cli.cli_exceptions import ProjectNotInConfigError
 
 
 @dataclass

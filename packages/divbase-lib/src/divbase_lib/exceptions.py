@@ -9,8 +9,6 @@ we ensure that when you manually raise a specific exception the error message lo
 
 from pathlib import Path
 
-from divbase_lib.api_schemas.s3 import ExistingFileResponse
-
 
 class ObjectDoesNotExistError(FileNotFoundError):
     """Raised when an S3 object/key does not exist in the bucket."""
@@ -20,111 +18,6 @@ class ObjectDoesNotExistError(FileNotFoundError):
         super().__init__(error_message)
         self.key = key
         self.bucket = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class ObjectDoesNotExistInSpecifiedVersionError(KeyError):
-    """Raised when an S3 object/key does not exist in the specified bucket versioning yaml file."""
-
-    def __init__(self, project_name: str, bucket_version: str, missing_objects: list[str]):
-        missing_objects_str = "\n".join(f"- '{name}'" for name in missing_objects)
-        error_message = (
-            f"For the project: '{project_name}'\n"
-            f"And bucket version you specified: '{bucket_version}':\n"
-            "The following objects could not be found in the metadata file:\n"
-            f"{missing_objects_str}"
-            "\n Maybe they only existed in a later version of the project/bucket?"
-        )
-        self.bucket_name = project_name
-        self.bucket_version = bucket_version
-        self.missing_objects = missing_objects
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class BucketVersioningFileDoesNotExist(FileNotFoundError):
-    """
-    Raised when the bucket versioning file does not exist in the bucket,
-    and it needs to be for the given operation (e.g. add/delete version).
-    """
-
-    def __init__(self, bucket_name: str):
-        error_message = (
-            f"The bucket: '{bucket_name}', does not have a bucket versioning file.\n"
-            "please create one first using the 'divbase version create' command."
-        )
-        super().__init__(error_message)
-        self.bucket_name = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class FilesAlreadyInBucketError(FileExistsError):
-    """
-    Raised when trying to upload file(s) that already exists in the bucket
-    and the user does not want to accidently create a new version of any file.
-    """
-
-    def __init__(self, existing_objects: list[ExistingFileResponse], project_name: str):
-        files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_objects)
-        error_message = (
-            f"For the project: '{project_name}'\n"
-            "The exact versions of the following objects that you're trying to upload already exist in the project's bucket:\n"
-            f"{files_list}."
-        )
-        super().__init__(error_message)
-        self.existing_objects = existing_objects
-        self.project_name = project_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class ProjectNameNotSpecifiedError(Exception):
-    """
-    Raised when the project name is not specified in the command line arguments, and
-    no default project is set in the user config file.
-    """
-
-    def __init__(self, config_path: Path):
-        error_message = (
-            "No project name provided. \n"
-            f"Please either set a default project in your user configuration file at '{config_path.resolve()}'.\n"
-            f"or pass the flag '--project <project_name>' to this command.\n"
-        )
-        super().__init__(error_message)
-        self.config_path = config_path
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
-class ProjectNotInConfigError(Exception):
-    """
-    Raised when the project name was
-        1. specified in the command line arguments OR
-        2. set as the default project in the user config file.
-    But info about the project could not be obtained from the user config file.
-    """
-
-    def __init__(self, config_path: Path, project_name: str):
-        error_message = (
-            f"Couldn't get information about the project named: '{project_name}' \n"
-            f"Please check the project is included in '{config_path.resolve()}'.\n"
-            f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
-        )
-        super().__init__(error_message)
-        self.config_path = config_path
-        self.project_name = project_name
         self.error_message = error_message
 
     def __str__(self):

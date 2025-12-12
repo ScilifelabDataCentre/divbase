@@ -105,7 +105,7 @@ def copy_fixtures_to_mock_download_from_bucket():
         bucket_name=None,
         all_files=None,
         download_dir=None,
-        bucket_version=None,
+        project_version=None,
         config_path=None,
     ):
         for file_path in file_list:

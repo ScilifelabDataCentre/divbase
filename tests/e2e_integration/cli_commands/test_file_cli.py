@@ -10,8 +10,8 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
+from divbase_cli.cli_exceptions import FilesAlreadyInProjectError
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import FilesAlreadyInBucketError
 
 runner = CliRunner()
 
@@ -133,7 +133,7 @@ def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONS
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInBucketError)
+    assert isinstance(result.exception, FilesAlreadyInProjectError)
 
 
 def test_reupload_of_same_file_with_safe_mode_off_works(
@@ -167,7 +167,7 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
     command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInBucketError)
+    assert isinstance(result.exception, FilesAlreadyInProjectError)
 
     command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
@@ -295,7 +295,7 @@ def test_download_at_a_project_version(logged_in_edit_user_with_existing_config,
 
     # Download + assert contents at v1.0.0
     command = (
-        f"files download {file_name} --bucket-version v1.0.0 --project {clean_project} --download-dir {download_dir}"
+        f"files download {file_name} --project-version v1.0.0 --project {clean_project} --download-dir {download_dir}"
     )
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -307,7 +307,7 @@ def test_download_at_a_project_version(logged_in_edit_user_with_existing_config,
 
     # Download + assert contents at v2.0.0
     command = (
-        f"files download {file_name} --bucket-version v2.0.0 --project {clean_project} --download-dir {download_dir}"
+        f"files download {file_name} --project-version v2.0.0 --project {clean_project} --download-dir {download_dir}"
     )
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -317,7 +317,7 @@ def test_download_at_a_project_version(logged_in_edit_user_with_existing_config,
         downloaded_content = f.read()
     assert downloaded_content == v2_content
 
-    # Download without specifiying bucket version works like "latest"
+    # Download without specifying project version works like "latest"
     command = f"files download {file_name} --project {clean_project} --download-dir {download_dir}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0

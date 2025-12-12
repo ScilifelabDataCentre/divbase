@@ -297,8 +297,8 @@ def upload_files_to_buckets():
         subprocess.run(command, check=True, env=LOCAL_ENV)
 
 
-def add_bucket_versioning_file():
-    """Add a bucket versioning file to each project's storage bucket."""
+def create_first_project_version():
+    """Add a user defined project version to each project after initial file upload."""
     for project in PROJECTS:
         command = shlex.split(
             f"divbase-cli version add v0.1.0 --description 'add initial data sets' --project {project['name']}"
@@ -317,7 +317,7 @@ if __name__ == "__main__":
     create_local_config()
     login_to_divbase()
     upload_files_to_buckets()
-    add_bucket_versioning_file()
+    create_first_project_version()
 
     print("Setup completed successfully!")
     print("\nTest Users:")
