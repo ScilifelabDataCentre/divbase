@@ -50,7 +50,6 @@ class DivBaseAPIError(DivBaseCLIError):
         self.error_details = error_details
         self.http_method = http_method
         self.url = url
-
         error_message = (
             f"DivBase Server returned an error response:\n"
             f"HTTP Status code: {status_code}\n"
@@ -59,6 +58,7 @@ class DivBaseAPIError(DivBaseCLIError):
             f"Error type: {error_type}\n"
             f"Details: {error_details}\n"
         )
+        self.error_message = error_message
         super().__init__(error_message)
 
 
