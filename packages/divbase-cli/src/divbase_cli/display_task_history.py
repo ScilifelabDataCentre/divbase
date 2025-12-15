@@ -9,6 +9,7 @@ from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
     SampleMetadataQueryTaskResult,
+    TaskHistoryResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,30 +34,28 @@ class TaskHistoryDisplayManager:
 
     def __init__(
         self,
-        task_items: dict,
+        task_items: list[TaskHistoryResult],
         user_name: str | None,
         project_name: str | None,
-        task_id: str | None,
         mode: str,
         display_limit: int,
     ):
         self.task_items = task_items
         self.user_name = user_name
         self.project_name = project_name
-        self.task_id = task_id
         self.mode = mode
         self.display_limit = display_limit
 
     def print_task_history(self) -> None:
         """Display the task history fetched from the results backend in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].created_at or "", reverse=True)
+        sorted_tasks = sorted(self.task_items, key=lambda x: x.created_at or "", reverse=True)
         display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
 
-        for task_id, task in limited_tasks:
+        for task in limited_tasks:
             raw_status = task.status
             if raw_status and raw_status.upper() in self.CELERY_STATES_EXCLUDING_PENDING:
                 state = raw_status.upper()
@@ -71,7 +70,7 @@ class TaskHistoryDisplayManager:
 
             table.add_row(
                 submitter,
-                task_id,
+                str(task.id),
                 state_with_colour,
                 self._to_cet(task.created_at),
                 self._to_cet(task.started_at),
@@ -93,7 +92,7 @@ class TaskHistoryDisplayManager:
                 f"{title_prefix} for User: {self.user_name or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
             )
         elif self.mode == "id":
-            title = f"{title_prefix} for Task ID: {self.task_id or 'Unknown'}"
+            title = f"{title_prefix} for Task ID: {self.task_items[0].id if self.task_items else 'Unknown'}"
         elif self.mode == "project":
             title = f"{title_prefix} for Project: {self.project_name or 'Unknown'}"
         else:

@@ -37,7 +37,7 @@ class TaskHistoryDB(BaseDBModel):
 
     __tablename__ = "task_history"
 
-    task_id: Mapped[str] = mapped_column(String, primary_key=True, index=True, unique=True)
+    task_id: Mapped[str] = mapped_column(String, index=True, unique=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("user.id", ondelete="CASCADE"),
@@ -50,8 +50,6 @@ class TaskHistoryDB(BaseDBModel):
         nullable=True,  # nullable so that cronjob tasks can use project_id None
         index=True,
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")
@@ -60,17 +58,21 @@ class TaskHistoryDB(BaseDBModel):
         uselist=False,  # one-to-one relationship: one entry in TaskHistoryDB <-> one entry in CeleryTaskMeta
         viewonly=True,  # Read-only since we don't manage CeleryTaskMeta directly, it is initiated and updated by Celery
     )
+    started_at_table: Mapped["TaskStartedAtDB"] = relationship(
+        "TaskStartedAtDB", primaryjoin="TaskHistoryDB.task_id==foreign(TaskStartedAtDB.task_id)"
+    )
 
-    @property
-    def runtime_seconds(self) -> float | None:
-        """
-        Calculate runtime in seconds from started_at and completed_at.
-        This is for the admin panel. The deserializer calculates this for the task_history CLI separately
-        since property cannot be directly used in the CRUD query.
-        """
-        if self.started_at and self.completed_at:
-            return (self.completed_at - self.started_at).total_seconds()
-        return None
+    # @hybrid_property
+    # def runtime_seconds(self) -> float | None:
+    #     """
+    #     Calculate runtime in seconds from started_at and completed_at.
+    #     This is for the admin panel. The deserializer calculates this for the task_history CLI separately
+    #     since property cannot be directly used in the CRUD query.
+    #     """
+    #     if self.started_at_table and self.celery_meta:
+    #         if self.celery_meta.date_done and self.started_at_table.started_at:
+    #             return (self.celery_meta.date_done - self.started_at_table.started_at).total_seconds()
+    #     return None
 
 
 class CeleryTaskMeta(Base):
@@ -95,3 +97,14 @@ class CeleryTaskMeta(Base):
     worker = Column(String(155))
     retries = Column(Integer)
     queue = Column(String(155))
+
+
+class TaskStartedAtDB(BaseDBModel):
+    """
+    DB model for storing the start time of tasks. Not provided by CeleryTaskMeta. Avoids potential race conditions by not having to make multiple updates to entries in TaskHistoryDB.
+    """
+
+    __tablename__ = "task_started_at"
+
+    task_id: Mapped[str] = mapped_column(String, index=True, unique=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)

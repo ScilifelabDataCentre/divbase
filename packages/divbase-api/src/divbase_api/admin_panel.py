@@ -21,7 +21,6 @@ from starlette_admin import (
     BooleanField,
     DateTimeField,
     EmailField,
-    FloatField,
     HasOne,
     IntegerField,
     StringField,
@@ -37,7 +36,7 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
@@ -406,21 +405,23 @@ class TaskHistoryView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
 
     fields = [
+        IntegerField("id", label="ID", disabled=True),
         StringField("task_id"),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
         DateTimeField("created_at"),
-        FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
+        # FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
     ]
-    fields_default_sort = [("created_at", True)]  # False = descending, True = ascending
+
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
         Override to format how values are displayed in the view.
         """
-        if field.name == "runtime_seconds" and value is not None:
-            return f"{value:.2f}"
+        # if field.name == "runtime_seconds" and value is not None:
+        #     return f"{value:.2f}"
         if isinstance(value, datetime) and field.name in ["created_at"]:
             formatted = _format_cet_datetime(value, field, ["created_at"])
             if formatted is not None:
@@ -511,6 +512,45 @@ class CeleryTaskMetaView(ModelView):
         return False
 
 
+class TaskStartedAtView(ModelView):
+    """
+    Custom admin panel View for TaskStartedAtDB.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["created_at", "updated_at"]
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id"),
+        DateTimeField("started_at"),
+    ]
+
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to format how values are displayed in the view.
+        """
+        if isinstance(value, datetime) and field.name in ["started_at"]:
+            formatted = _format_cet_datetime(value, field, ["started_at"])
+            if formatted is not None:
+                return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of task history entries."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Optionally disable editing if task history should be read-only."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Optionally disable deletion if task history should be immutable."""
+        return False
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
@@ -525,5 +565,6 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
     )
+    admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
 
     admin.mount_to(app)

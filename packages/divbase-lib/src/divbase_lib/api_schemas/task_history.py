@@ -4,7 +4,7 @@ Schemas for task history routes.
 
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -20,7 +20,7 @@ class TaskHistoryResult(BaseModel):
     Task details as returned by queries to the SQAlchemy+pg results backend.
     """
 
-    uuid: str
+    id: int
     submitter_email: Optional[str] = None
     status: Optional[str] = None
     result: Optional[
@@ -50,11 +50,8 @@ class TaskHistoryResult(BaseModel):
     runtime: Optional[float] = None
 
 
-# TODO consider if traceback: Optional[str] = None;     retries: Optional[int] = None;     queue: Optional[str] = None would be relevant?
+# class TaskHistoryResults(BaseModel):
+#     """Results from all tasks fetched from a task history request."""
 
-
-class TaskHistoryResults(BaseModel):
-    """Results from all tasks fetched from a task history request."""
-
-    tasks: dict[str, TaskHistoryResult] = Field(..., description="Mapping of task_id to results backend task details")
-    user_email: Optional[str] = Field(None, description="Email of the user who requested the task history")
+#     tasks: dict[str, TaskHistoryResult] = Field(..., description="Mapping of task_id to results backend task details")
+#     user_email: Optional[str] = Field(None, description="Email of the user who requested the task history")
