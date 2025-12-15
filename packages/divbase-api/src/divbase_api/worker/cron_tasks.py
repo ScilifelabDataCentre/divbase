@@ -134,6 +134,8 @@ def cleanup_stuck_tasks_task(
         raise
 
 
+# NOTE! If you add a new task here, make sure it starts with "cron_tasks"
+
 app.conf.beat_schedule = {
     "cleanup-old-tasks-daily": {
         "task": "cron_tasks.cleanup_old_task_history",

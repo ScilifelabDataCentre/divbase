@@ -103,14 +103,21 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
     happened to create the entry before this signal handler (=race condition),
     this function just updates user_id and project_id.
     """
-    task_id = headers.get("id")
+    # NOTE! tasks will still be executed even if this signal handler raises an exeception, since tasks are already in the broker queue.
 
+    task_id = headers["id"]
     task_kwargs = {}
     if body and len(body) > 1 and isinstance(body[1], dict):
         task_kwargs = body[1]
 
-    user_id = task_kwargs.get("user_id")
-    project_id = task_kwargs.get("project_id")
+    task_name = headers["task"]
+    if not task_name.startswith("cron_tasks"):
+        user_id = task_kwargs.get("user_id")
+        project_id = task_kwargs.get("project_id")
+        if user_id is None or project_id is None:
+            raise ValueError(
+                f"Task '{task_name}' is missing required 'user_id' or 'project_id' in kwargs for TaskHistoryDB entry."
+            )
 
     with SyncSessionLocal() as db:
         insert_values = {
@@ -167,9 +174,12 @@ def handle_task_revoked(sender=None, request=None, **kwargs):
     Signal handler that updates the completed_at timestamp in TaskHistoryDB
     for the given task_id when a task is revoked.
     """
-    task_id = request.id if request else None
+    task_id = request.id
     if task_id:
         _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
+
+
+# should a retry signal update started_at? if you enable celery task retry, be careful!
 
 
 def _upsert_task_timestamps(task_id: str, set_started_at=False, set_completed_at=False):
