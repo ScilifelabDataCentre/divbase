@@ -62,18 +62,6 @@ class TaskHistoryDB(BaseDBModel):
         "TaskStartedAtDB", primaryjoin="TaskHistoryDB.task_id==foreign(TaskStartedAtDB.task_id)"
     )
 
-    # @hybrid_property
-    # def runtime_seconds(self) -> float | None:
-    #     """
-    #     Calculate runtime in seconds from started_at and completed_at.
-    #     This is for the admin panel. The deserializer calculates this for the task_history CLI separately
-    #     since property cannot be directly used in the CRUD query.
-    #     """
-    #     if self.started_at_table and self.celery_meta:
-    #         if self.celery_meta.date_done and self.started_at_table.started_at:
-    #             return (self.celery_meta.date_done - self.started_at_table.started_at).total_seconds()
-    #     return None
-
 
 class CeleryTaskMeta(Base):
     """

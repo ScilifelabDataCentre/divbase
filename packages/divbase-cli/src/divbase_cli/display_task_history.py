@@ -28,7 +28,8 @@ class TaskHistoryDisplayManager:
         "RETRY": "blue",
         "REVOKED": "magenta",
     }
-    # These are the states known by the worker. The state when a task is in the queue is handled by the broker and PENDING is typically used
+    # These are the states known by the worker. The state when a task is in the queue is handled by the broker and PENDING is typically used for that purpose.
+    # For user display purposes, we want to show QUEUING instead of PENDING for tasks that are not yet started.
     # To avoid having separate CRUD logic for the enqueued state, check task status against the worker state and return QUEUING to user's terminal.
     CELERY_STATES_EXCLUDING_PENDING = {"STARTED", "SUCCESS", "FAILURE", "RETRY", "REVOKED"}
 

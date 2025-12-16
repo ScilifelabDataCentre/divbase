@@ -48,10 +48,3 @@ class TaskHistoryResult(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     runtime: Optional[float] = None
-
-
-# class TaskHistoryResults(BaseModel):
-#     """Results from all tasks fetched from a task history request."""
-
-#     tasks: dict[str, TaskHistoryResult] = Field(..., description="Mapping of task_id to results backend task details")
-#     user_email: Optional[str] = Field(None, description="Email of the user who requested the task history")

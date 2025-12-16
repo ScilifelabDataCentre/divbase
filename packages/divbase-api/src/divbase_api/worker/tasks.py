@@ -126,61 +126,6 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-# @task_success.connect
-# def handle_task_success(sender=None, **kwargs):
-#     """
-#     Signal handler that updates the completed_at timestamp in TaskHistoryDB
-#     for the given task_id upon task success.
-#     """
-#     task_id = sender.request.id
-#     _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
-
-
-# @task_failure.connect
-# def handle_task_failure(sender=None, task_id=None, **kwargs):
-#     """
-#     Signal handler that updates the completed_at timestamp in TaskHistoryDB
-#     for the given task_id upon task failure.
-#     """
-#     _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
-
-
-# @task_revoked.connect
-# def handle_task_revoked(sender=None, request=None, **kwargs):
-#     """
-#     Signal handler that updates the completed_at timestamp in TaskHistoryDB
-#     for the given task_id when a task is revoked.
-#     """
-#     task_id = request.id
-#     if task_id:
-#         _upsert_task_timestamps(task_id=task_id, set_completed_at=True)
-
-
-# # should a retry signal update started_at? if you enable celery task retry, be careful!
-
-
-# def _upsert_task_timestamps(task_id: str, set_started_at=False, set_completed_at=False):
-#     """
-#     Helper function that UPSERTs timestamps in TaskHistoryDB based on the signal handlers
-#     that calls it. If the task_pending_handler signal handler have not created the entry
-#     before this signal handler (=race condition), this function creates the entry and the
-#     timestamps, but leaves user_id and project_id to the other function.
-#     """
-#     with SyncSessionLocal() as db:
-#         upsert_values = {"task_id": task_id}
-#         if set_started_at:
-#             upsert_values["started_at"] = datetime.now(timezone.utc)
-#         if set_completed_at:
-#             upsert_values["completed_at"] = datetime.now(timezone.utc)
-#         stmt = insert(TaskHistoryDB).values(**upsert_values)
-#         stmt = stmt.on_conflict_do_update(
-#             index_elements=["task_id"],
-#             set_=upsert_values,
-#         )
-#         db.execute(stmt)
-#         db.commit()
-
-
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
 def sample_metadata_query_task(
     tsv_filter: str,
@@ -685,5 +630,4 @@ def _check_that_file_versions_match_dimensions_index(
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
-# Alternatively, the cron tasks could be defined in
 from divbase_api.worker import cron_tasks  # noqa: E402, F401

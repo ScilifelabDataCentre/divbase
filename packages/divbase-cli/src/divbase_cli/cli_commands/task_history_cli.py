@@ -113,7 +113,7 @@ def list_task_history_for_project(
     """
 
     # TODO add option to sort ASC/DESC by task timestamp
-    # TODO use resolve project          default project from config if not --project specified
+    # TODO use default project from config if not --project specified
 
     config = load_user_config(config_file)
     logged_in_url = config.logged_in_url

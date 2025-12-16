@@ -411,7 +411,6 @@ class TaskHistoryView(ModelView):
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
         DateTimeField("created_at"),
-        # FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
     ]
 
     fields_default_sort = [("id", True)]  # False = descending, True = ascending
@@ -420,8 +419,6 @@ class TaskHistoryView(ModelView):
         """
         Override to format how values are displayed in the view.
         """
-        # if field.name == "runtime_seconds" and value is not None:
-        #     return f"{value:.2f}"
         if isinstance(value, datetime) and field.name in ["created_at"]:
             formatted = _format_cet_datetime(value, field, ["created_at"])
             if formatted is not None:
