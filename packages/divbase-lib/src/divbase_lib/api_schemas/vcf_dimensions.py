@@ -13,6 +13,7 @@ class DimensionUpdateKwargs(BaseModel):
     bucket_name: str
     project_id: int
     project_name: str
+    user_id: int
 
 
 class DimensionUpdateTaskResult(BaseModel):

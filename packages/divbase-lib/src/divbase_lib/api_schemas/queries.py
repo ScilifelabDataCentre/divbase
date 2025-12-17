@@ -32,6 +32,7 @@ class SampleMetadataQueryKwargs(BaseModel):
     bucket_name: str
     project_id: int
     project_name: str
+    user_id: int
 
 
 class BcftoolsQueryKwargs(BaseModel):
@@ -43,6 +44,7 @@ class BcftoolsQueryKwargs(BaseModel):
     bucket_name: str
     project_id: int
     project_name: str
+    user_id: int
 
 
 class SampleMetadataQueryTaskResult(BaseModel):

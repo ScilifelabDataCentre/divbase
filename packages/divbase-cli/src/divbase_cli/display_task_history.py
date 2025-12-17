@@ -1,5 +1,6 @@
-import datetime
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from rich.console import Console
 from rich.table import Table
@@ -8,6 +9,7 @@ from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
     SampleMetadataQueryTaskResult,
+    TaskHistoryResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,34 +28,41 @@ class TaskHistoryDisplayManager:
         "RETRY": "blue",
         "REVOKED": "magenta",
     }
+    # These are the states known by the worker. The state when a task is in the queue is handled by the broker and PENDING is typically used for that purpose.
+    # For user display purposes, we want to show QUEUING instead of PENDING for tasks that are not yet started.
+    # To avoid having separate CRUD logic for the enqueued state, check task status against the worker state and return QUEUING to user's terminal.
+    CELERY_STATES_EXCLUDING_PENDING = {"STARTED", "SUCCESS", "FAILURE", "RETRY", "REVOKED"}
 
     def __init__(
         self,
-        task_items: dict,
+        task_items: list[TaskHistoryResult],
         user_name: str | None,
         project_name: str | None,
-        task_id: str | None,
         mode: str,
         display_limit: int,
     ):
         self.task_items = task_items
         self.user_name = user_name
         self.project_name = project_name
-        self.task_id = task_id
         self.mode = mode
         self.display_limit = display_limit
 
     def print_task_history(self) -> None:
         """Display the task history fetched from the results backend in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items.items(), key=lambda x: x[1].created_at or "", reverse=True)
+        sorted_tasks = sorted(self.task_items, key=lambda x: x.created_at or "", reverse=True)
         display_limit = self.display_limit or 10
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
 
-        for task_id, task in limited_tasks:
-            state = task.status or "N/A"
+        for task in limited_tasks:
+            raw_status = task.status
+            if raw_status and raw_status.upper() in self.CELERY_STATES_EXCLUDING_PENDING:
+                state = raw_status.upper()
+            else:
+                state = "QUEUING"
+
             colour = self.STATE_COLOURS.get(state, "white")
             state_with_colour = f"[{colour}]{state}[/{colour}]"
 
@@ -62,36 +71,15 @@ class TaskHistoryDisplayManager:
 
             table.add_row(
                 submitter,
-                task_id,
+                str(task.id),
                 state_with_colour,
-                self._format_unix_timestamp(task.created_at),
-                self._format_unix_timestamp(task.started_at),
+                self._to_cet(task.created_at),
+                self._to_cet(task.started_at),
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
         console = Console()
         console.print(table)
-
-    def _format_unix_timestamp(self, timestamp):
-        """
-        The results backend task status returns timestamps as integers or floats.
-        This function formats them into a human-readable string.
-        """
-        if timestamp is None:
-            return "N/A"
-
-        if isinstance(timestamp, datetime.datetime):
-            dt = timestamp.replace(microsecond=0)
-        elif isinstance(timestamp, (int, float)):
-            dt = datetime.datetime.fromtimestamp(timestamp).replace(microsecond=0)
-        else:
-            return str(timestamp)
-
-        if dt.tzinfo is not None:
-            return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        else:
-            local_dt = dt.astimezone()
-            return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def _create_task_history_table(self):
         """
@@ -105,7 +93,7 @@ class TaskHistoryDisplayManager:
                 f"{title_prefix} for User: {self.user_name or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
             )
         elif self.mode == "id":
-            title = f"{title_prefix} for Task ID: {self.task_id or 'Unknown'}"
+            title = f"{title_prefix} for Task ID: {self.task_items[0].id if self.task_items else 'Unknown'}"
         elif self.mode == "project":
             title = f"{title_prefix} for Project: {self.project_name or 'Unknown'}"
         else:
@@ -179,3 +167,16 @@ class TaskHistoryDisplayManager:
 
         result_message = str(task.result)
         return f"[{colour}]{result_message}[/{colour}]"
+
+    def _to_cet(self, timestamp_str):
+        """
+        Convert a UTC timestamp string in '%Y-%m-%d %H:%M:%S UTC' format to CET.
+        """
+        if not timestamp_str or timestamp_str == "N/A":
+            return "N/A"
+        try:
+            dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S %Z")
+            cet_dt = dt.astimezone(ZoneInfo("Europe/Stockholm"))
+            return cet_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        except Exception:
+            return timestamp_str

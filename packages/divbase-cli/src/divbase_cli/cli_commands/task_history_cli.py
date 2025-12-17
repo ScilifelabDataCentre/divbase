@@ -15,7 +15,7 @@ from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
-from divbase_lib.api_schemas.task_history import TaskHistoryResults
+from divbase_lib.api_schemas.task_history import TaskHistoryResult
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,12 @@ def list_task_history_for_user(
             api_route="v1/task-history/tasks/user",
         )
 
-    task_history_data = TaskHistoryResults(**task_history_response.json())
+    task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data.tasks,
-        user_name=task_history_data.user_email,
+        task_items=task_history_data,
+        user_name="TODO-GET-FROM-CONFIG-IN-THE-FUTURE",
         project_name=project,
-        task_id=None,
         mode="user_project" if project else "user",
         display_limit=limit,
     ).print_task_history()
@@ -73,7 +72,7 @@ def list_task_history_for_user(
 
 @task_history_app.command("id")
 def task_history_by_id(
-    task_id: str | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
+    task_id: int | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
@@ -92,13 +91,12 @@ def task_history_by_id(
         api_route=f"v1/task-history/tasks/{task_id}",
     )
 
-    task_history_data = TaskHistoryResults(**task_history_response.json())
+    task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data.tasks,
+        task_items=task_history_data,
         user_name=None,
         project_name=None,
-        task_id=task_id,
         mode="id",
         display_limit=None,
     ).print_task_history()
@@ -115,7 +113,7 @@ def list_task_history_for_project(
     """
 
     # TODO add option to sort ASC/DESC by task timestamp
-    # TODO use resolve project          default project from config if not --project specified
+    # TODO use default project from config if not --project specified
 
     config = load_user_config(config_file)
     logged_in_url = config.logged_in_url
@@ -129,13 +127,12 @@ def list_task_history_for_project(
         api_route=f"v1/task-history/projects/{project}",
     )
 
-    task_history_data = TaskHistoryResults(**task_history_response.json())
+    task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
     TaskHistoryDisplayManager(
-        task_items=task_history_data.tasks,
+        task_items=task_history_data,
         user_name=None,
         project_name=project,
-        task_id=None,
         mode="project",
         display_limit=limit,
     ).print_task_history()

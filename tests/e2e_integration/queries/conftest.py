@@ -176,6 +176,7 @@ def sample_metadata_query_kwargs_fixture():
         "metadata_tsv_name": "sample_metadata.tsv",
         "bucket_name": "divbase-local-query-project",
         "project_name": "query-project",
+        "user_id": 1,
     }
 
 
@@ -188,6 +189,7 @@ def bcftools_pipe_kwargs_fixture():
         "command": "view -s SAMPLES; view -r 21:15000000-25000000",
         "bucket_name": "divbase-local-query-project",
         "project_name": "query-project",
+        "user_id": 1,
     }
 
 

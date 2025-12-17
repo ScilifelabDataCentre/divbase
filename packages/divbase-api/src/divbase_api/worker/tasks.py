@@ -8,16 +8,12 @@ from pathlib import Path
 
 from celery import Celery
 from celery.signals import (
-    task_failure,
+    after_task_publish,
     task_prerun,
-    task_retry,
-    task_revoked,
-    task_success,
 )
-from sqlalchemy.exc import OperationalError
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -61,6 +57,7 @@ app.conf.update(
         "task": CELERY_TASKMETA_TABLE_NAME,
         "group": CELERY_GROUPMETA_TABLE_NAME,
     },
+    result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
 
@@ -97,119 +94,40 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
 app.conf.task_routes = (dynamic_router,)
 
 
+@after_task_publish.connect
+def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
+    """
+    For cron_tasks: create TaskHistoryDB entry when task is published to broker.
+
+    NOTE! User-submitted tasks are created by the API. This signal handler is for system-submitted tasks.
+
+    """
+    task_name = headers["task"]
+    if not task_name.startswith("cron_tasks"):
+        return
+
+    task_id = headers["id"]
+
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None)
+    with SyncSessionLocal() as db:
+        db.add(task_history_entry)
+        db.commit()
+
+
 @task_prerun.connect
-def task_prerun_handler(sender=None, task_id=None, **kwargs):
-    """Called when task starts executing (STARTED state)."""
-    _update_task_status_in_pg(
-        task_id=task_id,
-        status=TaskStatus.STARTED,
-        set_started_at=True,
-    )
-
-
-@task_success.connect
-def task_success_handler(sender=None, result=None, **kwargs):
-    """Called when task completes successfully (SUCCESS state)."""
-    task_id = sender.request.id
-    _update_task_status_in_pg(
-        task_id=task_id,
-        status=TaskStatus.SUCCESS,
-        set_completed_at=True,
-    )
-
-
-@task_failure.connect
-def task_failure_handler(
-    sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra
-):
-    """Called when task fails (FAILURE state)."""
-    _update_task_status_in_pg(
-        task_id=task_id,
-        status=TaskStatus.FAILURE,
-        error_msg=str(exception)[:500],
-        set_completed_at=True,
-    )
-
-
-@task_retry.connect
-def task_retry_handler(sender=None, request=None, reason=None, einfo=None, **kwargs):
-    """Called when task is retried (RETRY state)."""
-    task_id = request.id
-    _update_task_status_in_pg(task_id, TaskStatus.RETRY, error_msg=str(reason)[:500])
-
-
-@task_revoked.connect
-def task_revoked_handler(sender=None, request=None, terminated=None, signum=None, expired=None, **kwargs):
-    """Called when task is revoked/cancelled (REVOKED state)."""
-    task_id = request.id if request else None
-    reason = "terminated" if terminated else "expired" if expired else "revoked"
-    if task_id:
-        _update_task_status_in_pg(
-            task_id=task_id,
-            status=TaskStatus.REVOKED,
-            error_msg=f"Task {reason}",
-            set_completed_at=True,
-        )
-
-
-def _update_task_status_in_pg(
-    task_id: str,
-    status: TaskStatus,
-    error_msg: str = None,
-    set_started_at: bool = False,
-    set_completed_at: bool = False,
-):
+def handle_task_started(sender=None, task_id=None, **kwargs):
     """
-    Update task status in database using upsert to handle race conditions.
-    Handles user-submitted tasks that have an existing TaskHistoryDB entry (created by API),
-    as well as beat-scheduled tasks that do not have an existing entry (created here).
+    Signal handler that inserts the started_at timestamp in TaskStartedAtDB
+    for the given task_id.
     """
-    try:
-        with SyncSessionLocal() as db:
-            from sqlalchemy.dialects.postgresql import insert
+    started_at = datetime.now(timezone.utc)
+    if task_id is None:
+        raise ValueError("task_id is None in task_prerun signal handler")
 
-            # Values for INSERT (used only if row doesn't exist - i.e., beat-scheduled tasks)
-            insert_values = {
-                "task_id": str(task_id),
-                "user_id": None,  # Beat-scheduled tasks don't belong to any user
-                "project_id": None,  # Beat-scheduled tasks don't belong to any project
-                "status": status,
-            }
-
-            if set_started_at:
-                insert_values["started_at"] = datetime.now(timezone.utc)
-            if set_completed_at:
-                insert_values["completed_at"] = datetime.now(timezone.utc)
-            if error_msg:
-                insert_values["error_message"] = error_msg
-
-            # Values for UPDATE (used if row exists - i.e., API-submitted tasks)
-            # Only update status and timestamps, preserve user_id/project_id
-            update_values = {"status": status}
-
-            if error_msg:
-                update_values["error_message"] = error_msg
-
-            if set_started_at:
-                update_values["started_at"] = datetime.now(timezone.utc)
-
-            if set_completed_at:
-                update_values["completed_at"] = datetime.now(timezone.utc)
-
-            stmt = insert(TaskHistoryDB).values(**insert_values)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["task_id"],
-                set_=update_values,
-            )
-
-            db.execute(stmt)
-            db.commit()
-            logger.debug(f"Upserted task {task_id} with status {status}")
-
-    except OperationalError as e:
-        logger.error(f"Database connection error when updating task {task_id}: {e}")
-    except Exception as e:
-        logger.error(f"Failed to update task status for {task_id}: {e}")
+    with SyncSessionLocal() as db:
+        entry = TaskStartedAtDB(task_id=task_id, started_at=started_at)
+        db.add(entry)
+        db.commit()
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
@@ -219,6 +137,7 @@ def sample_metadata_query_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
@@ -269,6 +188,7 @@ def bcftools_pipe_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -351,6 +271,7 @@ def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
+    user_id: int,
 ) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
@@ -713,5 +634,4 @@ def _check_that_file_versions_match_dimensions_index(
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
-# Alternatively, the cron tasks could be defined in
 from divbase_api.worker import cron_tasks  # noqa: E402, F401
