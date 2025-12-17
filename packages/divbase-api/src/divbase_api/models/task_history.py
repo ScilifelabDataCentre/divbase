@@ -2,13 +2,14 @@
 Task history DB Model. Summarizes tasks run by Celery without storing all details.
 """
 
+from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from divbase_api.models.base import BaseDBModel
+from divbase_api.models.base import Base, BaseDBModel
 
 if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectDB
@@ -36,14 +37,62 @@ class TaskHistoryDB(BaseDBModel):
 
     __tablename__ = "task_history"
 
-    task_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("project.id", ondelete="CASCADE"), nullable=False, index=True
+    task_id: Mapped[str] = mapped_column(String, index=True, unique=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,  # nullable so that cronjob tasks can use user_id None
+        index=True,
     )
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
-    error_message: Mapped[str] = mapped_column(String, nullable=True)
-    result_message: Mapped[str] = mapped_column(String, nullable=True)
+    project_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=True,  # nullable so that cronjob tasks can use project_id None
+        index=True,
+    )
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")
+    celery_meta: Mapped["CeleryTaskMeta"] = relationship(
+        "CeleryTaskMeta",
+        uselist=False,  # one-to-one relationship: one entry in TaskHistoryDB <-> one entry in CeleryTaskMeta
+        viewonly=True,  # Read-only since we don't manage CeleryTaskMeta directly, it is initiated and updated by Celery
+    )
+    started_at_table: Mapped["TaskStartedAtDB"] = relationship(
+        "TaskStartedAtDB", primaryjoin="TaskHistoryDB.task_id==foreign(TaskStartedAtDB.task_id)"
+    )
+
+
+class CeleryTaskMeta(Base):
+    """
+    DB model for the celery_taskmeta table (auto-created by celery in tasks.py in app.conf.update). Not referenced in
+    models.__init__py since celery handles table creation.
+
+    Note: this should not inherit from BaseDBModel, since the db table this is referring to is created by celery
+    """
+
+    __tablename__ = "celery_taskmeta"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(155), ForeignKey("task_history.task_id"), unique=True, index=True)
+    status = Column(String(50))
+    result = Column(LargeBinary)
+    date_done = Column(DateTime)
+    traceback = Column(Text)
+    name = Column(String(155))
+    args = Column(LargeBinary)
+    kwargs = Column(LargeBinary)
+    worker = Column(String(155))
+    retries = Column(Integer)
+    queue = Column(String(155))
+
+
+class TaskStartedAtDB(BaseDBModel):
+    """
+    DB model for storing the start time of tasks. Not provided by CeleryTaskMeta. Avoids potential race conditions by not having to make multiple updates to entries in TaskHistoryDB.
+    """
+
+    __tablename__ = "task_started_at"
+
+    task_id: Mapped[str] = mapped_column(String, index=True, unique=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)

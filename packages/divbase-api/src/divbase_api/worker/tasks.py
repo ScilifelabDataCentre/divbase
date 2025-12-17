@@ -2,22 +2,18 @@ import dataclasses
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
 from celery import Celery
 from celery.signals import (
-    task_failure,
+    after_task_publish,
     task_prerun,
-    task_retry,
-    task_revoked,
-    task_success,
 )
-from sqlalchemy import select
-from sqlalchemy.exc import OperationalError
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.models.task_history import TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -38,18 +34,26 @@ from divbase_lib.exceptions import NoVCFFilesFoundError
 logger = logging.getLogger(__name__)
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
-RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db"
+)
 S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
-
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
-# Redis-specific config
+# Celery results backend config
 app.conf.update(
-    result_expires=2592000,  # 30 days in seconds
     task_track_started=True,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
+    result_extended=True,
+    timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
+    # let celery auto-create db tables
+    database_table_names={
+        "task": "celery_taskmeta",
+        "group": "celery_groupmeta",
+    },
+    result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
 
@@ -78,67 +82,48 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
         return {"queue": "quick"}
     if name == "tasks.bcftools_query":
         return {"queue": "long"}
+    if name == "tasks.update_vcf_dimensions_task":
+        return {"queue": "long"}  # can take minutes for large VCF files
     return {"queue": "celery"}
 
 
 app.conf.task_routes = (dynamic_router,)
 
 
+@after_task_publish.connect
+def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
+    """
+    For cron_tasks: create TaskHistoryDB entry when task is published to broker.
+
+    NOTE! User-submitted tasks are created by the API. This signal handler is for system-submitted tasks.
+
+    """
+    task_name = headers["task"]
+    if not task_name.startswith("cron_tasks"):
+        return
+
+    task_id = headers["id"]
+
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None)
+    with SyncSessionLocal() as db:
+        db.add(task_history_entry)
+        db.commit()
+
+
 @task_prerun.connect
-def task_prerun_handler(sender=None, task_id=None, **kwargs):
-    """Called when task starts executing (STARTED state)."""
-    _update_task_status_in_pg(task_id, TaskStatus.STARTED)
+def handle_task_started(sender=None, task_id=None, **kwargs):
+    """
+    Signal handler that inserts the started_at timestamp in TaskStartedAtDB
+    for the given task_id.
+    """
+    started_at = datetime.now(timezone.utc)
+    if task_id is None:
+        raise ValueError("task_id is None in task_prerun signal handler")
 
-
-@task_success.connect
-def task_success_handler(sender=None, result=None, **kwargs):
-    """Called when task completes successfully (SUCCESS state)."""
-    task_id = sender.request.id
-    _update_task_status_in_pg(task_id, TaskStatus.SUCCESS)
-
-
-@task_failure.connect
-def task_failure_handler(
-    sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra
-):
-    """Called when task fails (FAILURE state)."""
-    _update_task_status_in_pg(task_id, TaskStatus.FAILURE, error_msg=str(exception)[:500])
-
-
-@task_retry.connect
-def task_retry_handler(sender=None, request=None, reason=None, einfo=None, **kwargs):
-    """Called when task is retried (RETRY state)."""
-    task_id = request.id
-    _update_task_status_in_pg(task_id, TaskStatus.RETRY, error_msg=str(reason)[:500])
-
-
-@task_revoked.connect
-def task_revoked_handler(sender=None, request=None, terminated=None, signum=None, expired=None, **kwargs):
-    """Called when task is revoked/cancelled (REVOKED state)."""
-    task_id = request.id if request else None
-    reason = "terminated" if terminated else "expired" if expired else "revoked"
-    if task_id:
-        _update_task_status_in_pg(task_id, TaskStatus.REVOKED, error_msg=f"Task {reason}")
-
-
-def _update_task_status_in_pg(task_id: str, status: TaskStatus, error_msg: str = None):
-    """Update task status in database."""
-    try:
-        with SyncSessionLocal() as db:
-            stmt = select(TaskHistoryDB).where(TaskHistoryDB.task_id == str(task_id))
-            entry = db.execute(stmt).scalar_one_or_none()
-            if entry:
-                entry.status = status
-                if error_msg:
-                    entry.error_message = error_msg
-                db.commit()
-                logger.debug(f"Updated task {task_id} to status {status}")
-            else:
-                logger.warning(f"Task {task_id} not found in database")
-    except OperationalError as e:
-        logger.error(f"Database connection error when trying updating task {task_id}: {e}")
-    except Exception as e:
-        logger.error(f"Failed to update task status for {task_id}: {e}")
+    with SyncSessionLocal() as db:
+        entry = TaskStartedAtDB(task_id=task_id, started_at=started_at)
+        db.add(entry)
+        db.commit()
 
 
 @app.task(name="tasks.sample_metadata_query", tags=["quick"])
@@ -148,7 +133,7 @@ def sample_metadata_query_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
-    user_name: str,
+    user_id: int,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
@@ -173,51 +158,12 @@ def sample_metadata_query_task(
     )
 
     try:
-        s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
-
-        metadata_path = _download_sample_metadata(
-            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-        )
-
-        with SyncSessionLocal() as db:
-            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-        if not vcf_dimensions_data.get("vcf_files"):
-            return {
-                "status": "error",
-                "error": f"No VCF dimensions indexed for project '{bucket_name}'. Please run 'divbase-cli dimensions update --project {bucket_name}' first.",
-                "type": "VCFDimensionsMissingError",
-                "task_id": task_id,
-            }
-
-        metadata_result = run_sidecar_metadata_query(
-            file=metadata_path,
-            filter_string=tsv_filter,
-            project_id=project_id,
-            vcf_dimensions_data=vcf_dimensions_data,
-        )
-
-        try:
-            os.remove(metadata_path)
-            logger.info(f"Deleted metadata file {metadata_path} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
-
-        result = dataclasses.asdict(metadata_result)
-        result["status"] = "completed"
-        result["task_id"] = task_id
-
-        logger.info(
-            f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
-            f"mapped to {len(metadata_result.unique_filenames)} VCF files"
-        )
-
-        return result
-
+        os.remove(metadata_path)
+        logger.info(f"Deleted metadata file {metadata_path} from worker.")
     except Exception as e:
         logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
 
-    # Convert to dict since celery serializes to JSON when sending back to API layer. Pydantic model serialization is not supported by celery
+    # Convert to dict since celery serializes to JSON when sending back to API layer
     result = metadata_result.model_dump()
     result["status"] = "completed"
     result["task_id"] = task_id
@@ -238,7 +184,7 @@ def bcftools_pipe_task(
     bucket_name: str,
     project_id: int,
     project_name: str,
-    user_name: str,
+    user_id: int,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -306,20 +252,23 @@ def bcftools_pipe_task(
         )
     )
 
-    try:
-        output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
-    except Exception as e:
-        logger.error(f"Error in bcftools task: {str(e)}")
-        return {"status": "error", "error": str(e), "task_id": task_id}
+    # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
+    # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
+    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    return {"status": "completed", "output_file": output_file, "submitter": user_name}
+    return {"status": "completed", "output_file": output_file}
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
-def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str, project_name: str) -> dict:
+def update_vcf_dimensions_task(
+    bucket_name: str,
+    project_id: int,
+    project_name: str,
+    user_id: int,
+) -> dict:
     """
     Update VCF dimensions in the database for the specified bucket.
     """
@@ -438,7 +387,6 @@ def update_vcf_dimensions_task(bucket_name: str, project_id: int, user_name: str
 
     result = DimensionUpdateTaskResult(
         status="completed",
-        submitter=user_name,
         VCF_files_added=files_indexed_by_this_job,
         VCF_files_skipped=divbase_results_files_skipped_by_this_job,
         VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
@@ -679,3 +627,7 @@ def _check_that_file_versions_match_dimensions_index(
                 "The VCF dimensions file is not up to date with the VCF files in the project. "
                 "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )
+
+
+# Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
+from divbase_api.worker import cron_tasks  # noqa: E402, F401

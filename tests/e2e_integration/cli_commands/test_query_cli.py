@@ -16,18 +16,24 @@ from pathlib import Path
 from unittest.mock import patch
 
 import boto3
-import httpx
 import pytest
 from celery import current_app
+from sqlalchemy import select
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
+from divbase_api.models.users import UserDB
 from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
+from divbase_api.services.task_history import _deserialize_celery_task_metadata
 from divbase_api.worker.tasks import bcftools_pipe_task
+from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.divbase_cli import app
+from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.exceptions import ProjectNotInConfigError
 
+logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
 
 
@@ -37,30 +43,54 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
-def wait_for_task_complete(task_id: str, max_retries: int = 30):
-    """Given a task_id, check the status of the task via the CLI until it is complete or times out."""
-    command = f"task-history id {task_id}"
+def wait_for_task_complete(user_task_id: int, max_retries: int = 30) -> TaskHistoryResult:
+    """
+    For a given task_id, check the status of the task via the PostgreSQL results backend until it is complete or times out.
+    Need to join CeleryTaskMeta with TaskHistoryDB to get timestamps for the mandatory fields of the pydantic model.
+    Deserialization is needed because of how the celery results backed stores fields.
+    """
+    celery_task_id = None
+    with SyncSessionLocal() as db:
+        row = db.execute(select(TaskHistoryDB.task_id).where(TaskHistoryDB.id == user_task_id)).first()
+        if row is None:
+            raise ValueError(f"No TaskHistoryDB entry found for id={user_task_id}")
+        celery_task_id = row[0]
+
     while max_retries > 0:
-        result = runner.invoke(app, command)
-        output = result.stdout.replace("\n", " ").replace("\r", " ")
-        formatted_output = " ".join(output.split())  # handle multiline and irregular spaces in output
-        if (
-            "FAILURE" in formatted_output
-            or "SUCCESS" in formatted_output
-            or "'status': 'completed'" in formatted_output
-            or "completed" in formatted_output
-            or "FAIL" in formatted_output
-            or "SidecarInvalidFilterError" in formatted_output
-            or "Unsupported bcftools command" in formatted_output
-            or "Empty command provided" in formatted_output
-            or "'status': 'error'" in formatted_output
-            or "Output file ready for download" in formatted_output
-            or ".vcf.gz" in formatted_output
-        ):
-            return result
-        time.sleep(1)
-        max_retries -= 1
-    pytest.fail(f"Task didn't complete retries. Last status: {result.stdout}")
+        with SyncSessionLocal() as db:
+            stmt = (
+                select(
+                    *CeleryTaskMeta.__table__.c,
+                    TaskHistoryDB.id.label("user_task_id"),
+                    TaskHistoryDB.created_at,
+                    TaskStartedAtDB.started_at,
+                    UserDB.email.label("submitter_email"),
+                )
+                .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                .join(TaskStartedAtDB, TaskHistoryDB.task_id == TaskStartedAtDB.task_id, isouter=True)
+                .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
+                .where(CeleryTaskMeta.task_id == celery_task_id)
+            )
+
+            result = db.execute(stmt).first()
+
+            if result is None:
+                time.sleep(1)
+                max_retries -= 1
+                continue
+
+            task_dict = dict(result._mapping)
+            status = task_dict.get("status")
+            if status in ["SUCCESS", "FAILURE"]:
+                deserialized = _deserialize_celery_task_metadata(task_dict)
+                return deserialized
+
+            time.sleep(1)
+            max_retries -= 1
+
+    raise TimeoutError(
+        f"Task {user_task_id} (celery_task_id={celery_task_id}) did not complete within the expected time"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +122,8 @@ def test_sample_metadata_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     query_string = "Area:West of Ireland,Northern Portugal;Sex:F"
     expected_sample_ids = ["5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21", "5a_HOM-I7", "1b_HOM-G58"]
@@ -120,7 +151,8 @@ def test_bcftools_pipe_query(
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -129,8 +161,8 @@ def test_bcftools_pipe_query(
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
-    task_id = result.stdout.strip().split()[-1]
-    wait_for_task_complete(task_id=task_id)
+    user_task_id = result.stdout.strip().split()[-1]
+    _ = wait_for_task_complete(user_task_id=user_task_id)
 
     command = f"files list --project {project_name} "
     result = runner.invoke(app, command)
@@ -173,35 +205,48 @@ def test_bcftools_pipe_query_errors(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
 ):
-    """
-    Test bad formatted input raises errors
-
-    TODO - these sorts of errors in the future should be handled by the API, and not sent to Celery.
-    This test will need to be rewritten then, hence why it is quite sloppy now.
-    """
+    """Test that validation errors cause task FAILURE status."""
     if "DEFAULT" in project_name:
         project_name = CONSTANTS["QUERY_PROJECT"]
     if "DEFAULT" in tsv_filter:
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
         command = "view -s SAMPLES"
+
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
-    result = runner.invoke(app, command)
+    command_str = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+    response = runner.invoke(app, command_str)
 
-    task_id = result.stdout.strip().split()[-1]
-    # TODO, assertion below should become 1, when API has the role of validating input.
-    assert result.exit_code == 0
-    result = wait_for_task_complete(task_id=task_id)
-    assert expected_error in result.stdout
+    assert response.exit_code == 0
+    user_task_id = response.stdout.strip().split()[-1]
+    result = wait_for_task_complete(user_task_id=user_task_id)
+
+    assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
+
+    # For failed tasks, result is a dict with exception info
+    full_error = ""
+    if isinstance(result.result, dict):
+        exc_type = str(result.result.get("exc_type", ""))
+        exc_message_list = result.result.get("exc_message", [])
+        if isinstance(exc_message_list, list):
+            exc_message = " ".join(str(msg) for msg in exc_message_list)
+        else:
+            exc_message = str(exc_message_list)
+        full_error = f"{exc_type} {exc_message}"
+    else:
+        full_error = str(result.result)
+
+    assert expected_error in full_error, f"Expected '{expected_error}' in error message, but got: {full_error}"
 
 
-def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config):
-    """Get the status of a task by its ID. Uses flower API via get_task_history to get the task info.
-    Note that this does not test the CLI command for testing task status.
+def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
+    """
+    Get the status of a task by its ID, as in the task ID int that is returned to the users, not the Celery UUID task ID.
+    Uses the PostgreSQL Celery results backend to get task info.
     """
     project_name = CONSTANTS["QUERY_PROJECT"]
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
@@ -216,16 +261,27 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
     assert second_task_result.exit_code == 0
     second_task_id = second_task_result.stdout.strip().split()[-1]
 
-    flower_user = os.environ["FLOWER_USER"]
-    flower_password = os.environ["FLOWER_PASSWORD"]
-    flower_base_url = os.environ["FLOWER_BASE_URL"]
+    max_retries = 10
+    retry_delay = 0.5
 
-    for task_id in [first_task_id, second_task_id]:
-        flower_url = f"{flower_base_url}/api/task/info/{task_id}"
-        auth = (flower_user, flower_password)
-        response = httpx.get(flower_url, auth=auth, timeout=3.0)
-        tasks_status = response.json()
-        assert tasks_status.get("uuid") == task_id
+    with SyncSessionLocal() as db:
+        for task_id in [first_task_id, second_task_id]:
+            result = None
+            for _ in range(max_retries):
+                stmt = (
+                    select(CeleryTaskMeta.status)
+                    .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                    .where(TaskHistoryDB.id == task_id)
+                )
+                result = db.execute(stmt).scalar_one_or_none()
+
+                if result is not None:
+                    break
+
+                time.sleep(retry_delay)
+
+            assert result is not None, f"Task {task_id} not found in results backend after {max_retries} retries"
+            assert result in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
 
 
 @patch(
@@ -248,7 +304,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):
@@ -284,9 +341,9 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "command": "view -s SAMPLES; view -r 1,4,6,21,24",
             "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
             "bucket_name": bucket_name,
-            "user_name": "test-user",
             "project_id": project_id,
             "project_name": project_name,
+            "user_id": 1,
         }
         with pytest.raises(ValueError) as excinfo:
             bcftools_pipe_task(**params)
@@ -307,7 +364,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
+                "user_id": 1,
             },
             False,
             False,
@@ -323,7 +380,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
+                "user_id": 1,
             },
             True,
             True,
@@ -345,8 +402,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 31,34,36,321,324",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             False,
             True,
@@ -364,8 +421,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -392,8 +449,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 21:15000000-25000000",
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "project_name": "query-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -417,8 +474,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,
@@ -447,8 +504,8 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
-                "user_name": "test-user",
                 # project_id is added dynamically in the tests
+                "user_id": 1,
             },
             True,
             True,

@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import boto3
+import requests
 import yaml
 
 MINIO_URL = "http://localhost:9000"
@@ -16,8 +17,19 @@ FIXTURES_DIR = Path(__file__).parent.parent / "tests" / "fixtures"
 LOCAL_ENV = os.environ.copy()
 LOCAL_ENV["DIVBASE_ENV"] = "local"
 
-FLOWER_USER = "floweradmin"
-FLOWER_PASSWORD = "badpassword"
+DIVBASE_API_URL = "http://localhost:8001/api/v1"
+DIVBASE_ADMIN_EMAIL = "admin@divbase.com"
+DIVBASE_ADMIN_PASSWORD = "badpassword"
+
+
+def get_divbase_access_token() -> str:
+    """Get an access token for the DivBase API."""
+    response = requests.post(
+        f"{DIVBASE_API_URL}/../auth/login",
+        data={"username": DIVBASE_ADMIN_EMAIL, "password": DIVBASE_ADMIN_PASSWORD},
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
 
 
 def ensure_project_exists(project_name: str):

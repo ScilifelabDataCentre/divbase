@@ -12,15 +12,14 @@ class DimensionUpdateKwargs(BaseModel):
 
     bucket_name: str
     project_id: int
-    user_name: str
     project_name: str
+    user_id: int
 
 
 class DimensionUpdateTaskResult(BaseModel):
     """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
 
     status: Optional[str] = None
-    submitter: str
     VCF_files_added: Optional[list[str]] = Field(
         None, description="VCF files that were added to dimensions index by this job"
     )

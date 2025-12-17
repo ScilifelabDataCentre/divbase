@@ -6,6 +6,11 @@ It also collects fixtures and constants that are needed across multiple test mod
 that the imports work correctly.
 """
 
+import os
+
+# Set environment variable BEFORE any divbase_api imports. otherwise worker_db.py will set SyncSessionLocal to None due to import timings
+os.environ.setdefault("WORKER_DATABASE_URL", "postgresql+psycopg2://divbase_user:badpassword@localhost:5432/divbase_db")
+
 import logging
 from pathlib import Path
 from unittest.mock import patch
@@ -151,11 +156,11 @@ def run_update_dimensions(CONSTANTS):
     Usage: run_update_dimensions(bucket_name, project_id, project_name)
     """
 
-    def _update(bucket_name="split-scaffold-project", project_id=None, user_name="Test User", project_name=None):
+    def _update(bucket_name="split-scaffold-project", project_id=None, project_name=None, user_id=None):
         with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
             mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
             result = update_vcf_dimensions_task(
-                bucket_name=bucket_name, project_id=project_id, user_name=user_name, project_name=project_name
+                bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
             )
         return result
 
