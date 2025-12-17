@@ -7,6 +7,7 @@ These overrides are on methods inside BaseModelView (parent of ModelView, which 
 
 import json
 import logging
+import pickle
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -39,7 +40,6 @@ from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
-from divbase_api.services.task_history import _deserialize_celery_task_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +468,6 @@ class CeleryTaskMetaView(ModelView):
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         """
         Override to deserialize Celery's binary fields for display.
-        Reuses the existing _deserialize_celery_task_metadata function from the task_history service layer.
 
         NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
         """
@@ -481,17 +480,26 @@ class CeleryTaskMetaView(ModelView):
         if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
             return await super().serialize_field_value(value, field, action, request)
 
-        # _deserialize_celery_task_metadata expects a full task dict, but we only need the specific field
-        task = {field.name: value}
-
+        # NOTE: This is somewhat duplicated logic (also found in '_deserialize_celery_task_metadata' function from the task_history service layer).
+        # It cannot be reused here as pydantic will raise validation errors as this function works on a per "cell" basis.
+        # So the pydantic model cannot be created as would be missing all other (required) attributes.
         try:
-            deserialized = _deserialize_celery_task_metadata(task)
-            field_value = deserialized.get(field.name)
+            if field.name in ["args", "kwargs"]:
+                # Deserialize args as JSON
+                str_decoded = value.decode("utf-8") if isinstance(value, bytes) else value
+                json_data = json.loads(str_decoded)
+                return json.dumps(json_data, indent=2, default=str)
 
-            # Format as JSON string for display in the admin panel
-            if isinstance(field_value, (dict, list)):
-                return json.dumps(field_value, indent=2, default=str)
-            return str(field_value) if field_value is not None else "<None>"
+            elif field.name == "result":
+                # Handle pickled results
+                if isinstance(value, bytes) and value[:1] == b"\x80":
+                    result_data = pickle.loads(value)
+                else:
+                    result_str = value.decode("utf-8") if isinstance(value, bytes) else value
+                    result_data = json.loads(result_str)
+
+                return json.dumps(result_data, indent=2, default=str)
+
         except Exception as e:
             logger.warning(f"Failed to deserialize {field.name}: {e}")
             return f"<Binary data: {len(value)} bytes>"
