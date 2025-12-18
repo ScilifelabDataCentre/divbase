@@ -18,10 +18,8 @@ from divbase_api.worker.cron_tasks import cleanup_old_task_history_task, cleanup
 
 class TaskStatus(StrEnum):
     """
-    TODO: Temporarily here to prevent breaking tests in this module.
-    No longer used in main codebase
-    Helper class that contains the valid Celery task states.
-    Used by TaskHistoryDB to set the status column.
+    Helper class that contains the possible Celery task states in the
+    status column of the CeleryTaskMeta table (which is celery managed).
     """
 
     PENDING = "pending"
