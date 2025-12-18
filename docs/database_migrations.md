@@ -7,7 +7,7 @@ The directory `packages/divbase-api/src/divbase_api/migrations` contains databas
 - **Migration files/scripts** are stored in `versions/` with descriptive names: `YYYY-MM-DD_description.py`
 - **Migrations are generated** by comparing SQLAlchemy models with the current database instance deployed using the local docker compose stack.
 - **Migrations are applied automatically** in local development when the docker compose stack starts up using an init-container (db-migrator).
-- **In production/deployed enviroments**, migrations should be applied as part of the deployment process - multi step and not automatic, see below.
+- **In production/deployed environments**, migrations should be applied as part of the deployment process - multi step and not automatic, see below.
 - **FastAPI's lifespan event automatically checks** if migrations are up to date during startup. - will raise an error if not.
 - **`pytest test/migrations`** can run tests to ensure all migrations can be applied cleanly to a fresh database.
 - **Celery managed tables** (`celery_taskmeta` and `celery_groupmeta`) are excluded from alembic (see the `migrations/env.py`), as Celery handles their creation and updates. Keep this in mind when creating migrations.
@@ -102,4 +102,4 @@ TODO
 
 ### Starlette admin/admin panel not showing the models
 
-- You need the models in your src to match the postgres schema. So if you have pending changes (that you have or have not created migrations for) they wont display until you've actually done the migration.
+- You need the models in your src to match the postgres schema. So if you have pending changes (that you have or have not created migrations for) they won't display until you've actually done the migration.

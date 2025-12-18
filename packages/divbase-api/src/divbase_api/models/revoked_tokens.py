@@ -43,7 +43,7 @@ class RevokedTokenDB(BaseDBModel):
     __tablename__ = "revoked_token"
 
     token_jti: Mapped[str] = mapped_column(String(36), index=True, unique=True)  # UUIDv4 string
-    token_type: Mapped[TokenType] = mapped_column(index=True)
+    token_type: Mapped[TokenType] = mapped_column(Enum(TokenType), index=True)
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_reason: Mapped[TokenRevokeReason] = mapped_column(Enum(TokenRevokeReason))
 
