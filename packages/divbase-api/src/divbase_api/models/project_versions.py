@@ -38,7 +38,7 @@ class ProjectVersionDB(BaseDBModel):
     # As versioning on project level, can safely delete entry if project deleted
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"), index=True)
     # But we should allow the user who made this to be deleted without deleting the version entry
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"))
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="project_versions")
 
