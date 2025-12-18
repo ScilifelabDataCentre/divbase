@@ -1,6 +1,7 @@
 import json
 import logging
 import pickle
+from datetime import datetime, timezone
 
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -10,29 +11,27 @@ from divbase_lib.api_schemas.queries import (
 )
 from divbase_lib.api_schemas.task_history import (
     TaskHistoryResult,
-    TaskHistoryResults,
 )
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
 
 logger = logging.getLogger(__name__)
 
 
-def deserialize_tasks_to_result(serialized_tasks: list[dict]) -> TaskHistoryResults:
+def deserialize_tasks_to_result(serialized_tasks: list[dict]) -> list[TaskHistoryResult]:
     """
     Convert a list of task dicts from the DB into a TaskHistoryResults object.
     """
     if not serialized_tasks:
-        return TaskHistoryResults(tasks={})
+        return []
 
-    deserialized_tasks = {}
+    deserialized_tasks = []
     for task in serialized_tasks:
-        deserialized_task = _deserialize_celery_task_metadata(task)
-        deserialized_tasks[task["task_id"]] = TaskHistoryResult(**deserialized_task)
+        deserialized_tasks.append(_deserialize_celery_task_metadata(task))
 
-    return TaskHistoryResults(tasks=deserialized_tasks)
+    return deserialized_tasks
 
 
-def _deserialize_celery_task_metadata(task: dict) -> dict:
+def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
     """
     Helper function to deserialize tasks from the db CeleryTaskMeta table (SQLalchemy+postgres celery results backend).
     The results backend serializes fields controlled by result_extended=True (e.g. args, kwargs) as JSON, but the task results
@@ -101,22 +100,33 @@ def _deserialize_celery_task_metadata(task: dict) -> dict:
 
     runtime = None
     started_at = task.get("started_at")
-    completed_at = task.get("completed_at")
+    completed_at = task.get("date_done")
     if started_at and completed_at:
         runtime = (completed_at - started_at).total_seconds()
 
-    return {
-        "uuid": task.get("task_id"),
-        "submitter_email": task.get("submitter_email"),
-        "status": task.get("status"),
-        "result": parsed_result,
-        "date_done": task.get("date_done").isoformat() if task.get("date_done") else None,
-        "name": task_name,
-        "args": args_as_str,
-        "kwargs": parsed_kwargs,
-        "worker": task.get("worker"),
-        "created_at": task.get("created_at").timestamp() if task.get("created_at") else None,
-        "started_at": started_at.timestamp() if started_at else None,
-        "completed_at": completed_at.timestamp() if completed_at else None,
-        "runtime": runtime,
-    }
+    return TaskHistoryResult(
+        id=task.get("user_task_id"),
+        submitter_email=task.get("submitter_email"),
+        status=task.get("status"),
+        result=parsed_result,
+        date_done=task.get("date_done").isoformat() if task.get("date_done") else None,
+        name=task_name,
+        args=args_as_str,
+        kwargs=parsed_kwargs,
+        worker=task.get("worker"),
+        created_at=_format_timestamp(task.get("created_at")),
+        started_at=_format_timestamp(started_at),
+        completed_at=_format_timestamp(completed_at),
+        runtime=runtime,
+    )
+
+
+def _format_timestamp(timestamp: datetime) -> str | None:
+    """
+    Format datetime to string with timezone. Celery uses UTC by default.
+    """
+    if timestamp is None:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")

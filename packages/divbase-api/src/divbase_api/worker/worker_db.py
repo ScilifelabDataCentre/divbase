@@ -2,22 +2,16 @@
 Handles connection between celery workers and the postgresql db.
 """
 
-import logging
 import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-logger = logging.getLogger(__name__)
-
-# if block is used as API and worker are in same package and
-# API imports modules from the worker (e.g. tasks.py).
-# Without the if:
-# - Would have to add the WORKER_DATABASE_URL environment variable to the API and
-# - create the SyncSessionLocal object that would not used by the API.
-WORKER_DATABASE_URL = os.getenv("WORKER_DATABASE_URL")
-if WORKER_DATABASE_URL:
-    sync_engine = create_engine(WORKER_DATABASE_URL, echo=False, pool_pre_ping=True)
-    SyncSessionLocal = sessionmaker(bind=sync_engine)
-else:
-    SyncSessionLocal = None
+# NOTE: As SyncSessionLocal is created at module load time,
+# both the API and WORKER applications will import an instance of the SyncSessionLocal object.
+# Both already need the enviroment variable SYNC_DATABASE_URL set.
+# And as the overhead of creating the SyncSessionLocal object is low, we can just create it for both,
+# even if the API will not actually use it.
+SYNC_DATABASE_URL = os.environ["SYNC_DATABASE_URL"]
+sync_engine = create_engine(SYNC_DATABASE_URL, echo=False, pool_pre_ping=True)
+SyncSessionLocal = sessionmaker(bind=sync_engine)

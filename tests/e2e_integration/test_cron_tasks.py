@@ -7,12 +7,27 @@ and verifying that the cleanup tasks correctly delete old entries.
 
 import time
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 
 import pytest
 from sqlalchemy import select, text
 
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStatus
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.worker.cron_tasks import cleanup_old_task_history_task, cleanup_stuck_tasks_task
+
+
+class TaskStatus(StrEnum):
+    """
+    Helper class that contains the possible Celery task states in the
+    status column of the CeleryTaskMeta table (which is celery managed).
+    """
+
+    PENDING = "pending"
+    STARTED = "started"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    RETRY = "retry"
+    REVOKED = "revoked"
 
 
 @pytest.fixture
@@ -51,28 +66,29 @@ def create_task_entry(db_session_sync, project_map):
 
         prefix = "system-task" if project_id is None else "task"
         task_id = f"{prefix}-{time_old}{time_unit[0]}-{status.value}-{timestamp}"
-
-        # Determine timestamps based on status
-        # For PENDING: only created_at is set
-        # For STARTED: created_at and started_at are set
-        # For SUCCESS/FAILURE: all three timestamps are set
         created_at = delta_time
-        started_at = delta_time if status in [TaskStatus.STARTED, TaskStatus.SUCCESS, TaskStatus.FAILURE] else None
-        completed_at = delta_time if status in [TaskStatus.SUCCESS, TaskStatus.FAILURE] else None
+        started_at = None
+        completed_at = None
 
+        # Always create TaskHistoryDB with created_at set to delta_time
         task_history = TaskHistoryDB(
             task_id=task_id,
             user_id=user_id,
             project_id=project_id,
-            status=status,
             created_at=created_at,
-            started_at=started_at,
-            completed_at=completed_at,
         )
         db_session_sync.add(task_history)
         db_session_sync.commit()
 
+        # Optionally create TaskStartedAtDB for tasks that simulate having being started but
+        if status in [TaskStatus.STARTED, TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+            started_at = created_at + timedelta(minutes=1)
+            db_session_sync.add(TaskStartedAtDB(task_id=task_id, started_at=started_at))
+            db_session_sync.commit()
+
         # Create CeleryTaskMeta entry using raw SQL with explicit id
+        if status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+            completed_at = started_at + timedelta(minutes=1) if started_at else created_at + timedelta(minutes=2)
         max_id_result = db_session_sync.execute(text("SELECT COALESCE(MAX(id), 0) + 1 FROM celery_taskmeta")).scalar()
         db_session_sync.execute(
             text("""

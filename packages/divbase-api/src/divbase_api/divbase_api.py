@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from divbase_api.admin_panel import register_admin_panel
 from divbase_api.api_config import settings
 from divbase_api.db import (
-    create_all_tables,
+    check_db_migrations_up_to_date,
     create_first_admin_user,
     engine,
     health_check_db,
@@ -50,7 +50,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if not await health_check_db():
         raise ConnectionError("Could not connect to the database or db unhealthy. Exiting...")
     logger.info("Database connection healthy.")
-    await create_all_tables()
+
+    check_db_migrations_up_to_date()
+    logger.info("db is up to date with the latest migration files.")
+
     await create_first_admin_user()
     logger.info("DivBase API startup events complete.")
 

@@ -7,8 +7,10 @@ These overrides are on methods inside BaseModelView (parent of ModelView, which 
 
 import json
 import logging
+import pickle
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Response
 from pydantic import SecretStr
@@ -20,7 +22,6 @@ from starlette_admin import (
     BooleanField,
     DateTimeField,
     EmailField,
-    FloatField,
     HasOne,
     IntegerField,
     JSONField,
@@ -38,14 +39,29 @@ from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import get_password_hash
-from divbase_api.services.task_history import _deserialize_celery_task_metadata
 
 logger = logging.getLogger(__name__)
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
+
+
+def _format_cet_datetime(value: Any, field: Any, field_names: list[str]) -> str | None:
+    """
+    Helper function that can be called by overiding 'async def serialize_field_value()'
+    for views that display datetimes.
+    To change timezone, use patterns like this:
+    dt = value.astimezone(timezone.utc) - displays UTC
+    OR
+    from zoneinfo import ZoneInfo
+    dt = value.astimezone(ZoneInfo("Europe/Stockholm")) - displays CET
+    """
+    if isinstance(value, datetime) and field.name in field_names:
+        dt = value.astimezone(ZoneInfo("Europe/Stockholm"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+    return None
 
 
 class UserView(ModelView):
@@ -155,6 +171,12 @@ class UserView(ModelView):
         if isinstance(exc, IntegrityError):
             raise FormValidationError(errors={"email": "A user with this email already exists"})
         return super().handle_exception(exc)
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["last_password_change", "date_deleted"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
 
 
 class ProjectView(ModelView):
@@ -280,43 +302,11 @@ class ProjectMembershipView(ModelView):
 
         return super().handle_exception(exc)
 
-
-class RevokedTokenView(ModelView):
-    """
-    Custom admin panel View for the RevokedTokenDB model.
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
-    fields = [
-        IntegerField("id", label="ID", disabled=True),
-        StringField("token_jti", label="Token JTI", required=True),
-        StringField("token_type", label="Token Type", required=True),
-        DateTimeField("revoked_at", label="Revoked At", disabled=True),
-        StringField("revoked_reason", label="Revoked Reason", required=True),
-        IntegerField("user_id", label="User ID", required=False),
-        HasOne("user", identity="user", label="User"),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("updated_at", label="Updated At", disabled=True),
-    ]
-
-    exclude_fields_from_list = ["user_id"]
-    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
-    exclude_fields_from_detail = []
-
-    def handle_exception(self, exc: Exception) -> None:
-        """
-        Handles gracefully attempts to create/edit a revoked token entry that would otherwise become a 500 error:
-            - A token_type that is not allowed (only refresh and password reset tokens can be revoked).
-            - violating unique constraint on token_jti
-        """
-        if isinstance(exc, ValueError):  # raised by db models validate_token_type method
-            raise FormValidationError(errors={"token_type": str(exc)})
-
-        if isinstance(exc, IntegrityError):
-            raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
-
-        return super().handle_exception(exc)
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
 
 
 class ProjectVersionsView(ModelView):
@@ -376,6 +366,205 @@ class ProjectVersionsView(ModelView):
                 data["date_deleted"] = None
 
         return await super().edit(request=request, pk=pk, data=data)
+
+
+class RevokedTokenView(ModelView):
+    """
+    Custom admin panel View for the RevokedTokenDB model.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("token_jti", label="Token JTI", required=True),
+        StringField("token_type", label="Token Type", required=True),
+        DateTimeField("revoked_at", label="Revoked At", disabled=True),
+        StringField("revoked_reason", label="Revoked Reason", required=True),
+        IntegerField("user_id", label="User ID", required=False),
+        HasOne("user", identity="user", label="User"),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
+    exclude_fields_from_list = ["user_id"]
+    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
+    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
+    exclude_fields_from_detail = []
+
+    def handle_exception(self, exc: Exception) -> None:
+        """
+        Handles gracefully attempts to create/edit a revoked token entry that would otherwise become a 500 error:
+            - A token_type that is not allowed (only refresh and password reset tokens can be revoked).
+            - violating unique constraint on token_jti
+        """
+        if isinstance(exc, ValueError):  # raised by db models validate_token_type method
+            raise FormValidationError(errors={"token_type": str(exc)})
+
+        if isinstance(exc, IntegrityError):
+            raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+
+        return super().handle_exception(exc)
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
+
+class TaskHistoryView(ModelView):
+    page_size_options = PAGINATION_DEFAULTS
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id"),
+        HasOne("user", identity="user", label="User"),
+        HasOne("project", identity="project", label="Project"),
+        HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
+        DateTimeField("created_at"),
+    ]
+
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to format how values are displayed in the view.
+        """
+        if isinstance(value, datetime) and field.name in ["created_at"]:
+            formatted = _format_cet_datetime(value, field, ["created_at"])
+            if formatted is not None:
+                return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of task history entries."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Optionally disable editing if task history should be read-only."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Optionally disable deletion if task history should be immutable."""
+        return False
+
+
+class CeleryTaskMetaView(ModelView):
+    """
+    Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
+
+    Needs to be defined in order to display the entries in the admin panel, but is
+    intended to only be viewed as a child of TaskHistoryView
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id", label="Task UUID", disabled=True),
+        StringField("status", label="Celery Status", disabled=True),
+        StringField("name", label="Task Name", disabled=True),
+        StringField("worker", label="Worker", disabled=True),
+        StringField("queue", label="Queue", disabled=True),
+        IntegerField("retries", label="Retries", disabled=True),
+        DateTimeField("date_done", label="Date Done", disabled=True),
+        TextAreaField("args", label="Args", disabled=True),
+        TextAreaField("kwargs", label="Kwargs", disabled=True),
+        TextAreaField("result", label="Result", disabled=True),
+        TextAreaField("traceback", label="Traceback", disabled=True),
+    ]
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to deserialize Celery's binary fields for display.
+
+        NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
+        """
+        if isinstance(value, datetime) and field.name == "date_done":
+            formatted = _format_cet_datetime(value, field, ["date_done"])
+            if formatted is not None:
+                return formatted
+
+        # For non-bytes values or fields we don't need to deserialize, use default behavior
+        if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
+            return await super().serialize_field_value(value, field, action, request)
+
+        # NOTE: This is somewhat duplicated logic (also found in '_deserialize_celery_task_metadata' function from the task_history service layer).
+        # It cannot be reused here as pydantic will raise validation errors as this function works on a per "cell" basis.
+        # So the pydantic model cannot be created as would be missing all other (required) attributes.
+        try:
+            if field.name in ["args", "kwargs"]:
+                # Deserialize args as JSON
+                str_decoded = value.decode("utf-8") if isinstance(value, bytes) else value
+                json_data = json.loads(str_decoded)
+                return json.dumps(json_data, indent=2, default=str)
+
+            elif field.name == "result":
+                # Handle pickled results
+                if isinstance(value, bytes) and value[:1] == b"\x80":
+                    result_data = pickle.loads(value)
+                else:
+                    result_str = value.decode("utf-8") if isinstance(value, bytes) else value
+                    result_data = json.loads(result_str)
+
+                return json.dumps(result_data, indent=2, default=str)
+
+        except Exception as e:
+            logger.warning(f"Failed to deserialize {field.name}: {e}")
+            return f"<Binary data: {len(value)} bytes>"
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Disable editing."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion."""
+        return False
+
+
+class TaskStartedAtView(ModelView):
+    """
+    Custom admin panel View for TaskStartedAtDB.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["created_at", "updated_at"]
+
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("task_id"),
+        DateTimeField("started_at"),
+    ]
+
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        """
+        Override to format how values are displayed in the view.
+        """
+        if isinstance(value, datetime) and field.name in ["started_at"]:
+            formatted = _format_cet_datetime(value, field, ["started_at"])
+            if formatted is not None:
+                return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of task history entries."""
+        return False
+
+    def can_edit(self, request: Request) -> bool:
+        """Optionally disable editing if task history should be read-only."""
+        return False
+
+    def can_delete(self, request: Request) -> bool:
+        """Optionally disable deletion if task history should be immutable."""
+        return False
 
 
 class DivBaseAuthProvider(AuthProvider):
@@ -442,116 +631,6 @@ class DivBaseAuthProvider(AuthProvider):
         return AdminUser(username=user["name"], photo_url=None)
 
 
-class TaskHistoryView(ModelView):
-    """
-    Custom admin panel View for the TaskHistoryDB model.
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
-    fields_default_sort = [("created_at", False)]  # False = descending, True = ascending
-    fields = [
-        StringField("task_id", label="Task UUID", disabled=True),
-        StringField("status", label="Status", disabled=True),
-        HasOne("user", identity="user", label="User"),
-        HasOne("project", identity="project", label="Project"),
-        HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("started_at", label="Started At", disabled=True),
-        DateTimeField("completed_at", label="Completed At", disabled=True),
-        FloatField("runtime_seconds", label="Runtime (s)", disabled=True),
-    ]
-
-    exclude_fields_from_list = ["started_at", "completed_at", "args", "kwargs", "result"]
-
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        """
-        Override to format how values are displayed in the view.
-        """
-        if field.name == "runtime_seconds" and value is not None:
-            return f"{value:.2f}"
-
-        if field.name == "status" and isinstance(value, str):
-            return value.upper()
-        return await super().serialize_field_value(value, field, action, request)
-
-    def can_create(self, request: Request) -> bool:
-        """Disable manual creation of task history entries."""
-        return False
-
-    def can_edit(self, request: Request) -> bool:
-        """Optionally disable editing if task history should be read-only."""
-        return False
-
-    def can_delete(self, request: Request) -> bool:
-        """Optionally disable deletion if task history should be immutable."""
-        return False
-
-
-class CeleryTaskMetaView(ModelView):
-    """
-    Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
-
-    Needs to be defined in order to display the entries in the admin panel, but is
-    intended to only be viewed as a child of TaskHistoryView
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
-
-    fields = [
-        IntegerField("id", label="ID", disabled=True),
-        StringField("task_id", label="Task UUID", disabled=True),
-        StringField("status", label="Celery Status", disabled=True),
-        StringField("name", label="Task Name", disabled=True),
-        StringField("worker", label="Worker", disabled=True),
-        StringField("queue", label="Queue", disabled=True),
-        IntegerField("retries", label="Retries", disabled=True),
-        DateTimeField("date_done", label="Date Done", disabled=True),
-        TextAreaField("args", label="Args", disabled=True),
-        TextAreaField("kwargs", label="Kwargs", disabled=True),
-        TextAreaField("result", label="Result", disabled=True),
-        TextAreaField("traceback", label="Traceback", disabled=True),
-    ]
-
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        """
-        Override to deserialize Celery's binary fields for display.
-        Reuses the existing _deserialize_celery_task_metadata function from the task_history service layer.
-
-        NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
-        """
-        # For non-bytes values or fields we don't need to deserialize, use default behavior
-        if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
-            return await super().serialize_field_value(value, field, action, request)
-
-        # _deserialize_celery_task_metadata expects a full task dict, but we only need the specific field
-        task = {field.name: value}
-
-        try:
-            deserialized = _deserialize_celery_task_metadata(task)
-            field_value = deserialized.get(field.name)
-
-            # Format as JSON string for display in the admin panel
-            if isinstance(field_value, (dict, list)):
-                return json.dumps(field_value, indent=2, default=str)
-            return str(field_value) if field_value is not None else "<None>"
-        except Exception as e:
-            logger.warning(f"Failed to deserialize {field.name}: {e}")
-            return f"<Binary data: {len(value)} bytes>"
-
-    def can_create(self, request: Request) -> bool:
-        """Disable manual creation."""
-        return False
-
-    def can_edit(self, request: Request) -> bool:
-        """Disable editing."""
-        return False
-
-    def can_delete(self, request: Request) -> bool:
-        """Disable deletion."""
-        return False
-
-
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
@@ -561,11 +640,12 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
     admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
     admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
     admin.add_view(
         CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
     )
-    admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
 
+    admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
     admin.mount_to(app)

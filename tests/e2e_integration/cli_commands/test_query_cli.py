@@ -22,7 +22,7 @@ from sqlalchemy import select
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.services.s3_client import create_s3_file_manager
@@ -33,6 +33,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 
+logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
 
 
@@ -42,25 +43,33 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
-def wait_for_task_complete(task_id: str, max_retries: int = 30) -> TaskHistoryResult:
+def wait_for_task_complete(user_task_id: int, max_retries: int = 30) -> TaskHistoryResult:
     """
     For a given task_id, check the status of the task via the PostgreSQL results backend until it is complete or times out.
     Need to join CeleryTaskMeta with TaskHistoryDB to get timestamps for the mandatory fields of the pydantic model.
     Deserialization is needed because of how the celery results backed stores fields.
     """
+    celery_task_id = None
+    with SyncSessionLocal() as db:
+        row = db.execute(select(TaskHistoryDB.task_id).where(TaskHistoryDB.id == user_task_id)).first()
+        if row is None:
+            raise ValueError(f"No TaskHistoryDB entry found for id={user_task_id}")
+        celery_task_id = row[0]
+
     while max_retries > 0:
         with SyncSessionLocal() as db:
             stmt = (
                 select(
                     *CeleryTaskMeta.__table__.c,
+                    TaskHistoryDB.id.label("user_task_id"),
                     TaskHistoryDB.created_at,
-                    TaskHistoryDB.started_at,
-                    TaskHistoryDB.completed_at,
+                    TaskStartedAtDB.started_at,
                     UserDB.email.label("submitter_email"),
                 )
                 .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                .join(TaskStartedAtDB, TaskHistoryDB.task_id == TaskStartedAtDB.task_id, isouter=True)
                 .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
-                .where(CeleryTaskMeta.task_id == task_id)
+                .where(CeleryTaskMeta.task_id == celery_task_id)
             )
 
             result = db.execute(stmt).first()
@@ -71,16 +80,17 @@ def wait_for_task_complete(task_id: str, max_retries: int = 30) -> TaskHistoryRe
                 continue
 
             task_dict = dict(result._mapping)
-
             status = task_dict.get("status")
             if status in ["SUCCESS", "FAILURE"]:
                 deserialized = _deserialize_celery_task_metadata(task_dict)
-                return TaskHistoryResult(**deserialized)
+                return deserialized
 
             time.sleep(1)
             max_retries -= 1
 
-    raise TimeoutError(f"Task {task_id} did not complete within the expected time")
+    raise TimeoutError(
+        f"Task {user_task_id} (celery_task_id={celery_task_id}) did not complete within the expected time"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -151,8 +161,8 @@ def test_bcftools_pipe_query(
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
-    task_id = result.stdout.strip().split()[-1]
-    wait_for_task_complete(task_id=task_id)
+    user_task_id = result.stdout.strip().split()[-1]
+    _ = wait_for_task_complete(user_task_id=user_task_id)
 
     command = f"files list --project {project_name} "
     result = runner.invoke(app, command)
@@ -212,8 +222,8 @@ def test_bcftools_pipe_query_errors(
     response = runner.invoke(app, command_str)
 
     assert response.exit_code == 0
-    task_id = response.stdout.strip().split()[-1]
-    result = wait_for_task_complete(task_id=task_id)
+    user_task_id = response.stdout.strip().split()[-1]
+    result = wait_for_task_complete(user_task_id=user_task_id)
 
     assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
 
@@ -235,7 +245,7 @@ def test_bcftools_pipe_query_errors(
 
 def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
     """
-    Get the status of a task by its ID.
+    Get the status of a task by its ID, as in the task ID int that is returned to the users, not the Celery UUID task ID.
     Uses the PostgreSQL Celery results backend to get task info.
     """
     project_name = CONSTANTS["QUERY_PROJECT"]
@@ -258,7 +268,11 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
         for task_id in [first_task_id, second_task_id]:
             result = None
             for _ in range(max_retries):
-                stmt = select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == task_id)
+                stmt = (
+                    select(CeleryTaskMeta.status)
+                    .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+                    .where(TaskHistoryDB.id == task_id)
+                )
                 result = db.execute(stmt).scalar_one_or_none()
 
                 if result is not None:
@@ -267,8 +281,7 @@ def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing
                 time.sleep(retry_delay)
 
             assert result is not None, f"Task {task_id} not found in results backend after {max_retries} retries"
-            assert result.task_id == task_id
-            assert result.status in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
+            assert result in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
 
 
 @patch(

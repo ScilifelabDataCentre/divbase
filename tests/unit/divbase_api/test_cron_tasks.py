@@ -32,7 +32,7 @@ def test_cleanup_old_task_history_deletes_old_entries(mock_db_session):
         assert result["number_of_celery_meta_deleted"] == 5
         assert result["number_of_task_history_deleted"] == 5
         assert result["retention_days"] == 30
-        assert mock_db_session.execute.call_count == 2
+        assert mock_db_session.execute.call_count == 4
         assert mock_db_session.commit.called
 
 

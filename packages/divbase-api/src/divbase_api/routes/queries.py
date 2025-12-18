@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.task_history import create_task_history_entry
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
@@ -68,6 +69,13 @@ async def sample_metadata_query(
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs.model_dump())
 
+    _ = await create_task_history_entry(
+        user_id=current_user.id,
+        project_id=project.id,
+        task_id=results.id,
+        db=db,
+    )
+
     try:
         result_dict = await run_in_threadpool(results.get, timeout=10)
         # TODO - consider if we split this into 2 routes to handle time out issues on CLI side.
@@ -97,7 +105,7 @@ async def create_bcftools_jobs(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-) -> str:
+) -> int:
     """
     Create a new bcftools query job for the specified project.
     """
@@ -117,4 +125,12 @@ async def create_bcftools_jobs(
     )
 
     results = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())
-    return results.id
+
+    job_id = await create_task_history_entry(
+        user_id=current_user.id,
+        project_id=project.id,
+        task_id=results.id,
+        db=db,
+    )
+
+    return job_id

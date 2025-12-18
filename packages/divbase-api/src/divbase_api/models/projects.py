@@ -5,7 +5,7 @@ Project DB Model.
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
@@ -78,7 +78,7 @@ class ProjectMembershipDB(BaseDBModel):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), index=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"), index=True)
 
-    role: Mapped[ProjectRoles] = mapped_column(index=True)
+    role: Mapped[ProjectRoles] = mapped_column(Enum(ProjectRoles), index=True)
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="project_memberships")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="memberships")
