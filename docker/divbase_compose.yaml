@@ -41,7 +41,7 @@ services:
     environment: &worker-env
       - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
-      - WORKER_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
+      - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
@@ -152,9 +152,8 @@ services:
     - FRONTEND_BASE_URL=http://localhost:8000
     - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
-    - DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db
-    - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # TODO - CHECK which DB urls needed. 
-    - WORKER_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # needed for after_task_publish celery signal 
+    - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
+    - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
