@@ -117,6 +117,8 @@ calculated_value = my_function(my_input_parameter)
 return {"status": "completed", "calculated_value": calculated_value}
 ```
 
+For a longer example, please look at `bcftools_pipe_task()` in `tasks.py`. The other examples in this document will refer to aspects of `bcftools_pipe_task()`, but for brevity, a toy task was used here instead.
+
 ### 2.2. Pydantic models
 
 DivBase use Pydantic models for strong typing, type validation, and as self-documenting data structures. Support for Pydantic model validation comes out-of-the-box with fastAPI, which is the API service used in DivBase. As described in Section 2,1, the Celery task itself cannot return Pydantic models (this is a limiation of Celery). Other than that, Pydantic models are used for all requests and responses to/from the API, including when users submit tasks and request task history to/from the DivBase server.
@@ -196,23 +198,93 @@ class TaskHistoryResult(BaseModel):
 
 ### 2.3. API endpoint
 
-- In `./packages/divbase-api/src/divbase_api/routes/`
+- API endpoints for enqueueing tasks are found in files the folder: `./packages/divbase-api/src/divbase_api/routes/`
+- Endpoint functions are decorated on the form `@query_router.post("<ENDPOINT_URL>", status_code=status.HTTP_201_CREATED)`, where `<ENDPOINT_URL>` should be a RESTful URL such as `/bcftools-pipe/projects/{project_name}`
+- To make use of fastAPIs async worker threads, define the function as`async def <ENDPOINT_FUNCTION_NAME>()`
+- The endpoint function has several required arguments: the Pydantic Request model (see Section 2.2.) and three helper arguments / fastAPI dependency injections.
 
-- Add a FastAPI route to submit the task, validate input,
-- enqueue the task function from tasks.py using `result = <TASK_FUNCTION>.apply_async()`. This returns for instance the task UUID. Use kwargs.
-- call the `create_task_history_entry()` CRUD function to record the task UUID in TaskHistoryDB. This returns the DivBase task ID, which is the autoincrementing id from the postgreSQL table. this is an integer and much easier for the users to handle than long UUIDs.
-- return the DivBase task ID
+ ```python
+ async def my_endpoint_function(
+    my_request_model: MyRequestModel,
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+ )
+  ```
 
-- Use the appropriate schema for request/response.
-- user validation to return user id and project id
+- The dependency injection in `project_and_user_and_role` and the helper function `has_required_role` are used to connect to the database and check that the user has permission to submit tasks to this project. See the example below for how to use it in an endpoint function.
+- To enqueue the task function defined in `tasks.py` in the job system, use `result = <TASK_FUNCTION>.apply_async()`. This returns some initial Celery task metadata, including the Celery task UUID.
+  - The established pattern in DivBase is - for clarity - to call `.apply_async()` with keyword arguments and not arguments. Specifically, the Pydantic kwargs model can be populated, and then dumped in to Python dict in `.apply_async()` since Celery cannot de/serialise Pydantic mdoels. This ensures that kwarg types are validated before enqueuing the task.
+- Call the `create_task_history_entry()` CRUD function to record the Celery task UUID in `TaskHistoryDB` along with user and project ID. This function will return the DivBase task ID, which is the autoincrementing id from the postgreSQL table. This is an integer and much easier for the users to handle than long UUIDs.
+- Finally, return the DivBase task ID to the user client as an API reponse.
 
- When tasks are scheduled by the API (Section 2.3), the established pattern in DivBase is to call it by keyword arguments.
+Example of an API endpoint. This pattern can more or less be used as boilerplate code when creating new endpoints for user-submitted tasks.
+
+```python
+@query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
+async def create_bcftools_jobs(
+    bcftools_query_request: BcftoolsQueryRequest,
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> int:
+    """
+    Create a new bcftools query job for the specified project.
+    """
+    # Standard DivBase pattern to check if user has permission to submit a task to a specific project.
+    # First calls a helper function that makes a lookup of user credentials in the database.
+    # Assumes that the CLI sent the request using make_authenticated_request(), see Section 2.4.
+    project, current_user, role = project_and_user_and_role
+    # Then calls on another helper function to check if the credentials are enough to grant permission
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError("You don't have permission to query this project.")
+
+    # Pack the required task arguments in the corresponding Pydantic model (see Section 2.2.)
+    # This ensures that the kwargs are type validated
+    task_kwargs = BcftoolsQueryKwargs(
+        tsv_filter=bcftools_query_request.tsv_filter,
+        command=bcftools_query_request.command,
+        metadata_tsv_name=bcftools_query_request.metadata_tsv_name,
+        bucket_name=project.bucket_name,
+        project_id=project.id,
+        project_name=project.name,
+    )
+
+    # Send the task to the Celery app, which enqueues it in the job system broker.
+    # Note that the kwargs Pydantic model is dumped already here. This is due to a limitation in Celery's deserialization. It may seem redundant, but this way the the kwarg types have been validated by Pydantic.
+    results = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())
+
+    # Call a helper CRUD function to create an entry in TaskHistoryDB that maps Celery Task UUID,
+    # User_id, and project_id. The auto-incremented table id is returned. This will now serve as
+    # the DivBase task ID, since it it an int and less unwieldy than a full UUID.
+    job_id = await create_task_history_entry(
+        user_id=current_user.id,
+        project_id=project.id,
+        task_id=results.id,
+        db=db,
+    )
+
+    # As a API response, return the DivBase task ID to the CLI client that made the request, where it can be displayed to the user.
+    return job_id
+```
+
+Note on a special case: if a task returns is return result directly from the API endpoint (currently, only implemented in `sample_metadata_query_task()` since it is considered to be a very quick task), the endpoint decorator can contain the Pydantic results model (see Section 2.2.) as `response_model=SampleMetadataQueryTaskResult`. If used this way, fastAPI will validate the model before returning it, and raise an error if the returned data structure does not match the types of the Pydantic model.
+
+```python
+@query_router.post(
+    "/sample-metadata/projects/{project_name}",
+    status_code=status.HTTP_200_OK,
+    response_model=SampleMetadataQueryTaskResult,
+)
+```
 
 ### 2.4. CLI
 
 In the folder `./packages/divbase-cli/src/divbase_cli/cli_commands/`
 
 - Add a CLI command to submit the task and/or fetch results.
+
+- `make_authenticated_request()`
 
 ### 2.5. Task History deserialization
 
