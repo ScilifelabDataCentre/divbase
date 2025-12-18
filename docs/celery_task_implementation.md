@@ -2,9 +2,9 @@
 
 DivBase uses [Celery](https://docs.celeryq.dev/) as an asynchronous job management system. This document aims to describe how Celery tasks are implemented in the DivBase system architechture. The document can serve as a guide for maintaining and updating existing tasks, as well as implementing new tasks. It is intended to be a complement to the official Celery documentation, so please refer to them in addition to this.
 
-Tasks can be divided by how they are submitted to the queue: user-submitted tasks, and system-submitted periodic tasks. User-submitted tasks are manually enqueued in the job management system by entering a command on in the DivBase CLI. System-submitted periodic tasks are cronjobs that are enqueued based on a time schedule, and typically handle system maintenance tasks such as cleanup jobs.
+As a rule-of-thumb, Celery tasks are intended to be used for operations that have a runtime that is longer than what is suitable for an asynchronous database transaction. In practice, operations that require interacting with files in an S3 bucket (including parsing the content of the files) should be run as a Celery task. If you want to implement a new function in DivBase that **only** relies on calling a CRUD function, it is better to do this directly in the API endpoint rather than enqueing a Celery task with the same logic.
 
-TODO: Add section on when to use tasks and when to use other strategies (e.g. API async CRUD calls)
+Tasks can be divided by how they are submitted to the queue: user-submitted tasks, and system-submitted periodic tasks. User-submitted tasks are manually enqueued in the job management system by entering a command on in the DivBase CLI. System-submitted periodic tasks are cronjobs that are enqueued based on a time schedule, and typically handle system maintenance tasks such as cleanup jobs.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ Tasks are generally executed asynchronously and can possibly take a bit of time 
 
 \* One exception is `sample_metadata_query_task` that is assumed to run so quickly that it waits for results to be returned back to the user's terminal. The task is enqueued as an asynchronous celery task like any other task, with the difference that the API layer waits for the task layer to return the results so that the API in turn can return that to the users terminal.
 
-DivBase uses a layered architechture and therefore task implementations occur at several layers. Roughly speaking, there is a Celery worker layer where the Celery app and its tasks are defined (including task metadata writes to database), an API layer that handles routing and some other required database operations, and a CLI layer that handles sending a task from the user's client to a specific API endpoint. The task signal flow in DivBase looks like the following, starting from the user input:
+DivBase uses a layered architechture and therefore task implementations occur at several layers. Roughly speaking, there is a Celery worker layer where the Celery app and its tasks are defined (including task metadata writes to database), an API layer that handles routing and some other required database operations, and a CLI layer that handles sending a task from the user's client to a specific API endpoint. The typicall task signal flow in DivBase looks like the following, starting from the user input:
 
 ```mermaid
 sequenceDiagram
@@ -61,6 +61,8 @@ Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this di
 
 ## 2. Implementation of user-submitted tasks
 
+For a user-submitted task to be fully integrated in DivBase, it needs to be implemented in six different layers, as described in the subsections below. Doing so ensures that the task can be enqued and executed in the job system, and ensures that the task results can be correctly returned to the user with the task history CLI command.
+
 ### 2.1 Task Definition
 
 - Tasks are defined in `./packages/divbase-api/src/divbase_api/worker/tasks.py`
@@ -85,6 +87,8 @@ Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this di
 Example of a task defintion:
 
 ```python
+# This assumes that this is in tasks.py and that the celery app is defined somewhere above this example function
+
 @app.task(name="tasks.example")
 def example_task(
     my_input_parameter: str,
@@ -115,13 +119,80 @@ return {"status": "completed", "calculated_value": calculated_value}
 
 ### 2.2. Pydantic models
 
-In the folder in `./packages/divbase-lib/src/divbase_lib/api_schemas/`, add request models = task kwargs, response models = task results, and add those models to TaskHistoryResult to that they can be queried for by the user
+DivBase use Pydantic models for strong typing, type validation, and as self-documenting data structures. Support for Pydantic model validation comes out-of-the-box with fastAPI, which is the API service used in DivBase. As described in Section 2,1, the Celery task itself cannot return Pydantic models (this is a limiation of Celery). Other than that, Pydantic models are used for all requests and responses to/from the API, including when users submit tasks and request task history to/from the DivBase server.
 
-Place request and results models in a relevant schema file (e.g., queries.py, vcf_dimensions.py).
+In DivBase, Pydantic models are used together with Celery tasks in the following way:
 
-As described in Section 2,1, the Celery task itselves cannot return pydantic models (this is a limiation of Celery). But there are other uses in DivBase where Pydantic models are helpful.
+- In the folder in `./packages/divbase-lib/src/divbase_lib/api_schemas/`, add a request model (send from the CLI to the API), a task kwargs model (send by the API to Celery), and a response model for the task results (used when returning task results with the task history CLI command).
+- Also register those models in `TaskHistoryResult` Pydantic mdoel in `./packages/divbase-lib/src/divbase_lib/api_schemas/task_history.py` so that they are correctly returned to the user when the run the task history CLI command. Place request and results models in a relevant schema file within the api_schemas (e.g., `queries.py`, `vcf_dimensions.py`, or a new one with a name of your choice).
 
-Pydantic models are used elsewhere in the codebase for packing task results when the API returns task history to the user. Do not return errors as custom messages in the task return, raise them (see above bullet).
+Example of a request, task kwargs, and results model for a task named BcftoolsQuery:
+
+```python
+class BcftoolsQueryRequest(BaseModel):
+    """Request model for sample metadata query route."""
+
+    tsv_filter: str
+    metadata_tsv_name: str
+    command: str
+
+
+class BcftoolsQueryKwargs(BaseModel):
+    """Keyword arguments for BCFtools query task. Used to pass info to Celery task, and also for recording task history."""
+
+    tsv_filter: str
+    command: str
+    metadata_tsv_name: str
+    bucket_name: str
+    project_id: int
+    project_name: str
+    user_id: int
+
+
+class BcftoolsQueryTaskResult(BaseModel):
+    """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
+
+    output_file: str
+    status: Optional[str] = None
+```
+
+And then add the task kwargs and task results models TaskHistoryResult in `./packages/divbase-lib/src/divbase_lib/api_schemas/task_history.py`:
+
+```python
+class TaskHistoryResult(BaseModel):
+    """
+    Task details as returned by queries to the SQAlchemy+pg results backend.
+    """
+
+    id: int
+    submitter_email: Optional[str] = None
+    status: Optional[str] = None
+    result: Optional[
+        Union[
+            dict[
+                str, Any
+            ],  # Note! This dict must come first here so that error results are preserved and not incorrectly inserted into the result models
+            SampleMetadataQueryTaskResult,
+            BcftoolsQueryTaskResult, # Task result model from above example
+            DimensionUpdateTaskResult,
+        ]
+    ] = None
+    date_done: Optional[str] = None
+    name: Optional[str] = None
+    args: Optional[str] = None
+    kwargs: Optional[
+        Union[
+            SampleMetadataQueryKwargs,
+            BcftoolsQueryKwargs, # Task kwargs model from above example
+            DimensionUpdateKwargs,
+        ]
+    ] = None
+    worker: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    runtime: Optional[float] = None
+```
 
 ### 2.3. API endpoint
 
