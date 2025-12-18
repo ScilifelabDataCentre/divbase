@@ -2,14 +2,8 @@
 Top-level pytest configuration for the DivBase project.
 It handles spinning up the job system docker stack for the duration of the test session, and the tear-down afterwards.
 
-It also collects fixtures and constants that are needed across multiple test modules. Storing them here in the top-level ensures
-that the imports work correctly.
+It also collects fixtures and constants that are needed across multiple test modules.
 """
-
-import os
-
-# Set environment variable BEFORE any divbase_api imports. otherwise worker_db.py will set SyncSessionLocal to None due to import timings
-os.environ.setdefault("SYNC_DATABASE_URL", "postgresql+psycopg2://divbase_user:badpassword@localhost:5432/divbase_db")
 
 import logging
 from pathlib import Path
