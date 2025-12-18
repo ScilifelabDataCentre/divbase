@@ -1,8 +1,10 @@
 # Celery task implementation in DivBase
 
-DivBase uses [Celery](https://docs.celeryq.dev/) as an asynchronous job management system. This document aims to describe how Celery tasks are implemented in the DivBase system architechture. The document can serve as a guide for maintaining and updating existing tasks, as well as implementing new tasks.
+DivBase uses [Celery](https://docs.celeryq.dev/) as an asynchronous job management system. This document aims to describe how Celery tasks are implemented in the DivBase system architechture. The document can serve as a guide for maintaining and updating existing tasks, as well as implementing new tasks. It is intended to be a complement to the official Celery documentation, so please refer to them in addition to this.
 
 Tasks can be divided by how they are submitted to the queue: user-submitted tasks, and system-submitted periodic tasks. User-submitted tasks are manually enqueued in the job management system by entering a command on in the DivBase CLI. System-submitted periodic tasks are cronjobs that are enqueued based on a time schedule, and typically handle system maintenance tasks such as cleanup jobs.
+
+TODO: Add section on when to use tasks and when to use other strategies (e.g. API async CRUD calls)
 
 ## Table of Contents
 
@@ -62,18 +64,54 @@ Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this di
 ### 2.1 Task Definition
 
 - Tasks are defined in `./packages/divbase-api/src/divbase_api/worker/tasks.py`
-- the file contain the celery app defintions, these should not be altered unless refactoring the celery app specifically
-- a task is a function decorated with `@app.task(...)`.
-- return a serializable dict (not a Pydantic model)!
-- raise errors, not return in custom manner otherwise Celery will not set the Status of the task to FAILURE
-- Optional: dynamtic task routing
-- task input and outputs should preferrably be Pydantic models.
+- Towards the top of the file are the Celery app defintions in `app = Celery()` and `app.conf.update()`. These should not be altered unless refactoring the celery app specifically. The Celery results backend handles writing of task metadata to the `CeleryTaskMeta` table in the postgreSQL database.
+- Two Celery signal handlers are used to write to additional postgreSQL tables to capture values that are not included in `CeleryTaskMeta`. Like the Celery app, these should not be altered unless they are part of a refactoring.
+  - The `after_task_publish` signal handler handles cron jobs specifically. This signal fires when a task is published to the queue. If the task name begins with `cron_task` an entry is written to `TaskHistoryDB`. For user-submitted tasks, the writes to `TaskHistoryDB` are handled by the API, as described below in Section 2.3.
+  - The `task_prerun` signal handler fires when an idle worker picks up a task from the queue and changes its status to `STARTED`. This signal triggeres a write of a `started_at` timestamp to the `TaskStartedAtDB` table. This is used by the task history logic to calculate the runtime of a task.
+- A user-submitted task in DivBase is a function decorated with `@app.task(tasks.<NAME>)`. It is possible to tag the tasks with labels, such as `tags=["slow"]`. These tags could potentially be used by other Celery logic, such as task routing, but the use of tags is optional in DivBase tasks.
+- For clarity, suffix the function name with `_task`, e.g. `def <FUNCTION_NAME>_task()`. There is no logic that uses the suffix, so its function is to signal to the developer that this is a task function.
+- Define the task arguments and their type hints just like any other Python function. There are no mandatory args for DivBase tasks, but there are some patterns that can be reused. For instance, if the task logic will interact with S3, add `bucket_name: str,` Tasks that interact with VCF dimensions table need `project_id: int,` for the `get_vcf_metadata_by_project()` helper function and `project_name: str,` for exceptions.
+- The logic inside the task can be anything, but typically include reading file(s) from S3 and acting on them.
+  - Divbase tasks can include database transaction (see next bullet below for more details), but if the task only does a database CRUD it would be better to implement that as an async database CRUD in the API layer rather than a Celery task since that is likely faster and does not require a Celery worker.
+  - There are existing helper functions for S3 operations (e.g. `create_s3_file_manager()`, `_download_vcf_files()`, `_delete_job_files_from_worker()`) and VCF dimensions metadata table transactions (e.g. `get_vcf_metadata_by_project()`, `get_skipped_vcfs_by_project_worker()`,`create_or_update_vcf_metadata()`). Look at previous tasks to see if there are existing helper functions or logic that can be reused.
+- Database transactions can be called from the task using the `SyncSessionLocal()` sessionmaker instance from SQLAlchemy. There is no point in trying to use async database sessions in DivBase Celery tasks since tasks are run in dedicated worker containers/pods and inside a Celery event pool (see the Celery docs for `prefork` pools). Furthermore, since Celery does not provide a simple way to use the async event loops from SQLAlchemy. Experiments during DivBase development showed that it is technically possible to implement workarounds to use async db sessions in tasks executed by Celery workers, but that it can easily result in event pool issues and errors.
+- Raise errors in the task function (catching any errors proprageted from potential helper fuctions called by the task). This assures that `CeleryTaskMeta` is correctly updated with task status `FAILURE` and the error message. This assures that the task history CLI command correctly prints this information in the user's terminal. If errors are returned in any other way that with a `raise`, there is a risk that the status of the task becomes `SUCESS` even if it exited due to errors.
+- Tasks end with a `return` statement. This is written to the `results` field in `CeleryTaskMeta`. Celery will use `pickle` to serialize the results for storage in the `CeleryTaskMeta` table.
+  - For best compatibility, return a dictionary containing e.g. messages and values from the task.
+  - Note! Celery cannot handle serialisation of Pydantic models so they cannot be directlty in the return. It is possible to have a helper function return a Pydantic model to the task, but then this needs to be dumped to Python dict with `<PYDANTIC_MODEL_NAME>.model_dump()`.
+- Perhaps a little unintutive given the last subbullet above, but DivBase task input and outputs should preferrably be structured as Pydantic models since this gives benefits elsewhere in the codebase. Details on this is covered in Section 2.2.
+- Dynamtic task routing is optional
 
-divbase tasks use kwargs. it is possible to use args, but the pattern is to not use it.
+Example of a task defintion:
 
-list which task kwargs are always needed
+```python
+@app.task(name="tasks.example")
+def example_task(
+    my_input_parameter: str,
+    bucket_name: str,
+    project_id: int,
+    project_name: str,
+):
 
-Celery signals (`after_task_publish`, `task_prerun`) will handle DB entries for task history and started_at automatically if you follow the patterns.
+# To get the Celery Task UUID, for instance for logging and error messages, use:
+task_id = example_task.request.id
+logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
+
+# Example of how to add database transactions to a task by using the sync database session:
+with SyncSessionLocal() as db:
+    vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+# Raise errors inside the task to ensure that the task is masked as FAILED in CeleryTaskMeta.
+# Some custom exceptions exist that can take variables such as project name or task UUID
+if not vcf_dimensions_data.get("vcf_files"):
+    raise VCFDimensionsEntryMissingError(project_name=project_name)
+
+# Add any logic that the task should perform,
+calculated_value = my_function(my_input_parameter)
+
+# The returns should preferrably be a dict (or a Pydantic model dump) to be compatible with Celery serilisation
+return {"status": "completed", "calculated_value": calculated_value}
+```
 
 ### 2.2. Pydantic models
 
@@ -81,17 +119,23 @@ In the folder in `./packages/divbase-lib/src/divbase_lib/api_schemas/`, add requ
 
 Place request and results models in a relevant schema file (e.g., queries.py, vcf_dimensions.py).
 
+As described in Section 2,1, the Celery task itselves cannot return pydantic models (this is a limiation of Celery). But there are other uses in DivBase where Pydantic models are helpful.
+
+Pydantic models are used elsewhere in the codebase for packing task results when the API returns task history to the user. Do not return errors as custom messages in the task return, raise them (see above bullet).
+
 ### 2.3. API endpoint
 
 - In `./packages/divbase-api/src/divbase_api/routes/`
 
 - Add a FastAPI route to submit the task, validate input,
-- enqueue the task function from tasks.py using `result = <TASK_FUNCTION>.apply_async`. This returns for instance the task UUID.
+- enqueue the task function from tasks.py using `result = <TASK_FUNCTION>.apply_async()`. This returns for instance the task UUID. Use kwargs.
 - call the `create_task_history_entry()` CRUD function to record the task UUID in TaskHistoryDB. This returns the DivBase task ID, which is the autoincrementing id from the postgreSQL table. this is an integer and much easier for the users to handle than long UUIDs.
 - return the DivBase task ID
 
 - Use the appropriate schema for request/response.
 - user validation to return user id and project id
+
+ When tasks are scheduled by the API (Section 2.3), the established pattern in DivBase is to call it by keyword arguments.
 
 ### 2.4. CLI
 
