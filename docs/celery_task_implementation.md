@@ -15,7 +15,6 @@ Tasks can be divided by how they are submitted to the queue: user-submitted task
   - [2.3. API endpoint](#23-api-endpoint)
   - [2.4. CLI](#24-cli)
   - [2.5. Task History deserialization](#25-task-history-deserialization)
-  - [2.6. Admin Panel](#26-admin-panel)
 - [3. Implementation of system-submitted periodic (cron) tasks](#3-implementation-of-system-submitted-periodic-cron-tasks)
 
 ## 1. Overview
@@ -61,7 +60,7 @@ Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this di
 
 ## 2. Implementation of user-submitted tasks
 
-For a user-submitted task to be fully integrated in DivBase, it needs to be implemented in six different layers, as described in the subsections below. Doing so ensures that the task can be enqued and executed in the job system, and ensures that the task results can be correctly returned to the user with the task history CLI command.
+For a user-submitted task to be fully integrated in DivBase, it needs to be implemented in five different layers, as described in the subsections below. Doing so ensures that the task can be enqued and executed in the job system, and ensures that the task results can be correctly returned to the user with the task history CLI command.
 
 ### 2.1 Task Definition
 
@@ -350,6 +349,7 @@ The steps covered in Sections 2.1-2.4 are enough to implement tasks that can be 
   ```
 
   - By following these patterns, the task history deserialiser should now be able to correctly deserialise and inser the task metadata into the `TaskHistoryResults` model for return to the user.
+- The Starlette-admin panel is already configured for deserialisation of the task history results using its own logic. It does not rely on Pydantic models in the same way that the task history CLI does, and therefore no additions are needed to be made in (`./packages/divbase-api/src/divbase_api/admin_panel.py`).
 
 Example:
 
@@ -383,11 +383,6 @@ is_error_result = isinstance(result_data, dict) and (
 
 ```
 
-### 2.6. Admin Panel
-
-- In `./packages/divbase-api/src/divbase_api/admin_panel.py`
-- If you want custom display/handling in the admin panel, update the relevant `ModelView`.
-
 ## 3. Implementation of system-submitted periodic (cron) tasks
 
-Tasks that are scheduled by system.
+TODO: describe how to define and schedule the Celery Beat tasks
