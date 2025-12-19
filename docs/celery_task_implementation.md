@@ -201,7 +201,7 @@ class TaskHistoryResult(BaseModel):
 - API endpoints for enqueueing tasks are found in files the folder: `./packages/divbase-api/src/divbase_api/routes/`
 - Endpoint functions are decorated on the form `@query_router.post("<ENDPOINT_URL>", status_code=status.HTTP_201_CREATED)`, where `<ENDPOINT_URL>` should be a RESTful URL such as `/bcftools-pipe/projects/{project_name}`
 - To make use of fastAPIs async worker threads, define the function as`async def <ENDPOINT_FUNCTION_NAME>()`
-- The endpoint function has several required arguments: the Pydantic Request model (see Section 2.2.) and three helper arguments / fastAPI dependency injections.
+- The endpoint function has several required arguments: the Pydantic Request model (see Section 2.2.) and three helper arguments / fastAPI dependency injections. The Pydantic model is used to convert the incoming payload into the model and validate its types (see Section 2.4 for how the CLI uses and serializes the same Pydantic model in the request).
 
  ```python
  async def my_endpoint_function(
@@ -280,11 +280,60 @@ Note on a special case: if a task returns is return result directly from the API
 
 ### 2.4. CLI
 
-In the folder `./packages/divbase-cli/src/divbase_cli/cli_commands/`
+The DivBase client uses the [Typer](https://typer.tiangolo.com/) library to build its CLI. This part of the docs will not explain how the DivBase Typer architechture was setup, but will focus on adding a new CLI command to submit a task to the DivBase server.
 
-- Add a CLI command to submit the task and/or fetch results.
+- The CLI commands are defined in files in the folder `./packages/divbase-cli/src/divbase_cli/cli_commands/`. The CLI commands make requests to the API and gets responses back. For task-submitting requests, the CLI commands send task args to the corresponding API endpoint based on the user's CLI input.
+- There needs to be a Typer app (on the form `query_app = typer.Typer()`) to which the CLI command functions needs to be connected. The app needs to be initiated with `app.add_typer(query_app, name="query")` in `./packages/divbase-cli/src/divbase_cli/divbase_cli.py`.
+- The typer app name is used as a decorator for the function, e.g. `@query_app.command("bcftools-pipe")`. The argument of the decorator will become the command for the CLI.
+- Pack the task arguments in the Pydantic request model (see Section 2.2), e.g. `request_data=BcftoolsQueryRequest()` for type validation.
+- The `resolve_project()` helper function is be used to fetch the data from the users local config and is needed for the established pattern to make the request. This helper function need that the CLI function args contain `project: str | None = PROJECT_NAME_OPTION,` and `config_file: Path = CONFIG_FILE_OPTION,`. See an existing CLI file for more details on the constants they are calling.
+- The main function call for all DivBase CLI->API interactions is `make_authenticated_request()`. If the user is logged in to the CLI, it sends the user's JSON Web Token as part of the request, which the API uses to validate the user's identity and project role/permissions.
+  - The arguments `method="POST",divbase_base_url=project_config.divbase_url` should always be included as is.
+  - `api_route` is the route URL defined in the corresponding endpoint (see Section 2.3).
+  - `json=request_data.model_dump()` is used to serialise the Pydantic model to Python dict so that it can be passed as JSON in the request payload. The API endpoint will take this input and pack it back into the corresponding Pydantic model if everthing has been configured as described in Section 2.3.
 
-- `make_authenticated_request()`
+Example:
+
+```python
+
+# Define a Typer app
+query_app = typer.Typer(
+    help="Run queries on the VCF files stored in the project's storage bucket. Queries are run on the DivBase API",
+    no_args_is_help=True,
+)
+
+
+@query_app.command("bcftools-pipe")
+def pipe_query(
+    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
+    command: str = BCFTOOLS_ARGUMENT,
+    metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+) -> None:
+    """
+    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project's storage bucket on success.
+    """
+    # Helper function that fetches project information from the users local config file
+    project_config = resolve_project(project_name=project, config_path=config_file)
+
+    # Pack the required task arguments in the corresponding Pydantic model (see Section 2.2.)
+    # This ensures that the kwargs are type validated
+    request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
+
+    # Call an helper function to send a request to the API. If the user is logged in to the CLI,
+    # the function passes a JWT token to the API that is used to verify the user's identity and permissions
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
+        json=request_data.model_dump(), # serialize the Pydantic model to Python dict since the API expects JSON. On the API side, it converted back to the Pydantic model.
+    )
+
+    # Using the pattern described in Section 2.3, the API returns the DivBase task ID, which can be displayed to the user in their terminal like such:
+    task_id = response.json()
+    print(f"Job submitted successfully with task id: {task_id}")
+```
 
 ### 2.5. Task History deserialization
 
