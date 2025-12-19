@@ -385,4 +385,92 @@ is_error_result = isinstance(result_data, dict) and (
 
 ## 3. Implementation of system-submitted periodic (cron) tasks
 
-TODO: describe how to define and schedule the Celery Beat tasks
+DivBase uses Celery Beat for periodic tasks to schedule certain system operations. This for instance include cleanup of dangling task history entries in the database and other jobs that relate to interal states of the system components (often the PostgreSQL database). Note that system deployment level periodic tasks, such as database backup, is NOT handled by the Celery Beat tasks. This text will use the concept cron task, (Celery) Beat task, and periodic task interchangably.
+
+- The tasks are defined in `./packages/divbase-api/src/divbase_api/worker/cron_tasks.py` to separate them from the user-submitted tasks. A small workaround is needed to make this work: at the bottom of `tasks.py` is an import statement for the cron tasks as `from divbase_api.worker import cron_tasks  # noqa: E402, F401`. This needs to come at the bottom to avoid issues with Celery app initiation timings and circular imports and should never need to be altered unless during a refactoring.
+- Celery Beat needs to be enabled in the Celery app or a specific worker container. Please refer to the [Celery doc](https://docs.celeryq.dev/en/main/userguide/periodic-tasks.html#starting-the-scheduler). This is already configured for the DivBase Docker Compose stack used for local dev, but may need to configured differently for deployment to a cluster environment.
+- Because of this setup, the cron tasks can be decorated with reference to same Celery app as the user-submitted tasks. Add `@app.task(name="cron_tasks.<NAME>")` above the task function definition like before. NOTE! In DivBase, it is important that the periodic task names are prefixed by `cron_tasks.`: there is logic in the signal handlers that make use of this; also it give a clear distinction from the user-submitted tasks that start with `task.`
+- The Beat tasks are configured to writes to the three task history tables (`TaskHistoryDB`, `TaskStartedAtDB`, `CeleryTaskMeta`) just like the user-submitted tasks. Since these tasks are intended for internal use, their task metadata can only be viewed from the Starlette-admin panel and not from the task history CLI command.
+  - The write to `TaskHistoryDB` is handled by the `@after_task_publish` Celery signal handler in `tasks.py`. For comparison, user-submitted tasks are writted to `TaskHistoryDB` by the API and returns the DivBase task ID. The cron task does not use neither the API nor the DivBase task ID, and thus this signal handler that fires when the task is enqueued in the broker is used instead. (Technically, all Celery tasks will trigger the `@after_task_publish` function, but only tasks with a name that starts with `cron_task.` will be processed by the function logic.) To further mark that the task belongs to the system and not to any user, the signal handler ensures that the inserted row in `TaskHistoryDB` will use `user_id=None, project_id=None`.
+  - The other two tables are written to with the same logic as for the user-submitted tasks: when the task starts, the `@task_prerun` signal will write to `TaskStartedAtDB`, and the Celery results backend will write to `CeleryTaskMeta` during task execution.
+- Definiton of the actualy task logic work just like described in Section 2.1. E.g. connect to databse with SyncSessionLocal() if needed, raise exception in the main task, return result messages, etc.
+- The main difference compared to the user-submitted tasks is that the cron tasks are scheduled to submitted to the Celery queue with `app.conf.beat_schedule`. This is a nested dictionary in which the frequency and arguments for a cron task is configured.
+  - The frequency is set with `crontab`. See the [Celery docs on periodic tasks](https://docs.celeryq.dev/en/main/userguide/periodic-tasks.html#crontab-schedules) for more details.
+
+Example of a DivBase cron task definition:
+
+```python
+@app.task(name="cron_tasks.cleanup_old_task_history")
+def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
+    """
+    Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
+    Runs daily to remove entries older than retention_days.
+    """
+    try:
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+
+        with SyncSessionLocal() as db:
+            old_task_ids = [
+                row[0]
+                for row in db.execute(
+                    text("SELECT task_id FROM task_history WHERE created_at < :cutoff_date"),
+                    {"cutoff_date": cutoff_date},
+                ).fetchall()
+            ]
+
+            deleted_celery_task_meta = db.execute(
+                delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(old_task_ids))
+            ).rowcount
+            deleted_task_history = db.execute(
+                delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(old_task_ids))
+            ).rowcount
+            deleted_started_at = db.execute(
+                delete(TaskStartedAtDB).where(TaskStartedAtDB.task_id.in_(old_task_ids))
+            ).rowcount
+
+            db.commit()
+
+            logger.info(
+                f"Cleaned up {deleted_celery_task_meta} entries from CeleryTaskMeta, "
+                f"{deleted_task_history} from TaskHistoryDB, and "
+                f"{deleted_started_at} from TaskStartedAtDB older than {retention_days} days "
+                f"(cutoff: {cutoff_date.isoformat()})"
+            )
+
+            return {
+                "status": "completed",
+                "number_of_celery_meta_deleted": deleted_celery_task_meta,
+                "number_of_task_history_deleted": deleted_task_history,
+                "number_of_started_at_deleted": deleted_started_at,
+                "cutoff_date": cutoff_date.isoformat(),
+                "retention_days": retention_days,
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to cleanup old task history: {e}")
+        raise
+```
+
+Example of how a `app.conf.beat_schedule` configuration: 
+
+```python
+app.conf.beat_schedule = {
+    "cleanup-old-tasks-daily": {
+        "task": "cron_tasks.cleanup_old_task_history",
+        "schedule": crontab(
+            hour=5, minute=0
+        ),  # Run daily at 5 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        "kwargs": {"retention_days": TASK_RETENTION_DAYS},
+    },
+    "cleanup-stuck-tasks-daily": {
+        "task": "cron_tasks.cleanup_stuck_tasks",
+        "schedule": crontab(
+            hour=5, minute=15
+        ),  # Run daily at 5:15 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        "kwargs": {
+            "stuck_pending_hours": STUCK_PENDING_STATUS_HOURS,
+            "stuck_started_hours": STUCK_STARTED_STATUS_HOURS,
+        },
+    },
+}
+```
