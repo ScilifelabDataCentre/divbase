@@ -8,6 +8,7 @@ The directory `packages/divbase-api/src/divbase_api/migrations` contains databas
 - **Migrations are generated** by comparing SQLAlchemy models with the current database instance deployed using the local docker compose stack.
 - **Migrations are applied automatically** in local development when the docker compose stack starts up using an init-container (db-migrator).
 - **In production/deployed environments**, migrations should be applied as part of the deployment process - multi step and not automatic, see below.
+- **In deployed environments with actual user data**, database migrations are a dangerous operation that can lead to data loss if not done carefully. A backup of the database must be taken before applying migrations in production.
 - **FastAPI's lifespan event automatically checks** if migrations are up to date during startup. - will raise an error if not.
 - **`pytest test/migrations`** can run tests to ensure all migrations can be applied cleanly to a fresh database.
 - **Celery managed tables** (`celery_taskmeta` and `celery_groupmeta`) are excluded from alembic (see the `migrations/env.py`), as Celery handles their creation and updates. Keep this in mind when creating migrations.
@@ -47,6 +48,7 @@ exit
 **NOTE: If you've been using `docker compose watch` up to this point, it is expected that now the FastAPI service will be in a crashed state due to pending migrations -> the lifespan event will fail when the app restarts.**
 **NOTE2** The commands can be run as a one-liner with:
 `docker compose -f docker/divbase_compose.yaml exec -it fastapi alembic revision --autogenerate -m "write_your_useful_slug_here"`
+
 #### 3. Review the generated migration file
 
 - The migration script created in the container is automatically synced to your host machine (`packages/divbase-api/src/divbase_api/migrations/versions/`)
@@ -79,8 +81,14 @@ This will make the db-migrator init-container run the migrations, and then start
 If issues check the db-migrator logs.
 
 You can furthermore check that an update to a table schema has been applied as intended by running the postgreSQL `\d <TABLE_NAME>` command to inspect how the table looks like in the database engine after the restart:
+`docker exec -it divbase-postgres-1 psql -U divbase_user -d divbase_db -c '\d "<TABLE_NAME>";'`
 
-`docker exec -it divbase-postgres-1 psql -U divbase_user -d divbase_db -c '\d "<TABLE_NAME>";' `
+To check the current status of applied migrations in the database, you can run:
+
+```bash
+docker exec -it divbase-postgres-1 psql -U divbase_user -d divbase_db -c 'SELECT * FROM "alembic_version";'
+```
+
 You can also run the `pytest-alembic` tests to further validate the newly created migration script.
 
 ```bash
@@ -102,7 +110,7 @@ TODO
 
 - Check the migration file for syntax errors
 - Ensure the database is in the expected state
-- Use `alembic current` to check current migration status
+- Use `alembic current` to check current migration status or inspect the `alembic_version` table in the database (see section 4).
 
 ### Starlette admin/admin panel not showing the models
 
