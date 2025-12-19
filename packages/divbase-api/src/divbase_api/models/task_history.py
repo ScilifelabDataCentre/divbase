@@ -3,7 +3,6 @@ Task history DB Model. Summarizes tasks run by Celery without storing all detail
 """
 
 from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, LargeBinary, String, Text
@@ -14,20 +13,6 @@ from divbase_api.models.base import Base, BaseDBModel
 if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectDB
     from divbase_api.models.users import UserDB
-
-
-class TaskStatus(StrEnum):
-    """
-    Helper class that contains the valid Celery task states.
-    Used by TaskHistoryDB to set the status column.
-    """
-
-    PENDING = "pending"
-    STARTED = "started"
-    SUCCESS = "success"
-    FAILURE = "failure"
-    RETRY = "retry"
-    REVOKED = "revoked"
 
 
 class TaskHistoryDB(BaseDBModel):

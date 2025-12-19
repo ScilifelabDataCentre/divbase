@@ -27,9 +27,16 @@ class APISettings:
 
 @dataclass
 class DBSettings:
-    """PostgreSQL database configuration settings."""
+    """
+    PostgreSQL database configuration settings.
 
-    url: SecretStr = SecretStr(os.getenv("DATABASE_URL", "NOT_SET"))
+    The SYNC_DATABASE_URL is only used for the lifespan migration check with alembic.
+    But as it is a required env variable we include it here, so it can use the same validation logic
+    that the other required settings use.
+    """
+
+    url: SecretStr = SecretStr(os.getenv("ASYNC_DATABASE_URL", "NOT_SET"))
+    sync_url: SecretStr = SecretStr(os.getenv("SYNC_DATABASE_URL", "NOT_SET"))
     echo_db_output: bool = bool(os.getenv("DB_ECHO", "False") == "True")  # anything but "True" is considered False
 
 
@@ -125,7 +132,8 @@ class Settings:
         required_fields = {
             "DIVBASE_ENV": self.api.environment,
             "FRONTEND_BASE_URL": self.api.frontend_base_url,
-            "DATABASE_URL": self.database.url,
+            "ASYNC_DATABASE_URL": self.database.url,
+            "SYNC_DATABASE_URL": self.database.sync_url,
             "JWT_SECRET_KEY": self.jwt.secret_key,
             "S3_ENDPOINT_URL": self.s3.endpoint_url,
             "S3_PRESIGNING_URL": self.s3.presigning_url,

@@ -40,6 +40,10 @@ RESULT_BACKEND = os.environ.get(
 S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
 app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
+
+CELERY_TASKMETA_TABLE_NAME = "celery_taskmeta"
+CELERY_GROUPMETA_TABLE_NAME = "celery_groupmeta"
+
 # Celery results backend config
 app.conf.update(
     task_track_started=True,
@@ -48,10 +52,10 @@ app.conf.update(
     result_serializer="json",
     result_extended=True,
     timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
-    # let celery auto-create db tables
+    # let celery auto-create db tables (alembic is configured to not manage changes to these tables)
     database_table_names={
-        "task": "celery_taskmeta",
-        "group": "celery_groupmeta",
+        "task": CELERY_TASKMETA_TABLE_NAME,
+        "group": CELERY_GROUPMETA_TABLE_NAME,
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )

@@ -7,12 +7,27 @@ and verifying that the cleanup tasks correctly delete old entries.
 
 import time
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 
 import pytest
 from sqlalchemy import select, text
 
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB, TaskStatus
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.worker.cron_tasks import cleanup_old_task_history_task, cleanup_stuck_tasks_task
+
+
+class TaskStatus(StrEnum):
+    """
+    Helper class that contains the possible Celery task states in the
+    status column of the CeleryTaskMeta table (which is celery managed).
+    """
+
+    PENDING = "pending"
+    STARTED = "started"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    RETRY = "retry"
+    REVOKED = "revoked"
 
 
 @pytest.fixture
