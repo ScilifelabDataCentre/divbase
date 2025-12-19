@@ -45,11 +45,12 @@ exit
 ```
 
 **NOTE: If you've been using `docker compose watch` up to this point, it is expected that now the FastAPI service will be in a crashed state due to pending migrations -> the lifespan event will fail when the app restarts.**
-
+**NOTE2** The commands can be run as a one-liner with:
+`docker compose -f docker/divbase_compose.yaml exec -it fastapi alembic revision --autogenerate -m "write_your_useful_slug_here"`
 #### 3. Review the generated migration file
 
 - The migration script created in the container is automatically synced to your host machine (`packages/divbase-api/src/divbase_api/migrations/versions/`)
-- Check that the auto generated changes correctly represent your intended changes.
+- Open the created migration script and check that the auto generated changes correctly represent your intended changes
 - Be extra careful if you rename a table, or if you are dropping columns or tables.
 - Modify the `upgrade()` and `downgrade()` functions if needed to actually achieve the desired schema changes.
 - If you have created a new Enum you need to append a drop statement into the downgrade function for the enum.
@@ -66,7 +67,7 @@ See the bottom of the first migration script (2025-12-04_initial_migration.py) f
 
 - In local development, migrations are applied automatically when the stack starts up using the `db-migrator` init-container.
 - The `db-migrator` ensures that migrations are applied before starting FastAPI and worker services (via `condition: service_completed_successfully`).
-- Do not down the volumes, this is a good initial test to ensure the migration works as expected.
+- Do not down the volumes (e.g. `docker compose -f docker/divbase_compose.yaml down -v`), this is a good initial test to ensure the migration works as expected.
 - To test the migration:
 
 ```bash
@@ -77,6 +78,9 @@ docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/d
 This will make the db-migrator init-container run the migrations, and then start fastapi and workers if successful.
 If issues check the db-migrator logs.
 
+You can furthermore check that an update to a table schema has been applied as intended by running the postgreSQL `\d <TABLE_NAME>` command to inspect how the table looks like in the database engine after the restart:
+
+`docker exec -it divbase-postgres-1 psql -U divbase_user -d divbase_db -c '\d "<TABLE_NAME>";' `
 You can also run the `pytest-alembic` tests to further validate the newly created migration script.
 
 ```bash
