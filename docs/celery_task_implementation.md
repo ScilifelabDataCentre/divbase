@@ -337,8 +337,51 @@ def pipe_query(
 
 ### 2.5. Task History deserialization
 
-- In `./packages/divbase-api/src/divbase_api/services/task_history.py`
+The steps covered in Sections 2.1-2.4 are enough to implement tasks that can be submitted and executed. But in order to fetch the results from task, it the task history deserialiser also need to be updated to contain the kwargs and results Pydantic models from the task.
+
+- The deserialiser is located in `./packages/divbase-api/src/divbase_api/services/task_history.py`.
 - Update `_deserialize_celery_task_metadata` to handle your new task’s result and kwargs schemas.
+  - Under the `else:` clause shown in the below example, add an if statement with the name of the task `if task_name ==<TASK_NAME>`, where `<TASK_NAME>` is the name that was defined in the task decorator in Section 2.1. E.g. `if task_name ==tasks.bcftools_query`, referring to the task name defined in `@app.task(tasks.bcftools_query)`.
+  - In the if statement, specify the results and kwargs models of the tasks using:
+
+  ```
+  parsed_result = <TASK_RESULTS_PYDANTIC_MODEL>(**result_data) if result_data else None
+  parsed_kwargs = <TASK_KWARGS_PYDANTIC_MODEL>(**kwargs) if kwargs else None
+  ```
+
+  - By following these patterns, the task history deserialiser should now be able to correctly deserialise and inser the task metadata into the `TaskHistoryResults` model for return to the user.
+
+Example:
+
+```Python
+def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
+
+# ... Scroll down to this section of the function
+
+is_error_result = isinstance(result_data, dict) and (
+        "exc_type" in result_data or "exc_message" in result_data or result_data.get("status") == "error"
+    )
+    if is_error_result:
+        parsed_result = result_data
+        parsed_kwargs = kwargs
+    else:
+        if task_name == "tasks.sample_metadata_query":
+            parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
+            parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
+        elif task_name == "tasks.bcftools_query":
+            parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
+            parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
+        elif task_name == "tasks.update_vcf_dimensions_task":
+            parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
+            parsed_kwargs = DimensionUpdateKwargs(**kwargs) if kwargs else None
+        else:
+            # Fallback for Unknown task type - keep everything as dicts
+            parsed_result = result_data
+            parsed_kwargs = kwargs
+
+# ... Code continues, does not need to be updated
+
+```
 
 ### 2.6. Admin Panel
 
