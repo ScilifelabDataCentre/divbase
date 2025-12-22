@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
-from pydantic import EmailStr
 
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import ProjectNotInConfigError
@@ -29,7 +28,7 @@ class UserConfig:
 
     config_path: Path
     logged_in_url: str | None = None  # URL of the divbase server the user is currently logged in to, if any.
-    logged_in_email: EmailStr | None = None  # Email the user is currently logged in with, if any.
+    logged_in_email: str | None = None  # Email the user is currently logged in with, if any.
     projects: list[ProjectConfig] = field(default_factory=list)
     default_project: str | None = None
     # default_download_dir is a string (rather than Path) for easier loading/saving.

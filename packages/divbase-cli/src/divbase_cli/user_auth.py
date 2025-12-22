@@ -76,9 +76,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
-def login_to_divbase(
-    email: str, password: SecretStr, divbase_url: str, config_path: Path = cli_settings.CONFIG_PATH
-) -> None:
+def login_to_divbase(email: str, password: SecretStr, divbase_url: str, config_path: Path) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """

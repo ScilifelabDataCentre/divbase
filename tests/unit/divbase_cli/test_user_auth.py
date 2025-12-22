@@ -57,7 +57,6 @@ def test_is_refresh_token_expired_method(mock_token_data):
     assert mock_token_data.is_refresh_token_expired() is True
 
 
-@patch("divbase_cli.user_auth.load_user_tokens")
 def test_check_existing_session_not_logged_in(mock_logged_out_config):
     """Test that check_existing_session returns None if not logged in."""
 
@@ -66,7 +65,7 @@ def test_check_existing_session_not_logged_in(mock_logged_out_config):
 
 
 @patch("divbase_cli.user_auth.load_user_tokens")
-def test_check_existing_session_when_logged_in_to_different_divbase_url(mock_logged_in_config, mock_token_data):
+def test_check_existing_session_when_logged_in_to_different_divbase_url(mock_logged_in_config):
     """Test that check_existing_session returns None if logged in to a different divbase URL."""
 
     result = check_existing_session("https://otherdivbaseinstance.com", mock_logged_in_config)

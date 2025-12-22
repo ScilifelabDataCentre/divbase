@@ -109,7 +109,7 @@ def show_default_project_command(
     config = load_user_config(config_file)
 
     if config.default_project:
-        print({config.default_project})
+        print(config.default_project)
     else:
         print("No default project is set in the user configuration file.")
 
@@ -156,7 +156,7 @@ def show_user_config(
         console.print(f"[bold]You're logged into a DivBase server at URL:[/bold] '{config.logged_in_url}'")
         console.print(f"[bold]Logged in with email:[/bold] '{config.logged_in_email}'")
     else:
-        console.print("[bold]You're not logged into to any DivBase server.[/bold]")
+        console.print("[bold]You're not logged into any DivBase server.[/bold]")
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
