@@ -146,4 +146,8 @@ def delete_version(
     deleted_version = delete_version_command(
         project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
     )
-    print(f"The version: '{deleted_version}' was deleted from the project: '{project_config.name}'")
+    if deleted_version.already_deleted:
+        date_deleted = format_timestamp(deleted_version.date_deleted)
+        print(f"The version: '{deleted_version.name}' has already been soft-deleted on {date_deleted}.")
+    else:
+        print(f"The version: '{deleted_version.name}' was deleted from the project: '{project_config.name}'")

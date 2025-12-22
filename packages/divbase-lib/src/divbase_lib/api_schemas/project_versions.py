@@ -54,4 +54,9 @@ class ProjectVersionDetailResponse(ProjectBasicInfo):
 class DeleteVersionResponse(BaseModel):
     """Response model for deleting a version."""
 
-    deleted_version: str = Field(..., description="Name of the version that was deleted")
+    name: str = Field(..., description="Name of the version that was deleted")
+    already_deleted: bool = Field(
+        False,
+        description="Whether the version was already soft-deleted before this request",
+    )
+    date_deleted: str = Field(..., description="ISO timestamp of when the version was soft-deleted")

@@ -73,13 +73,11 @@ def get_version_details_command(
     return ProjectVersionDetailResponse(**response.json())
 
 
-def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> str:
+def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> DeleteVersionResponse:
     """
     Delete a version from the project versions table stored on the divbase server.
     This marks the version as (soft) deleted server side,
     and it will eventually be permanently deleted (after some grace period).
-
-    Returns the deleted version's name.
     """
     request_data = DeleteVersionRequest(version_name=version_name)
 
@@ -90,8 +88,7 @@ def delete_version_command(project_name: str, divbase_base_url: str, version_nam
         json=request_data.model_dump(),
     )
 
-    response_data = DeleteVersionResponse(**response.json())
-    return response_data.deleted_version
+    return DeleteVersionResponse(**response.json())
 
 
 def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:

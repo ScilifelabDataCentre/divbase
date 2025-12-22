@@ -161,8 +161,19 @@ async def soft_delete_version(
             message=f"Version '{version_name}' not found for the project. Perhaps it was already deleted or you mistyped the version name?"
         )
 
+    if version_entry.is_deleted and version_entry.date_deleted is not None:
+        return DeleteVersionResponse(
+            name=version_name,
+            already_deleted=True,
+            date_deleted=version_entry.date_deleted.isoformat(),
+        )
+
     version_entry.is_deleted = True
     version_entry.date_deleted = datetime.now(tz=timezone.utc)
     await db.commit()
     await db.refresh(version_entry)
-    return DeleteVersionResponse(deleted_version=version_name)
+    return DeleteVersionResponse(
+        name=version_name,
+        already_deleted=False,
+        date_deleted=version_entry.date_deleted.isoformat(),
+    )
