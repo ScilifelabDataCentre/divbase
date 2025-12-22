@@ -1,0 +1,118 @@
+site_name: DivBase
+site_description: CLI and API documentation for DivBase
+site_url: https://scilifelabdatacentre.github.io/divbase/
+repo_url: https://github.com/ScilifelabDataCentre/divbase
+repo_name: ScilifelabDataCentre/divbase
+
+theme:
+  name: material
+  palette:
+  - media: "(prefers-color-scheme)"
+    toggle:
+      icon: material/lightbulb-auto
+      name: Switch to light mode
+  - media: '(prefers-color-scheme: light)'
+    scheme: default
+    primary: teal
+    accent: light green
+    toggle:
+      icon: material/lightbulb
+      name: Switch to dark mode
+  - media: '(prefers-color-scheme: dark)'
+    scheme: slate # this means dark mode
+    primary: teal
+    accent: light green
+    toggle:
+      icon: material/lightbulb-outline
+      name: Switch to system preference
+  features:
+  - content.code.annotate
+  - content.code.copy
+  - content.footnote.tooltips
+  - content.tabs.link
+  - content.tooltips
+  - navigation.footer
+  - navigation.indexes
+  - navigation.instant
+  - navigation.instant.prefetch
+  - navigation.instant.progress
+  - navigation.path
+  - navigation.tabs
+  - navigation.tabs.sticky
+  - navigation.top
+  - navigation.tracking
+  - search.highlight
+  - search.share
+  - search.suggest
+  - toc.follow
+  icon: # footer
+    repo: fontawesome/brands/github-alt
+  logo: assets/img/scilifelab_logo.png
+  favicon: assets/img/favicon.png
+  language: en
+
+plugins:
+  search:
+  social:
+  typeset:
+
+nav:
+  - Home: index.md
+  - CLI Guide: 
+    - Getting Started: cli/getting-started.md
+  - API Reference:
+    - Overview: api/overview.md
+  - Developer Guide: 
+    - Overview: development/overview.md
+    - Sending Emails: development/sending_emails.md
+ 
+hooks:
+  - scripts/build_docs.py
+
+markdown_extensions:
+  # Material for MkDocs Extensions
+  material.extensions.preview:
+    targets:
+      include:
+        - "*"
+  # Python Markdown
+  abbr:
+  attr_list:
+  footnotes:
+  md_in_html:
+  tables:
+  toc:
+    permalink: true
+
+  # Python Markdown Extensions
+  pymdownx.betterem:
+    smart_enable: all
+  pymdownx.caret:
+  pymdownx.highlight:
+    line_spans: __span
+  pymdownx.inlinehilite:
+  pymdownx.keys:
+  pymdownx.mark:
+  pymdownx.tilde:
+
+  # pymdownx blocks
+  pymdownx.blocks.admonition:
+    types:
+    - note
+    - attention
+    - caution
+    - danger
+    - error
+    - tip
+    - hint
+    - warning
+    - info
+    - check
+  pymdownx.blocks.details:
+  pymdownx.blocks.tab:
+    alternate_style: True
+
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/ScilifelabDataCentre/divbase
