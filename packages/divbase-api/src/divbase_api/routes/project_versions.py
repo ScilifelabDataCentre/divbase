@@ -1,7 +1,7 @@
 """
 Routes for users to manage their project versioning.
 
-Project versions are the state of all files in a project's storage bucket at a given time point.
+Project versions are the state of all files in a project at a given time point.
 These are user defined points in time (like a checkpoint/commit) that the user can refer back to later.
 """
 
@@ -48,7 +48,7 @@ async def add_version_endpoint(
     """
     Add a new entry to the project versioning db table.
 
-    The entry specifies the current state of all files in the project's storage bucket.
+    The entry specifies the current state of all files in the project.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
