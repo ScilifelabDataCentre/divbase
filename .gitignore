@@ -31,3 +31,6 @@ task_records*.json
 
 #MacOS artifacts
 .DS_Store
+
+# mkdocs build cache
+.cache/
