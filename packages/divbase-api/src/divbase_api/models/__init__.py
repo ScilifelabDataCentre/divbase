@@ -5,6 +5,7 @@ They are imported in dependency order to avoid circular import issues.
 """
 
 from divbase_api.models.base import Base, BaseDBModel
+from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
@@ -24,4 +25,5 @@ __all__ = [
     "TaskStartedAtDB",
     "TokenRevokeReason",
     "RevokedTokenDB",
+    "ProjectVersionDB",
 ]

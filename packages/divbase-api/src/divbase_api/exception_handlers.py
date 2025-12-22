@@ -21,12 +21,12 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
-    BucketVersionAlreadyExistsError,
-    BucketVersioningFileAlreadyExistsError,
-    BucketVersionNotFoundError,
     ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
+    ProjectVersionAlreadyExistsError,
+    ProjectVersionCreationError,
+    ProjectVersionNotFoundError,
     TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
@@ -73,6 +73,20 @@ async def render_error_page(
             "current_user": current_user,
         },
         status_code=status_code,
+    )
+
+
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Handle unexpected exceptions globally. - in the ideal world this is never be triggered
+    """
+    logger.error(f"Unexpected Error occurred for: {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An unexpected error occurred. Please try again later.",
+            "type": "server_error",
+        },
     )
 
 
@@ -185,43 +199,45 @@ async def too_many_objects_in_request_error_handler(request: Request, exc: TooMa
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-async def bucket_versioning_file_exists_error_handler(request: Request, exc: BucketVersioningFileAlreadyExistsError):
+async def project_version_creation_error_handler(request: Request, exc: ProjectVersionCreationError):
     logger.warning(
-        f"Bucket versioning file already exists for {request.method} {request.url.path}: {exc.message}", exc_info=True
+        f"Project version creation error for {request.method} {request.url.path}: {exc.message}", exc_info=True
     )
 
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_versioning_file_already_exists_error"},
+            content={"detail": exc.message, "type": "project_version_creation_error"},
             headers=exc.headers,
         )
     else:
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-async def bucket_version_exists_error_handler(request: Request, exc: BucketVersionAlreadyExistsError):
-    logger.warning(
-        f"Bucket version already exists for {request.method} {request.url.path}: {exc.message}", exc_info=True
+async def project_version_already_exists_error_handler(request: Request, exc: ProjectVersionAlreadyExistsError):
+    logger.info(
+        f"Project version already exists error for {request.method} {request.url.path}: {exc.message}", exc_info=True
     )
 
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_version_already_exists_error"},
+            content={"detail": exc.message, "type": "project_version_already_exists_error"},
             headers=exc.headers,
         )
     else:
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
-async def bucket_version_not_found_error_handler(request: Request, exc: BucketVersionNotFoundError):
-    logger.warning(f"Bucket version not found for {request.method} {request.url.path}: {exc.message}", exc_info=True)
+async def project_version_not_found_error_handler(request: Request, exc: ProjectVersionNotFoundError):
+    logger.warning(
+        f"Project version not found error for {request.method} {request.url.path}: {exc.message}", exc_info=True
+    )
 
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.message, "type": "bucket_version_not_found_error"},
+            content={"detail": exc.message, "type": "project_version_not_found_error"},
             headers=exc.headers,
         )
     else:
@@ -322,11 +338,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectNotFoundError, project_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionAlreadyExistsError, project_version_already_exists_error_handler)  # type: ignore
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersioningFileAlreadyExistsError, bucket_versioning_file_exists_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersionAlreadyExistsError, bucket_version_exists_error_handler)  # type: ignore
-    app.add_exception_handler(BucketVersionNotFoundError, bucket_version_not_found_error_handler)  # type: ignore
-    app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionNotFoundError, project_version_not_found_error_handler)  # type: ignore
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore
+
+    # These cover more generic/unexpected HTTP errors - the exceptions above take precedence
+    app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
+    app.add_exception_handler(Exception, global_exception_handler)  # type: ignore

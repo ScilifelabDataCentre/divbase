@@ -1,8 +1,11 @@
+"""CLI commands for managing project versions in DivBase."""
+
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import typer
+from rich import print
 from rich.console import Console
 from rich.table import Table
 
@@ -10,9 +13,8 @@ from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.services import (
     add_version_command,
-    create_version_object_command,
     delete_version_command,
-    list_files_at_version_command,
+    get_version_details_command,
     list_versions_command,
 )
 
@@ -24,7 +26,7 @@ PROJECT_NAME_OPTION = typer.Option(
 
 version_app = typer.Typer(
     no_args_is_help=True,
-    help="Version the state of all files in the entire projects storage bucket at a given timestamp.",
+    help="Add, view and remove versions representing the state of all files in the entire project at the current timestamp.",
 )
 
 
@@ -35,30 +37,6 @@ def format_timestamp(timestamp_str: str) -> str:
     return cet_dt.strftime("%d/%m/%Y %H:%M:%S %Z")
 
 
-@version_app.command("create")
-def create_version(
-    name: str = typer.Option(default="v0.0.0", help="Name of the version (e.g., semantic version)."),
-    description: str = typer.Option("", help="Optional description of the version."),
-    project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
-):
-    """Create a bucket versioning file that is stored inside the project's storage bucket."""
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
-
-    new_version = create_version_object_command(
-        project_name=project_config.name,
-        divbase_base_url=logged_in_url,
-        version_name=name,
-        description=description if description else "",
-    )
-    print(
-        f"Bucket versioning file created for project: '{project_config.name}'\n"
-        f"with initial version named: '{new_version.name}'\n"
-        f" and description: '{new_version.description}'\n"
-    )
-
-
 @version_app.command("add")
 def add_version(
     name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
@@ -66,31 +44,40 @@ def add_version(
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Add an entry to the bucket versioning file specfying the current state of all files in the project's storage bucket."""
+    """Add a new project version entry which specifies the current state of all files in the project at the current timestamp."""
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    add_version_command(
+    add_version_response = add_version_command(
         name=name,
         description=description,
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
     )
-    print(f"New version: '{name}' added to the project: '{project_config.name}'")
+    print(f"New version: '{add_version_response.name}' added to the project: '{project_config.name}'")
 
 
 @version_app.command("list")
 def list_versions(
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
+    include_deleted: bool = typer.Option(False, help="Include soft-deleted versions in the listing."),
 ):
-    """List all entries in the bucket versioning file."""
+    """
+    List all entries in the project versioning file.
+
+    Displays version name, creation timestamp, and description for each project version.
+    If you specify --include-deleted, soft-deleted versions will also be shown.
+    Soft-deleted versions can be restored by a DivBase admin within 30 days of deletion.
+    """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    version_info = list_versions_command(project_name=project_config.name, divbase_base_url=logged_in_url)
+    versions_info = list_versions_command(
+        project_name=project_config.name, include_deleted=include_deleted, divbase_base_url=logged_in_url
+    )
 
-    if not version_info:
+    if not versions_info:
         print(f"No versions found for project: {project_config.name}.")
         return
 
@@ -99,32 +86,20 @@ def list_versions(
     table.add_column("Version", style="cyan", no_wrap=True)
     table.add_column("Created ", style="magenta")
     table.add_column("Description", style="green")
+    if include_deleted:
+        table.add_column("Soft Deleted", style="red")
 
-    for version, details in version_info.items():
-        desc = details.description or "No description provided"
-        formatted_timestamp = format_timestamp(details.timestamp)
-        table.add_row(version, formatted_timestamp, desc)
+    for version in versions_info:
+        name = version.name
+        desc = version.description or "No description provided"
+        created_at = format_timestamp(version.created_at)
+        if include_deleted:
+            soft_deleted = "Yes" if version.is_deleted else "No"
+            table.add_row(name, created_at, desc, soft_deleted)
+        else:
+            table.add_row(name, created_at, desc)
 
     console.print(table)
-
-
-@version_app.command("delete")
-def delete_version(
-    name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
-    project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
-):
-    """
-    Delete an entry in the bucket versioning file specfying a specific state of all files in the project's storage bucket.
-    Does not delete the files themselves.
-    """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
-
-    deleted_version = delete_version_command(
-        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
-    )
-    print(f"The version: '{deleted_version}' was deleted from the project: '{project_config.name}'")
 
 
 @version_app.command("info")
@@ -137,14 +112,42 @@ def get_version_info(
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    files_at_version = list_files_at_version_command(
-        project_name=project_config.name, divbase_base_url=logged_in_url, bucket_version=version
+    version_details = get_version_details_command(
+        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=version
     )
 
-    if not files_at_version:
-        print("No files were registered at this version.")
-        return
-
-    print(f"State of each file in the project: '{project_config.name}' at version: '{version}'")
-    for object_name, hash in files_at_version.items():
+    print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
+    print(f"Entry created at: {format_timestamp(version_details.created_at)}")
+    if version_details.description:
+        print(f"Description: {version_details.description}")
+    if version_details.is_deleted:
+        print(
+            "[red]WARNING: This version has been soft-deleted and will soon be permanently deleted unless restored - Contact a DivBase admin to prevent this.[/red]"
+        )
+    print("Files at this version:")
+    for object_name, hash in version_details.files.items():
         print(f"- '{object_name}' : '{hash}'")
+
+
+@version_app.command("delete")
+def delete_version(
+    name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Delete a version entry in the project versioning table. This does not delete the files themselves.
+    Deleted version entries older than 30 days will be permanently deleted.
+    You can ask a DivBase admin to restore a deleted version within that time period.
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    deleted_version = delete_version_command(
+        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
+    )
+    if deleted_version.already_deleted:
+        date_deleted = format_timestamp(deleted_version.date_deleted)
+        print(f"The version: '{deleted_version.name}' has already been soft-deleted on {date_deleted}.")
+    else:
+        print(f"The version: '{deleted_version.name}' was deleted from the project: '{project_config.name}'")

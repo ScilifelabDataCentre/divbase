@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 METADATA_TSV_ARGUMENT = typer.Option(
-    cli_settings.METADATA_TSV_NAME, help="Name of the sample metadata TSV file in the project's storage bucket."
+    cli_settings.METADATA_TSV_NAME, help="Name of the sample metadata TSV file in the project's data store on DivBase."
 )
 
 BCFTOOLS_ARGUMENT = typer.Option(
@@ -58,7 +58,7 @@ TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to fi
 
 
 query_app = typer.Typer(
-    help="Run queries on the VCF files stored in the project's storage bucket. Queries are run on the DivBase API",
+    help="Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase API",
     no_args_is_help=True,
 )
 
@@ -78,7 +78,7 @@ def sample_metadata_query(
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
-    Query the tsv sidecar metadata file for the VCF files in the project's storage bucket.
+    Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
 
     TODO: it perhaps be useful to set the default download_dir in the config so that we can
@@ -119,7 +119,7 @@ def pipe_query(
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
-    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project's storage bucket on success.
+    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project on success.
 
     TODO Error handling for subprocess calls.
     TODO: handle case empty results are returned from tsv_query()

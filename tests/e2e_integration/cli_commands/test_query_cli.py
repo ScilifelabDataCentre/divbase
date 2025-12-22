@@ -29,9 +29,9 @@ from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
-from divbase_lib.exceptions import ProjectNotInConfigError
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()

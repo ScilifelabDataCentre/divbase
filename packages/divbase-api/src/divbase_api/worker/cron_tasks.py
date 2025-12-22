@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from celery.schedules import crontab
 from sqlalchemy import delete, text
 
+from divbase_api.models.project_versions import ProjectVersionDB
+from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.worker.tasks import app
 from divbase_api.worker.worker_db import SyncSessionLocal
@@ -20,6 +22,9 @@ logger = logging.getLogger(__name__)
 TASK_RETENTION_DAYS = int(os.environ.get("TASK_RETENTION_DAYS", "30"))
 STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
 STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
+
+SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS = 30
+REVOKED_TOKEN_MAX_AGE_DAYS = 7
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
@@ -151,8 +156,47 @@ def cleanup_stuck_tasks_task(
         raise
 
 
-# NOTE! If you add a new task here, make sure it starts with "cron_tasks"
+@app.task(name="cron_tasks.cleanup_old_revoked_tokens")
+def cleanup_old_revoked_tokens():
+    """
+    Periodic task to clean up old revoked token entries.
+    (These tokens will all have expired by this timepoint anyway.)
+    """
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=REVOKED_TOKEN_MAX_AGE_DAYS)
+    stmt = delete(RevokedTokenDB).where(RevokedTokenDB.revoked_at < cutoff_date)
+    with SyncSessionLocal() as db:
+        deleted_count = db.execute(stmt).rowcount
+        db.commit()
+    return {
+        "status": "completed",
+        "number_of_revoked_tokens_deleted": deleted_count,
+        "cutoff_date": cutoff_date.isoformat(),
+        "max_revoked_token_age_days": REVOKED_TOKEN_MAX_AGE_DAYS,
+    }
 
+
+@app.task(name="cron_tasks.cleanup_soft_deleted_project_versions")
+def cleanup_soft_deleted_project_versions():
+    """
+    Periodic task to hard delete any soft-deleted project versions older than the retention period.
+    """
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS)
+    stmt = delete(ProjectVersionDB)
+    stmt = stmt.where(ProjectVersionDB.is_deleted == True)  # noqa: E712
+    stmt = stmt.where(ProjectVersionDB.date_deleted < cutoff_date)
+
+    with SyncSessionLocal() as db:
+        deleted_count = db.execute(stmt).rowcount
+        db.commit()
+    return {
+        "status": "completed",
+        "number_of_project_versions_hard_deleted": deleted_count,
+        "cutoff_date": cutoff_date.isoformat(),
+        "soft_delete_retention_period_days": SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS,
+    }
+
+
+# NOTE! If you add a new task here, make sure it starts with "cron_tasks"
 app.conf.beat_schedule = {
     "cleanup-old-tasks-daily": {
         "task": "cron_tasks.cleanup_old_task_history",
@@ -170,5 +214,13 @@ app.conf.beat_schedule = {
             "stuck_pending_hours": STUCK_PENDING_STATUS_HOURS,
             "stuck_started_hours": STUCK_STARTED_STATUS_HOURS,
         },
+    },
+    "cleanup-old-revoked-daily": {
+        "task": "cron_tasks.cleanup_old_revoked_tokens",
+        "schedule": crontab(hour=5, minute=20),  # Run daily at 5:20 AM CET
+    },
+    "cleanup-soft-deleted-project-versions-daily": {
+        "task": "cron_tasks.cleanup_soft_deleted_project_versions",
+        "schedule": crontab(hour=5, minute=25),  # Run daily at 5:25 AM CET
     },
 }

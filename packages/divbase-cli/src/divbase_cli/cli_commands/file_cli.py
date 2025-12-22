@@ -1,7 +1,9 @@
 """
-Command line interface for managing files in a DivBase project's storage bucket.
+Command line interface for managing files in a DivBase project's store on DivBase.
 
 TODO - support for specifying versions of files when downloading files?
+TODO - Download all files option.
+TODO - skip checked option (aka skip files that already exist in same local dir with correct checksum).
 """
 
 from pathlib import Path
@@ -20,7 +22,7 @@ from divbase_cli.services import (
     upload_files_command,
 )
 
-file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's storage bucket.")
+file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 
 @file_app.command("list")
@@ -29,17 +31,17 @@ def list_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    list all files in the project's storage bucket.
+    list all files in the project's DivBase store.
 
-    To see files at a user specified bucket version (controlled by the 'divbase-cli version' subcommand),
-    you can instead use the 'divbase version info [VERSION_NAME]' command.
+    To see files at a user specified project version (controlled by the 'divbase-cli version' subcommand),
+    you can instead use the 'divbase-cli version info [VERSION_NAME]' command.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
     files = list_files_command(divbase_base_url=logged_in_url, project_name=project_config.name)
     if not files:
-        print("No files found in the project's storage bucket.")
+        print("No files found in the project's store on DivBase.")
     else:
         print(f"Files in the project '{project_config.name}':")
         for file in files:
@@ -49,7 +51,7 @@ def list_files(
 @file_app.command("download")
 def download_files(
     files: list[str] = typer.Argument(
-        None, help="Space separated list of files/objects to download from the project's bucket."
+        None, help="Space separated list of files/objects to download from the project's store on DivBase."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     download_dir: str = typer.Option(
@@ -68,14 +70,15 @@ def download_files(
             "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
         ),
     ] = False,
-    bucket_version: str = typer.Option(
-        default=None, help="Version of the project's storage bucket at which to download the files."
+    project_version: str = typer.Option(
+        default=None,
+        help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Download files from the project's storage bucket. This can be done by either:
+    Download files from the project's store on DivBase. This can be done by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to download the files to.
     """
@@ -105,7 +108,7 @@ def download_files(
         all_files=list(all_files),
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
-        bucket_version=bucket_version,
+        project_version=project_version,
     )
 
     if download_results.successful:
@@ -139,7 +142,7 @@ def upload_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Upload files to your project's storage bucket by either:
+    Upload files to your project's store on DivBase by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to upload
         3. providing a text file with or a file list.
@@ -190,7 +193,7 @@ def upload_files(
 @file_app.command("remove")
 def remove_files(
     files: list[str] | None = typer.Argument(
-        None, help="Space seperated list of files/objects in the project's storage bucket to delete."
+        None, help="Space seperated list of files/objects in the project's store on DivBase to delete."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     dry_run: bool = typer.Option(
@@ -200,7 +203,7 @@ def remove_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Remove files from the project's storage bucket by either:
+    Remove files from the project's store on DivBase by either:
         1. providing a list of files paths directly in the command line
         2. providing a text file with or a file list.
 

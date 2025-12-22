@@ -24,6 +24,7 @@ from starlette_admin import (
     EmailField,
     HasOne,
     IntegerField,
+    JSONField,
     StringField,
     TextAreaField,
 )
@@ -35,6 +36,7 @@ from starlette_admin.exceptions import FormValidationError
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
+from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
@@ -100,6 +102,14 @@ class UserView(ModelView):
             disabled=True,
         ),
         "project_memberships",
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
     ]
 
     exclude_fields_from_list = ["hashed_password", "password"]
@@ -132,13 +142,11 @@ class UserView(ModelView):
         Override the default edit method to ensure that the `date_deleted` field is updated
         when/if a users soft deletion status is changed.
         """
-        logger.info(f"Editing user with pk={pk}, data={data}")
         if "is_deleted" in data:
             if data["is_deleted"]:
                 data["date_deleted"] = datetime.now(tz=timezone.utc)
             else:
                 data["date_deleted"] = None
-        logger.info(f"Editing user with pk={pk}, data={data}")
 
         return await super().edit(request=request, pk=pk, data=data)
 
@@ -202,6 +210,14 @@ class ProjectView(ModelView):
             help_text="Current storage usage for this project in bytes.",
         ),
         BooleanField("is_active", required=True, label="Is Active", help_text="Mark the project as active or not."),
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
     ]
 
     exclude_fields_from_list = ["description", "storage_used_bytes"]
@@ -293,6 +309,65 @@ class ProjectMembershipView(ModelView):
         return await super().serialize_field_value(value, field, action, request)
 
 
+class ProjectVersionsView(ModelView):
+    """
+    Custom admin panel View for the ProjectVersionDB model.
+    """
+
+    fields = [
+        "id",
+        StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
+        TextAreaField("description", required=False, label="Description"),
+        HasOne("project", identity="project", label="Project"),
+        IntegerField(
+            "user_id", label="User ID"
+        ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
+        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
+        DateTimeField(
+            "date_deleted",
+            help_text="Timestamp when the version was soft deleted (else None). Value determined by system, cannot be edited.",
+            disabled=True,
+        ),
+        JSONField(
+            "files", required=True, label="Files", help_text="Mapping of file names to version IDs.", disabled=True
+        ),
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
+    ]
+
+    page_size_options = PAGINATION_DEFAULTS
+    exclude_fields_from_list = ["files"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "files", "project", "user_id"]
+    exclude_fields_from_detail = []
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion of project versions. Project versions can be soft deleted instead."""
+        return False
+
+    def can_create(self, request: Request) -> bool:
+        """Disable creation of project versions. This is something users can create instead."""
+        return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a version's soft deletion status is changed.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
+
+
 class RevokedTokenView(ModelView):
     """
     Custom admin panel View for the RevokedTokenDB model.
@@ -335,70 +410,6 @@ class RevokedTokenView(ModelView):
         if formatted is not None:
             return formatted
         return await super().serialize_field_value(value, field, action, request)
-
-
-class DivBaseAuthProvider(AuthProvider):
-    """
-    This class enables starlette-admin to make use of DivBase's pre-existing auth system.
-
-    The methods below are overriding several existing methods in the AuthProvider class (and its parent BaseAuthProvider).
-    """
-
-    async def render_login(self, request: Request, admin: BaseAdmin) -> Response:
-        """Override the default starlette-admin login method to use our frontend get_login route/page."""
-        return await get_login(request)
-
-    async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
-        """Override the default starlette-admin logout to use our frontend post_logout function/route."""
-        # can't rely on dependency injection here like in FastAPI, so we manually obtain a db session
-        async for db in get_db():
-            logout_response = await post_logout(request, db)
-        return logout_response
-
-    async def is_authenticated(self, request: Request) -> bool:
-        """
-        Overrides the default implementation to use our pre-existing DivBase auth system.
-
-        In which we determine the user from their JWT tokens stored in httponly cookies.
-
-        As expected, we also confirm user.is_admin for access.
-        """
-        access_token = request.cookies.get("access_token")
-        refresh_token = request.cookies.get("refresh_token")
-        if not access_token and not refresh_token:
-            return False
-
-        try:
-            # Starlette does not support dependency injection like FastAPI,
-            # so we need to manually obtain the database session here.
-            async for db in get_db():
-                user = await _authenticate_frontend_user_from_tokens(
-                    access_token=access_token, refresh_token=refresh_token, db=db
-                )
-
-                if user and user.is_admin and user.is_active:
-                    # Store user info in the request state so it can be accessed by e.g. get_admin_user
-                    request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
-                    return True
-        except Exception as e:
-            logger.warning(
-                f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
-            )
-            return False
-
-        return False
-
-    def get_admin_user(self, request: Request) -> AdminUser | None:
-        """
-        Retrieve the current (admin) user for display on the admin panel.
-
-        This controls the display of the user info in the top right of the admin panel and makes having a logout button possible.
-        """
-        user = request.state.user
-        if not user:
-            return None
-
-        return AdminUser(username=user["name"], photo_url=None)
 
 
 class TaskHistoryView(ModelView):
@@ -556,6 +567,70 @@ class TaskStartedAtView(ModelView):
         return False
 
 
+class DivBaseAuthProvider(AuthProvider):
+    """
+    This class enables starlette-admin to make use of DivBase's pre-existing auth system.
+
+    The methods below are overriding several existing methods in the AuthProvider class (and its parent BaseAuthProvider).
+    """
+
+    async def render_login(self, request: Request, admin: BaseAdmin) -> Response:
+        """Override the default starlette-admin login method to use our frontend get_login route/page."""
+        return await get_login(request)
+
+    async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
+        """Override the default starlette-admin logout to use our frontend post_logout function/route."""
+        # can't rely on dependency injection here like in FastAPI, so we manually obtain a db session
+        async for db in get_db():
+            logout_response = await post_logout(request, db)
+        return logout_response
+
+    async def is_authenticated(self, request: Request) -> bool:
+        """
+        Overrides the default implementation to use our pre-existing DivBase auth system.
+
+        In which we determine the user from their JWT tokens stored in httponly cookies.
+
+        As expected, we also confirm user.is_admin for access.
+        """
+        access_token = request.cookies.get("access_token")
+        refresh_token = request.cookies.get("refresh_token")
+        if not access_token and not refresh_token:
+            return False
+
+        try:
+            # Starlette does not support dependency injection like FastAPI,
+            # so we need to manually obtain the database session here.
+            async for db in get_db():
+                user = await _authenticate_frontend_user_from_tokens(
+                    access_token=access_token, refresh_token=refresh_token, db=db
+                )
+
+                if user and user.is_admin and user.is_active:
+                    # Store user info in the request state so it can be accessed by e.g. get_admin_user
+                    request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
+                    return True
+        except Exception as e:
+            logger.warning(
+                f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
+            )
+            return False
+
+        return False
+
+    def get_admin_user(self, request: Request) -> AdminUser | None:
+        """
+        Retrieve the current (admin) user for display on the admin panel.
+
+        This controls the display of the user info in the top right of the admin panel and makes having a logout button possible.
+        """
+        user = request.state.user
+        if not user:
+            return None
+
+        return AdminUser(username=user["name"], photo_url=None)
+
+
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     """
     Create and register an admin panel for the FastAPI app.
@@ -565,11 +640,12 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
     admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
     admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
     admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
     admin.add_view(
         CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
     )
-    admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
 
+    admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
     admin.mount_to(app)

@@ -5,15 +5,25 @@ Tests the actual cleanup logic by creating database entries with backdated times
 and verifying that the cleanup tasks correctly delete old entries.
 """
 
+import random
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 
 import pytest
 from sqlalchemy import select, text
 
+from divbase_api.models.project_versions import ProjectVersionDB
+from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
-from divbase_api.worker.cron_tasks import cleanup_old_task_history_task, cleanup_stuck_tasks_task
+from divbase_api.security import TokenType
+from divbase_api.worker.cron_tasks import (
+    cleanup_old_revoked_tokens,
+    cleanup_old_task_history_task,
+    cleanup_soft_deleted_project_versions,
+    cleanup_stuck_tasks_task,
+)
 
 
 class TaskStatus(StrEnum):
@@ -326,3 +336,181 @@ def test_cleanup_stuck_tasks_deletes_from_both_tables(db_session_sync, create_ta
     ).scalar_one_or_none()
     assert task_history_after is None
     assert celery_meta_after is None
+
+
+@pytest.fixture
+def create_revoked_token(db_session_sync):
+    """
+    Fixture to create revoked token entries with backdated timestamps.
+    """
+
+    def _create_revoked_token(days_old: int) -> int:
+        """Create a revoked token entry with backdated revoked_at timestamp."""
+        revoked_at = datetime.now(timezone.utc) - timedelta(days=days_old)
+        revoked_token = RevokedTokenDB(
+            token_jti=str(uuid.uuid4()),
+            token_type=random.choice([TokenType.REFRESH, TokenType.PASSWORD_RESET]),
+            revoked_at=revoked_at,
+            revoked_reason=random.choice(list(TokenRevokeReason)),
+            user_id=1,
+        )
+
+        db_session_sync.add(revoked_token)
+        db_session_sync.commit()
+        db_session_sync.refresh(revoked_token)
+        return revoked_token.id
+
+    return _create_revoked_token
+
+
+def test_cleanup_old_revoked_tokens_deletes_old_entries(db_session_sync, create_revoked_token):
+    """
+    Test that cleanup_old_revoked_tokens deletes tokens older than REVOKED_TOKEN_MAX_AGE_DAYS
+    and keeps recent tokens.
+    """
+    old_token_10d = create_revoked_token(days_old=10)
+    old_token_15d = create_revoked_token(days_old=15)
+
+    recent_token_3d = create_revoked_token(days_old=3)
+    recent_token_6d = create_revoked_token(days_old=6)
+
+    result = cleanup_old_revoked_tokens()
+
+    assert result["status"] == "completed"
+    assert result["number_of_revoked_tokens_deleted"] == 2
+    assert result["max_revoked_token_age_days"] == 7
+
+    # Verify old tokens were deleted
+    for token_id in [old_token_10d, old_token_15d]:
+        revoked_token = db_session_sync.execute(
+            select(RevokedTokenDB).where(RevokedTokenDB.id == token_id)
+        ).scalar_one_or_none()
+        assert revoked_token is None
+
+    # Verify recent tokens were kept
+    for token_id in [recent_token_3d, recent_token_6d]:
+        revoked_token = db_session_sync.execute(
+            select(RevokedTokenDB).where(RevokedTokenDB.id == token_id)
+        ).scalar_one_or_none()
+        assert revoked_token is not None
+
+
+def test_cleanup_old_revoked_tokens_with_no_old_entries(db_session_sync, create_revoked_token):
+    """
+    Test that cleanup handles the case where there are no old revoked tokens gracefully.
+    """
+    create_revoked_token(days_old=2)
+    create_revoked_token(days_old=5)
+
+    result = cleanup_old_revoked_tokens()
+
+    assert result["status"] == "completed"
+    assert result["number_of_revoked_tokens_deleted"] == 0
+
+
+@pytest.fixture
+def create_soft_deleted_project_version(db_session_sync):
+    """
+    Fixture to create soft-deleted project version entries with backdated timestamps.
+    """
+
+    def _create_soft_deleted_project_version(days_old: int, name: str) -> int:
+        """Create a soft-deleted project version with backdated date_deleted."""
+        date_deleted = datetime.now(timezone.utc) - timedelta(days=days_old)
+
+        project_version = ProjectVersionDB(
+            project_id=1,
+            name=name,
+            files={"file1.txt": "v1somehash", "file2.txt": "v2somehash"},
+            is_deleted=True,
+            date_deleted=date_deleted,
+        )
+        db_session_sync.add(project_version)
+        db_session_sync.commit()
+
+        return project_version.id
+
+    return _create_soft_deleted_project_version
+
+
+def test_cleanup_soft_deleted_project_versions_deletes_old_entries(
+    db_session_sync, create_soft_deleted_project_version
+):
+    """
+    Test that cleanup_soft_deleted_project_versions hard deletes project versions
+    that were soft-deleted longer than SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS ago.
+    """
+    old_version_35d = create_soft_deleted_project_version(days_old=35, name="v1.0.old35d")
+    old_version_45d = create_soft_deleted_project_version(days_old=45, name="v1.0.old45d")
+    recent_version_15d = create_soft_deleted_project_version(days_old=15, name="v1.0.recent15d")
+    recent_version_25d = create_soft_deleted_project_version(days_old=25, name="v1.0.recent25d")
+
+    result = cleanup_soft_deleted_project_versions()
+
+    assert result["status"] == "completed"
+    assert result["number_of_project_versions_hard_deleted"] == 2
+    assert result["soft_delete_retention_period_days"] == 30
+
+    # Verify old versions were hard deleted
+    for version_id in [old_version_35d, old_version_45d]:
+        project_version = db_session_sync.execute(
+            select(ProjectVersionDB).where(ProjectVersionDB.id == version_id)
+        ).scalar_one_or_none()
+        assert project_version is None
+
+    # Verify recent versions were kept
+    for version_id in [recent_version_15d, recent_version_25d]:
+        project_version = db_session_sync.execute(
+            select(ProjectVersionDB).where(ProjectVersionDB.id == version_id)
+        ).scalar_one_or_none()
+        assert project_version is not None
+
+
+def test_cleanup_soft_deleted_project_versions_only_affects_soft_deleted(
+    db_session_sync, create_soft_deleted_project_version
+):
+    """
+    Test that cleanup only affects soft-deleted project versions, not non-deleted ones.
+    """
+    old_soft_deleted = create_soft_deleted_project_version(days_old=35, name="v1.0.old35d")
+
+    active_version = ProjectVersionDB(
+        project_id=1,
+        name="v1.0.active",
+        files={"file1.txt": "v1somehash", "file2.txt": "v2somehash"},
+    )
+    db_session_sync.add(active_version)
+    db_session_sync.commit()
+    active_version_id = active_version.id
+
+    result = cleanup_soft_deleted_project_versions()
+
+    assert result["status"] == "completed"
+    assert result["number_of_project_versions_hard_deleted"] == 1
+
+    # Verify active version was not deleted
+    active_version_after = db_session_sync.execute(
+        select(ProjectVersionDB).where(ProjectVersionDB.id == active_version_id)
+    ).scalar_one_or_none()
+    assert active_version_after is not None
+
+    # Verify soft-deleted version was deleted
+    soft_deleted_after = db_session_sync.execute(
+        select(ProjectVersionDB).where(ProjectVersionDB.id == old_soft_deleted)
+    ).scalar_one_or_none()
+    assert soft_deleted_after is None
+
+
+def test_cleanup_soft_deleted_project_versions_with_no_old_entries(
+    db_session_sync, create_soft_deleted_project_version
+):
+    """
+    Test that cleanup handles the case where there are no old soft-deleted versions gracefully.
+    """
+    create_soft_deleted_project_version(days_old=10, name="v1.0.recent10d")
+    create_soft_deleted_project_version(days_old=20, name="v1.0.recent20d")
+
+    result = cleanup_soft_deleted_project_versions()
+
+    assert result["status"] == "completed"
+    assert result["number_of_project_versions_hard_deleted"] == 0
