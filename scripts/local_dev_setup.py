@@ -272,7 +272,7 @@ def create_local_config():
         raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
 
     for project in PROJECTS:
-        command = shlex.split(f"divbase-cli config add-project {project['name']}")
+        command = shlex.split(f"divbase-cli config add {project['name']}")
         subprocess.run(command, check=True, env=LOCAL_ENV)
 
     default_project = PROJECTS[0]["name"]

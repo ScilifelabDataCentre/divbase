@@ -55,8 +55,7 @@ def login(
                 print("Login cancelled.")
                 return
 
-    login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url)
-    config.set_logged_in_url(divbase_url)
+    login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url, config_path=config_file)
     print(f"Logged in successfully as: {email}")
 
 

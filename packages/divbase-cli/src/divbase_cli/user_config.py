@@ -16,11 +16,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 
 @dataclass
 class ProjectConfig:
-    """
-    Config of a single project.
-
-    TODO - consider adding validation of URLs and names based on known constraints.
-    """
+    """Config of a single project."""
 
     name: str
     divbase_url: str
@@ -32,6 +28,7 @@ class UserConfig:
 
     config_path: Path
     logged_in_url: str | None = None  # URL of the divbase server the user is currently logged in to, if any.
+    logged_in_email: str | None = None  # Email the user is currently logged in with, if any.
     projects: list[ProjectConfig] = field(default_factory=list)
     default_project: str | None = None
     # default_download_dir is a string (rather than Path) for easier loading/saving.
@@ -49,6 +46,7 @@ class UserConfig:
         """
         config_dict = {
             "logged_in_url": self.logged_in_url,
+            "logged_in_email": self.logged_in_email,
             "projects": [project.__dict__ for project in self.projects],
             "default_project": self.default_project,
             "default_download_dir": self.default_download_dir,
@@ -126,12 +124,15 @@ class UserConfig:
                 return project
         raise ProjectNotInConfigError(config_path=self.config_path, project_name=name)
 
-    def set_logged_in_url(self, url: str | None) -> None:
+    def set_login_status(self, url: str | None, email: str | None) -> None:
         """
-        Set the URL of the DivBase server the user is currently logged in to.
-        Used during login/logout to track the state.
+        Used during login/logout to track state (Dumps config after updating)
+        Sets the following fields:
+        1. URL of the DivBase server the user is currently logged in to.
+        2. Email of the user currently logged in.
         """
         self.logged_in_url = url
+        self.logged_in_email = email
         self.dump_config()
 
 
@@ -143,8 +144,9 @@ def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
     return UserConfig(
-        logged_in_url=config_contents.get("logged_in_url"),
         config_path=config_path,
+        logged_in_url=config_contents.get("logged_in_url"),
+        logged_in_email=config_contents.get("logged_in_email"),
         projects=projects,
         default_project=config_contents.get("default_project"),
         default_download_dir=config_contents.get("default_download_dir"),

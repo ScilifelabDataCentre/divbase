@@ -76,9 +76,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
-def login_to_divbase(
-    email: str, password: SecretStr, divbase_url: str, config_path: Path = cli_settings.CONFIG_PATH
-) -> None:
+def login_to_divbase(email: str, password: SecretStr, divbase_url: str, config_path: Path) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """
@@ -113,8 +111,7 @@ def login_to_divbase(
     token_data.dump_tokens()
 
     config = load_user_config(config_path)
-    config.set_logged_in_url(divbase_url)
-    config.dump_config()
+    config.set_login_status(url=divbase_url, email=email)
 
 
 def logout_of_divbase(
@@ -140,9 +137,12 @@ def logout_of_divbase(
                 api_route="v1/auth/logout",
                 json=request_data.model_dump(),
             )
+        except AuthenticationError:
+            # Tokens already expired/invalid/revoked etc...
+            pass
         except DivBaseAPIConnectionError as e:
             warnings.warn(
-                f"Could not contact DivBase server to log out fully: '{e}'.\n\n"
+                f"Could not connect to DivBase server to log out fully: '{e}'.\n\n"
                 "Continuing local logout.\n"
                 "You do not need to do anything, but if you see this message often, please let us know.",
                 stacklevel=2,
@@ -150,7 +150,7 @@ def logout_of_divbase(
             )
         except DivBaseAPIError as e:
             warnings.warn(
-                f"Recieved an error message from DivBase server when attempting to logout:"
+                f"Received an error message from DivBase server when attempting to logout:"
                 f"'{e.error_message=}'. \n\n"
                 "Continuing local logout.\n"
                 "You do not need to do anything. If you see this message a lot, please let us know.",
@@ -159,8 +159,7 @@ def logout_of_divbase(
             )
 
     token_path.unlink(missing_ok=True)
-    config.set_logged_in_url(None)
-    config.dump_config()
+    config.set_login_status(url=None, email=None)
 
 
 def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
@@ -197,6 +196,9 @@ def make_authenticated_request(
 
     if token_data.is_access_token_expired():
         if token_data.is_refresh_token_expired():
+            # Prevents user getting warning about being already logged in when they try to log in again
+            config = load_user_config()
+            config.set_login_status(url=None, email=None)
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
         else:
             token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
@@ -243,11 +245,10 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
 
     # Possible if e.g. token revoked on server side.
     if response.status_code == 401:
-        # Clear logged in URL in config as tokens no longer valid.
+        # Clear logged in status in user config as tokens no longer valid.
         # Prevents user getting warning about being already logged in when they try to log in again.
         config = load_user_config()
-        config.set_logged_in_url(None)
-        config.dump_config()
+        config.set_login_status(url=None, email=None)
         raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
 
     response.raise_for_status()

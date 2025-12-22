@@ -66,7 +66,7 @@ def logged_out_user_with_existing_config(CONSTANTS):
     assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
     for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
-        add_command = f"config add-project {project}"
+        add_command = f"config add {project}"
         result = runner.invoke(app, add_command)
         assert result.exit_code == 0
 
@@ -136,7 +136,7 @@ def _create_logged_in_user_fixture(user_type: str):
         assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
 
         for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
-            add_command = f"config add-project {project}"
+            add_command = f"config add {project}"
             result = runner.invoke(app, add_command)
             assert result.exit_code == 0
 

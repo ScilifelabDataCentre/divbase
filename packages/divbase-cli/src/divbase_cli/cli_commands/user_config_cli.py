@@ -21,7 +21,7 @@ CONFIG_FILE_OPTION = typer.Option(
     cli_settings.CONFIG_PATH,
     "--config",
     "-c",
-    help="Path to your user configuration file. By default it is stored at ~/.config/.divbase_tools.yaml.",
+    help="Path to your user configuration file. If you didn't specify a custom path when you created it, you don't need to set this.",
 )
 
 config_app = typer.Typer(help="Manage your user configuration file for the DivBase CLI.", no_args_is_help=True)
@@ -30,27 +30,35 @@ config_app = typer.Typer(help="Manage your user configuration file for the DivBa
 @config_app.command("create")
 def create_user_config_command(
     config_file: Path = typer.Option(
-        cli_settings.CONFIG_PATH, help="Where to store your config file locally on your pc."
+        cli_settings.CONFIG_PATH,
+        "--config",
+        "-c",
+        help="Where to store your config file locally on your pc.",
     ),
 ):
-    """Create a user configuration file for the divbase-cli tool."""
+    """Create a user configuration file for divbase-cli."""
     create_user_config(config_path=config_file)
     print(f"User configuration file created at {config_file.resolve()}.")
 
 
-@config_app.command("add-project")
+@config_app.command("add")
 def add_project_command(
-    name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
-    divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase API URL associated with this project."),
+    name: str = typer.Argument(..., help="Name of the project to add to your config file."),
+    divbase_url: str = typer.Option(
+        cli_settings.DIVBASE_API_URL,
+        "--divbase-url",
+        "-u",
+        help="DivBase API URL associated with this project.",
+    ),
     make_default: bool = typer.Option(
         False,
         "--default",
         "-d",
-        help="Set this project as the default project in the user configuration file.",
+        help="Set this project as the default project in your config file.",
     ),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Add a new project to the user configuration file."""
+    """Add a new project to your user configuration file."""
     config = load_user_config(config_file)
     project = config.add_project(
         name=name,
@@ -67,12 +75,12 @@ def add_project_command(
         print(f"To make '{project.name}' your default project you can run: 'divbase config set-default {project.name}'")
 
 
-@config_app.command("remove-project")
+@config_app.command("remove")
 def remove_project_command(
-    name: str = typer.Argument(..., help="Name of the project to remove from the user configuration file."),
+    name: str = typer.Argument(..., help="Name of the project to remove from your user configuration file."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Remove a project from the user configuration file."""
+    """Remove a project from your user configuration file."""
     config = load_user_config(config_file)
     removed_project = config.remove_project(name)
 
@@ -87,7 +95,7 @@ def set_default_project_command(
     name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
     config_file: Path = CONFIG_FILE_OPTION,
 ):
-    """Set the default project to use."""
+    """Set your default project to use in all divbase-cli commands."""
     config = load_user_config(config_file)
     default_project_name = config.set_default_project(name=name)
     print(f"Default project is now set to '{default_project_name}'.")
@@ -97,11 +105,11 @@ def set_default_project_command(
 def show_default_project_command(
     config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
-    """Show the currently set default project."""
+    """Print the currently set default project to the console."""
     config = load_user_config(config_file)
 
     if config.default_project:
-        print(f"Default project is: '{config.default_project}'.")
+        print(config.default_project)
     else:
         print("No default project is set in the user configuration file.")
 
@@ -142,16 +150,17 @@ def show_user_config(
         dload_dir_info = "Working directory of wherever you run the download command from."
     else:
         dload_dir_info = config.default_download_dir
-    console.print(f"[bold]Default Download Directory:[/bold] {dload_dir_info}")
+    console.print(f"[bold]Default Download Directory:[/bold] '{dload_dir_info}'")
 
-    if config.logged_in_url:
-        console.print(f"[bold]You're logged into DivBase API at URL:[/bold] {config.logged_in_url}")
+    if config.logged_in_url and config.logged_in_email:
+        console.print(f"[bold]You're logged into a DivBase server at URL:[/bold] '{config.logged_in_url}'")
+        console.print(f"[bold]Logged in with email:[/bold] '{config.logged_in_email}'")
     else:
-        console.print("[bold]Not currently logged into any DivBase API URL.[/bold]")
+        console.print("[bold]You're not logged into any DivBase server.[/bold]")
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
-        console.print("You can add a project using the command: 'divbase config add-project <project_name>'")
+        console.print("You can add a project using the command: 'divbase-cli config add <project_name>'")
         return
 
     table = Table(title="\nProjects in your DivBase CLI user config file")

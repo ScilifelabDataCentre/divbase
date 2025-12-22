@@ -70,7 +70,7 @@ def ensure_project_in_config(project_name: str) -> None:
         print(f"Project '{project_name}' already exists in config.")
     else:
         print(f"Project '{project_name}' does not exist in config. Adding it...")
-        command = shlex.split(f"divbase-cli config add-project {project_name}")
+        command = shlex.split(f"divbase-cli config add {project_name}")
         subprocess.run(command, check=True, env=LOCAL_ENV)
 
 
