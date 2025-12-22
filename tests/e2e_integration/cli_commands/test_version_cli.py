@@ -90,6 +90,34 @@ def test_list_versions(logged_in_edit_user_with_existing_config):
     assert f"{VERSION_2_NAME}" in result.stdout
 
 
+def test_list_versions_with_and_without_include_deleted_flag(logged_in_edit_user_with_existing_config):
+    """Test that deleted versions only show up when include_deleted flag is used"""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+    runner.invoke(app, f"version add {VERSION_2_NAME}")
+    runner.invoke(app, f"version delete {VERSION_1_NAME}")
+
+    result = runner.invoke(app, "version list")
+    assert result.exit_code == 0
+    assert VERSION_1_NAME not in result.stdout
+    assert VERSION_2_NAME in result.stdout
+
+    result = runner.invoke(app, "version list --include-deleted")
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+    assert VERSION_2_NAME in result.stdout
+
+
+def test_list_versions_for_empty_project(logged_in_edit_user_with_existing_config):
+    """Test that list version works fine if no versions exist"""
+    result = runner.invoke(app, "version list")
+    assert result.exit_code == 0
+    assert "No versions found" in result.stdout
+
+    result = runner.invoke(app, "version list --include-deleted")
+    assert result.exit_code == 0
+    assert "No versions found" in result.stdout
+
+
 def test_delete_version(logged_in_edit_user_with_existing_config):
     command = f"version add {VERSION_1_NAME}"
     result = runner.invoke(app, command)
@@ -115,6 +143,22 @@ def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
     assert isinstance(result.exception, DivBaseAPIError)
     assert result.exception.error_type == "project_version_not_found_error"
     assert result.exception.status_code == 404
+
+
+def test_delete_already_deleted_version(logged_in_edit_user_with_existing_config):
+    """
+    Test deleting a version that's already been soft deleted
+    Should not raise error, but just say it's already been deleted.
+    """
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+    result = runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    assert result.exit_code == 0
+    assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
+
+    result = runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+    assert "has already been soft-deleted" in result.stdout
 
 
 def test_get_version_info(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -144,6 +188,25 @@ def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_wi
     assert isinstance(result.exception, DivBaseAPIError)
     assert result.exception.error_type == "project_version_not_found_error"
     assert result.exception.status_code == 404
+
+
+def test_get_version_info_for_deleted_version(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Should still work"""
+    default_project = CONSTANTS["DEFAULT_PROJECT"]
+    files_in_project = CONSTANTS["PROJECT_CONTENTS"][default_project]
+
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+    runner.invoke(app, f"version delete {VERSION_1_NAME}")
+
+    command = f"version info {VERSION_1_NAME}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+    assert "WARNING: This version has been soft-deleted" in result.stdout
+
+    for file in files_in_project:
+        assert file in result.stdout
 
 
 def test_get_version_updates_hashes_on_new_upload(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
