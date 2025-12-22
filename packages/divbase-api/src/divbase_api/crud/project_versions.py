@@ -81,16 +81,28 @@ async def add_project_version(
 async def list_project_versions(
     db: AsyncSession,
     project_id: int,
+    include_deleted: bool = False,
 ) -> list[ProjectVersionInfo]:
     """List all version entries for a given project."""
-    stmt = (
-        select(ProjectVersionDB.name, ProjectVersionDB.description, ProjectVersionDB.created_at)
-        .where(ProjectVersionDB.project_id == project_id, ProjectVersionDB.is_deleted == False)  # noqa: E712
-        .order_by(ProjectVersionDB.created_at.desc())
+    stmt = select(
+        ProjectVersionDB.name,
+        ProjectVersionDB.description,
+        ProjectVersionDB.created_at,
+        ProjectVersionDB.is_deleted,
     )
+    stmt = stmt.where(ProjectVersionDB.project_id == project_id)
+    if not include_deleted:
+        stmt = stmt.where(ProjectVersionDB.is_deleted == False)  # noqa: E712
+    stmt = stmt.order_by(ProjectVersionDB.created_at.desc())
+
     result = await db.execute(stmt)
     versions = [
-        ProjectVersionInfo(name=row.name, description=row.description, created_at=row.created_at.isoformat())
+        ProjectVersionInfo(
+            name=row.name,
+            description=row.description,
+            created_at=row.created_at.isoformat(),
+            is_deleted=row.is_deleted,
+        )
         for row in result
     ]
     return versions
@@ -103,23 +115,29 @@ async def get_project_version_details(
 ) -> ProjectVersionDetailResponse:
     """Get the mapping of files to their version IDs at a specific project version."""
     stmt = select(
-        ProjectVersionDB.name, ProjectVersionDB.description, ProjectVersionDB.created_at, ProjectVersionDB.files
-    ).where(
+        ProjectVersionDB.name,
+        ProjectVersionDB.description,
+        ProjectVersionDB.created_at,
+        ProjectVersionDB.is_deleted,
+        ProjectVersionDB.files,
+    )
+    stmt = stmt.where(
         ProjectVersionDB.project_id == project_id,
         ProjectVersionDB.name == version_name,
-        ProjectVersionDB.is_deleted == False,  # noqa: E712
     )
+
     result = await db.execute(stmt)
     version_entry = result.one_or_none()
     if version_entry is None:
         raise ProjectVersionNotFoundError(message=f"Version '{version_name}' not found for the project.")
 
-    name, description, created_at, files = version_entry
+    name, description, created_at, is_deleted, files = version_entry
     return ProjectVersionDetailResponse(
         name=name,
         description=description,
         created_at=created_at.isoformat(),
-        files=version_entry.files,
+        is_deleted=is_deleted,
+        files=files,
     )
 
 

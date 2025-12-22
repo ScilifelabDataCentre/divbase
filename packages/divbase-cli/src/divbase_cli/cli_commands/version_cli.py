@@ -5,6 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import typer
+from rich import print
 from rich.console import Console
 from rich.table import Table
 
@@ -60,12 +61,21 @@ def add_version(
 def list_versions(
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
+    include_deleted: bool = typer.Option(False, help="Include soft-deleted versions in the listing."),
 ):
-    """List all entries in the project versioning file."""
+    """
+    List all entries in the project versioning file.
+
+    Displays version name, creation timestamp, and description for each project version.
+    If you specify --include-deleted, soft-deleted versions will also be shown.
+    Soft-deleted versions can be restored by a DivBase admin within 30 days of deletion.
+    """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    versions_info = list_versions_command(project_name=project_config.name, divbase_base_url=logged_in_url)
+    versions_info = list_versions_command(
+        project_name=project_config.name, include_deleted=include_deleted, divbase_base_url=logged_in_url
+    )
 
     if not versions_info:
         print(f"No versions found for project: {project_config.name}.")
@@ -76,12 +86,18 @@ def list_versions(
     table.add_column("Version", style="cyan", no_wrap=True)
     table.add_column("Created ", style="magenta")
     table.add_column("Description", style="green")
+    if include_deleted:
+        table.add_column("Soft Deleted", style="red")
 
     for version in versions_info:
         name = version.name
         desc = version.description or "No description provided"
         created_at = format_timestamp(version.created_at)
-        table.add_row(name, created_at, desc)
+        if include_deleted:
+            soft_deleted = "Yes" if version.is_deleted else "No"
+            table.add_row(name, created_at, desc, soft_deleted)
+        else:
+            table.add_row(name, created_at, desc)
 
     console.print(table)
 
@@ -96,13 +112,20 @@ def get_version_info(
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    files_at_version = get_version_details_command(
+    version_details = get_version_details_command(
         project_name=project_config.name, divbase_base_url=logged_in_url, version_name=version
     )
 
-    print(f"State of each file in the project: '{project_config.name}' at version: '{version}'")
-    print(f"Created at: {format_timestamp(files_at_version.created_at)}")
-    for object_name, hash in files_at_version.files.items():
+    print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
+    print(f"Entry created at: {format_timestamp(version_details.created_at)}")
+    if version_details.description:
+        print(f"Description: {version_details.description}")
+    if version_details.is_deleted:
+        print(
+            "[red]WARNING: This version has been soft-deleted and will soon be permanently deleted unless restored - Contact a DivBase admin to prevent this.[/red]"
+        )
+    print("Files at this version:")
+    for object_name, hash in version_details.files.items():
         print(f"- '{object_name}' : '{hash}'")
 
 

@@ -41,7 +41,7 @@ def add_version_command(project_name: str, divbase_base_url: str, name: str, des
     return AddVersionResponse(**response.json())
 
 
-def list_versions_command(project_name: str, divbase_base_url: str) -> list[ProjectVersionInfo]:
+def list_versions_command(project_name: str, include_deleted: bool, divbase_base_url: str) -> list[ProjectVersionInfo]:
     """
     List all versions in the project versions table stored on the divbase server.
     Returns a dict of version names (keys) to details about the versions.
@@ -49,7 +49,7 @@ def list_versions_command(project_name: str, divbase_base_url: str) -> list[Proj
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/project-versions/list?project_name={project_name}",
+        api_route=f"v1/project-versions/list?project_name={project_name}&include_deleted={str(include_deleted).lower()}",
     )
 
     project_versions = []

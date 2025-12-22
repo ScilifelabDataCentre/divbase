@@ -75,19 +75,22 @@ async def add_version_endpoint(
 @project_version_router.get("/list", status_code=status.HTTP_200_OK, response_model=list[ProjectVersionInfo])
 async def list_versions_endpoint(
     project_name: str,
+    include_deleted: bool = False,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ):
     """
     List all project versions for the project.
-    Returns basic info about each version (name, description, timestamp)
+    Returns basic info about each version (name, description, timestamp, is_deleted),
     but not a list of all files at that version.
+
+    You can also return soft-deleted versions by including the flag 'include_deleted'.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list project versions for this project.")
 
-    return await list_project_versions(db=db, project_id=project.id)
+    return await list_project_versions(db=db, project_id=project.id, include_deleted=include_deleted)
 
 
 @project_version_router.get(
