@@ -29,7 +29,7 @@ divbase-cli config show
 To add your first project to the config file you can run:
 
 ```bash
-divbase-cli config add-project [PROJECT_NAME] # append `--default`  or `-d` to make it the default project
+divbase-cli config add [PROJECT_NAME] # append `--default`  or `-d` to make it the default project
 ```
 
 **Tip:** On the DivBase website in the project's page, you'll see the command you can run to add that specific project to your user config file.

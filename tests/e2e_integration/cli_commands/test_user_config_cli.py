@@ -17,7 +17,7 @@ runner = CliRunner()
 
 
 def test_create_config_command(tmp_config_path):
-    command = f"config create --config-file {tmp_config_path}"
+    command = f"config create --config {tmp_config_path}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -25,7 +25,7 @@ def test_create_config_command(tmp_config_path):
 
 
 def test_cant_create_config_if_exists(tmp_config_path):
-    command = f"config create --config-file {tmp_config_path}"
+    command = f"config create --config {tmp_config_path}"
     result1 = runner.invoke(app, command)
     assert result1.exit_code == 0
 
@@ -36,7 +36,7 @@ def test_cant_create_config_if_exists(tmp_config_path):
 
 def test_add_project_command(logged_out_user_with_fresh_config):
     project_name = "test_project"
-    command = f"config add-project {project_name}"
+    command = f"config add {project_name}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -47,7 +47,7 @@ def test_add_project_command(logged_out_user_with_fresh_config):
 def test_add_project_as_default_command(logged_out_user_with_fresh_config):
     project_name = "test_project"
 
-    command = f"config add-project {project_name} --default"
+    command = f"config add {project_name} --default"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -60,7 +60,7 @@ def test_add_project_and_specify_urls(logged_out_user_with_fresh_config):
     project_name = "test_project"
     divbase_url = "https://divbasewebsite.com"
 
-    command = f"config add-project {project_name} --divbase-url {divbase_url}"
+    command = f"config add {project_name} --divbase-url {divbase_url}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -81,7 +81,7 @@ def test_add_project_that_already_exists(logged_out_user_with_fresh_config):
     initial_divbase_url = "https://divbasewebsite.se"
     new_divbase_url = "https://newdivbasewebsite.se"
 
-    initial_command = f"config add-project {project_name} --divbase-url {initial_divbase_url}"
+    initial_command = f"config add {project_name} --divbase-url {initial_divbase_url}"
     result = runner.invoke(app, initial_command)
     assert result.exit_code == 0
 
@@ -90,7 +90,7 @@ def test_add_project_that_already_exists(logged_out_user_with_fresh_config):
     assert project_info.divbase_url == initial_divbase_url
     assert project_info.name in user_config.all_project_names
 
-    new_command = f"config add-project {project_name} --divbase-url {new_divbase_url}"
+    new_command = f"config add {project_name} --divbase-url {new_divbase_url}"
 
     with pytest.warns(UserWarning, match=f"The project: '{project_name}' already existed"):
         result = runner.invoke(app, new_command)
@@ -137,7 +137,7 @@ def test_show_default_with_no_default_set_command(logged_out_user_with_fresh_con
 
 def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS):
     for project_name in CONSTANTS["PROJECT_CONTENTS"]:
-        command = f"config remove-project {project_name}"
+        command = f"config remove {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
 
@@ -147,7 +147,7 @@ def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS)
 
 def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config):
     project_name = "does-not-exist"
-    command = f"config remove-project {project_name}"
+    command = f"config remove {project_name}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -155,7 +155,7 @@ def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config
 
 
 def test_remove_default_project_command(logged_out_user_with_existing_config, CONSTANTS):
-    command = f"config remove-project {CONSTANTS['DEFAULT_PROJECT']}"
+    command = f"config remove {CONSTANTS['DEFAULT_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 

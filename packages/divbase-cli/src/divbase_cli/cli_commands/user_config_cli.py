@@ -160,7 +160,7 @@ def show_user_config(
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
-        console.print("You can add a project using the command: 'divbase config add-project <project_name>'")
+        console.print("You can add a project using the command: 'divbase-cli config add <project_name>'")
         return
 
     table = Table(title="\nProjects in your DivBase CLI user config file")
