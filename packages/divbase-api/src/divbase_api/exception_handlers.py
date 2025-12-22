@@ -80,7 +80,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     """
     Handle unexpected exceptions globally. - in the ideal world this is never be triggered
     """
-    logger.error(f"Unexpected Error occured for: {request.method} {request.url.path}: {exc}", exc_info=True)
+    logger.error(f"Unexpected Error occurred for: {request.method} {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={

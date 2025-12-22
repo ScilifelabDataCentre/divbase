@@ -325,7 +325,7 @@ class ProjectVersionsView(ModelView):
         BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
         DateTimeField(
             "date_deleted",
-            help_text="Timestamp when the user was soft deleted (else None). Value determined by system, cannot be edited.",
+            help_text="Timestamp when the version was soft deleted (else None). Value determined by system, cannot be edited.",
             disabled=True,
         ),
         JSONField(
@@ -357,7 +357,7 @@ class ProjectVersionsView(ModelView):
     async def edit(self, request: Request, pk: Any, data: dict) -> Any:
         """
         Override the default edit method to ensure that the `date_deleted` field is updated
-        when/if a users soft deletion status is changed.
+        when/if a version's soft deletion status is changed.
         """
         if "is_deleted" in data:
             if data["is_deleted"]:

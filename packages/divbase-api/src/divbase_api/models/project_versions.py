@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 class ProjectVersionDB(BaseDBModel):
     """
-    DB Model for project bucket versions.
+    DB Model for project versions.
     An entry here corresponds to the overall state of all files in the project's bucket
     at a given timestamp. Entries are manually created by the users via API.
 

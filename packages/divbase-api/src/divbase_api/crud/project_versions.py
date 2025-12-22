@@ -1,7 +1,7 @@
 """
 CRUD operations for project versions.
 
-Project versions correspond to the overall state of all files in a project's bucket
+Project versions capture the overall state of all files in a project
 at a given timestamp. Each version entry records the mapping of file names to their unique
 version IDs (hashes) at that point in time.
 
