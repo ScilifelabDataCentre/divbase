@@ -60,10 +60,19 @@ nav:
   - Home: index.md
   - CLI Guide: 
     - Getting Started: cli/getting-started.md
+    - divbase-cli: cli/_auto_generated/divbase-cli-overview.md
+    - divbase-cli config: cli/_auto_generated/config.md
+    - divbase-cli auth: cli/_auto_generated/auth.md
+    - divbase-cli files: cli/_auto_generated/files.md
+    - divbase-cli query: cli/_auto_generated/query.md
+    - divbase-cli version: cli/_auto_generated/version.md
+    - divbase-cli dimensions: cli/_auto_generated/dimensions.md
+    - divbase-cli task-history: cli/_auto_generated/task-history.md
   - API Reference:
     - Overview: api/overview.md
   - Developer Guide: 
     - Overview: development/overview.md
+    - Database Migrations: development/database_migrations.md
     - Sending Emails: development/sending_emails.md
  
 hooks:
