@@ -97,7 +97,7 @@ pytest tests/migrations
 
 ## Production Deployment
 
-TODO
+Documentaton on how to run migrations in production/deployed environments is covered in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase).
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
 # Sending emails
 
-Emails sending for email verification, password resets (TODO), notifications etc.. is handled by the email_sender.py service.
+Emails sending for email verification and password resets is handled by the `email_sender.py` service.
 
 Inspiration for the approach was taken heavily from the <https://github.com/fastapi/full-stack-fastapi-template>
 
