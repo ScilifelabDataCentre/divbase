@@ -38,9 +38,9 @@ $ divbase-cli query tsv [OPTIONS] FILTER
 
 * `FILTER`: String consisting of keys:values in the tsv file to filter on.
     The syntax is &#x27;Key1:Value1,Value2;Key2:Value3,Value4&#x27;, where the key
-    are the column header names in the tsv, and values are the column values. 
-    Multiple values for a key are separated by commas, and multiple keys are 
-    separated by semicolons. When multple keys are provided, an intersect query 
+    are the column header names in the tsv, and values are the column values.
+    Multiple values for a key are separated by commas, and multiple keys are
+    separated by semicolons. When multple keys are provided, an intersect query
     will be performed. E.g. &#x27;Area:West of Ireland,Northern Portugal;Sex:F&#x27;.
       [required]
 
@@ -74,9 +74,9 @@ $ divbase-cli query bcftools-pipe [OPTIONS]
 
 * `--tsv-filter TEXT`: String consisting of keys:values in the tsv file to filter on.
 The syntax is &#x27;Key1:Value1,Value2;Key2:Value3,Value4&#x27;, where the key
-are the column header names in the tsv, and values are the column values. 
-Multiple values for a key are separated by commas, and multiple keys are 
-separated by semicolons. When multple keys are provided, an intersect query 
+are the column header names in the tsv, and values are the column values.
+Multiple values for a key are separated by commas, and multiple keys are
+separated by semicolons. When multple keys are provided, an intersect query
 will be performed. E.g. &#x27;Area:West of Ireland,Northern Portugal;Sex:F&#x27;.
 * `--command TEXT`: String consisting of the bcftools command to run on the files returned by the tsv query.  [required]
 * `--metadata-tsv-name TEXT`: Name of the sample metadata TSV file in the project&#x27;s data store on DivBase.  [default: sample_metadata.tsv]
