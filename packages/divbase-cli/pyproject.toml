@@ -1,6 +1,6 @@
 [project]
 name = "divbase-cli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Command Line Interface for Divbase"
 readme = "../../README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,9 @@ dependencies = [
 [build-system]
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/divbase_cli/__init__.py"
 
 [tool.uv.sources]
 divbase-lib = { workspace = true }
