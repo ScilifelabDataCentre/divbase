@@ -7,6 +7,7 @@ import sys
 
 import typer
 
+from divbase_cli import __version__
 from divbase_cli.cli_commands.auth_cli import auth_app
 from divbase_cli.cli_commands.dimensions_cli import dimensions_app
 from divbase_cli.cli_commands.file_cli import file_app
@@ -29,6 +30,30 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+
+def version_callback(show_version: bool) -> None:
+    """
+    Callback function to display the installed version of the divbase-cli package.
+    See https://typer.tiangolo.com/tutorial/options/version/#fix-with-is_eager
+    """
+    if show_version:
+        typer.echo(f"divbase-cli version: {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def show_installed_version(
+    show_version: bool = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the currently installed version of the divbase-cli package.",
+    ),
+) -> None:
+    pass
 
 
 app.add_typer(version_app, name="version")
