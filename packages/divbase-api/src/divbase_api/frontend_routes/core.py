@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from divbase_api.api_config import settings
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.models.users import UserDB
 
@@ -18,6 +19,7 @@ fr_core_router = APIRouter()
 
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir.resolve())
+templates.env.globals["mkdocs_site_url"] = settings.api.mkdocs_site_url
 
 
 @fr_core_router.get("/", response_class=HTMLResponse)
