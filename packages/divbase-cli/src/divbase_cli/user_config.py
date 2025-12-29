@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import ProjectNotInConfigError
+from divbase_cli.cli_exceptions import ConfigFileNotFoundError, ProjectNotInConfigError
 
 
 @dataclass
@@ -138,8 +138,11 @@ class UserConfig:
 
 def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig:
     """Helper function to load the user config file"""
-    with open(config_path, "r") as file:
-        config_contents = yaml.safe_load(file)
+    try:
+        with open(config_path, "r") as file:
+            config_contents = yaml.safe_load(file)
+    except FileNotFoundError:
+        raise ConfigFileNotFoundError from None
 
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
