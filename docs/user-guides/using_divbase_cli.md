@@ -1,6 +1,8 @@
 
 # Using DivBase CLI tool
 
+TODO - this needs a lot of TLC and could be split up.
+
 Please make sure you have followed the install instructions in the main README.md to install divbase-cli before continuing.
 
 The CLI tool relies on 2 local files to preserve state between commands:

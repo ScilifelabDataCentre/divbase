@@ -51,7 +51,7 @@ def on_startup(command, dirty):
 
     # Keep only the top level command output (e.g. divbase-cli --help)
     overview_content = result.stdout.split("##")[0].strip()
-    output_file = SAVE_DIR / "divbase-cli-overview.md"
+    output_file = SAVE_DIR / "divbase-cli.md"
     output_file.write_text(overview_content)
 
     for cmd_name, cmd_path in SUB_COMMANDS.items():
