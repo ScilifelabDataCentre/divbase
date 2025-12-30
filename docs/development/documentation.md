@@ -14,7 +14,7 @@ To build and serve the documentation locally, you can use the following command:
 mkdocs serve
 ```
 
-The docs will be available at: `<http://localhost:8001/divbase/>
+The docs will be available at: <http://localhost:8001/divbase/>
 
 If you make changes to the documentation files inside the `docs/` folder, the local server will automatically reload to reflect those changes. Changes to the `mkdocs.yml` file require a restart of the server to take effect.
 

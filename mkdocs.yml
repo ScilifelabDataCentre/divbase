@@ -64,13 +64,14 @@ nav:
   - User Guides:
     - Overview: user-guides/index.md
     - Quick Start Guide: user-guides/quick-start.md
-    - Installation: user-guides/installation.md
     - Account Management: user-guides/account-management.md
+    - Installation: user-guides/installation.md
+    - Setup DivBase CLI: user-guides/setup_divbase_cli.md
     - Working with VCF Files: user-guides/vcf-files.md
     - Running Queries: user-guides/running-queries.md
     - Managing Project Versions: user-guides/project-versioning.md
     - Troubleshooting: user-guides/troubleshooting.md
-    - Using DivBase CLI: user-guides/using_divbase_cli.md
+
   - CLI Command Reference: 
     - Overview: cli/index.md
     - divbase-cli: cli/_auto_generated/divbase-cli.md

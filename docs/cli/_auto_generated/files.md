@@ -60,7 +60,7 @@ $ divbase-cli files download [OPTIONS] [FILES]...
 
 * `--file-list PATH`: Text file with list of files to upload.
 * `--download-dir TEXT`: Directory to download the files to. 
-If not provided, defaults to what you specified in your user config.
+If not provided, defaults to what you specified in your user config. 
 If also not specified in your user config, downloads to the current directory.
 You can also specify &quot;.&quot; to download to the current directory.
 * `--disable-verify-checksums`: Turn off checksum verification which is on by default. Checksum verification means all downloaded files are verified against their MD5 checksums.It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.

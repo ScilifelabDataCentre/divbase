@@ -1,26 +1,78 @@
-# Installation
+# Installing divbase-cli
 
-TODO - show different ways to install
+## Recommended options: pipx or uv tool
 
-Can suggest pipx over pip etc...
+### 1. With pipx
 
-cover other methods like conda, uv.
+```bash
+pipx install divbase-cli
+```
 
-Should make a comment on virtual environments.
+If you do not have pipx installed, you can install it by following [the official instructions from pipx](https://pipx.pypa.io/stable/installation/).
 
-## Upgrading
+!!! info "why pipx and not pip?"
+    Pipx is recommended for command-line tools that need to be run from the terminal. With pipx, the tool is installed in an isolated environment and made available globally, which avoids dependency conflicts with other Python packages on your system.
+
+To upgrade later, use:
+
+```bash
+pipx upgrade divbase-cli
+```
+
+### 2. With uv tool
+
+If you use the package manager [uv](https://docs.astral.sh/uv/), you can install `divbase-cli` using UV's equivalent to pipx (`uv tool`):
+
+```bash
+uv tool install divbase-cli
+uv tool upgrade divbase-cli
+```
+
+## Alternative Installation Methods
+
+### pip with a Virtual Environment
+
+If you would prefer to manually create a virtual enviroment with for example `conda`/`mamba`/`venv` then you can install `divbase-cli` with pip after activating your virtual enviroment.
+
+For example, with conda:
+
+```bash
+conda create -n divbase python=3.13
+conda activate divbase
+pip install divbase-cli
+```
+
+And to upgrade later:
+
+```bash
+conda activate divbase
+pip install --upgrade divbase-cli
+```
+
+## Upgrading divbase-cli
 
 To check your currently installed version:
-
-TODO - implement the command...
 
 ```bash
 divbase-cli --version
 ```
 
-TODO:
-To upgrade to the latest version, use the following command:
+To upgrade to the latest version:
+
+**With pipx (recommended):**
 
 ```bash
-pipx install --upgrade divbase-cli
+pipx upgrade divbase-cli
+```
+
+**With uv (also recommended):**
+
+```bash
+uv tool upgrade divbase-cli
+```
+
+**With pip:**
+
+```bash
+pip install --upgrade divbase-cli
 ```

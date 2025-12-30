@@ -1,8 +1,8 @@
 # `divbase-cli`
 
-This tool lets you interact with your DivBase project(s) in order to:
+This tool lets you interact with your DivBase project(s) in order to: 
 
-    - Query the metadata for the VCF files stored in the project.
+    - Query the metadata for the VCF files stored in the project. 
 
     - Upload/download files to/from the project. 
 
@@ -16,6 +16,7 @@ $ divbase-cli [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `-v, --version`: Show the currently installed version of the divbase-cli package.
 * `--install-completion`: Install completion for the current shell.
 * `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
 * `--help`: Show this message and exit.

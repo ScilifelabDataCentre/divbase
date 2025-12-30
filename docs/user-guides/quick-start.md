@@ -5,22 +5,21 @@ This guide will walk you through everything you need to start managing and query
 ## Prerequisites
 
 - Python 3.12 or higher
-- Valid email address for account verification
 - VCF files and sample metadata in TSV format
 
 ## Step 1: Create an account
 
-Create an account at [DivBase Website](https://divbase.scilifelab.se) and make sure to verify your email address.
+Create an account on [DivBase](https://divbase.scilifelab.se) and make sure to verify your email address.
 
-## Step 2: Join or Create a Project
+## Step 2: Join or create a project
 
-### Option 1: Join an Existing Project
+### Option 1: Join an existing project
 
 If you have an account you can be added to an existing project by a project member with the role manager. Ask them to add you and give them the email address you used to sign up with.
 
 Managers can see this guide here on how to add members to a project here (TODO).
 
-### Option 2: Create a New Project
+### Option 2: Create a new project
 
 To create a new project, you'll need to contact us at <TODO@scilifelab.se> with the following information:
 
@@ -30,13 +29,13 @@ To create a new project, you'll need to contact us at <TODO@scilifelab.se> with 
 
 ## Step 3: Install divbase-cli
 
-Install the DivBase CLI using pip or you're preferred package manager:
-
-TODO - is pipx best option
+Install `divbase-cli` using pipx (recommended):
 
 ```bash
 pipx install divbase-cli
 ```
+
+If you do not have `pipx` installed, you can install it by following [the official instructions from pipx](https://pipx.pypa.io/stable/installation/). Refer to the [Installation Guide](installation.md) for more detailed instructions or other ways to install divbase-cli.
 
 ## Step 4: Configure the CLI
 
@@ -59,7 +58,7 @@ By setting this as the default project, you won't need to specify the project na
 !!! note
     On the divbase website you can see your project's name(s) under the "Projects" tab after logging in.
 
-## Step 5: Log In
+## Step 5: Log in
 
 Log in to DivBase:
 
@@ -67,7 +66,7 @@ Log in to DivBase:
 divbase-cli auth login EMAIL_ADDRESS
 ```
 
-## Step 6: Upload Files
+## Step 6: Upload files
 
 Upload your VCF files to your project:
 
@@ -88,7 +87,7 @@ Check your uploaded files:
 divbase-cli files list
 ```
 
-## Step 7: Upload Sample Metadata
+## Step 7: Upload sample metadata
 
 Sample metadata must be upload as follows:
 
@@ -110,7 +109,7 @@ Update the project dimensions after uploading your files:
 divbase-cli dimensions update
 ```
 
-## Step 9: Confirm Dimensions Update Job Completion
+## Step 9: Confirm dimensions update job completion
 
 Check the task history to confirm the dimensions update job has completed:
 
@@ -147,11 +146,11 @@ divbase-cli download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/result
 
 Replacing [JOB_ID] with the actual job ID from the task history.
 
-## Next Steps
+## Next steps
 
 TODO - a selection of links to more detailed user guides
 
-## Getting Help
+## Getting help
 
 If you run into issues:
 
