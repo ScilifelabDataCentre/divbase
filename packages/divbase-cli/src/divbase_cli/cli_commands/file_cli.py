@@ -15,6 +15,7 @@ from typing_extensions import Annotated
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
+from divbase_cli.pre_signed_urls import DownloadOutcome
 from divbase_cli.services import (
     download_files_command,
     list_files_command,
@@ -22,7 +23,37 @@ from divbase_cli.services import (
     upload_files_command,
 )
 
+DISABLE_VERIFY_CHECKSUMS_OPTION = (
+    typer.Option(
+        "--disable-verify-checksums",
+        help="Turn off checksum verification which is on by default. "
+        "Checksum verification means all downloaded files are verified against their MD5 checksums."
+        "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
+    ),
+)
+DOWNLOAD_DIR_OPTION = typer.Option(
+    None,
+    help="""Directory to download the files to. 
+            If not provided, defaults to what you specified in your user config. 
+            If also not specified in your user config, downloads to the current directory.
+            You can also specify "." to download to the current directory.""",
+)
+
+
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
+
+
+def pretty_print_download_outcome(download_outcome: DownloadOutcome) -> None:
+    """Pretty print to the console the outcome of a download files operation."""
+    if download_outcome.successful:
+        print("[green bold]Successfully downloaded the following files:[/green bold]")
+        for success in download_outcome.successful:
+            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
+    if download_outcome.failed:
+        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
+        for failed in download_outcome.failed:
+            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+        raise typer.Exit(1)
 
 
 @file_app.command("list")
@@ -54,22 +85,8 @@ def download_files(
         None, help="Space separated list of files/objects to download from the project's store on DivBase."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    download_dir: str = typer.Option(
-        None,
-        help="""Directory to download the files to. 
-            If not provided, defaults to what you specified in your user config. 
-            If also not specified in your user config, downloads to the current directory.
-            You can also specify "." to download to the current directory.""",
-    ),
-    disable_verify_checksums: Annotated[
-        bool,
-        typer.Option(
-            "--disable-verify-checksums",
-            help="Turn off checksum verification which is on by default. "
-            "Checksum verification means all downloaded files are verified against their MD5 checksums."
-            "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
-        ),
-    ] = False,
+    download_dir: str = DOWNLOAD_DIR_OPTION,
+    disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
     project_version: str = typer.Option(
         default=None,
         help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
@@ -111,16 +128,52 @@ def download_files(
         project_version=project_version,
     )
 
-    if download_results.successful:
-        print("[green bold]Successfully downloaded the following files:[/green bold]")
-        for success in download_results.successful:
-            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
-    if download_results.failed:
-        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
-        for failed in download_results.failed:
-            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+    pretty_print_download_outcome(download_outcome=download_results)
 
-        raise typer.Exit(1)
+
+@file_app.command("download-result")
+def download_result(
+    task_id: int = typer.Argument(..., help="Task ID of the results file to download."),
+    include_logs: bool = typer.Option(
+        False, help="Also download the log file for the task that created the results file."
+    ),
+    only_logs: bool = typer.Option(
+        False, help="Only download the log file for the task that created the results file."
+    ),
+    download_dir: str | None = DOWNLOAD_DIR_OPTION,
+    disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Download a vcf results file from the project's store on DivBase.
+    You can also download the associated query tasks log file.
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
+
+    # TODO - check results file exists first or give better error message?
+    # TODO - if these names ever change, very awkward with prior installs.
+    # Alternative would be api endpoint that still returns pre-signed urls for these files.
+    # and just specify task_id.
+    results_file = f"merged_{task_id}.vcf.gz"
+    log_file = f"task_log_{task_id}.txt"
+    to_download = []
+    if not only_logs:
+        to_download.append(results_file)
+    if only_logs or include_logs:
+        to_download.append(log_file)
+
+    download_results = download_files_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        all_files=to_download,
+        download_dir=download_dir_path,
+        verify_checksums=not disable_verify_checksums,
+    )
+
+    pretty_print_download_outcome(download_outcome=download_results)
 
 
 @file_app.command("upload")

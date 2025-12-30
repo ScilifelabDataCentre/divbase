@@ -149,3 +149,14 @@ class ConfigFileNotFoundError(DivBaseCLIError):
         ),
     ):
         super().__init__(error_message)
+
+
+class ProjectFileNotFoundError(DivBaseCLIError):
+    """Raised when an attempt to download a file fails because the file could not be found (aka 404)"""
+
+    def __init__(self, file_name: str):
+        error_message = (
+            f"Could not find file named: '{file_name}' in the projects store.\n"
+            "Please make sure the file exists in the project and you have selected the correct project'.\n"
+        )
+        super().__init__(error_message)

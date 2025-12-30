@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 
+from divbase_cli.cli_exceptions import ProjectFileNotFoundError
 from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
@@ -75,6 +76,9 @@ def _download_single_pre_signed_url(
     Helper function, do not call directly from outside this module.
     """
     with httpx_client.stream("GET", pre_signed_url) as response:
+        if response.status_code == 404:
+            custom_exception = ProjectFileNotFoundError(file_name=object_name)
+            return FailedDownload(object_name=object_name, file_path=output_file_path, exception=custom_exception)
         try:
             response.raise_for_status()
         except httpx.HTTPError as err:
