@@ -60,7 +60,10 @@ plugins:
   typeset:
 
 nav:
-  - DivBase: index.md
+  - DivBase: 
+    - Overview: index.md
+    - Contributing: CONTRIBUTING.md
+    - Security Policy: SECURITY.md
   - User Guides:
     - Overview: user-guides/index.md
     - Quick Start Guide: user-guides/quick-start.md
@@ -71,7 +74,6 @@ nav:
     - Running Queries: user-guides/running-queries.md
     - Managing Project Versions: user-guides/project-versioning.md
     - Troubleshooting: user-guides/troubleshooting.md
-
   - CLI Command Reference: 
     - Overview: cli/index.md
     - divbase-cli: cli/_auto_generated/divbase-cli.md
@@ -86,7 +88,6 @@ nav:
     - Overview: development/index.md
     - Setup Guide: development/setup.md
     - API: development/api.md
-    - Contributing: development/contributing.md
     - Database Migrations: development/database-migrations.md
     - Deployment: development/deployment.md
     - Documentation: development/documentation.md
