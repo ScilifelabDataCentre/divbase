@@ -11,7 +11,7 @@ To add a new page to the documentation site you must add it to the `nav:` sectio
 To build and serve the documentation locally, you can use the following command:
 
 ```bash
-mkdocs serve
+mkdocs serve --livereload
 ```
 
 The docs will be available at: <http://localhost:8001/divbase/>
