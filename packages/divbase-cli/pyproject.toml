@@ -2,7 +2,7 @@
 name = "divbase-cli"
 dynamic = ["version"]
 description = "Command Line Interface for Divbase"
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.15.4",
@@ -21,4 +21,5 @@ path = "src/divbase_cli/__init__.py"
 divbase-lib = { workspace = true }
 
 [project.scripts]
-divbase-cli = "divbase_cli.divbase_cli:main"
+divbase = "divbase_cli.divbase_cli:main"
+divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 

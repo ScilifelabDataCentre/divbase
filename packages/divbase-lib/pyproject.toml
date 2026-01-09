@@ -1,7 +1,7 @@
 [project]
 name = "divbase-lib"
 dynamic = ["version"]
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0.2",
