@@ -24,12 +24,12 @@ The API package has 2 entrypoints (fastapi and celery worker) and the CLI packag
 
 We use docker compose in local development and testing to create a matching local environment with all the services we need. Taking a look at the `docker/divbase_compose.yaml` file is a good way to get an overview of the different services that make up DivBase and how they interact.
 
-You can also take a look at our architecture decision records (ADRs) folder - `adr/` (and their associated PRs) for some more context surronding choices we have made over time.
+You can also take a look at our architecture decision records (ADRs) folder - `adr/` (and their associated PRs) for some more context surrounding choices we have made over time.
 
 ## Some good to know things
 
 1. Whilst we expose an API, all user interactions with DivBase are intended to be done via `divbase-cli`. The CLI handles authentication, configuration management and making the appropriate API calls to divbase.
 
-2. In production/deployed enviroments, we have an S3 tenant provided by KTH NetApp. We mimic this in local development/testing with a [MinIO](https://min.io/) instance running in the docker compose stack.
+2. In production/deployed environments, we have an S3 tenant provided by KTH NetApp. We mimic this in local development/testing with a [MinIO](https://min.io/) instance running in the docker compose stack.
 
 3. User data is stored in S3 buckets, one bucket for one project. The metadata about the projects, users and jobs is stored in a Postgres database. A user should not need to understand what a bucket is in order to use DivBase.

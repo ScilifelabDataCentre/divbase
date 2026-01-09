@@ -1,6 +1,6 @@
 # DivBase CLI Command Reference
 
-This section of the documentation covers all avaialble CLI commands for `divbase-cli`.
+This section of the documentation covers all available CLI commands for `divbase-cli`.
 
 Each page in this section of the documentation is auto-generated from the divbase-cli code and is also available directly via the CLI tool by running:
 

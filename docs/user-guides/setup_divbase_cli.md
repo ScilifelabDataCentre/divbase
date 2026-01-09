@@ -5,8 +5,8 @@ This section covers how to configure divbase-cli to know which projects you're a
 
 ## Prerequisites
 
-- Installed divbase-cli, see the [quickstart guide](/docs/user-guides/quick-start.md) guide or [installation section](/docs/user-guides/quick-start.md) of the documentation.
-- Have created a [DivBase account via the website](https://divbase.scilifelab.se) and have access to at least one DivBase project. See the [account management guide](/docs/user-guides/account-management.md) for more information on how to get access to a project.
+- Installed divbase-cli, see the [quickstart guide](quick-start.md) guide or [installation section](installation.md) of the documentation.
+- Have created a [DivBase account via the website](https://divbase.scilifelab.se) and have access to at least one DivBase project. See the [account management guide](account-management.md) for more information on how to get access to a project.
 
 ## 1. Create a user config file and add your project(s)
 
@@ -25,10 +25,11 @@ divbase-cli config show
 To add a project to the config file you can run:
 
 ```bash
-divbase-cli config add [PROJECT_NAME] # append `--default`  or `-d` to make it the default project
+divbase-cli config add [PROJECT_NAME] # append `--default` to make it the default project
 ```
 
-**Tip:** On the DivBase website in the project's page, you'll see the command you can run to add that specific project to your user config file.
+!!! info
+    On the DivBase website in the project's page, you'll see the command you can run to add that specific project to your user config file.
 
 If you want to change your default project later, you can run the same command with the `--default` flag again or:
 

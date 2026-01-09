@@ -13,11 +13,18 @@ If you do not have pipx installed, you can install it by following [the official
 !!! info "why pipx and not pip?"
     Pipx is recommended for command-line tools that need to be run from the terminal. With pipx, the tool is installed in an isolated environment and made available globally, which avoids dependency conflicts with other Python packages on your system.
 
-To upgrade later, use:
+To upgrade your prior install of divbase-cli, use:
 
 ```bash
 pipx upgrade divbase-cli
 ```
+
+!!! info "Which version is installed?"
+    To check which version of divbase-cli is currently installed, run:
+
+    ```bash
+    divbase-cli --version
+    ```
 
 ### 2. With uv tool
 
@@ -25,6 +32,11 @@ If you use the package manager [uv](https://docs.astral.sh/uv/), you can install
 
 ```bash
 uv tool install divbase-cli
+```
+
+And to upgrade an existing installation:
+
+```bash
 uv tool upgrade divbase-cli
 ```
 
@@ -46,33 +58,5 @@ And to upgrade later:
 
 ```bash
 conda activate divbase
-pip install --upgrade divbase-cli
-```
-
-## Upgrading divbase-cli
-
-To check your currently installed version:
-
-```bash
-divbase-cli --version
-```
-
-To upgrade to the latest version:
-
-**With pipx (recommended):**
-
-```bash
-pipx upgrade divbase-cli
-```
-
-**With uv (also recommended):**
-
-```bash
-uv tool upgrade divbase-cli
-```
-
-**With pip:**
-
-```bash
 pip install --upgrade divbase-cli
 ```

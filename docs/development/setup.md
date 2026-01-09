@@ -68,7 +68,7 @@ divbase-cli relies on 2 local files to preserve state between runs:
 
 You can read [the user guides](../user-guides/index.md) for more information on how to setup the CLI tool for the first time use.
 
-For convienance, we provide a local development setup script, but in order to run this you need the docker compose stack running (see next section).
+For convenience, we provide a local development setup script, but in order to run this you need the docker compose stack running (see next section).
 
 ## 4. Run DivBase server locally using docker compose watch
 
@@ -76,7 +76,7 @@ For convienance, we provide a local development setup script, but in order to ru
 docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/divbase_compose.yaml watch
 ```
 
-This will deploy the API, job system and a MinIO (S3) instance locally. Using `compose watch` means changes in the `/src` folder will automatically be sycned to the container and if needed trigger a restart or rebuild of them.
+This will deploy the API, job system and a MinIO (S3) instance locally. Using `compose watch` means changes in the `/src` folder will automatically be synced to the container and if needed trigger a restart or rebuild of them.
 
 Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/api/v1/docs> to test out some of API commands directly.
 
