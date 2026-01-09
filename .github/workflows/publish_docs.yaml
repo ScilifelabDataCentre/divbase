@@ -1,0 +1,29 @@
+name: Build and deploy the divbase documentation website
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+  pull_request: # TODO - temporary for testing remove before merge 
+    branches: 
+    - main
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-docs:
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - uses: actions/cache@v5
+        with: 
+          key: ${{ github.ref }}
+          path: .cache
+      - run: pip install mkdocs-material
+      - name: Deploy documentation
+        run: mkdocs gh-deploy --force
