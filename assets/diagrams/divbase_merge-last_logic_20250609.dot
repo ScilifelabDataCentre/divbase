@@ -1,0 +1,48 @@
+digraph pipe_query_command {
+    rankdir=TB;
+    node [shape=box];
+    nodesep=1.0; // Increase horizontal spacing
+    ranksep=0.25; // Decrease vertical spacing
+    ratio=1;
+    dpi=300;
+
+    start [label="Start"];
+    command_list [label="Make a list of all input commands (command_list)"];
+    check_image [label="Check if bcftools\nDocker image exists", shape=diamond];
+    build_image [label="Build Docker image"];
+    process_commands [label="Command(s) in command_list\nleft to process?", shape=diamond];
+    init_loop [label="Processing the first command\nin command_list?", shape=diamond];
+
+    input_vcf [label="Set current_inputs\nas the VCF files"];
+    input_temp [label="Set current_inputs\nas the latest temp_files"];
+    process_files [label="File(s) in current_inputs\nleft to process", shape=diamond];
+    generate_temp [label="Generate temp file name"];
+    format_command [label="Build bcftools command\nfrom current state of the loops"];
+    run_command [label="Run command (run_bcftools_docker)"];
+    temp_output [label="Output: temp files "]
+    ensure_index [label="Ensure .csi index exists"];
+    merge_files [label="Merge the final temp files\n(bcftools merge --force-samples) "];
+    cleanup [label="Delete temp files"];
+    end [label="End"];
+
+    start -> command_list
+    command_list -> check_image;
+    check_image -> build_image [label="No"];
+    build_image -> process_commands;
+    check_image -> process_commands [label="Yes"];
+    process_commands -> init_loop [label="Yes"];
+    init_loop -> input_vcf [label="Yes"];
+    init_loop -> input_temp [label="No"];
+    input_vcf -> process_files;
+    input_temp -> process_files;
+    process_files -> generate_temp [label="Yes"];
+    generate_temp -> format_command;
+    format_command -> run_command;
+    run_command -> temp_output
+    temp_output -> ensure_index;
+    ensure_index -> process_files;
+    process_files -> process_commands [label="No"];
+    process_commands -> merge_files[label="No"];
+    merge_files -> cleanup;
+    cleanup -> end;
+}

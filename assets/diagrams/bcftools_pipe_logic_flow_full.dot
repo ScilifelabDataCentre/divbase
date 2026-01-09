@@ -1,0 +1,155 @@
+digraph bcftools_pipe_logic_flow_in_divbasae {
+    graph [rankdir=RL ranksep=1.5 label="DivBase logic flow for bcftools-pipe queries, with CLI, WebAPI, and job system" labelloc=t fontsize=30]
+    rankdir=TB;
+    node [shape=box];
+    nodesep=1.0; // Increase horizontal spacing
+    ranksep=0.25; // Decrease vertical spacing
+    ratio=1;
+    dpi=300;
+
+    start [label="Start", fillcolor=lightgreen, style=filled];
+    CLI_command [label="divbase-cli query bcftools-pipe \n --tsv-filter <column:value>--command <view ...> \n --metadata-tsv-name <file.tsv> --project <project_name>", fillcolor=gray, style=filled];
+    API_request [label="API request to \n endpoint /query/bcftools-pipe/", fillcolor=khaki, style=filled];
+    submit_task [label="Submit bcftools_pipe_task.apply_async \n task to queue", fillcolor=khaki, style=filled];
+
+    worker_picks_up_task [label="Idle worker picks up task from queue and runs it"];
+    connect_to_bucket [label="Connect to project bucket and create an instance of S3FileManager"];
+    get_vcf_dimensions [label="Is there a dimensions file \nin the bucket?", shape=diamond];
+    raise_error_no_dimensions_file [label="ERROR. No dimensions file found in bucket. Please run 'dimensions update' CLI command", fillcolor=firebrick1, style=filled];
+    get_latest_vcf_file_version_ID [label="Create an instance of VCFDimensionIndexManager and get version ID for latest versions VCF files in the bucket"];
+    run_tsv_query [label="Run sample metadata query to get the VCF filenames needed for the query. Returns list of VCF files needed for the query"];
+    check_versions_matching_dimensions [label="Check that VCF file version IDs in bucket match with the metadata stored in the dimensions file"];
+    raise_error_version_mismatch [label="ERROR. Versions do not match dimensions. Please run 'dimensions update' CLI command", fillcolor=firebrick1, style=filled];
+
+
+    check_if_view_r [label="Is 'view -r' part of the query?", shape=diamond];
+    check_if_scaffolds_in_vcf [label="Check the files in the list of VCF files needed for the query against the dimensions file."];
+    any_unnecessary_files [label="Are there files that do not contain\n any of the scaffolds needed for the query?", shape=diamond];
+    drop_unnecessary_files [label="Drop the unnecessary files from the from the list of VCF files needed for the query"]
+
+    check_if_samples_can_be_combined_with_bcftools [label="Check if sample sets across all VCF files can be combined with bcftools"];
+    group_vcfs_by_sample_set [label="Group VCF files by sample sets"];
+    calculate_pairwise_overlap_types_for_sample_sets [label="Calculate all pairwise overlaps between sample sets"];
+    check_sample_set_overlap_validity [label="Are these sample set overlap types \n present in among the VCF files?", shape=diamond];
+    valid_overlap [label="Sample set overlap is compatible with bcftools"];
+    all_overlaps_checked [label="Have all pairwise overlaps\n been checked?", shape=diamond];
+    invalid_overlap [label="Sample set overlap is incompatible with bcftools"];
+    raise_error_invalid_sample_set_overlap [label="ERROR. Sample set overlap between VCF files is not compatible with bcftools. This query cannot be peformed.", fillcolor=firebrick1, style=filled];
+
+    transfer_files_to_worker [label="Transfer the required VCF files from bucket to worker"];
+    run_bcftools [label="Run BcftoolsQueryManager().execute_pipe to perform subsets and merge and/or concat"];
+
+    command_list [label="Make a list of all input commands (command_list),\ne.g. 'view -S SAMPLES; view -r chr1,chr3'", fillcolor=lightblue, style=filled];
+    process_commands [label="Command(s) in command_list\nleft to process?", shape=diamond, fillcolor=lightblue, style=filled];
+    init_loop [label="Processing the first command\nin command_list?", shape=diamond, fillcolor=lightblue, style=filled];
+    input_vcf [label="Set current_inputs\nas the VCF files", fillcolor=lightblue, style=filled];
+    input_temp [label="Set current_inputs\nas the latest temp_files", fillcolor=lightblue, style=filled];
+    process_files [label="File(s) in current_inputs\nleft to process", shape=diamond, fillcolor=lightblue, style=filled];
+    generate_temp [label="Generate temp file name", fillcolor=lightblue, style=filled];
+    format_command [label="Build bcftools command\nfrom current state of the loops", fillcolor=lightblue, style=filled];
+    run_command [label="Run command", fillcolor=lightblue, style=filled];
+    temp_output [label="Output: temp files ", fillcolor=lightblue, style=filled]
+    ensure_index [label="Ensure .csi index exists", fillcolor=lightblue, style=filled];
+
+    check_ovelaps_for_merge_concat [label="Group subset VCFs (i.e. temp files) by sample set and check sample set overlaps", fillcolor=lightblue, style=filled];
+    check_if_more_than_one_temp_file [label="Is there only one temp file?", shape=diamond, fillcolor=lightblue, style=filled];
+    rename_output_file [label="Rename single temp file to output file name", fillcolor=lightblue, style=filled];
+    concat_files [label="For each sample set, concatenate all VCF files that contain that sample set ('bcftools concat')", fillcolor=lightblue, style=filled];
+
+    any_overlaps_for_merge_concat [label="Among all sample sets, are there any VCF files \nwith overlapping sample sets?", shape=diamond fillcolor=lightblue, style=filled];
+    mixed_merge_overlap [label="Are there any non-overlapping sample sets left\n(including concatenated temp file(s))?", shape=diamond fillcolor=lightblue, style=filled];
+
+    merge_files [label="Merge the temp files\n(bcftools merge) ", fillcolor=lightblue, style=filled];
+    sort_results_file [label="Sort the results file with 'bcftools sort'", fillcolor=lightblue, style=filled];
+    cleanup_temp_files [label="Delete bcftools-created temp files from worker", fillcolor=lightblue, style=filled];
+
+
+    results_file_created [label="Results file from bcftools created on worker", fillcolor=lightblue, style=filled];
+    upload_results_file_to_bucket [label="Upload results file to bucket"];
+    delete_job_files_from_worker [label="Delete remaining job files (input VCFs, metadata tsv, results file) from worker"];
+    task_completed [label="Task finished, return 'status:completed' to job system logs"];
+    end [label="End", fillcolor=lightgreen, style=filled];
+
+    start -> CLI_command
+    CLI_command -> API_request;
+    API_request -> submit_task
+    submit_task -> worker_picks_up_task
+    worker_picks_up_task -> connect_to_bucket
+    connect_to_bucket -> get_vcf_dimensions
+    get_vcf_dimensions -> get_latest_vcf_file_version_ID [label = "Yes"]
+    get_vcf_dimensions -> raise_error_no_dimensions_file [label = "No"]
+    get_latest_vcf_file_version_ID -> run_tsv_query
+    run_tsv_query -> check_versions_matching_dimensions
+    check_versions_matching_dimensions -> raise_error_version_mismatch
+    check_versions_matching_dimensions -> check_if_view_r
+    check_if_view_r -> check_if_scaffolds_in_vcf [label = "Yes"]
+
+    check_if_scaffolds_in_vcf -> any_unnecessary_files
+    any_unnecessary_files -> drop_unnecessary_files [label = "Yes"]
+    any_unnecessary_files -> check_if_samples_can_be_combined_with_bcftools [label = "No"]
+    drop_unnecessary_files -> check_if_samples_can_be_combined_with_bcftools
+    check_if_view_r -> check_if_samples_can_be_combined_with_bcftools [label = "No"]
+    check_if_samples_can_be_combined_with_bcftools -> group_vcfs_by_sample_set
+    group_vcfs_by_sample_set -> calculate_pairwise_overlap_types_for_sample_sets
+    calculate_pairwise_overlap_types_for_sample_sets -> check_sample_set_overlap_validity
+    check_sample_set_overlap_validity -> valid_overlap [label = "Complete overlap,\nsame sample order"]
+    check_sample_set_overlap_validity -> valid_overlap [label = "Non-overlapping sample sets"]
+    check_sample_set_overlap_validity -> invalid_overlap [label = "Complete overlap,\nbut not same sample order"]
+    check_sample_set_overlap_validity -> invalid_overlap [label = "Partial overlap"]
+    invalid_overlap -> raise_error_invalid_sample_set_overlap
+    valid_overlap -> all_overlaps_checked
+    all_overlaps_checked -> transfer_files_to_worker [label="Yes"]
+    all_overlaps_checked -> check_sample_set_overlap_validity [label="No"]
+    transfer_files_to_worker -> run_bcftools
+    run_bcftools -> command_list
+
+    command_list -> process_commands;
+    process_commands -> init_loop [label="Yes"];
+    init_loop -> input_vcf [label="Yes"];
+    init_loop -> input_temp [label="No"];
+    input_vcf -> process_files;
+    input_temp -> process_files;
+    process_files -> generate_temp [label="Yes"];
+    generate_temp -> format_command;
+    format_command -> run_command;
+    run_command -> temp_output
+    temp_output -> ensure_index;
+    ensure_index -> process_files;
+    process_files -> process_commands [label="No"];
+    process_commands -> check_ovelaps_for_merge_concat[label="No"];
+    check_ovelaps_for_merge_concat -> check_if_more_than_one_temp_file
+    check_if_more_than_one_temp_file -> rename_output_file [label="Yes"];
+    rename_output_file -> sort_results_file
+    check_if_more_than_one_temp_file -> any_overlaps_for_merge_concat [label="No"];
+    any_overlaps_for_merge_concat -> concat_files [label="Yes"];
+    concat_files -> mixed_merge_overlap
+    mixed_merge_overlap -> merge_files [label="Yes"]
+    mixed_merge_overlap -> sort_results_file [label="No"]
+    any_overlaps_for_merge_concat -> merge_files [label="No"];
+    merge_files -> sort_results_file
+    sort_results_file -> results_file_created;
+    results_file_created -> cleanup_temp_files
+    cleanup_temp_files -> upload_results_file_to_bucket
+
+    upload_results_file_to_bucket -> delete_job_files_from_worker
+    delete_job_files_from_worker -> task_completed
+    task_completed -> end;
+
+    // Legend cluster
+    subgraph cluster_legend {
+        label = "Legend";
+        key1 [label="Start and End", fillcolor=lightgreen, style=filled, shape=box];
+        key2 [label="User: CLI input", fillcolor=gray, style=filled, shape=box];
+        key3 [label="WebAPI requests", fillcolor=khaki, style=filled, shape=box];
+        key4 [label="Celery worker: pre-processing (tasks.bcftools_query)", fillcolor=white, style=filled, shape=box];
+        key5 [label="Celery worker: VCF processing (BcftoolsQueryManager().execute_pipe)", fillcolor=lightblue, style=filled, shape=box];
+        key6 [label="ERROR: abort task and send message to user", fillcolor=firebrick1, style=filled, shape=box];
+        key6
+        key1 -> key2 [style=invis];
+        key2 -> key3 [style=invis];
+        key3 -> key4 [style=invis];
+        key4 -> key5 [style=invis];
+        key5 -> key6 [style=invis];
+    }
+
+}
