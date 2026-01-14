@@ -5,6 +5,10 @@ networks:
     driver: bridge
   external-s3:
     driver: bridge
+  # External network for monitoring services defined in monitoring_compose.yaml
+  divbase-observability:
+    driver: bridge
+    external: true
 services:
   rabbitmq:
     image: "rabbitmq:alpine"
