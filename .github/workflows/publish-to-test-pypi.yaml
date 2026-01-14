@@ -8,7 +8,7 @@ on:
       - mkdocs 
 jobs:
   build-divbase-lib-and-cli:
-    name: Build divbase-lib and divbase-cli to Test PyPI
+    name: Build divbase-lib and divbase-cli packages
     runs-on: ubuntu-latest
     if: github.repository == 'ScilifelabDataCentre/divbase'
 
