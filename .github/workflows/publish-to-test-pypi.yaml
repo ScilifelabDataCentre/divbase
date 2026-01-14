@@ -8,44 +8,12 @@ on:
       - mkdocs 
 jobs:
   build-divbase-lib-and-cli:
-    name: Build divbase-lib and divbase-cli packages
-    runs-on: ubuntu-latest
-    if: github.repository == 'ScilifelabDataCentre/divbase'
-
-    steps:
-      - uses: actions/checkout@v6
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.9.15"
-          enable-cache: true
-      
-      - name: "Set up Python"
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: ".python-version"
-
-      - name: Validate versions
-        run: |
-          uv run scripts/ci/validate_package_versions.py
-      
-      - name: Build packages
-        run: |
-          uv build --package divbase-lib --no-sources
-          uv build --package divbase-cli --no-sources
-
-      - uses: actions/upload-artifact@v6
-        with:
-          name: Packages
-          path: dist/
-
+    uses: ./.github/workflows/build-pypi-packages.yaml
 
   publish-to-test-pypi:
     name: Publish divbase-lib and divbase-cli to Test PyPI
     if: github.repository == 'ScilifelabDataCentre/divbase'
     needs: build-divbase-lib-and-cli
-
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # For trusted publishing
@@ -59,7 +27,7 @@ jobs:
           name: Packages
           path: dist/
 
-      - name: Publish to PyPI
+      - name: Publish to Test PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
