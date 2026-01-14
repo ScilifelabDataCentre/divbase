@@ -1,14 +1,40 @@
 [project]
 name = "divbase-cli"
-dynamic = ["version"]
 description = "Command Line Interface for Divbase"
 readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "SciLifeLab Data Centre", email = "datacentre@scilifelab.se" },
+]
 requires-python = ">=3.12"
 dependencies = [
+    "divbase-lib==0.1.0.dev0",
     "typer>=0.15.4",
     "httpx>=0.28.1",
-    "divbase-lib",
 ]
+dynamic = ["version"]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+[project.urls]
+Homepage = "https://divbase.scilifelab.se"
+Documentation = "https://scilifelabdatacentre.github.io/divbase"
+Repository = "https://github.com/ScilifelabDataCentre/divbase"
+Issues = "https://github.com/ScilifelabDataCentre/divbase/issues"
+
+[project.scripts]
+divbase = "divbase_cli.divbase_cli:main"
+divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 
 
 [build-system]
 requires = ["hatchling >= 1.26"]
@@ -19,7 +45,3 @@ path = "src/divbase_cli/__init__.py"
 
 [tool.uv.sources]
 divbase-lib = { workspace = true }
-
-[project.scripts]
-divbase = "divbase_cli.divbase_cli:main"
-divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 
