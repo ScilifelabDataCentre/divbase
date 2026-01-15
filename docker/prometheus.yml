@@ -6,5 +6,6 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
   - job_name: 'rabbitmq'
+    metrics_path: /metrics/per-object
     static_configs:
       - targets: ['rabbitmq:15692']

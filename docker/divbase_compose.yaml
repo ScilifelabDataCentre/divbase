@@ -11,7 +11,7 @@ networks:
     external: true
 services:
   rabbitmq:
-    image: "rabbitmq:alpine"
+    image: "rabbitmq:4.2.1-management-alpine"
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 5s
@@ -22,6 +22,7 @@ services:
       - 15692:15692 # Prometheus metrics endpoint
     environment:
       - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_prometheus true
+      - RABBITMQ_PROMETHEUS_RETURN_PER_OBJECT_METRICS=true # enable per-queue metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
     networks: &internal-network
