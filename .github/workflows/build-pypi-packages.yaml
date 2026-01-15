@@ -34,7 +34,18 @@ jobs:
           uv build --package divbase-lib --no-sources
           uv build --package divbase-cli --no-sources
 
-      - uses: actions/upload-artifact@v6
+      - name: Smoke test built packages
+        run: |
+          uv venv smoke-test
+          source smoke-test/bin/activate
+          uv pip install dist/divbase_lib-*.whl
+          uv pip install dist/divbase_cli-*.whl
+          python -c "import divbase_lib; import divbase_cli"
+          divbase-cli --help
+          divbase-cli --version
+
+      - name: Upload built packages as artifact
+        uses: actions/upload-artifact@v6
         with:
           name: Packages
           path: dist/
