@@ -3,7 +3,7 @@ site_description: A service to manage, query and version VCF files and associate
 site_url: https://scilifelabdatacentre.github.io/divbase/
 repo_url: https://github.com/ScilifelabDataCentre/divbase
 repo_name: ScilifelabDataCentre/divbase
-dev_addr: localhost:8001
+dev_addr: localhost:8008
 
 theme:
   name: material

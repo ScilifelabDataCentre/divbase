@@ -14,7 +14,7 @@ This means you can save the current state of your project as a named version, an
         ...
     }
     ```
-    The unique files hashes mean uploading a new version of the file with the same name doesn't matter. DivBase will now that entry refers to the older version of the file.
+    The unique files hashes mean uploading a new version of the file with the same name doesn't matter. DivBase will know that entry refers to the older version of the file.
 
 ---
 

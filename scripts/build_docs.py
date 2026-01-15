@@ -51,6 +51,8 @@ def on_startup(command, dirty):
 
     # Keep only the top level command output (e.g. divbase-cli --help)
     overview_content = result.stdout.split("##")[0].strip()
+
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
     output_file = SAVE_DIR / "divbase-cli.md"
     output_file.write_text(overview_content)
 
