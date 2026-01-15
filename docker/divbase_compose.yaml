@@ -19,10 +19,14 @@ services:
       retries: 5
     ports:
       - 5672:5672
+      - 15692:15692 # Prometheus metrics endpoint
+    environment:
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_prometheus true
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
     networks: &internal-network
       - internal 
+      - divbase-observability
   worker-quick:
     build: &worker-build
       context: .. 
