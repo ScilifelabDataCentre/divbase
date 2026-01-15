@@ -27,11 +27,11 @@ Something good to know is that you cannot upload the same version of a package t
 
 To test how the installation of a new version would be without affecting the production PyPI registry:
 
-1. Bump the version number in each packages `__init__.py` file and the version of `divbase-lib` to install in the `pyproject.toml` for divbase-cli. So these 4 files:
-    - `packages/divbase-api/src/divbase_api/__init__.py`
-    - `packages/divbase-lib/src/divbase_lib/__init__.py`
-    - `packages/divbase-cli/src/divbase_cli/__init__.py`
-    - `packages/divbase-cli/pyproject.toml` (the version of `divbase-lib` to install)
+1. Bump the version number in each packages `__init__.py` file and the version of `divbase-lib` to install in the `pyproject.toml` for divbase-cli. You can do this easily with the helper script:
+
+    ```bash
+    uv run scripts/set_divbase_version.py [NEW_VERSION]
+    ```
 
     !!! Tip "How should I bump the version when I'm just testing something?"
         If a semantic version bump does not make sense (perhaps you're just testing something not ready for end users), then you can append a dev suffix to the current version, e.g. if the current version is `1.2.3`, you can set the new version to `1.2.3.dev1` or `1.2.3.dev2` etc...
