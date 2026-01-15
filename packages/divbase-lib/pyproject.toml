@@ -39,3 +39,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "src/divbase_lib/__init__.py"
+
+[tool.ruff]
+extend = "../../ruff.toml"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"divbase_cli" = { msg = "divbase-lib cannot import from divbase-cli, only the other way around works" }
+"divbase_api" = { msg = "divbase-lib cannot import from divbase-api, only the other way around works" }

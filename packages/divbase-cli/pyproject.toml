@@ -45,3 +45,9 @@ path = "src/divbase_cli/__init__.py"
 
 [tool.uv.sources]
 divbase-lib = { workspace = true }
+
+[tool.ruff]
+extend = "../../ruff.toml"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"divbase_api" = { msg = "divbase-cli cannot use code from divbase-api. Move shared code to divbase-lib." }
