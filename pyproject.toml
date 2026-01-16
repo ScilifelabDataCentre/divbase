@@ -24,9 +24,3 @@ benchmarking = [
     "statsmodels>=0.14.4",
     "requests>=2.32.4",
 ]
-
-[tool.ruff]
-extend = "../../ruff.toml"
-
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"divbase_cli" = { msg = "divbase-api cannot use code from divbase-cli. Move shared code to divbase-lib." }

@@ -44,4 +44,4 @@ if __name__ == "__main__":
 
     change_versions(version_input)
     update_cli_dependency_to_divbase_lib(version_input)
-    print(f"divbase packages version's set to: {version_input}")
+    print(f"All divbase packages versions are now set to: {version_input}")
