@@ -25,36 +25,7 @@ Tasks are generally executed asynchronously and can possibly take a bit of time 
 
 DivBase uses a layered architechture and therefore task implementations occur at several layers. Roughly speaking, there is a Celery worker layer where the Celery app and its tasks are defined (including task metadata writes to database), an API layer that handles routing and some other required database operations, and a CLI layer that handles sending a task from the user's client to a specific API endpoint. The typicall task signal flow in DivBase looks like the following, starting from the user input:
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant CLI
-    participant API
-    participant DB as PostgreSQL
-    participant Celery App
-    participant Broker as RabbitMQ Broker
-    participant Celery Worker
-
-    User->>CLI: enters command<br>to submit task
-    CLI->>API: sends request
-    API->>DB: check user credentials
-    DB-->>API: returns user id, project id, project role
-    API->>API: checks if role has<br>required permissions
-    API-->>CLI: if no permission:<br>raise AuthorizationError
-    CLI-->>User: prints error in<br>user's terminal
-    API->>Celery App: calls <TASK_FUNCTION>.apply_async()
-    Celery App->>Broker: puts task in queue
-    Celery App-->>API: returns Celery task UUID
-
-    API->>DB: write task entry to TaskHistoryDB<br>(creates DivBase task ID for the Celery task UUID)
-    DB-->>API: returns DivBase task ID
-    API-->>CLI: returns DivBase task ID
-    CLI-->>User: prints DivBase task ID<br>to user's terminal
-    Broker->>Celery Worker: (idle worker) picks<br>up task from queue
-    Celery Worker-->>DB: writes task<br>started timestamp<br>in TaskStartedAtDB<br>(task_prerun signal handler)
-    Celery Worker->>Celery Worker: executes task
-    Celery Worker-->>DB: writes task metadata<br>to CeleryTaskMeta<br>(Celery results backend)
-```
+![Celery Task Implementation Sequence Diagram](../assets/diagrams/celery_task_implementation_sequence_diagram.svg)
 
 Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this diagram only shows submission and execution of tasks; to fetch the result of a task, users need to use the task history CLI command, which is not included in this diagram.
 
