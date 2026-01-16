@@ -451,7 +451,7 @@ def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
         raise
 ```
 
-Example of how a `app.conf.beat_schedule` configuration: 
+Example of how a `app.conf.beat_schedule` configuration:
 
 ```python
 app.conf.beat_schedule = {
