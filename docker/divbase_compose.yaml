@@ -7,8 +7,8 @@ networks:
     driver: bridge
   # External network for monitoring services defined in monitoring_compose.yaml
   divbase-observability:
+    name: divbase-observability
     driver: bridge
-    external: true
 services:
   rabbitmq:
     image: "rabbitmq:4.2.1-management-alpine"
