@@ -1,6 +1,6 @@
 # Sending emails
 
-Emails sending for email verification, password resets (TODO), notifications etc.. is handled by the email_sender.py service.
+Emails sending for email verification and password resets is handled by the `email_sender.py` service.
 
 Inspiration for the approach was taken heavily from the <https://github.com/fastapi/full-stack-fastapi-template>
 
@@ -22,7 +22,7 @@ Inspiration for the approach was taken heavily from the <https://github.com/fast
 
 ## MailPit
 
-New service add to the docker compose file, which can be used in local dev/testing (wont be used on cluster) for catching all emails sent by DivBase. You can visit the webUI at [http://localhost:8025](http://localhost:8025). Any email sent by DivBase to any email address will be received there so you can use it to check how the emails look and that the verification tokens etc.. work.
+The docker compose file contains a MailPit service which can be used in local dev/testing (wont be deployed on cluster) for catching all emails sent by DivBase. You can visit the webUI at [http://localhost:8025](http://localhost:8025). Any email sent by DivBase to any email address will be received there so you can use it to check how the emails look and that the verification tokens etc.. work.
 
 ## Email verification flow
 

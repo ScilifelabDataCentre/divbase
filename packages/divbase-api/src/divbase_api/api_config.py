@@ -20,6 +20,7 @@ class APISettings:
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "NOT_SET")
+    mkdocs_site_url: str = os.getenv("MKDOCS_SITE_URL", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
@@ -132,6 +133,7 @@ class Settings:
         required_fields = {
             "DIVBASE_ENV": self.api.environment,
             "FRONTEND_BASE_URL": self.api.frontend_base_url,
+            "MKDOCS_SITE_URL": self.api.mkdocs_site_url,
             "ASYNC_DATABASE_URL": self.database.url,
             "SYNC_DATABASE_URL": self.database.sync_url,
             "JWT_SECRET_KEY": self.jwt.secret_key,

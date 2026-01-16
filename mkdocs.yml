@@ -1,0 +1,134 @@
+site_name: DivBase
+site_description: A service to manage, query and version VCF files and associated sample metadata
+site_url: https://scilifelabdatacentre.github.io/divbase/
+repo_url: https://github.com/ScilifelabDataCentre/divbase
+repo_name: ScilifelabDataCentre/divbase
+dev_addr: localhost:8008
+
+theme:
+  name: material
+  palette:
+  - media: "(prefers-color-scheme)"
+    toggle:
+      icon: material/lightbulb-auto
+      name: Switch to light mode
+  - media: '(prefers-color-scheme: light)'
+    scheme: default
+    primary: teal
+    accent: light green
+    toggle:
+      icon: material/lightbulb
+      name: Switch to dark mode
+  - media: '(prefers-color-scheme: dark)'
+    scheme: slate # this means dark mode
+    primary: teal
+    accent: light green
+    toggle:
+      icon: material/lightbulb-outline
+      name: Switch to system preference
+  features:
+  - content.action.edit
+  - content.action.view
+  - content.code.annotate
+  - content.code.copy
+  - content.footnote.tooltips
+  - content.tabs.link
+  - content.tooltips
+  - navigation.footer
+  - navigation.indexes
+  - navigation.instant
+  - navigation.instant.prefetch
+  - navigation.instant.progress
+  - navigation.path
+  - navigation.tabs
+  - navigation.tabs.sticky
+  - navigation.top
+  - navigation.tracking
+  - search.highlight
+  - search.share
+  - search.suggest
+  - toc.follow
+  icon: # footer
+    repo: fontawesome/brands/github-alt
+  logo: assets/img/scilifelab_logo.png
+  favicon: assets/img/favicon.png
+  language: en
+
+plugins:
+  search:
+  social:
+  typeset:
+
+nav:
+  - DivBase: 
+    - Overview: index.md
+    - Contributing: CONTRIBUTING.md
+    - Security Policy: SECURITY.md
+  - User Guides:
+    - Overview: user-guides/index.md
+    - Quick Start Guide: user-guides/quick-start.md
+    - Account Management: user-guides/account-management.md
+    - Installation: user-guides/installation.md
+    - Setup DivBase CLI: user-guides/setup_divbase_cli.md
+    - Working with VCF Files: user-guides/vcf-files.md
+    - Running Queries: user-guides/running-queries.md
+    - Managing Project Versions: user-guides/project-versioning.md
+    - Troubleshooting: user-guides/troubleshooting.md
+  - CLI Command Reference: 
+    - Overview: cli/index.md
+    - divbase-cli: cli/_auto_generated/divbase-cli.md
+    - divbase-cli config: cli/_auto_generated/config.md
+    - divbase-cli auth: cli/_auto_generated/auth.md
+    - divbase-cli files: cli/_auto_generated/files.md
+    - divbase-cli query: cli/_auto_generated/query.md
+    - divbase-cli version: cli/_auto_generated/version.md
+    - divbase-cli dimensions: cli/_auto_generated/dimensions.md
+    - divbase-cli task-history: cli/_auto_generated/task-history.md
+  - Developer Guide: 
+    - Overview: development/index.md
+    - Setup Guide: development/setup.md
+    - API: development/api.md
+    - Database Migrations: development/database-migrations.md
+    - Celery Task Implementation: development/celery_task_implementation.md
+    - Bcftools Celery Task Logic: development/bcftools_task_logic.md
+    - Bcftools Celery Task Constraints: development/bcftools_task_constraints.md
+    - Task History Implementation: development/task_history_implementation.md
+    - Deployment: development/deployment.md
+    - Documentation: development/documentation.md
+    - Sending Emails: development/sending-emails.md
+    - Testing: development/testing.md
+  - "Go to DivBase Website": https://divbase.scilifelab.se
+
+hooks:
+  - scripts/build_docs.py
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  # Python Markdown Extensions
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.superfences
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/ScilifelabDataCentre/divbase   
+    - icon: fontawesome/solid/globe
+      link: https://divbase.scilifelab.se
+      name: Website
