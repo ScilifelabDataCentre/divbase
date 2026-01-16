@@ -11,6 +11,8 @@ lint.select = [
     "SIM",
     # isort
     "I",
+    # flake8-tidy-imports
+    "TID",
 ]
 
 lint.ignore = [

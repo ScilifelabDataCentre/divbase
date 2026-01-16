@@ -13,10 +13,10 @@ import httpx
 import yaml
 from pydantic import SecretStr
 
-from divbase_api.schemas.auth import LogoutRequest
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.user_config import load_user_config
+from divbase_lib.api_schemas.auth import LogoutRequest
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 

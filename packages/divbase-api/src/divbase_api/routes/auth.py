@@ -20,14 +20,14 @@ from divbase_api.db import get_db
 from divbase_api.deps import get_current_user
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.auth import (
+from divbase_api.schemas.users import UserResponse
+from divbase_api.security import TokenType, create_token, verify_token
+from divbase_lib.api_schemas.auth import (
     CLILoginResponse,
     LogoutRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
-from divbase_api.schemas.users import UserResponse
-from divbase_api.security import TokenType, create_token, verify_token
 
 logger = logging.getLogger(__name__)
 

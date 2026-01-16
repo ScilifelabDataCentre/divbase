@@ -34,3 +34,5 @@ task_records*.json
 
 # mkdocs build cache
 .cache/
+# pypi 
+dist/
