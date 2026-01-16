@@ -23,11 +23,11 @@
     },
     {
       "type": "timeseries",
-      "title": "Memory Usage (bytes; cAdvisor)",
+      "title": "Container Memory Usage (working set bytes; cAdvisor)",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "container_memory_usage_bytes",
+          "expr": "container_memory_working_set_bytes",
           "legendFormat": "{{id}}",
           "interval": ""
         }
