@@ -5,9 +5,13 @@ networks:
     driver: bridge
   external-s3:
     driver: bridge
+  # External network for monitoring services defined in monitoring_compose.yaml
+  divbase-observability:
+    name: divbase-observability
+    driver: bridge
 services:
   rabbitmq:
-    image: "rabbitmq:alpine"
+    image: "rabbitmq:4.2.1-management-alpine"
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 5s
@@ -15,10 +19,15 @@ services:
       retries: 5
     ports:
       - 5672:5672
+      - 15692:15692 # Prometheus metrics endpoint
+    environment:
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_prometheus true
+      - RABBITMQ_PROMETHEUS_RETURN_PER_OBJECT_METRICS=true # enable per-queue metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
     networks: &internal-network
       - internal 
+      - divbase-observability
   worker-quick:
     build: &worker-build
       context: .. 

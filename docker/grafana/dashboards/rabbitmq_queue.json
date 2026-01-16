@@ -1,0 +1,136 @@
+{
+  "id": null,
+  "title": "RabbitMQ Overview",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Messages Published (per 1 minute interval)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "increase(rabbitmq_queue_messages_published_total{queue=~\"celery|long|quick\"}[1m])",
+          "legendFormat": "{{queue}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Current Queue Depth: celery",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue=\"celery\"}",
+          "legendFormat": "celery",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Current Queue Depth: quick",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue=\"quick\"}",
+          "legendFormat": "quick",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Current Queue Depth: long",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue=\"long\"}",
+          "legendFormat": "long",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Current number of consumers per Queue: celery",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_consumers{queue=\"celery\"}",
+          "legendFormat": "celery",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 }
+    },
+    {
+      "type": "stat",
+      "title": "Current number of consumers per Queue: quick",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_consumers{queue=\"quick\"}",
+          "legendFormat": "quick",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 12 }
+    },
+    {
+      "type": "stat",
+      "title": "Current number of consumers per Queue: long",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_consumers{queue=\"long\"}",
+          "legendFormat": "long",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 12 }
+    }
+  ],
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s"
+}
