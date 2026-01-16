@@ -6,6 +6,8 @@ As a rule-of-thumb, Celery tasks are intended to be used for operations that hav
 
 Tasks can be divided by how they are submitted to the queue: user-submitted tasks, and system-submitted periodic tasks. User-submitted tasks are manually enqueued in the job management system by entering a command on in the DivBase CLI. System-submitted periodic tasks are cronjobs that are enqueued based on a time schedule, and typically handle system maintenance tasks such as cleanup jobs.
 
+Assuming that a task has been implemented as decribed in this document, DivBase users can access their task history with the `divbase-cli task-history` command. Please see [Task History Implementation](task_history_implementation.md) for details on how the task history works.
+
 ## Table of Contents
 
 - [1. Overview](#1-overview)
@@ -27,7 +29,7 @@ DivBase uses a layered architechture and therefore task implementations occur at
 
 ![Celery Task Implementation Sequence Diagram](../assets/diagrams/celery_task_implementation_sequence_diagram.svg)
 
-Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this diagram only shows submission and execution of tasks; to fetch the result of a task, users need to use the task history CLI command, which is not included in this diagram.
+Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this diagram only shows submission and execution of tasks; to fetch the result of a task, users need to use the task history CLI command, which is not included in this diagram. Please see [Task History Implementation](task_history_implementation.md) for details on that command.
 
 ## 2. Implementation of user-submitted tasks
 
