@@ -58,6 +58,7 @@ plugins:
   search:
   social:
   typeset:
+  meta:
 
 nav:
   - DivBase: 
