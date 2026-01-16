@@ -1,44 +1,40 @@
 sequenceDiagram
-    title Task status list: sequence diagram
+    title divbase-cli task-history id
     participant User
     participant CLI
     participant API
-    participant DB as DB (postgreSQL)
-    participant Flower
-    participant Redis as Redis (Celery Results Backend)
+    participant DB as PostgreSQL
 
-    User->>CLI: Run "divbase-cli task-history id <id>"
-    CLI->>API: HTTP GET /api/v1/task-history/list/<task_id>
-    API->>DB: Query allowed task IDs for user
-    DB-->>API: Return allowed task IDs
+    User->>CLI: Run "divbase-cli task-history id TASK_ID"
+    Note over CLI: TASK_ID is the DivBase Job ID (int)
 
-    alt User not allowed to view task
-        API-->>CLI: Return empty result
-        CLI->>User: Display empty result
-    else User allowed to view task
-        API->>Flower: HTTP GET /api/task/info/<task_id>
-        Flower->>Redis: Fetch task data
-        Redis-->>Flower: Return task data
-        Flower-->>API: Return task info
+    CLI->>CLI: Load user config from config file
+    CLI->>CLI: Check if logged in (logged_in_url exists)
 
-        alt Task not found in Flower/Redis
-            API-->>CLI: Return empty result
-            CLI->>User: Display empty result
-        else Task found
-            API-->>CLI: Return task info
-            CLI->>User: Display task info
+    alt Not logged in
+        CLI->>User: Raise AuthenticationError
+    else Logged in
+        CLI->>API: HTTP GET /api/v1/task-history/tasks/{user_task_id}
+
+        API->>DB: Query TaskHistoryDB by user_task_id
+        Note over API: Permission check:<br/>- Admin can view any task<br/>- Non-admin can view own tasks<br/>- Non-admin can view project tasks if MANAGE role
+
+        alt Task not found or no permission
+            API-->>CLI: Raise AuthorizationError
+            CLI->>User: Display error message
+        else Task found and authorized
+            DB-->>API: Return task history record
+
+            API->>API: Deserialize task metadata to TaskHistoryResult
+            API-->>CLI: Return list[TaskHistoryResult]
+
+            CLI->>CLI: TaskHistoryDisplayManager processes results
+            CLI->>User: Display formatted task history table
         end
     end
 
-%% Version without early-exit ALT sequences
-    %% User->>CLI: Run "divbase-cli query task-status TODO ID"
-    %% CLI->>API: HTTP GET /api/v1/task-history/list{task_id}
-    %% API->>DB: Query allowed task IDs for user/project
-    %% DB-->>API: Return allowed task IDs
-    %% API->>Flower: HTTP GET /api/task/info/{task_id}
-    %% Flower->>Redis: Fetch task data
-    %% Redis-->>Flower: Return task data
-    %% Flower-->>API: Return all tasks
-    %% API->>API: Filter tasks by allowed IDs and project
-    %% API-->>CLI: Return filtered TaskHistoryResults
-    %% CLI->>User: Display results in terminal
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/task_history_id_sequence_diagram.mermaid \
+%%      -o docs/assets/diagrams/task_history_id_sequence_diagram.svg \
+%%      -t dark \
+%%      --backgroundColor "#22272e"
