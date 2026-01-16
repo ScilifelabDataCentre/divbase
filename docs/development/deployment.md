@@ -21,7 +21,11 @@ We have accounts on both [PyPI](https://pypi.org/) and [TestPyPI](https://test.p
 
 (Login credentials are in bitwarden, but if you use the GH actions below you don't need to use them.)
 
-Something good to know is that you cannot upload the same version of a package to PyPI or TestPyPI if that version already exists (even if you delete the existing package). So in such cases you need to bump the version number in the packages before uploading new versions.
+### Good to know
+
+1. You cannot upload the same version of a package to PyPI or TestPyPI if that version already exists (even if you delete the existing package). So in such cases you need to bump the version number in the packages before uploading new versions.
+
+2. We set the version numbers of `divbase-{lib/cli/api}` to be identical for any release. This is done for the sake of simplicity (obvious which version of which package supports each other). So when you bump a version number for a new release, make sure to bump it in all packages to the same value, (read below for a helper script that does this for you).
 
 ### Publishing to TestPyPI
 
@@ -54,7 +58,7 @@ To test how the installation of a new version would be without affecting the pro
 5. Once the action has run, you can now test the installation of the new version.
 
     !!! Warning "Make sure you're testing the installed version"
-        To make sure you're testing the installed version from TestPyPI, and not the version in your local git repo, you should create a new terminal window (not in your divbase git repo virtual env) and run the install command there.
+        To make sure you're testing the installed version from TestPyPI, and not the version from your local env in your local git repo, you should create a new terminal window (not in your divbase git repo root) and run the install command there.
 
     ```bash
     # open a new terminal and not the in the root of the divbase git repo
@@ -72,7 +76,7 @@ To test how the installation of a new version would be without affecting the pro
 
 ### Publishing to PyPI
 
-The production release is automated, once a new release is published on GitHub, a [GitHub Actions workflow will run to publish the packages to PyPI](.github/workflows/publish-to-pypi.yaml).
+The production release is automated, once a new release is published on GitHub, a GitHub Actions workflow (`publish-to-pypi.yaml`) will run to publish the packages to PyPI.
 
 If something goes wrong with the GH action that automatically publishes to PyPI:
 
@@ -82,5 +86,13 @@ If something goes wrong with the GH action that automatically publishes to PyPI:
 
 !!! Info
     If really needed, you can consider enabling `workflow_dispatch` on the GH action workflow to manually trigger it.
-    Or locally use `uv build` and then `uv publish` to manually build and publish the packages to PyPI.
+    Or locally run:
+    ```bash
+    # Make sure to have the correct version numbers set in the packages before running these commands
+
+    uv build --package divbase-cli --no-sources
+    uv build --package divbase-lib --no-sources
+    uv publish .....
+    ```
+    [see here for why you need to add the flag --no-sources to the build steps](https://docs.astral.sh/uv/guides/package/#building-your-package).
     But this should really not be needed in normal cases.
