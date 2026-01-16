@@ -1,6 +1,8 @@
-# List of rules for bcftools operations to combine multiple VCF files into one file
+# Bcftools Celery Task Constraints
 
-DivBase uses `bcftools` to perform queries that act on the data contained inside VCF files. Thus, DivBase needs to adhere to the syntax and requirements for the different `bcftools` commands it uses. This document aims to map these requirements with specific examples and fixtures. The findings will then be used to propose solutions that can be implemented in DivBase for a better user experience. The focus is on the last step in the DivBase "bcftools pipe", where multiple subset VCF files typically need to be combined: query jobs can potentially have run for quite some time without error, only to fail on this last, somewhat complex step.
+DivBase uses `bcftools` to perform queries that act on the data contained inside VCF files. Thus, DivBase needs to adhere to the syntax and requirements for the different `bcftools` commands it uses. The queries are run as Celery tasks as defined in `tasks.bcftools_query` in `worker/tasks.py` in the `divbase-api` package. The task logic is based on subsetting each input VCF file seperatelly as temp files, and then eventually merging all temp files. To design and maintain this logic, a list of rules for bcftools operations to combine multiple VCF files into one file is therefore needed. This document aims to map these requirements with specific examples.
+
+Findings from this document has been implemented in the `_check_if_samples_can_be_combined_with_bcftools` helper function in `tasks.py`. It uses the VCF dimensions index for the DivBase project to analyse whether or not the input VCFs of a given query fullfil the rules for processing by the bcftools logic in `tasks.bcftools_query`. If not, the task exits to save on compute resources. The exit happens before the transfer of VCF files to the worker containers from S3 is started.
 
 ## General rules
 

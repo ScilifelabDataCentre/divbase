@@ -90,6 +90,7 @@ nav:
     - API: development/api.md
     - Database Migrations: development/database-migrations.md
     - Celery Task Implementation: development/celery_task_implementation.md
+    - Bcftools Task Constraints: development/bcftools_task_constraints.md
     - Deployment: development/deployment.md
     - Documentation: development/documentation.md
     - Sending Emails: development/sending-emails.md
