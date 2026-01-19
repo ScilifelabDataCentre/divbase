@@ -1,0 +1,112 @@
+{
+  "id": null,
+  "title": "Celery Worker Prometheus Client Metrics",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage (%) per Worker Process (Container/Pod; % of a Single CPU Core)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_cpu_percent",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU Time (Total Seconds) per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_cpu_time_total",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage (Bytes) per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_memory_bytes",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage (%) per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_memory_percent",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Number of Threads per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_num_threads",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Open File Descriptors per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_open_fds",
+          "legendFormat": "{{instance}} ({{worker_name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+    }
+  ]
+}
