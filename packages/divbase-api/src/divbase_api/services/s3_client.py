@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 
 import boto3
+from boto3.s3.transfer import TransferConfig
+from botocore.config import Config
 
 from divbase_lib.exceptions import ObjectDoesNotExistError
 
@@ -14,12 +16,27 @@ logger = logging.getLogger(__name__)
 
 
 class S3FileManager:
+    """An S3 client wrapper to do basic S3 operations."""
+
     def __init__(self, url: str, access_key: str, secret_key: str):
         self.s3_client = boto3.client(
             "s3",
             endpoint_url=url,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            config=Config(
+                retries={
+                    "max_attempts": 5,
+                    "mode": "adaptive",
+                }
+            ),
+        )
+        # multipart up/download config
+        self.transfer_config = TransferConfig(
+            multipart_threshold=16 * 1024 * 1024,  # 16MB
+            multipart_chunksize=16 * 1024 * 1024,
+            max_concurrency=10,
+            use_threads=True,
         )
 
     def list_files(self, bucket_name: str) -> list[str]:
@@ -71,16 +88,11 @@ class S3FileManager:
                 Filename=str(source),
                 Bucket=bucket_name,
                 Key=key,
+                Config=self.transfer_config,
             )
             uploaded_files[key] = source.resolve()
 
         return uploaded_files
-
-    def upload_str_as_s3_object(self, key: str, content: str, bucket_name: str) -> None:
-        """
-        Upload a string (e.g. output of yaml.safe_dump()) as a new file to the S3 bucket.
-        """
-        self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content.encode("utf-8"))
 
     def soft_delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
         """
@@ -139,7 +151,13 @@ class S3FileManager:
         """
         extra_args = {"VersionId": version_id} if version_id else None
         try:
-            self.s3_client.download_file(Bucket=bucket_name, Key=key, Filename=str(dest), ExtraArgs=extra_args)
+            self.s3_client.download_file(
+                Bucket=bucket_name,
+                Key=key,
+                Filename=str(dest),
+                ExtraArgs=extra_args,
+                Config=self.transfer_config,
+            )
         except self.s3_client.exceptions.ClientError as err:
             if err.response["Error"]["Code"] == "404":
                 raise ObjectDoesNotExistError(
@@ -185,9 +203,7 @@ class S3FileManager:
         return matches
 
 
-def create_s3_file_manager(
-    url: str,
-) -> S3FileManager:
+def create_s3_file_manager(url: str) -> S3FileManager:
     """Helper function to creates an S3FileManager instance using the S3 service account's credentials"""
     access_key = os.environ["S3_SERVICE_ACCOUNT_ACCESS_KEY"]
     secret_key = os.environ["S3_SERVICE_ACCOUNT_SECRET_KEY"]
