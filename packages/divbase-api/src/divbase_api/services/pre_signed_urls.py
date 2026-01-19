@@ -12,7 +12,7 @@ from functools import lru_cache
 import boto3
 
 from divbase_api.api_config import settings
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedSinglePartUploadResponse
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class S3PreSignedService:
 
     def create_presigned_url_for_upload(
         self, bucket_name: str, object_name: str, content_length: int, md5_hash: str | None = None
-    ) -> PreSignedUploadResponse:
+    ) -> PreSignedSinglePartUploadResponse:
         """
         Generate a presigned S3 PUT URL to upload a file to S3.
         The response object contains the object name, pre-signed URL, and any headers that must be included in the PUT request.
@@ -86,7 +86,9 @@ class S3PreSignedService:
             Params=upload_args,
             ExpiresIn=3600 * 24,  # 24 hours
         )
-        return PreSignedUploadResponse(name=object_name, pre_signed_url=pre_signed_url, put_headers=put_headers)
+        return PreSignedSinglePartUploadResponse(
+            name=object_name, pre_signed_url=pre_signed_url, put_headers=put_headers
+        )
 
 
 @lru_cache()

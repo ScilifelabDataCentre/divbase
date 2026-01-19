@@ -1,8 +1,15 @@
 """
 Schemas for DivBase's S3 API routes.
+
+Pre-signed download URLs do not need to account for single vs multipart as this can be controlled by the client
+using the HTTP range header when downloading (so you only need 1 pre-signed URL per object for download).
+
+Pre-signed upload URLs need to account for single vs multipart uploads hence all the extra schemas below.
 """
 
 from pydantic import BaseModel, Field
+
+MB = 1024 * 1024
 
 
 class DownloadObjectRequest(BaseModel):
@@ -20,8 +27,9 @@ class PreSignedDownloadResponse(BaseModel):
     version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
 
 
-class UploadObjectRequest(BaseModel):
-    """Request model to upload a single object using a pre-signed URL."""
+### Single-part upload models ###
+class UploadSinglePartObjectRequest(BaseModel):
+    """Request model to upload a single object as a single part using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be uploaded")
     content_length: int = Field(..., description="Size of the file in bytes")

@@ -23,7 +23,11 @@ from divbase_lib.api_schemas.project_versions import (
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
 )
-from divbase_lib.api_schemas.s3 import ExistingFileResponse, PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.api_schemas.s3 import (
+    ExistingFileResponse,
+    PreSignedDownloadResponse,
+    PreSignedSinglePartUploadResponse,
+)
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, convert_checksum_hex_to_base64
 
 
@@ -163,6 +167,7 @@ def upload_files_command(
     """
     file_checksums_hex = {}
     if safe_mode:
+        # TODO - have I enough tests for safe mode...
         for file in all_files:
             file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
 
@@ -201,7 +206,7 @@ def upload_files_command(
         api_route=f"v1/s3/upload?project_name={project_name}",
         json=objects_to_upload,
     )
-    pre_signed_urls = [PreSignedUploadResponse(**item) for item in response.json()]
+    pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
     return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)
 
 

@@ -31,8 +31,8 @@ from divbase_lib.api_schemas.s3 import (
     DownloadObjectRequest,
     ExistingFileResponse,
     PreSignedDownloadResponse,
-    PreSignedUploadResponse,
-    UploadObjectRequest,
+    PreSignedSinglePartUploadResponse,
+    UploadSinglePartObjectRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,10 +95,10 @@ async def list_files(
     return await run_in_threadpool(s3_file_manager.list_files, bucket_name=project.bucket_name)
 
 
-@s3_router.post("/upload", status_code=status.HTTP_200_OK, response_model=list[PreSignedUploadResponse])
+@s3_router.post("/upload", status_code=status.HTTP_200_OK, response_model=list[PreSignedSinglePartUploadResponse])
 async def generate_upload_url(
     project_name: str,
-    objects: list[UploadObjectRequest],
+    objects: list[UploadSinglePartObjectRequest],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):

@@ -12,16 +12,19 @@ from pathlib import Path
 import httpx
 import stamina
 
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
+from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedSinglePartUploadResponse
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
 
-# Used for multipart file downloads
-CHUNK_SIZE = 1024 * 1024 * 8  # 8MB
+# Used for multipart file transfers
+MB = 1024 * 1024
+CHUNK_SIZE = 8 * MB
 MAX_CONCURRENCY = 8
-MULTIPART_DOWNLOAD_THRESHOLD = CHUNK_SIZE * 2
+MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
+# Upload threshold higher as more server client overhead compared to downloads
+MULTIPART_UPLOAD_THRESHOLD = 64 * MB
 
 
 @dataclass
@@ -223,7 +226,7 @@ class UploadOutcome:
 
 
 def upload_multiple_pre_signed_urls(
-    pre_signed_urls: list[PreSignedUploadResponse], all_files: list[Path]
+    pre_signed_urls: list[PreSignedSinglePartUploadResponse], all_files: list[Path]
 ) -> UploadOutcome:
     """
     Upload files using pre-signed PUT URLs.
