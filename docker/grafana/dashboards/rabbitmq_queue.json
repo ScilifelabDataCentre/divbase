@@ -9,7 +9,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "increase(rabbitmq_queue_messages_published_total{queue=~\"celery|long|quick\"}[1m])",
+          "expr": "sum by (queue) (increase(rabbitmq_queue_messages_published_total{queue=~\"celery|long|quick\"}[1m]))",
           "legendFormat": "{{queue}}",
           "interval": ""
         }
