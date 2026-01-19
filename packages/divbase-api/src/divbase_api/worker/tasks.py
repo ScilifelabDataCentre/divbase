@@ -10,6 +10,7 @@ from celery import Celery
 from celery.signals import (
     after_task_publish,
     task_prerun,
+    worker_process_init,
 )
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -24,6 +25,7 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
+from divbase_api.worker.metrics import start_metrics_server
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -59,6 +61,12 @@ app.conf.update(
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
+
+
+@worker_process_init.connect
+def init_worker_metrics(**kwargs):
+    """Start the Prometheus metrics server for the Celery worker. Ensures that only Celery workers start the metrics server."""
+    start_metrics_server(port=8001)
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
