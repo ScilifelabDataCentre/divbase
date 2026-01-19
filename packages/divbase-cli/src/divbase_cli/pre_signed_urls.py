@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+import stamina
 
 from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedUploadResponse
 from divbase_lib.exceptions import ChecksumVerificationError
@@ -127,6 +128,20 @@ def _get_content_length_and_checksum(httpx_client: httpx.Client, pre_signed_url:
     return content_length, server_checksum
 
 
+def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
+    """
+    Used by stamina's (library for retries) decorators to determine whether to retry the function or not.
+    We avoid retrying on HTTPStatusError for 4xx errors as no point (e.g. 404 Not Found or 403 Forbidden etc...).
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+
+    # Want to retry on other HTTPError (parent of HTTPStatusError),
+    # as this includes timeouts, connection errors, etc.
+    return isinstance(exc, httpx.HTTPError)
+
+
+@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
 def _perform_singlepart_download(httpx_client: httpx.Client, pre_signed_url: str, output_file_path: Path) -> None:
     """Used on objects smaller than the multipart threshold cutoff"""
     with httpx_client.stream("GET", pre_signed_url) as response:
@@ -167,6 +182,7 @@ def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, 
             future.result()
 
 
+@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
 def _download_chunk(client: httpx.Client, url: str, start: int, end: int, output_file_path: Path) -> None:
     """
     Downloads a specific range of bytes of a file (aka chunk),
