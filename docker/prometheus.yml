@@ -9,3 +9,6 @@ scrape_configs:
     metrics_path: /metrics/per-object
     static_configs:
       - targets: ['rabbitmq:15692']
+  - job_name: 'celery-workers'
+    static_configs:
+      - targets: ['worker-quick:8001', 'worker-long:8001']
