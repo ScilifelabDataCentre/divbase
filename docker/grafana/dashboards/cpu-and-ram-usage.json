@@ -2,6 +2,9 @@
   "id": null,
   "title": "Container CPU & Memory Usage (cAdvisor)",
   "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
   "panels": [
     {
       "type": "timeseries",
@@ -39,8 +42,5 @@
       },
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 }
     }
-  ],
-  "schemaVersion": 36,
-  "version": 1,
-  "refresh": "5s"
+  ]
 }

@@ -1,5 +1,6 @@
 {
   "id": null,
+  "uid": "e18c30be-908a-46b3-84fc-8dd353e39b62",
   "title": "Celery Worker Prometheus Client Metrics",
   "timezone": "browser",
   "schemaVersion": 36,
@@ -7,106 +8,417 @@
   "refresh": "5s",
   "panels": [
     {
+      "id": 1,
       "type": "timeseries",
       "title": "CPU Usage (%) per Worker Process (Container/Pod; % of a Single CPU Core)",
       "datasource": "Prometheus",
       "targets": [
         {
           "expr": "celery_worker_prom_client_cpu_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})"
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
-        }
+          "unit": "percent",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 0 },
+      "pluginVersion": "12.3.1"
     },
     {
-      "type": "timeseries",
-      "title": "CPU Time (Total Seconds) per Worker Process (Container/Pod)",
+      "id": 2,
+      "type": "gauge",
+      "title": "CPU Usage (%) Gauge",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "celery_worker_prom_client_cpu_time_total",
-          "legendFormat": "{{instance}} ({{worker_name}})"
+          "expr": "celery_worker_prom_client_cpu_percent",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
-        }
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "orientation": "auto",
+        "minVizHeight": 75,
+        "minVizWidth": 75
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "pluginVersion": "12.3.1"
     },
     {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory Usage (% of Container/Pod Memory Limit) per Worker Process",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_memory_percent",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 8 },
+      "pluginVersion": "12.3.1"
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Memory Usage (%) Gauge",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_memory_percent",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "orientation": "auto",
+        "minVizHeight": 75,
+        "minVizWidth": 75
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "pluginVersion": "12.3.1"
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Current Memory Usage (Bytes)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_memory_bytes",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "id": 6,
       "type": "timeseries",
       "title": "Memory Usage (Bytes) per Worker Process (Container/Pod)",
       "datasource": "Prometheus",
       "targets": [
         {
           "expr": "celery_worker_prom_client_memory_bytes",
-          "legendFormat": "{{instance}} ({{worker_name}})"
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
-        }
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+      "pluginVersion": "12.3.1"
     },
     {
-      "type": "timeseries",
-      "title": "Memory Usage (%) per Worker Process (Container/Pod)",
+      "id": 7,
+      "type": "stat",
+      "title": "Current Open File Descriptors",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "celery_worker_prom_client_memory_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
-    },
-    {
-      "type": "timeseries",
-      "title": "Number of Threads per Worker Process (Container/Pod)",
-      "datasource": "Prometheus",
-      "targets": [
-        {
-          "expr": "celery_worker_prom_client_num_threads",
-          "legendFormat": "{{instance}} ({{worker_name}})"
+          "expr": "celery_worker_prom_client_open_fds",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "none"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "gridPos": { "h": 3, "w": 12, "x": 0, "y": 27 }
     },
     {
+      "id": 8,
+      "type": "stat",
+      "title": "Current Number of Threads",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_num_threads",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "gridPos": { "h": 3, "w": 12, "x": 12, "y": 27 }
+    },
+    {
+      "id": 9,
       "type": "timeseries",
       "title": "Open File Descriptors per Worker Process (Container/Pod)",
       "datasource": "Prometheus",
       "targets": [
         {
           "expr": "celery_worker_prom_client_open_fds",
-          "legendFormat": "{{instance}} ({{worker_name}})"
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
-        }
+          "unit": "none",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "pluginVersion": "12.3.1"
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Number of Threads per Worker Process (Container/Pod)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_num_threads",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "pluginVersion": "12.3.1"
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Cumulative CPU Time (Seconds)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_cpu_time_total",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 36 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "CPU Time (Total Seconds) per Worker Process (Container/Pod; cumulative)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "celery_worker_prom_client_cpu_time_total",
+          "legendFormat": "{{instance}} ({{worker_name}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none", "hideZeros": false }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 38 },
+      "pluginVersion": "12.3.1"
     }
-  ]
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  }
 }
