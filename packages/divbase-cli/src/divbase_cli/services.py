@@ -203,7 +203,7 @@ def upload_files_command(
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/upload?project_name={project_name}",
+        api_route=f"v1/s3/upload/single-part?project_name={project_name}",
         json=objects_to_upload,
     )
     pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
