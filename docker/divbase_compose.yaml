@@ -21,6 +21,8 @@ services:
       - 5672:5672
       - 15692:15692 # Prometheus metrics endpoint
     environment:
+      - RABBITMQ_DEFAULT_USER=celery_user
+      - RABBITMQ_DEFAULT_PASS=badpassword
       - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_prometheus true
       - RABBITMQ_PROMETHEUS_RETURN_PER_OBJECT_METRICS=true # enable per-queue metrics
     volumes:
@@ -48,7 +50,7 @@ services:
       db-migrator:
         condition: service_completed_successfully
     environment: &worker-env
-      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+      - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
@@ -164,7 +166,7 @@ services:
     - DIVBASE_ENV=local_dev
     - FRONTEND_BASE_URL=http://localhost:8000
     - MKDOCS_SITE_URL=http://localhost:8008/divbase 
-    - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+    - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
