@@ -65,7 +65,10 @@ app.conf.update(
 
 @worker_process_init.connect
 def init_worker_metrics(**kwargs):
-    """Start the Prometheus metrics server for the Celery worker. Ensures that only Celery workers start the metrics server."""
+    """
+    Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
+    With celery prefork concurrency, only the first worker process to execute will successfully bind to port 8001.
+    """
     start_metrics_server(port=8001)
 
 
