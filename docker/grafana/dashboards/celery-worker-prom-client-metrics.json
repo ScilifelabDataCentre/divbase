@@ -15,7 +15,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_cpu_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -48,7 +48,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_cpu_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -87,7 +87,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_memory_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -120,7 +120,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_memory_percent",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -159,7 +159,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_memory_bytes",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -190,7 +190,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_memory_bytes",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -223,7 +223,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_open_fds",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -254,7 +254,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_num_threads",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -285,7 +285,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_open_fds",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -318,7 +318,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_num_threads",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -351,7 +351,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_cpu_time_total",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
@@ -382,7 +382,7 @@
       "targets": [
         {
           "expr": "celery_worker_prom_client_cpu_time_total",
-          "legendFormat": "{{instance}} ({{worker_name}})",
+          "legendFormat": "{{worker_name}} - PID {{pid}}",
           "refId": "A"
         }
       ],
