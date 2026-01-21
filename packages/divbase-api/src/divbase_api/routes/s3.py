@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
-from divbase_api.crud.s3 import check_files_already_exist_by_checksum
+from divbase_api.crud.s3 import get_s3_checksums
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
@@ -30,13 +30,12 @@ from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadRequest,
     AbortMultipartUploadResponse,
-    CheckFileExistsRequest,
     CompleteMultipartUploadRequest,
     CompleteMultipartUploadResponse,
     CreateMultipartUploadRequest,
     CreateMultipartUploadResponse,
     DownloadObjectRequest,
-    ExistingFileResponse,
+    FileChecksumResponse,
     GetPresignedPartUrlsRequest,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
@@ -263,23 +262,27 @@ async def soft_delete_files(
 
 
 # using POST as GET with body is not considered good practice
-@s3_router.post("/check-exists", status_code=status.HTTP_200_OK, response_model=list[ExistingFileResponse])
-async def check_file_already_exists_by_checksum(
-    files_to_check: list[CheckFileExistsRequest],
+@s3_router.post("/checksums", status_code=status.HTTP_200_OK, response_model=list[FileChecksumResponse])
+async def get_files_checksums(
+    object_names: list[str],
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
-    Check if the files provided already exist in the project's bucket.
-    Compares the MD5 checksums of files of the same name. Returns those that do.
+    Given a list of potential file names in the bucket, return a list of those that exists and their checksums.
+
+    This can be used ahead of time when uploading multiple files and you want to check (before uploading)
+    which files already exist in the bucket.
+
+    It is not assumed that all files provided actually exist in the bucket,
+    only those that do are returned in the response dict.
+
     Max 100 files at a time.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
-        raise AuthorizationError("You don't have permission to check files in this project.")
+        raise AuthorizationError("You don't have permission to get file checksums for this project.")
 
-    check_too_many_objects_in_request(numb_objects=len(files_to_check))
+    check_too_many_objects_in_request(numb_objects=len(object_names))
 
-    return await run_in_threadpool(
-        check_files_already_exist_by_checksum, files_to_check=files_to_check, bucket_name=project.bucket_name
-    )
+    return await run_in_threadpool(get_s3_checksums, bucket_name=project.bucket_name, files_to_check=object_names)

@@ -133,9 +133,8 @@ class CheckFileExistsRequest(BaseModel):
     md5_checksum: str
 
 
-class ExistingFileResponse(BaseModel):
-    """Response model for reporting a file that already exists in the bucket (using it's checksum)"""
+class FileChecksumResponse(BaseModel):
+    """Response model for reporting a file's checksum in the bucket."""
 
-    object_name: str
-    md5_checksum: str
-    matching_object_name: str | None
+    object_name: str = Field(..., description="Name of the object in the bucket")
+    md5_checksum: str = Field(..., description="MD5 checksum of the object in the bucket")

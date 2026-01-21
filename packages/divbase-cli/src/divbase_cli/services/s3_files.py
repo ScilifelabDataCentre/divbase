@@ -9,7 +9,6 @@ from divbase_cli.cli_exceptions import (
     FilesAlreadyInProjectError,
 )
 from divbase_cli.services.pre_signed_urls import (
-    MULTIPART_UPLOAD_THRESHOLD,
     DownloadOutcome,
     FailedUpload,
     SuccessfulUpload,
@@ -20,13 +19,18 @@ from divbase_cli.services.pre_signed_urls import (
 )
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE
+from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.api_schemas.s3 import (
-    ExistingFileResponse,
+    FileChecksumResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
 )
-from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum, convert_checksum_hex_to_base64
+from divbase_lib.s3_checksums import (
+    MD5CheckSumFormat,
+    calculate_composite_md5_s3_etag,
+    calculate_md5_checksum,
+    convert_checksum_hex_to_base64,
+)
 
 
 def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
@@ -125,7 +129,7 @@ def upload_files_command(
 
     files_below_threshold, files_above_threshold = [], []
     for file in all_files:
-        if file.stat().st_size <= MULTIPART_UPLOAD_THRESHOLD:
+        if file.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
             files_below_threshold.append(file)
         else:
             files_above_threshold.append(file)
@@ -179,36 +183,44 @@ def upload_files_command(
 
 def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_files: list[Path]) -> dict[str, str]:
     """
-    Calculate the checksums of all local files (to be uploaded) and compare them to the files (with same name - if they exist)
-    already in the project's S3 bucket.
+    Calculate the checksums of all local files (to be uploaded) and compares them to the checksums of all files in the project's S3 bucket.
+    Raises error if any files already exist in the project's S3 bucket with identical checksums.
 
-    Here we are catching an attempt to upload the same file with the exact same content (checksum) twice.
-    Only ran if 'safe_mode' is enabled for uploads.
+    Here, we are catching an attempt to upload an identical file twice.
+    This is only ran if 'safe_mode' is enabled for uploads.
+    We do not catch an attempt to upload an identical object if it has a different name.
 
-    Return a dict of file names to hex-encoded checksums for all files to be uploaded.
+    Return a dict of file names with hex-encoded checksums for all files to be uploaded (including those that are not in S3).
+    These checksums are later used when uploading to the server so the server can verify the upload.
     """
-    file_checksums_hex = {}
-    for file in all_files:
-        file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
+    already_uploaded_files: dict[Path, str] = {}  # files that already exist in S3 with identical checksum
+    local_checksums: dict[str, str] = {}  # all local files checksums
 
-    files_to_check = []
-    for file in all_files:
-        files_to_check.append({"object_name": file.name, "md5_checksum": file_checksums_hex[file.name]})
+    # have to batch requests if above max number allowed by divbase server
+    for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
+        batch_files = all_files[i : i + MAX_S3_API_BATCH_SIZE]
+        batch_files_names = [file.name for file in batch_files]
 
-    # api accepts up to 100 files to check at a time
-    existing_files = []
-    for i in range(0, len(files_to_check), MAX_S3_API_BATCH_SIZE):
-        batch = files_to_check[i : i + MAX_S3_API_BATCH_SIZE]
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
-            api_route=f"v1/s3/check-exists?project_name={project_name}",
-            json=batch,
+            api_route=f"v1/s3/checksums?project_name={project_name}",
+            json=batch_files_names,
         )
-        existing_files.extend(response.json())
+        server_checksum_responses = [FileChecksumResponse(**item) for item in response.json()]
+        server_checksums = {item.object_name: item.md5_checksum for item in server_checksum_responses}
 
-    if existing_files:
-        existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
-        raise FilesAlreadyInProjectError(existing_files=existing_object_names, project_name=project_name)
+        for file in batch_files:
+            if file.stat().st_size > S3_MULTIPART_UPLOAD_THRESHOLD:
+                calculated_checksum = calculate_composite_md5_s3_etag(file_path=file)
+            else:
+                calculated_checksum = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
 
-    return file_checksums_hex
+            local_checksums[file.name] = calculated_checksum
+            if server_checksums.get(file.name) and server_checksums[file.name] == calculated_checksum:
+                already_uploaded_files[file] = calculated_checksum
+
+    if already_uploaded_files:
+        raise FilesAlreadyInProjectError(existing_files=already_uploaded_files, project_name=project_name)
+
+    return local_checksums

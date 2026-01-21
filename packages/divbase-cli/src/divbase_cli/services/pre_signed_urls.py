@@ -13,7 +13,10 @@ import httpx
 import stamina
 
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_CHUNK_SIZE
+from divbase_lib.api_schemas.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    S3_MULTIPART_CHUNK_SIZE,
+)
 from divbase_lib.api_schemas.s3 import (
     CompleteMultipartUploadRequest,
     CompleteMultipartUploadResponse,
@@ -36,8 +39,6 @@ MB = 1024 * 1024
 DOWNLOAD_CHUNK_SIZE = 8 * MB
 MAX_CONCURRENCY = 10
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
-# Upload threshold higher as more server client overhead compared to downloads
-MULTIPART_UPLOAD_THRESHOLD = 100 * MB
 
 
 @dataclass

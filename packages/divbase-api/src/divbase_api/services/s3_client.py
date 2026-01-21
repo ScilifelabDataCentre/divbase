@@ -10,7 +10,7 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
-from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE
+from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ObjectDoesNotExistError
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class S3FileManager:
         )
         # multipart up/download config
         self.transfer_config = TransferConfig(
-            multipart_threshold=64 * 1024 * 1024,  # 64MiB
+            multipart_threshold=S3_MULTIPART_UPLOAD_THRESHOLD,
             multipart_chunksize=S3_MULTIPART_CHUNK_SIZE,
             max_concurrency=10,
             use_threads=True,
@@ -170,7 +170,7 @@ class S3FileManager:
 
         return key
 
-    def get_file_checksum(self, bucket_name: str, object_name: str) -> str | None:
+    def get_object_checksum_if_exists(self, bucket_name: str, object_name: str) -> str | None:
         """
         Get the MD5 checksum of a file in the bucket, if it exists.
         Returns None if the file does not exist.
@@ -186,22 +186,6 @@ class S3FileManager:
                 )
                 return None
         return response.get("ETag", "").strip('"')
-
-    def get_multiple_checksums(self, bucket_name: str, object_names: list[str]) -> dict[str, str]:
-        """
-        Given a list of potential file names in the bucket, return a dict of those that exists with their checksums.
-
-        Note, this is used when uploading multiple files and want to check which already exist in the bucket.
-        So it should not be assumed all files provided actually exist in the bucket.
-        """
-        matches = {}
-        paginator = self.s3_client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket_name):
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                if key in object_names:
-                    matches[key] = obj.get("ETag", "").strip('"')
-        return matches
 
 
 def create_s3_file_manager(url: str) -> S3FileManager:

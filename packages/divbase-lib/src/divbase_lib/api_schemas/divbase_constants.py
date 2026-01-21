@@ -8,6 +8,12 @@ ONE_MiB = 1024 * 1024
 # to know the part/chunk size used in order to correctly calculate the composite checksum
 S3_MULTIPART_CHUNK_SIZE = 32 * ONE_MiB
 
+# At what point you swap from single part to multipart upload to S3.
+# If server and client used the same threshold then makes life easier
+# when validating the checksums of files in s3 as single part and multipart uploads use different ETag formats.
+# (No benefit in constraining the download threshold, so not done here)
+S3_MULTIPART_UPLOAD_THRESHOLD = 96 * ONE_MiB
+
 # Max number of items that can be processed in a single API call to divbase-api's S3 routes
 # covers e.g pre-signed urls for upload/download, soft delete and checksum comparisons
 # client has to batch requests if exceeding this limit

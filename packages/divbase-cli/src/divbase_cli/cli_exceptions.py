@@ -4,8 +4,6 @@ Custom exceptions for the divbase CLI.
 
 from pathlib import Path
 
-from divbase_lib.api_schemas.s3 import ExistingFileResponse
-
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -87,8 +85,10 @@ class FilesAlreadyInProjectError(DivBaseCLIError):
     and the user does not want to accidently create a new version of any file.
     """
 
-    def __init__(self, existing_files: list[ExistingFileResponse], project_name: str):
-        files_list = "\n".join(f"- '{obj.object_name}'" for obj in existing_files)
+    def __init__(self, existing_files: dict[Path, str], project_name: str):
+        files_list = "\n".join(
+            f"'{file_path}' (Checksum: {checksum})" for file_path, checksum in existing_files.items()
+        )
         self.existing_files = existing_files
         self.project_name = project_name
 
