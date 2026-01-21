@@ -53,7 +53,7 @@ _metrics_server_started = False
 _metrics_lock = threading.Lock()
 
 
-def start_metrics_server(port=8001):
+def start_metrics_server(port=8101):
     """
     Start the Prometheus-client metrics server and metrics collection. Designed to handle celery prefork concurrency >=1.
 

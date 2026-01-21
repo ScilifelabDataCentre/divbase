@@ -71,7 +71,7 @@ services:
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4", "-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
     networks: *internal-network
     ports:
-      - "8001:8001" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
+      - "8101:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
   worker-long:
     hostname: worker-long
     build: *worker-build
@@ -82,7 +82,7 @@ services:
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
     networks: *internal-network
     ports:
-      - "8002:8001" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
+      - "8102:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
   minio:
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     ports:

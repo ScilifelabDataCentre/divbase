@@ -7,7 +7,7 @@ services:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
     ports: !override
-      - "8011:8001" # metrics server port
+      - "8111:8101" # metrics server port
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset [] # no compose watch when running tests
@@ -15,7 +15,7 @@ services:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
     ports: !override
-      - "8012:8002" # metrics server port
+      - "8112:8101" # metrics server port (fixed: container port is 8001, not 8002)
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
