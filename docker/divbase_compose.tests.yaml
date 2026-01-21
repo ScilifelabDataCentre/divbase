@@ -1,8 +1,12 @@
 name: divbase-tests
+networks:
+  divbase-observability: !reset null  # Disable the shared observability network for test stack
 services:
   rabbitmq:
     ports: !override # port mapping is additive when merging compose files, unless overridden like this
       - 5673:5672 #host:container. for the testing env, it's enough to change the host port. The container port remains the same since it is for internal container communication.
+    networks: !override
+      - internal
   worker-quick:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
@@ -11,6 +15,8 @@ services:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset [] # no compose watch when running tests
+    networks: !override
+      - internal
   worker-long:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
@@ -19,6 +25,8 @@ services:
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
+    networks: !override
+      - internal
   minio:
     ports: !override
       - "9002:9000"
@@ -26,6 +34,14 @@ services:
     volumes: !reset []
     tmpfs:
       - /data/
+    networks: !override
+      - external-s3
+  minio-setup:
+    networks: !override
+      - external-s3
+  db-migrator:
+    networks: !override
+      - internal
   fastapi:
     develop: !reset [] 
     ports: !override
@@ -35,12 +51,16 @@ services:
       - FRONTEND_BASE_URL=http://localhost:8001
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
       - S3_PRESIGNING_URL=http://localhost:9002
+    networks: !override
+      - internal
   postgres:
     ports: !override
       - "5433:5432"
     volumes: !reset []
     tmpfs:
       - /var/lib/postgresql/data/pgdata
+    networks: !override
+      - internal
   mailpit:
     ports: !override
       - "1026:1025"
@@ -48,3 +68,5 @@ services:
     volumes: !reset []
     tmpfs:
       - /data/
+    networks: !override
+      - internal
