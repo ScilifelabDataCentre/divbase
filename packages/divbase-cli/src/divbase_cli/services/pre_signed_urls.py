@@ -13,10 +13,12 @@ import httpx
 import stamina
 
 from divbase_cli.user_auth import make_authenticated_request
+from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_CHUNK_SIZE
 from divbase_lib.api_schemas.s3 import (
     CompleteMultipartUploadRequest,
     CompleteMultipartUploadResponse,
     CreateMultipartUploadRequest,
+    CreateMultipartUploadResponse,
     GetPresignedPartUrlsRequest,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
@@ -30,12 +32,12 @@ logger = logging.getLogger(__name__)
 
 # Used for multipart file transfers
 MB = 1024 * 1024
+# We can download in whatever chunk size we want, the checksum validation has to use the right chunk size though
 DOWNLOAD_CHUNK_SIZE = 8 * MB
-MAX_CONCURRENCY = 8
+MAX_CONCURRENCY = 10
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
 # Upload threshold higher as more server client overhead compared to downloads
-MULTIPART_UPLOAD_THRESHOLD = 64 * MB
-UPLOAD_CHUNK_SIZE = 32 * MB
+MULTIPART_UPLOAD_THRESHOLD = 100 * MB
 
 
 @dataclass
@@ -302,35 +304,33 @@ def perform_multipart_upload(
     """
     object_name = file_path.name
     file_size = file_path.stat().st_size
-    upload_id = None
 
     # 1. Create multipart upload
     create_request = CreateMultipartUploadRequest(
         name=object_name,
         content_length=file_size,
-        part_size=UPLOAD_CHUNK_SIZE,
+        part_size=S3_MULTIPART_CHUNK_SIZE,
     )
     response = make_authenticated_request(
-        "POST",
-        divbase_base_url,
-        f"v1/s3/upload/multi-part/create?project_name={project_name}",
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/upload/multi-part/create?project_name={project_name}",
         json=create_request.model_dump(),
     )
-    create_response = response.json()
-    upload_id = create_response["upload_id"]
-    number_of_parts = create_response["number_of_parts"]
+    object_data = CreateMultipartUploadResponse(**response.json())
 
-    # 2. Upload each part in batches of max 100.
+    # 2. Upload each part in batches as divbase server limits how many part urls it will give at once
+    # TODO - edge case: what if file is exactly a multiple of the part/chunk size
+    parts_to_request = list(range(1, object_data.number_of_parts + 1))
+
     uploaded_parts: list[UploadedPart] = []
-    parts_to_request = list(range(1, number_of_parts + 1))
-
-    for i in range(0, len(parts_to_request), 100):
-        part_batch_numbers = parts_to_request[i : i + 100]
+    for i in range(0, len(parts_to_request), MAX_S3_API_BATCH_SIZE):
+        part_batch_numbers = parts_to_request[i : i + MAX_S3_API_BATCH_SIZE]
         part_urls = _get_part_urls(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
             object_name=object_name,
-            upload_id=upload_id,
+            upload_id=object_data.upload_id,
             part_numbers=part_batch_numbers,
             file_path=file_path,
             safe_mode=safe_mode,
@@ -341,13 +341,13 @@ def perform_multipart_upload(
     # 3. Complete multipart upload
     complete_request_body = CompleteMultipartUploadRequest(
         name=object_name,
-        upload_id=upload_id,
+        upload_id=object_data.upload_id,
         parts=uploaded_parts,
     )
     response = make_authenticated_request(
-        "POST",
-        divbase_base_url,
-        f"v1/s3/upload/multi-part/complete?project_name={project_name}",
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/upload/multi-part/complete?project_name={project_name}",
         json=complete_request_body.model_dump(),
     )
     completed_upload = CompleteMultipartUploadResponse(**response.json())
@@ -376,8 +376,8 @@ def _get_part_urls(
         for part_num in part_numbers:
             checksum = calculate_md5_checksum_for_chunk(
                 file_path=file_path,
-                start_byte=(part_num - 1) * UPLOAD_CHUNK_SIZE,
-                chunk_size=UPLOAD_CHUNK_SIZE,
+                start_byte=(part_num - 1) * S3_MULTIPART_CHUNK_SIZE,
+                chunk_size=S3_MULTIPART_CHUNK_SIZE,
             )
             md5_checksums.append(checksum)
 
@@ -389,9 +389,9 @@ def _get_part_urls(
         md5_checksums=md5_checksums,
     )
     response = make_authenticated_request(
-        "POST",
-        divbase_base_url,
-        f"v1/s3/upload/multi-part/part-urls?project_name={project_name}",
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/upload/multi-part/part-urls?project_name={project_name}",
         json=request_body.model_dump(),
     )
     return [PresignedUploadPartUrlResponse(**item) for item in response.json()]
@@ -412,10 +412,10 @@ def _upload_parts(part_urls: list[PresignedUploadPartUrlResponse], file_path: Pa
 def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tuple[int, str]:
     """Uploads a single chunk of a file to a pre-signed URL and returns its part number and ETag."""
 
-    start_byte = (part.part_number - 1) * UPLOAD_CHUNK_SIZE
+    start_byte = (part.part_number - 1) * S3_MULTIPART_CHUNK_SIZE
     with open(file_path, "rb") as f:
         f.seek(start_byte)
-        data_to_upload = f.read(UPLOAD_CHUNK_SIZE)
+        data_to_upload = f.read(S3_MULTIPART_CHUNK_SIZE)
 
     with httpx.Client() as client:
         # TODO - good timeout?

@@ -13,14 +13,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Iterator
 
+from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 from divbase_lib.exceptions import ChecksumVerificationError
 
 logger = logging.getLogger(__name__)
-
-# Chunk size used for multipart uploads to S3.
-# When uploading large files, they are split into many chunks
-# To validate the integrity of the downloaded file, you have to know the chunk size used.
-S3_MULTIPART_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MiB
 
 
 class MD5CheckSumFormat(StrEnum):

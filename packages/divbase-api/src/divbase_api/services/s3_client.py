@@ -10,6 +10,7 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
+from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 from divbase_lib.exceptions import ObjectDoesNotExistError
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,8 @@ class S3FileManager:
         )
         # multipart up/download config
         self.transfer_config = TransferConfig(
-            multipart_threshold=16 * 1024 * 1024,  # 16MB
-            multipart_chunksize=16 * 1024 * 1024,
+            multipart_threshold=64 * 1024 * 1024,  # 64MiB
+            multipart_chunksize=S3_MULTIPART_CHUNK_SIZE,
             max_concurrency=10,
             use_threads=True,
         )

@@ -14,6 +14,11 @@ import boto3
 from botocore.config import Config
 
 from divbase_api.api_config import settings
+from divbase_lib.api_schemas.divbase_constants import (
+    DOWNLOAD_URL_EXPIRATION_SECONDS,
+    MULTI_PART_UPLOAD_URL_EXPIRATION_SECONDS,
+    SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
+)
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadResponse,
     CompleteMultipartUploadResponse,
@@ -25,11 +30,6 @@ from divbase_lib.api_schemas.s3 import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-SINGLE_PART_UPLOAD_EXPIRATION_SECONDS = 3600  # 1 hour
-MULTI_PART_UPLOAD_EXPIRATION_SECONDS = 36000  # 10 hours
-DOWNLOAD_EXPIRATION_SECONDS = 36000  # 10 hours
 
 
 class S3PreSignedService:
@@ -82,7 +82,7 @@ class S3PreSignedService:
         url = self.s3_pre_signing_client.generate_presigned_url(
             ClientMethod="get_object",
             Params={"Bucket": bucket_name, "Key": object_name, **(extra_args or {})},
-            ExpiresIn=DOWNLOAD_EXPIRATION_SECONDS,
+            ExpiresIn=DOWNLOAD_URL_EXPIRATION_SECONDS,
         )
 
         return PreSignedDownloadResponse(
@@ -119,7 +119,7 @@ class S3PreSignedService:
             HttpMethod="PUT",
             ClientMethod="put_object",
             Params=upload_args,
-            ExpiresIn=SINGLE_PART_UPLOAD_EXPIRATION_SECONDS,
+            ExpiresIn=SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
         )
         return PreSignedSinglePartUploadResponse(
             name=object_name, pre_signed_url=pre_signed_url, put_headers=put_headers
@@ -168,7 +168,7 @@ class S3PreSignedService:
 
             url = self.s3_pre_signing_client.generate_presigned_url(
                 ClientMethod="upload_part",
-                ExpiresIn=MULTI_PART_UPLOAD_EXPIRATION_SECONDS,
+                ExpiresIn=MULTI_PART_UPLOAD_URL_EXPIRATION_SECONDS,
                 Params=params,
             )
             urls.append(PresignedUploadPartUrlResponse(part_number=part_number, pre_signed_url=url, headers=headers))

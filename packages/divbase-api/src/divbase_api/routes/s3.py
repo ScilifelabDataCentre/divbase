@@ -26,6 +26,7 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
 from divbase_api.services.s3_client import S3FileManager
+from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadRequest,
     AbortMultipartUploadResponse,
@@ -48,7 +49,10 @@ logger = logging.getLogger(__name__)
 s3_router = APIRouter()
 
 
-def check_too_many_objects_in_request(numb_objects: int, max_objects: int = 100) -> None:
+def check_too_many_objects_in_request(
+    numb_objects: int,
+    max_objects: int = MAX_S3_API_BATCH_SIZE,
+) -> None:
     """
     Helper function to check if too many objects are being requested to be worked on
     in one single request.
@@ -72,7 +76,7 @@ async def generate_download_urls(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to download files from this project.")
 
-    check_too_many_objects_in_request(len(objects_to_download))
+    check_too_many_objects_in_request(numb_objects=len(objects_to_download))
 
     response = []
     for obj in objects_to_download:
@@ -124,7 +128,7 @@ async def generate_single_part_upload_urls(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to upload files to this project.")
 
-    check_too_many_objects_in_request(len(objects))
+    check_too_many_objects_in_request(numb_objects=len(objects))
 
     response = []
     for obj in objects:
@@ -176,7 +180,7 @@ async def get_pre_signed_urls_parts(
         raise AuthorizationError("You don't have permission to upload files to this project.")
 
     numb_parts = parts_request.parts_range_end - parts_request.parts_range_start + 1
-    check_too_many_objects_in_request(numb_parts)
+    check_too_many_objects_in_request(numb_objects=numb_parts)
 
     if parts_request.md5_checksums and len(parts_request.md5_checksums) != numb_parts:
         # TODO should be 400 bad request
@@ -245,7 +249,7 @@ async def soft_delete_files(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to soft delete files in this project.")
 
-    check_too_many_objects_in_request(len(objects))
+    check_too_many_objects_in_request(numb_objects=len(objects))
 
     s3_file_manager = S3FileManager(
         url=settings.s3.endpoint_url,
@@ -274,7 +278,7 @@ async def check_file_already_exists_by_checksum(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to check files in this project.")
 
-    check_too_many_objects_in_request(len(files_to_check))
+    check_too_many_objects_in_request(numb_objects=len(files_to_check))
 
     return await run_in_threadpool(
         check_files_already_exist_by_checksum, files_to_check=files_to_check, bucket_name=project.bucket_name

@@ -20,6 +20,7 @@ from divbase_cli.services.pre_signed_urls import (
 )
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
+from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE
 from divbase_lib.api_schemas.s3 import (
     ExistingFileResponse,
     PreSignedDownloadResponse,
@@ -132,10 +133,10 @@ def upload_files_command(
     all_successful_uploads: list[SuccessfulUpload] = []
     all_failed_uploads: list[FailedUpload] = []
 
-    # P1. Process all single-part uploads in batches of 100.
-    for i in range(0, len(files_below_threshold), 100):
-        batch_files = files_below_threshold[i : i + 100]
-        single_parts_objects_to_upload = []
+    # P1. Process all single-part uploads in batches of max size allowed by divbase server.
+    for i in range(0, len(files_below_threshold), MAX_S3_API_BATCH_SIZE):
+        batch_files = files_below_threshold[i : i + MAX_S3_API_BATCH_SIZE]
+        batch_of_objects_to_upload = []
         for file in batch_files:
             upload_object = {
                 "name": file.name,
@@ -144,13 +145,13 @@ def upload_files_command(
             if safe_mode:
                 hex_checksum = file_checksums_hex[file.name]
                 upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum)
-            single_parts_objects_to_upload.append(upload_object)
+            batch_of_objects_to_upload.append(upload_object)
 
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=f"v1/s3/upload/single-part?project_name={project_name}",
-            json=single_parts_objects_to_upload,
+            json=batch_of_objects_to_upload,
         )
         pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
         single_part_upload_outcome = upload_multiple_singlepart_pre_signed_urls(
@@ -196,8 +197,8 @@ def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_
 
     # api accepts up to 100 files to check at a time
     existing_files = []
-    for i in range(0, len(files_to_check), 100):
-        batch = files_to_check[i : i + 100]
+    for i in range(0, len(files_to_check), MAX_S3_API_BATCH_SIZE):
+        batch = files_to_check[i : i + MAX_S3_API_BATCH_SIZE]
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
