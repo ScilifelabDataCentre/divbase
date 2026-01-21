@@ -168,8 +168,8 @@ def test_bcftools_pipe_query(
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert any("merged" in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
-        "No merged VCF file found in output"
+    assert any("result_of_job_" in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
+        "No result_of_job_ VCF file found in output"
     )
 
 
@@ -344,6 +344,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "project_id": project_id,
             "project_name": project_name,
             "user_id": 1,
+            "job_id": 1,
         }
         with pytest.raises(ValueError) as excinfo:
             bcftools_pipe_task(**params)
@@ -389,7 +390,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Only one file remained after concatenation, renamed this file to",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
                 "bcftools processing completed successfully",
                 "Cleaning up 14 temporary files",
             ],
@@ -437,7 +438,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Only one file remained after concatenation, renamed this file to",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
                 "bcftools processing completed successfully",
             ],
             [],
@@ -461,7 +462,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names do not overlap between temp files, will continue with 'bcftools merge'",
                 "Merged all temporary files into 'merged_unsorted_",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'merged_",
+                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
                 "bcftools processing completed successfully",
                 "Cleaning up 7 temporary files",
             ],
@@ -568,6 +569,11 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     params["bucket_name"] = bucket_name
     project_id = project_map[project_name]
     params["project_id"] = project_id
+    # Add job_id, incrementing for each parameterization
+    if not hasattr(test_bcftools_pipe_cli_integration_with_eager_mode, "call_count"):
+        test_bcftools_pipe_cli_integration_with_eager_mode.call_count = 1
+    params["job_id"] = test_bcftools_pipe_cli_integration_with_eager_mode.call_count
+    test_bcftools_pipe_cli_integration_with_eager_mode.call_count += 1
 
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
