@@ -14,7 +14,7 @@ Could be nice to have a detailed list route (so version IDs, sizes, last modifie
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
 from divbase_api.api_config import settings
@@ -182,8 +182,10 @@ async def get_pre_signed_urls_parts(
     check_too_many_objects_in_request(numb_objects=numb_parts)
 
     if parts_request.md5_checksums and len(parts_request.md5_checksums) != numb_parts:
-        # TODO should be 400 bad request
-        raise ValueError("The number of md5_checksums must match the number of parts requested.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The number of md5_checksums must match the number of parts requested.",
+        )
 
     return s3_signer_service.create_presigned_upload_part_urls(
         bucket_name=project.bucket_name,

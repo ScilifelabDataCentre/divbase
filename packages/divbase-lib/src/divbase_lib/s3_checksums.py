@@ -58,9 +58,10 @@ def calculate_md5_checksum(
     Returns the checksum in either hex-encoded (lowercase) or base64-encoded format.
 
     Used for:
-    - Generating the "Content-MD5" header for S3 uploads (base64-encoded)
-    - Verifying downloaded files against S3 ETag (hex-encoded)
-        (only works for files uploaded as single part - not composite/multipart)
+    - BASE64: The "Content-MD5" header used in uploads to S3.
+    - HEX: Verifying downloaded files against S3's ETag for the file.
+
+    (only works for files which will be uploaded as single part - not composite/multipart uploads)
     """
     md5_hash = hashlib.md5()
 

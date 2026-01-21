@@ -34,11 +34,15 @@ from divbase_lib.s3_checksums import calculate_md5_checksum_for_chunk, verify_do
 logger = logging.getLogger(__name__)
 
 # Used for multipart file transfers
-MB = 1024 * 1024
-# We can download in whatever chunk size we want, the checksum validation has to use the right chunk size though
-DOWNLOAD_CHUNK_SIZE = 8 * MB
 MAX_CONCURRENCY = 10
+
+MB = 1024 * 1024
+# We can download in whatever chunk size we want,
+# the checksum validation has to use the right chunk size though
+# Uploads should use the same threshold and chunk size as divbase-api
+# So those are defined in a shared lib.
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
+DOWNLOAD_CHUNK_SIZE = 8 * MB
 
 
 @dataclass
@@ -74,7 +78,7 @@ def download_multiple_pre_signed_urls(
     Returns a DownloadResults object containing all successful and failed downloads.
     """
     successful_downloads, failed_downloads = [], []
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client() as client:
         for obj in pre_signed_urls:
             output_file_path = download_dir / obj.name
             object_name = obj.name
@@ -249,7 +253,7 @@ def upload_multiple_singlepart_pre_signed_urls(
     file_map = {file.name: file for file in all_files}
 
     successful_uploads, failed_uploads = [], []
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client() as client:
         for obj in pre_signed_urls:
             result = _upload_one_singlepart_pre_signed_url(
                 httpx_client=client,
@@ -321,7 +325,6 @@ def perform_multipart_upload(
     object_data = CreateMultipartUploadResponse(**response.json())
 
     # 2. Upload each part in batches as divbase server limits how many part urls it will give at once
-    # TODO - edge case: what if file is exactly a multiple of the part/chunk size
     parts_to_request = list(range(1, object_data.number_of_parts + 1))
 
     uploaded_parts: list[UploadedPart] = []
@@ -419,12 +422,11 @@ def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tupl
         data_to_upload = f.read(S3_MULTIPART_CHUNK_SIZE)
 
     with httpx.Client() as client:
-        # TODO - good timeout?
         response = client.put(
             part.pre_signed_url,
             content=data_to_upload,
-            timeout=30.0,
             headers=part.headers,
+            timeout=httpx.Timeout(5.0, write=30.0),
         )
         response.raise_for_status()
         # ETag is returned with quotes, which must be stripped prior to comparison
