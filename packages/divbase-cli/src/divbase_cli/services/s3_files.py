@@ -112,28 +112,15 @@ def upload_files_command(
         1. checks if any of the files that are to be uploaded already exist in the bucket (by comparing checksums)
         2. Adds checksum to upload request to allow server to verify upload.
     """
-    file_checksums_hex = {}
     if safe_mode:
-        # TODO - have I enough tests for safe mode...
-        # TODO - batch, with max 100 files...
-        for file in all_files:
-            file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
-
-        files_to_check = []
-        for file in all_files:
-            files_to_check.append({"object_name": file.name, "md5_checksum": file_checksums_hex[file.name]})
-
-        response = make_authenticated_request(
-            method="POST",
+        # mapping of file name to hex-encoded checksum
+        file_checksums_hex = compare_local_to_s3_checksums(
+            project_name=project_name,
             divbase_base_url=divbase_base_url,
-            api_route=f"v1/s3/check-exists?project_name={project_name}",
-            json=files_to_check,
+            all_files=all_files,
         )
-        existing_files = response.json()
-
-        if existing_files:
-            existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
-            raise FilesAlreadyInProjectError(existing_files=existing_object_names, project_name=project_name)
+    else:
+        file_checksums_hex = {}
 
     files_below_threshold, files_above_threshold = [], []
     for file in all_files:
@@ -187,3 +174,40 @@ def upload_files_command(
             all_failed_uploads.append(outcome)
 
     return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads)
+
+
+def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_files: list[Path]) -> dict[str, str]:
+    """
+    Calculate the checksums of all local files (to be uploaded) and compare them to the files (with same name - if they exist)
+    already in the project's S3 bucket.
+
+    Here we are catching an attempt to upload the same file with the exact same content (checksum) twice.
+    Only ran if 'safe_mode' is enabled for uploads.
+
+    Return a dict of file names to hex-encoded checksums for all files to be uploaded.
+    """
+    file_checksums_hex = {}
+    for file in all_files:
+        file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
+
+    files_to_check = []
+    for file in all_files:
+        files_to_check.append({"object_name": file.name, "md5_checksum": file_checksums_hex[file.name]})
+
+    # api accepts up to 100 files to check at a time
+    existing_files = []
+    for i in range(0, len(files_to_check), 100):
+        batch = files_to_check[i : i + 100]
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/check-exists?project_name={project_name}",
+            json=batch,
+        )
+        existing_files.extend(response.json())
+
+    if existing_files:
+        existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
+        raise FilesAlreadyInProjectError(existing_files=existing_object_names, project_name=project_name)
+
+    return file_checksums_hex
