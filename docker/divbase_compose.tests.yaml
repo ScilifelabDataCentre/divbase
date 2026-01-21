@@ -6,12 +6,16 @@ services:
   worker-quick:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
+    ports: !override
+      - "8011:8001" # metrics server port
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset [] # no compose watch when running tests
   worker-long:
     environment:
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
+    ports: !override
+      - "8012:8002" # metrics server port
     volumes:
       - ../tests/fixtures:/app/tests/fixtures
     develop: !reset []
