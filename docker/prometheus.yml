@@ -11,4 +11,4 @@ scrape_configs:
       - targets: ['rabbitmq:15692']
   - job_name: 'celery-workers'
     static_configs:
-      - targets: ['worker-quick:8001', 'worker-long:8001']
+      - targets: ['worker-quick:8101', 'worker-long:8101']
