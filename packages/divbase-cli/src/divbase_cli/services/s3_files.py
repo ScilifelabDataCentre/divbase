@@ -9,10 +9,14 @@ from divbase_cli.cli_exceptions import (
     FilesAlreadyInProjectError,
 )
 from divbase_cli.services.pre_signed_urls import (
+    MULTIPART_UPLOAD_THRESHOLD,
     DownloadOutcome,
+    FailedUpload,
+    SuccessfulUpload,
     UploadOutcome,
     download_multiple_pre_signed_urls,
-    upload_multiple_pre_signed_urls,
+    perform_multipart_upload,
+    upload_multiple_singlepart_pre_signed_urls,
 )
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
@@ -32,6 +36,20 @@ def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
         api_route=f"v1/s3/?project_name={project_name}",
     )
 
+    return response.json()
+
+
+def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
+    """
+    Soft delete objects from the project's bucket.
+    Returns a list of the soft deleted objects
+    """
+    response = make_authenticated_request(
+        method="DELETE",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/?project_name={project_name}",
+        json=all_files,
+    )
     return response.json()
 
 
@@ -97,6 +115,7 @@ def upload_files_command(
     file_checksums_hex = {}
     if safe_mode:
         # TODO - have I enough tests for safe mode...
+        # TODO - batch, with max 100 files...
         for file in all_files:
             file_checksums_hex[file.name] = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
 
@@ -116,38 +135,55 @@ def upload_files_command(
             existing_object_names = [ExistingFileResponse(**file) for file in existing_files]
             raise FilesAlreadyInProjectError(existing_files=existing_object_names, project_name=project_name)
 
-    objects_to_upload = []
+    files_below_threshold, files_above_threshold = [], []
     for file in all_files:
-        upload_object = {
-            "name": file.name,
-            "content_length": file.stat().st_size,
-        }
-        if safe_mode:
-            hex_checksum = file_checksums_hex[file.name]
-            base64_checksum = convert_checksum_hex_to_base64(hex_checksum)
-            upload_object["md5_hash"] = base64_checksum
+        if file.stat().st_size <= MULTIPART_UPLOAD_THRESHOLD:
+            files_below_threshold.append(file)
+        else:
+            files_above_threshold.append(file)
 
-        objects_to_upload.append(upload_object)
+    all_successful_uploads: list[SuccessfulUpload] = []
+    all_failed_uploads: list[FailedUpload] = []
 
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/upload/single-part?project_name={project_name}",
-        json=objects_to_upload,
-    )
-    pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
-    return upload_multiple_pre_signed_urls(pre_signed_urls=pre_signed_urls, all_files=all_files)
+    # P1. Process all single-part uploads in batches of 100.
+    for i in range(0, len(files_below_threshold), 100):
+        batch_files = files_below_threshold[i : i + 100]
+        single_parts_objects_to_upload = []
+        for file in batch_files:
+            upload_object = {
+                "name": file.name,
+                "content_length": file.stat().st_size,
+            }
+            if safe_mode:
+                hex_checksum = file_checksums_hex[file.name]
+                upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum)
+            single_parts_objects_to_upload.append(upload_object)
 
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/upload/single-part?project_name={project_name}",
+            json=single_parts_objects_to_upload,
+        )
+        pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
+        single_part_upload_outcome = upload_multiple_singlepart_pre_signed_urls(
+            pre_signed_urls=pre_signed_urls, all_files=batch_files
+        )
+        all_successful_uploads.extend(single_part_upload_outcome.successful)
+        all_failed_uploads.extend(single_part_upload_outcome.failed)
 
-def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
-    """
-    Soft delete objects from the project's bucket.
-    Returns a list of the soft deleted objects
-    """
-    response = make_authenticated_request(
-        method="DELETE",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/?project_name={project_name}",
-        json=all_files,
-    )
-    return response.json()
+    # P2. process all multipart uploads.
+    for file_path in files_above_threshold:
+        outcome = perform_multipart_upload(
+            project_name=project_name,
+            divbase_base_url=divbase_base_url,
+            file_path=file_path,
+            safe_mode=safe_mode,
+        )
+
+        if isinstance(outcome, SuccessfulUpload):
+            all_successful_uploads.append(outcome)
+        else:
+            all_failed_uploads.append(outcome)
+
+    return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads)

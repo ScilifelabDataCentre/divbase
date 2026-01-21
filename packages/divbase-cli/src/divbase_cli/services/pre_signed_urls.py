@@ -5,26 +5,37 @@ TODO: Consider adding retries, error handling, progress bars, etc.
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 import stamina
 
-from divbase_lib.api_schemas.s3 import PreSignedDownloadResponse, PreSignedSinglePartUploadResponse
+from divbase_cli.user_auth import make_authenticated_request
+from divbase_lib.api_schemas.s3 import (
+    CompleteMultipartUploadRequest,
+    CompleteMultipartUploadResponse,
+    CreateMultipartUploadRequest,
+    GetPresignedPartUrlsRequest,
+    PreSignedDownloadResponse,
+    PreSignedSinglePartUploadResponse,
+    PresignedUploadPartUrlResponse,
+    UploadedPart,
+)
 from divbase_lib.exceptions import ChecksumVerificationError
-from divbase_lib.s3_checksums import verify_downloaded_checksum
+from divbase_lib.s3_checksums import calculate_md5_checksum_for_chunk, verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
 
 # Used for multipart file transfers
 MB = 1024 * 1024
-CHUNK_SIZE = 8 * MB
+DOWNLOAD_CHUNK_SIZE = 8 * MB
 MAX_CONCURRENCY = 8
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
 # Upload threshold higher as more server client overhead compared to downloads
 MULTIPART_UPLOAD_THRESHOLD = 64 * MB
+UPLOAD_CHUNK_SIZE = 32 * MB
 
 
 @dataclass
@@ -167,9 +178,9 @@ def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, 
         f.write(b"\0")
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENCY) as executor:
         futures = []
-        for i in range(0, content_length, CHUNK_SIZE):
+        for i in range(0, content_length, DOWNLOAD_CHUNK_SIZE):
             start = i
-            end = min(i + CHUNK_SIZE, content_length)
+            end = min(i + DOWNLOAD_CHUNK_SIZE, content_length)
             futures.append(
                 executor.submit(
                     _download_chunk,
@@ -225,11 +236,11 @@ class UploadOutcome:
     failed: list[FailedUpload]
 
 
-def upload_multiple_pre_signed_urls(
+def upload_multiple_singlepart_pre_signed_urls(
     pre_signed_urls: list[PreSignedSinglePartUploadResponse], all_files: list[Path]
 ) -> UploadOutcome:
     """
-    Upload files using pre-signed PUT URLs.
+    Upload singlepart files using pre-signed PUT URLs.
     Returns a UploadResults object containing the results of the upload attempts.
     """
     file_map = {file.name: file for file in all_files}
@@ -237,7 +248,7 @@ def upload_multiple_pre_signed_urls(
     successful_uploads, failed_uploads = [], []
     with httpx.Client(timeout=30.0) as client:
         for obj in pre_signed_urls:
-            result = _upload_single_pre_signed_url(
+            result = _upload_one_singlepart_pre_signed_url(
                 httpx_client=client,
                 pre_signed_url=obj.pre_signed_url,
                 file_path=file_map[obj.name],
@@ -253,7 +264,7 @@ def upload_multiple_pre_signed_urls(
     return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
 
 
-def _upload_single_pre_signed_url(
+def _upload_one_singlepart_pre_signed_url(
     httpx_client: httpx.Client,
     pre_signed_url: str,
     file_path: Path,
@@ -261,7 +272,7 @@ def _upload_single_pre_signed_url(
     headers: dict[str, str],
 ) -> SuccessfulUpload | FailedUpload:
     """
-    Upload a single file using a pre-signed PUT URL.
+    Upload one singlepart file to S3 using a pre-signed PUT URL.
     Helper function, do not call directly from outside this module.
     """
     with open(file_path, "rb") as file:
@@ -272,3 +283,149 @@ def _upload_single_pre_signed_url(
             return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
 
     return SuccessfulUpload(file_path=file_path, object_name=object_name)
+
+
+### multipart upload logic below ###
+
+
+def perform_multipart_upload(
+    project_name: str,
+    divbase_base_url: str,
+    file_path: Path,
+    safe_mode: bool,
+) -> SuccessfulUpload | FailedUpload:
+    """
+    Manages the entire multi-part upload process for a single file.
+    Protocol as follows: TODO
+
+    # TODO - error handling, which leads to abort the upload
+    """
+    object_name = file_path.name
+    file_size = file_path.stat().st_size
+    upload_id = None
+
+    # 1. Create multipart upload
+    create_request = CreateMultipartUploadRequest(
+        name=object_name,
+        content_length=file_size,
+        part_size=UPLOAD_CHUNK_SIZE,
+    )
+    response = make_authenticated_request(
+        "POST",
+        divbase_base_url,
+        f"v1/s3/upload/multi-part/create?project_name={project_name}",
+        json=create_request.model_dump(),
+    )
+    create_response = response.json()
+    upload_id = create_response["upload_id"]
+    number_of_parts = create_response["number_of_parts"]
+
+    # 2. Upload each part in batches of max 100.
+    uploaded_parts: list[UploadedPart] = []
+    parts_to_request = list(range(1, number_of_parts + 1))
+
+    for i in range(0, len(parts_to_request), 100):
+        part_batch_numbers = parts_to_request[i : i + 100]
+        part_urls = _get_part_urls(
+            project_name=project_name,
+            divbase_base_url=divbase_base_url,
+            object_name=object_name,
+            upload_id=upload_id,
+            part_numbers=part_batch_numbers,
+            file_path=file_path,
+            safe_mode=safe_mode,
+        )
+        batch_uploads = _upload_parts(part_urls=part_urls, file_path=file_path)
+        uploaded_parts.extend(batch_uploads)
+
+    # 3. Complete multipart upload
+    complete_request_body = CompleteMultipartUploadRequest(
+        name=object_name,
+        upload_id=upload_id,
+        parts=uploaded_parts,
+    )
+    response = make_authenticated_request(
+        "POST",
+        divbase_base_url,
+        f"v1/s3/upload/multi-part/complete?project_name={project_name}",
+        json=complete_request_body.model_dump(),
+    )
+    completed_upload = CompleteMultipartUploadResponse(**response.json())
+    return SuccessfulUpload(file_path=file_path, object_name=completed_upload.name)
+
+    # 4. TODO - implement error handling, abort upload and checksum validation for final object - is it needed?
+
+
+def _get_part_urls(
+    project_name: str,
+    divbase_base_url: str,
+    object_name: str,
+    upload_id: str,
+    part_numbers: list[int],
+    file_path: Path,
+    safe_mode: bool,
+) -> list[PresignedUploadPartUrlResponse]:
+    """
+    Gets up to 100 pre-signed URLs (from divbase server) for uploading parts of a large file to S3.
+
+    Not responsible for uploading the parts, just getting the URLs.
+    """
+    md5_checksums = None
+    if safe_mode:
+        md5_checksums = []
+        for part_num in part_numbers:
+            checksum = calculate_md5_checksum_for_chunk(
+                file_path=file_path,
+                start_byte=(part_num - 1) * UPLOAD_CHUNK_SIZE,
+                chunk_size=UPLOAD_CHUNK_SIZE,
+            )
+            md5_checksums.append(checksum)
+
+    request_body = GetPresignedPartUrlsRequest(
+        name=object_name,
+        upload_id=upload_id,
+        parts_range_start=part_numbers[0],
+        parts_range_end=part_numbers[-1],
+        md5_checksums=md5_checksums,
+    )
+    response = make_authenticated_request(
+        "POST",
+        divbase_base_url,
+        f"v1/s3/upload/multi-part/part-urls?project_name={project_name}",
+        json=request_body.model_dump(),
+    )
+    return [PresignedUploadPartUrlResponse(**item) for item in response.json()]
+
+
+def _upload_parts(part_urls: list[PresignedUploadPartUrlResponse], file_path: Path) -> list[UploadedPart]:
+    """Uploads a batch of parts in parallel and returns their ETag info."""
+    completed_parts = []
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENCY) as executor:
+        future_to_part = {executor.submit(_upload_chunk, part=part, file_path=file_path): part for part in part_urls}
+        for future in as_completed(future_to_part):
+            part_number, etag = future.result()
+            completed_parts.append(UploadedPart(part_number=part_number, etag=etag))
+    return completed_parts
+
+
+@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
+def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tuple[int, str]:
+    """Uploads a single chunk of a file to a pre-signed URL and returns its part number and ETag."""
+
+    start_byte = (part.part_number - 1) * UPLOAD_CHUNK_SIZE
+    with open(file_path, "rb") as f:
+        f.seek(start_byte)
+        data_to_upload = f.read(UPLOAD_CHUNK_SIZE)
+
+    with httpx.Client() as client:
+        # TODO - good timeout?
+        response = client.put(
+            part.pre_signed_url,
+            content=data_to_upload,
+            timeout=30.0,
+            headers=part.headers,
+        )
+        response.raise_for_status()
+        # ETag is returned with quotes, which must be stripped prior to comparison
+        etag = response.headers["ETag"].strip('"')
+        return part.part_number, etag

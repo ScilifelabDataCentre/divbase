@@ -85,14 +85,14 @@ class PresignedUploadPartUrlResponse(BaseModel):
 
     part_number: int = Field(..., description="Part number", ge=1, le=10000)
     pre_signed_url: str = Field(..., description="Pre-signed URL for uploading this part")
+    headers: dict[str, str] = Field(..., description="Headers to be included in the PUT request for this part")
 
 
 class UploadedPart(BaseModel):
-    """Model representing a part of an object that has been uploaded."""
+    """Model representing a part of an object that has been uploaded via multi-part upload."""
 
     part_number: int = Field(..., description="Part number", ge=1, le=10000)
     etag: str = Field(description="ETag returned by S3 after uploading the part")
-    # TODO - is the etag here "just" the MD5 checksum of that part?
 
 
 class CompleteMultipartUploadRequest(BaseModel):

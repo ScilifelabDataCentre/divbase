@@ -36,20 +36,33 @@ class S3PreSignedService:
     """
     Service to create pre-signed URLs for S3 object upload/download.
     Knows nothing about user authentication/authorization.
+
+    We have 2 s3 client instances here:
+    one for presigning urls,
+    one for direct s3 operations with the service account.
+    Both in production and in in local dev these point to different endpoint URLs.
     """
 
     def __init__(self):
-        self.s3_client = boto3.client(
+        s3_config = Config(
+            retries={
+                "max_attempts": 5,
+                "mode": "adaptive",
+            }
+        )
+        self.s3_pre_signing_client = boto3.client(
             "s3",
             endpoint_url=settings.s3.presigning_url,
             aws_access_key_id=settings.s3.access_key.get_secret_value(),
             aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
-            config=Config(
-                retries={
-                    "max_attempts": 5,
-                    "mode": "adaptive",
-                }
-            ),
+            config=s3_config,
+        )
+        self.s3_client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3.endpoint_url,
+            aws_access_key_id=settings.s3.access_key.get_secret_value(),
+            aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
+            config=s3_config,
         )
 
     def create_presigned_url_for_download(
@@ -66,7 +79,7 @@ class S3PreSignedService:
             :return: Presigned URL as string. If error, returns None.
         """
         extra_args = {"VersionId": version_id} if version_id else None
-        url = self.s3_client.generate_presigned_url(
+        url = self.s3_pre_signing_client.generate_presigned_url(
             ClientMethod="get_object",
             Params={"Bucket": bucket_name, "Key": object_name, **(extra_args or {})},
             ExpiresIn=DOWNLOAD_EXPIRATION_SECONDS,
@@ -102,7 +115,7 @@ class S3PreSignedService:
             upload_args["ContentMD5"] = md5_hash
             put_headers["Content-MD5"] = md5_hash
 
-        pre_signed_url = self.s3_client.generate_presigned_url(
+        pre_signed_url = self.s3_pre_signing_client.generate_presigned_url(
             HttpMethod="PUT",
             ClientMethod="put_object",
             Params=upload_args,
@@ -118,6 +131,8 @@ class S3PreSignedService:
         """
         Tell S3 to start a multipart upload.
         S3 gives us back and upload id, which is included in each part we then upload.
+
+        This action performed by service account so we use the s3_client not the presigning client.
         """
         response = self.s3_client.create_multipart_upload(Bucket=bucket_name, Key=object_name)
         number_of_parts = ceil(content_length / part_size)
@@ -146,16 +161,17 @@ class S3PreSignedService:
                 "UploadId": upload_id,
                 "PartNumber": part_number,
             }
+            headers = {}
             if md5_hash:
                 params["ContentMD5"] = md5_hash
+                headers["Content-MD5"] = md5_hash  # used by client
 
-            url = self.s3_client.generate_presigned_url(
+            url = self.s3_pre_signing_client.generate_presigned_url(
                 ClientMethod="upload_part",
                 ExpiresIn=MULTI_PART_UPLOAD_EXPIRATION_SECONDS,
                 Params=params,
             )
-            # TODO - need to return headers? Content-MD5 and Content-Length?
-            urls.append(PresignedUploadPartUrlResponse(part_number=part_number, pre_signed_url=url))
+            urls.append(PresignedUploadPartUrlResponse(part_number=part_number, pre_signed_url=url, headers=headers))
         return urls
 
     def complete_multipart_upload(
@@ -165,11 +181,17 @@ class S3PreSignedService:
         Complete a multipart upload by telling S3 to assemble all previously uploaded parts.
         Each part must have been successfully uploaded before calling this.
         """
+        s3_formatted_parts = []
+        for part in parts:
+            s3_formatted_parts.append({"ETag": part.etag, "PartNumber": part.part_number})
+        # Parts have to provided in ascending order (client can upload in whatever order).
+        s3_formatted_parts.sort(key=lambda x: x["PartNumber"])
+
         response = self.s3_client.complete_multipart_upload(
             Bucket=bucket_name,
             Key=object_name,
             UploadId=upload_id,
-            MultipartUpload={"Parts": [part.model_dump() for part in parts]},
+            MultipartUpload={"Parts": s3_formatted_parts},
         )
 
         # ETag is the combined etag for the entire object,
