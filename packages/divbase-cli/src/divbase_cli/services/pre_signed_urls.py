@@ -72,10 +72,10 @@ class DownloadOutcome:
 
 def download_multiple_pre_signed_urls(
     pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path
-) -> DownloadOutcome:
+) -> tuple[list[SuccessfulDownload], list[FailedDownload]]:
     """
     Download files using pre-signed URLs.
-    Returns a DownloadResults object containing all successful and failed downloads.
+    Returns a tuple of both the successful and failed downloads.
     """
     successful_downloads, failed_downloads = [], []
     with httpx.Client() as client:
@@ -98,7 +98,7 @@ def download_multiple_pre_signed_urls(
             else:
                 failed_downloads.append(result)
 
-    return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
+    return successful_downloads, failed_downloads
 
 
 def _download_single_pre_signed_url(

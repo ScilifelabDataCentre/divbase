@@ -92,18 +92,26 @@ def download_files_command(
     else:
         json_data = [{"name": obj, "version_id": None} for obj in all_files]
 
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/download?project_name={project_name}",
-        json=json_data,
-    )
-    pre_signed_urls = [PreSignedDownloadResponse(**item) for item in response.json()]
+    successful_downloads, failed_downloads = [], []
+    for i in range(0, len(json_data), MAX_S3_API_BATCH_SIZE):
+        batch_json_data = json_data[i : i + MAX_S3_API_BATCH_SIZE]
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/download?project_name={project_name}",
+            json=batch_json_data,
+        )
+        pre_signed_urls = [PreSignedDownloadResponse(**item) for item in response.json()]
 
-    download_results = download_multiple_pre_signed_urls(
-        pre_signed_urls=pre_signed_urls, download_dir=download_dir, verify_checksums=verify_checksums
-    )
-    return download_results
+        batch_download_success, batch_download_failed = download_multiple_pre_signed_urls(
+            pre_signed_urls=pre_signed_urls,
+            download_dir=download_dir,
+            verify_checksums=verify_checksums,
+        )
+        successful_downloads.extend(batch_download_success)
+        failed_downloads.extend(batch_download_failed)
+
+    return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
 
 
 def upload_files_command(
