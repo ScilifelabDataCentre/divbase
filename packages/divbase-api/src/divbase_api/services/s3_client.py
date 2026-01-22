@@ -1,5 +1,7 @@
 """
 An s3FileManager object that lets you do basic operations with a bucket.
+
+TODO - add some explanation here on single vs multipart and checksum verification etc...
 """
 
 import logging
@@ -10,8 +12,10 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
+from divbase_api.exceptions import DownloadedFileChecksumMismatchError
 from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
-from divbase_lib.exceptions import ObjectDoesNotExistError
+from divbase_lib.exceptions import ChecksumVerificationError, ObjectDoesNotExistError
+from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +153,8 @@ class S3FileManager:
         Downloads the latest version of the file by default unless the the version_id is provided.
 
         Returns the key of the downloaded file.
+
+        # TODO - implement retry logic for checksum verification failures, s3 inbuilt logic doesn't cover this.
         """
         extra_args = {"VersionId": version_id} if version_id else None
         try:
@@ -168,15 +174,43 @@ class S3FileManager:
 
             raise err
 
+        # validate the etag on s3 matches the downloaded file
+        expected_checksum = self.get_object_checksum_if_exists(
+            bucket_name=bucket_name,
+            object_name=key,
+            version_id=version_id,
+        )
+        if not expected_checksum:
+            raise DownloadedFileChecksumMismatchError(
+                file_path=dest,
+                expected_checksum="<missing>",
+                calculated_checksum="not yet calculated - expected behavior",
+            )
+
+        try:
+            verify_downloaded_checksum(file_path=dest, expected_checksum=expected_checksum)
+        except ChecksumVerificationError as err:
+            dest.unlink()  # delete the invalid file as will try again instead.
+            raise DownloadedFileChecksumMismatchError(
+                file_path=dest,
+                expected_checksum=err.expected_checksum,
+                calculated_checksum=err.calculated_checksum,
+            ) from None
+
         return key
 
-    def get_object_checksum_if_exists(self, bucket_name: str, object_name: str) -> str | None:
+    def get_object_checksum_if_exists(
+        self, bucket_name: str, object_name: str, version_id: str | None = None
+    ) -> str | None:
         """
         Get the MD5 checksum of a file in the bucket, if it exists.
         Returns None if the file does not exist.
         """
+        args = {"Bucket": bucket_name, "Key": object_name}
+        if version_id:
+            args["VersionId"] = version_id
         try:
-            response = self.s3_client.head_object(Bucket=bucket_name, Key=object_name)
+            response = self.s3_client.head_object(**args)
         except self.s3_client.exceptions.ClientError as err:
             if err.response["Error"]["Code"] == "404":
                 return None
