@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import FilesAlreadyInProjectError
 from divbase_cli.divbase_cli import app
+from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE
 
 runner = CliRunner()
 
@@ -185,6 +186,79 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
     assert isinstance(result.exception, FileNotFoundError)
 
 
+def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Validates that the batching logic for single-part uploads works correctly when uploading
+    more than MAX_S3_API_BATCH_SIZE files at once.
+    """
+    upload_dir = tmp_path / "many_files"
+    upload_dir.mkdir()
+    num_files = MAX_S3_API_BATCH_SIZE + 5
+
+    for i in range(num_files):
+        (upload_dir / f"test_file_{i}.txt").write_text(f"content_{i}")
+
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"test_file_{i}.txt" in result.stdout
+
+    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"test_file_{i}.txt" in result.stdout
+
+
+def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """
+    Tests that safe mode correctly identifies a duplicate file and raises FilesAlreadyInProjectError,
+    even when the check involves more than MAX_S3_API_BATCH_SIZE files.
+
+    The duplicated file would be in the 2nd batch of files to be uploaded as well.
+    """
+    upload_dir = tmp_path / "uploads_dir"
+    upload_dir.mkdir()
+    num_files = MAX_S3_API_BATCH_SIZE + 5
+
+    for i in range(num_files):
+        (upload_dir / f"safe_mode_test_{i}.txt").write_text(f"content_{i}")
+
+    duplicate_file = upload_dir / f"safe_mode_test_{MAX_S3_API_BATCH_SIZE + 4}.txt"
+    command = f"files upload {duplicate_file} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code != 0
+    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert duplicate_file.name in str(result.exception)
+
+    # Verify that none of the files were uploaded.
+    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    for i in range(num_files - 1):
+        file_name = f"safe_mode_test_{i}.txt"
+        if file_name == duplicate_file.name:
+            assert f"safe_mode_test_{i}.txt" in result.stdout
+        else:
+            assert f"safe_mode_test_{i}.txt" not in result.stdout
+
+    # Now run the upload again without safe_mode turned off, should work
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"safe_mode_test_{i}.txt" in result.stdout
+
+
 def test_download_1_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
     download_dir = tmp_path / "downloads"
@@ -255,6 +329,36 @@ def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp
     assert result.exit_code != 0
     assert "ERROR: Failed to download the following files:" in result.stdout
     assert "nonexistent_file.txt" in result.stdout
+
+
+def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Tests that the batching logic for downloads works correctly when downloading
+    more than MAX_S3_API_BATCH_SIZE (100) files at once.
+    """
+    upload_dir = tmp_path / "many_files_for_download"
+    upload_dir.mkdir()
+    num_files = 105
+
+    for i in range(num_files):
+        (upload_dir / f"download_test_{i}.txt").write_text(f"content_{i}")
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    download_dir = tmp_path / "downloads_dir"
+    download_dir.mkdir()
+    file_names_to_download = [f"download_test_{i}.txt" for i in range(num_files)]
+
+    command = f"files download {' '.join(file_names_to_download)} --download-dir {download_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for i in range(num_files):
+        file_name = f"download_test_{i}.txt"
+        assert file_name in result.stdout
+        assert (download_dir / file_name).exists()
+        assert (download_dir / file_name).read_text() == f"content_{i}"
 
 
 def test_download_at_a_project_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, fixtures_dir):
