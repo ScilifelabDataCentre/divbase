@@ -17,6 +17,8 @@ dependencies = [
     "celery>=5.5.3,<6",
     "alembic>=1.17.2,<2",
     "psycopg2-binary>=2.9.11,<3",
+    "prometheus-client>=0.24.0,<1",
+    "psutil>=7.2.0,<8",
     "divbase-lib"
 ]
 
