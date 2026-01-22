@@ -13,7 +13,6 @@ from celery.signals import (
     task_prerun,
     worker_process_init,
 )
-from prometheus_client import Gauge
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
@@ -27,7 +26,15 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
-from divbase_api.worker.metrics import start_metrics_server
+from divbase_api.worker.metrics import (
+    start_metrics_server,
+    store_task_metric,
+    task_bcftools_step_only_cpu_seconds,
+    task_bcftools_step_only_memory_bytes,
+    task_cpu_seconds,
+    task_memory_bytes,
+    update_prometheus_gauges_from_cache,
+)
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -62,18 +69,6 @@ app.conf.update(
         "group": CELERY_GROUPMETA_TABLE_NAME,
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
-)
-
-# Define per-task metrics. Tasks can export these metrics during their execution, which will make them available for Prometheus scraping.
-task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["task_id", "task_name"])
-task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["task_id", "task_name"])
-task_bcftools_step_only_cpu_seconds = Gauge(
-    "celery_task_bcftools_cpu_seconds_total",
-    "CPU seconds used by bcftools subprocess in task",
-    ["task_id", "task_name"],
-)
-task_bcftools_step_only_memory_bytes = Gauge(
-    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["task_id", "task_name"]
 )
 
 
@@ -310,13 +305,16 @@ def bcftools_pipe_task(
     cpu_used = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
     mem_used = mem_end - mem_start
 
-    task_cpu_seconds.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(cpu_used)
-    task_memory_bytes.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(mem_used)
-    task_bcftools_step_only_cpu_seconds.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(
-        bcftools_cpu_used
-    )
-    task_bcftools_step_only_memory_bytes.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(
-        bcftools_mem_used
+    # Store metrics in cache and update the Prometheus metrics server gauges
+    store_task_metric("task_cpu_seconds", task_id, bcftools_pipe_task.name, cpu_used)
+    store_task_metric("task_memory_bytes", task_id, bcftools_pipe_task.name, mem_used)
+    store_task_metric("task_bcftools_cpu_seconds", task_id, bcftools_pipe_task.name, bcftools_cpu_used)
+    store_task_metric("task_bcftools_memory_bytes", task_id, bcftools_pipe_task.name, bcftools_mem_used)
+    update_prometheus_gauges_from_cache(
+        task_cpu_seconds,
+        task_memory_bytes,
+        task_bcftools_step_only_cpu_seconds,
+        task_bcftools_step_only_memory_bytes,
     )
 
     return {"status": "completed", "output_file": output_file}

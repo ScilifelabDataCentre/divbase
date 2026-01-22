@@ -1,12 +1,20 @@
+import logging
 import os
 import socket
 import threading
 import time
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 import psutil
 from prometheus_client import Gauge, Info, start_http_server
 
-# Define Prometheus metrics. Use the same prefix to simplify discovery in Prometheus and Grafana UIs.
+logger = logging.getLogger(__name__)
+
+WORKER_NAME = socket.gethostname()
+
+## Define Prometheus metrics. Use the same prefix to simplify discovery in Prometheus and Grafana UIs.
+# System metrics
 worker_cpu_percent = Gauge("celery_worker_prom_client_cpu_percent", "CPU usage percent", ["worker_name", "pid"])
 worker_memory_mb = Gauge("celery_worker_prom_client_memory_mb", "Memory usage in MB", ["worker_name", "pid"])
 worker_memory_percent = Gauge(
@@ -19,8 +27,25 @@ worker_cpu_time_total = Gauge(
 worker_memory_bytes = Gauge("celery_worker_prom_client_memory_bytes", "Memory usage in bytes", ["worker_name", "pid"])
 worker_num_threads = Gauge("celery_worker_prom_client_num_threads", "Number of threads", ["worker_name", "pid"])
 worker_open_fds = Gauge("celery_worker_prom_client_open_fds", "Number of open file descriptors", ["worker_name", "pid"])
+# Per-task metrics
+task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["task_id", "task_name"])
+task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["task_id", "task_name"])
+task_bcftools_step_only_cpu_seconds = Gauge(
+    "celery_task_bcftools_cpu_seconds_total",
+    "CPU seconds used by bcftools subprocess in task",
+    ["task_id", "task_name"],
+)
+task_bcftools_step_only_memory_bytes = Gauge(
+    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["task_id", "task_name"]
+)
 
-WORKER_NAME = socket.gethostname()
+# Metrics cache for per-task metrics to persist across multiple task executions
+# Structure: {metric_name: {(task_id, task_name): {"value": float, "timestamp": datetime}}}
+task_metrics_cache = defaultdict(dict)
+metrics_cache_lock = threading.Lock()  # lock threads to avoid race conditions since multiple threads can access the cache (main thread, celery worker threads, purge thread)
+
+# Prometheus scrapes every 15 seconds in DivBase setup. A TLL of 5 min means it is available for 20 scrapes. Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
+TASK_METRICS_CACHE_TTL_MINUTES = int(os.environ.get("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
 
 
 def collect_system_metrics():
@@ -45,8 +70,72 @@ def collect_system_metrics():
             if hasattr(process, "num_fds"):
                 worker_open_fds.labels(worker_name=WORKER_NAME, pid=pid).set(process.num_fds())
         except Exception as e:
-            print(f"Error collecting metrics: {e}")
+            logger.error(f"Error collecting metrics: {e}")
         time.sleep(5)
+
+
+def store_task_metric(metric_name: str, task_id: str, task_name: str, value: float):
+    """Store a task metric in the cache with current timestamp."""
+    with metrics_cache_lock:
+        task_metrics_cache[metric_name][(task_id, task_name)] = {
+            "value": value,
+            "timestamp": datetime.now(),
+        }
+
+
+def purge_old_metrics():
+    """
+    Remove metrics older than TASK_METRICS_CACHE_TTL_MINUTES from cache.
+    Each metric is timestamped when stored and can thus be purged individually based on age.
+    """
+    cutoff_time = datetime.now() - timedelta(minutes=TASK_METRICS_CACHE_TTL_MINUTES)
+    with metrics_cache_lock:
+        for metric_name, gauge in [
+            ("task_cpu_seconds", task_cpu_seconds),
+            ("task_memory_bytes", task_memory_bytes),
+            ("task_bcftools_cpu_seconds", task_bcftools_step_only_cpu_seconds),
+            ("task_bcftools_memory_bytes", task_bcftools_step_only_memory_bytes),
+        ]:
+            tasks_to_remove = [
+                key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
+            ]
+            for key in tasks_to_remove:
+                del task_metrics_cache[metric_name][key]
+                gauge.remove(*key)
+                logger.debug(f"Purged old metric: {metric_name} for task_id={key[0]} from Prometheus client memory")
+
+
+def get_all_cached_metrics():
+    """Get all cached metrics for exposure via Prometheus."""
+    with metrics_cache_lock:
+        return {
+            metric_name: {key: data["value"] for key, data in tasks.items()}
+            for metric_name, tasks in task_metrics_cache.items()
+        }
+
+
+def update_prometheus_gauges_from_cache(task_cpu_gauge, task_mem_gauge, bcftools_cpu_gauge, bcftools_mem_gauge):
+    """Update all Prometheus Gauges with values from the cache."""
+    cached = get_all_cached_metrics()
+
+    for (task_id, task_name), value in cached.get("task_cpu_seconds", {}).items():
+        task_cpu_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+
+    for (task_id, task_name), value in cached.get("task_memory_bytes", {}).items():
+        task_mem_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+
+    for (task_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
+        bcftools_cpu_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+
+    for (task_id, task_name), value in cached.get("task_bcftools_memory_bytes", {}).items():
+        bcftools_mem_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+
+
+def metrics_purge_loop():
+    """Background thread that periodically purges old metrics."""
+    while True:
+        time.sleep(60)
+        purge_old_metrics()
 
 
 _metrics_server_started = False
@@ -76,16 +165,22 @@ def start_metrics_server(port=8101):
     worker_info.info({"worker_name": WORKER_NAME, "pid": str(pid)})
     thread = threading.Thread(target=collect_system_metrics, daemon=True)
     thread.start()
-    print(f"Metrics collection started for PID {pid}")
+    logger.info(f"Metrics collection started for PID {pid}")
 
     with _metrics_lock:
         if not _metrics_server_started:
             try:
                 start_http_server(port)
                 _metrics_server_started = True
-                print(f"Metrics HTTP server started on port {port}")
+                logger.info(f"Metrics HTTP server started on port {port}")
+                logger.info(f"Metrics cache TTL: {TASK_METRICS_CACHE_TTL_MINUTES} minutes")
+
+                # Start background thread for purging old metrics
+                purge_thread = threading.Thread(target=metrics_purge_loop, daemon=True)
+                purge_thread.start()
+                logger.info("Metrics purge thread started")
             except OSError as e:
                 if e.errno == 98:  # Address already in use
-                    print(f"Metrics server already running on port {port} (started by another process)")
+                    logger.info(f"Metrics server already running on port {port} (started by another process)")
                 else:
                     raise
