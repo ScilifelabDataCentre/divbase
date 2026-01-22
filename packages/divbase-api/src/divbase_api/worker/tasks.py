@@ -28,12 +28,17 @@ from divbase_api.worker.crud_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.worker.metrics import (
+    MemoryMonitor,
     start_metrics_server,
     store_task_metric,
+    task_bcftools_memory_avg_bytes,
+    task_bcftools_memory_peak_bytes,
     task_bcftools_step_only_cpu_seconds,
     task_bcftools_step_only_memory_bytes,
     task_cpu_seconds,
+    task_memory_avg_bytes,
     task_memory_bytes,
+    task_memory_peak_bytes,
     update_prometheus_gauges_from_cache,
 )
 from divbase_api.worker.vcf_dimension_indexing import (
@@ -219,6 +224,10 @@ def bcftools_pipe_task(
     cpu_start = process.cpu_times()
     mem_start = process.memory_info().rss
 
+    # Start monitoring memory for peak and average tracking
+    memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+    memory_monitor.start()
+
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
@@ -282,37 +291,44 @@ def bcftools_pipe_task(
         )
     )
 
-    # Monitor bcftools resource usage separately
-    bcftools_process = psutil.Process()
-    bcftools_cpu_start = bcftools_process.cpu_times()
-    bcftools_mem_start = bcftools_process.memory_info().rss
-
+    # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+    output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
 
-    bcftools_cpu_end = bcftools_process.cpu_times()
-    bcftools_mem_end = bcftools_process.memory_info().rss
-    bcftools_cpu_used = (bcftools_cpu_end.user + bcftools_cpu_end.system) - (
-        bcftools_cpu_start.user + bcftools_cpu_start.system
-    )
-    bcftools_mem_used = bcftools_mem_end - bcftools_mem_start
+    # Extract bcftools subprocess metrics
+    bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
+    bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
+    bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
+    # Delta not meaningful from subprocess metrics, use 0
+    bcftools_mem_used = 0.0
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
+    # Stop monitoring and get final stats
+    memory_stats = memory_monitor.stop()
+
     cpu_end = process.cpu_times()
     mem_end = process.memory_info().rss
-    cpu_used = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+    python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
     mem_used = mem_end - mem_start
+
+    # Total task CPU = Python overhead + bcftools subprocess CPU
+    # This allows stacked bar chart: total = bcftools + overhead
+    total_task_cpu = python_overhead_cpu + bcftools_cpu_used
 
     _record_task_metrics(
         job_id=job_id,
         task_name=bcftools_pipe_task.name,
-        cpu_used=cpu_used,
+        cpu_used=total_task_cpu,
         mem_used=mem_used,
+        mem_peak=memory_stats["peak_bytes"],
+        mem_avg=memory_stats["avg_bytes"],
         bcftools_cpu_used=bcftools_cpu_used,
         bcftools_mem_used=bcftools_mem_used,
+        bcftools_mem_peak=bcftools_mem_peak,
+        bcftools_mem_avg=bcftools_mem_avg,
     )
 
     return {"status": "completed", "output_file": output_file}
@@ -690,8 +706,12 @@ def _record_task_metrics(
     task_name: str,
     cpu_used: float,
     mem_used: float,
+    mem_peak: float = None,
+    mem_avg: float = None,
     bcftools_cpu_used: Optional[float] = None,
     bcftools_mem_used: Optional[float] = None,
+    bcftools_mem_peak: Optional[float] = None,
+    bcftools_mem_avg: Optional[float] = None,
 ) -> None:
     """
     Helper function that records task metrics to the cache and updates Prometheus gauges so that they can be served by the worker metrics server.
@@ -703,15 +723,28 @@ def _record_task_metrics(
 
     store_task_metric("task_cpu_seconds", job_id, task_name, cpu_used)
     store_task_metric("task_memory_bytes", job_id, task_name, mem_used)
+    if mem_peak is not None:
+        store_task_metric("task_memory_peak_bytes", job_id, task_name, mem_peak)
+    if mem_avg is not None:
+        store_task_metric("task_memory_avg_bytes", job_id, task_name, mem_avg)
     if bcftools_cpu_used is not None:
         store_task_metric("task_bcftools_cpu_seconds", job_id, task_name, bcftools_cpu_used)
     if bcftools_mem_used is not None:
         store_task_metric("task_bcftools_memory_bytes", job_id, task_name, bcftools_mem_used)
+    if bcftools_mem_peak is not None:
+        store_task_metric("task_bcftools_memory_peak_bytes", job_id, task_name, bcftools_mem_peak)
+    if bcftools_mem_avg is not None:
+        store_task_metric("task_bcftools_memory_avg_bytes", job_id, task_name, bcftools_mem_avg)
+
     update_prometheus_gauges_from_cache(
         task_cpu_seconds,
         task_memory_bytes,
         task_bcftools_step_only_cpu_seconds,
         task_bcftools_step_only_memory_bytes,
+        task_memory_peak_bytes,
+        task_memory_avg_bytes,
+        task_bcftools_memory_peak_bytes,
+        task_bcftools_memory_avg_bytes,
     )
 
 

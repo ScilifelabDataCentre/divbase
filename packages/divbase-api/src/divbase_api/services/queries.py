@@ -8,11 +8,13 @@ import gzip
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import psutil
 
 from divbase_lib.api_schemas.queries import SampleMetadataQueryTaskResult
 from divbase_lib.exceptions import (
@@ -127,11 +129,14 @@ class BcftoolsQueryManager:
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> str:
+    def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> tuple[str, dict[str, float]]:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
         passes that on to another method that process the commands according to the "merge-last" strategy.
+
+        Returns a tuple of (output_file, metrics) where metrics contains accumulated CPU and memory stats
+        for all bcftools subprocesses.
         """
 
         in_docker = os.path.exists("/.dockerenv")
@@ -147,8 +152,8 @@ class BcftoolsQueryManager:
         identifier = job_id if job_id else datetime.datetime.now().timestamp()
 
         commands_config_structure = self.build_commands_config(command, bcftools_inputs, identifier)
-        output_file = self.process_bcftools_commands(commands_config_structure, identifier)
-        return output_file
+        output_file, metrics = self.process_bcftools_commands(commands_config_structure, identifier)
+        return output_file, metrics
 
     @contextlib.contextmanager
     def temp_file_management(self):
@@ -215,42 +220,72 @@ class BcftoolsQueryManager:
 
         return commands_config_structure
 
-    def process_bcftools_commands(self, commands_config: list[dict[str, Any]], identifier: str) -> str:
+    def process_bcftools_commands(
+        self, commands_config: list[dict[str, Any]], identifier: str
+    ) -> tuple[str, dict[str, float]]:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
         the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
         looping over VCF files). Once the outer loop is done, it calls a method to merge all temporary results files
         into a single output VCF file.
+
+        Returns a tuple of (output_file, metrics) where metrics contains accumulated CPU and memory stats
+        for all bcftools subprocesses.
         """
         with self.temp_file_management() as temp_file_manager:
             logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
 
             final_output_temp_files = None
 
+            # Accumulate metrics across all commands
+            total_cpu_seconds = 0.0
+            max_peak_memory = 0
+            all_memory_samples = []
+
             for cmd_config in commands_config:
                 logger.info(f"Processing command #{cmd_config['counter'] + 1}: {cmd_config['command']}")
-                output_temp_files = self.run_current_command(cmd_config)
+                output_temp_files, cmd_metrics = self.run_current_command(cmd_config)
                 temp_file_manager.temp_files.extend(output_temp_files)
                 final_output_temp_files = output_temp_files
+
+                total_cpu_seconds += cmd_metrics.get("cpu_seconds", 0)
+                max_peak_memory = max(max_peak_memory, cmd_metrics.get("peak_memory_bytes", 0))
+                if cmd_metrics.get("avg_memory_bytes", 0) > 0:
+                    all_memory_samples.append(cmd_metrics["avg_memory_bytes"])
 
             output_file = self.merge_or_concat_bcftools_temp_files(final_output_temp_files, identifier)
 
             logger.info("bcftools processing completed successfully")
 
-            return output_file
+            avg_memory = sum(all_memory_samples) / len(all_memory_samples) if all_memory_samples else 0
 
-    def run_current_command(self, cmd_config: dict[str, Any]) -> list[str]:
+            metrics = {
+                "cpu_seconds": total_cpu_seconds,
+                "peak_memory_bytes": max_peak_memory,
+                "avg_memory_bytes": avg_memory,
+            }
+
+            return output_file, metrics
+
+    def run_current_command(self, cmd_config: dict[str, Any]) -> tuple[list[str], dict[str, float]]:
         """
         Method that handles the inner loop of the merge-last strategy: for each command pass from the outer loop,
         it processes all given input VCF files individually by running the command on each file using run_bcftools().
         For each processed file, a temporary output file is created, which is then used as input for the next command
         in the outer loop. Each temporary output file is indexed with a .csi index file using ensure_csi_index().
-        The method returns a list of output temporary files created by running the command on each input file.
+
+        Returns a tuple of (output_temp_files, metrics) where metrics contains accumulated CPU and memory stats
+        for all bcftools subprocesses executed in this command.
         """
         command = cmd_config["command"]
         input_files = cmd_config["input_files"]
         output_temp_files = cmd_config["output_temp_files"]
         sample_subset = cmd_config["sample_subset"]
+
+        # Accumulate metrics across all bcftools subprocess calls
+        total_cpu_seconds = 0.0
+        peak_memory = 0
+        memory_samples = []
 
         for f_counter, file in enumerate(input_files):
             temp_file = output_temp_files[f_counter]
@@ -264,27 +299,103 @@ class BcftoolsQueryManager:
 
             cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
             formatted_cmd = f"{cmd_with_samples} {file} -Oz -o {temp_file}"
-            self.run_bcftools(command=formatted_cmd)
-            self.ensure_csi_index(temp_file)
-        return output_temp_files
 
-    def run_bcftools(self, command: str) -> None:
+            # Run bcftools and monitor the subprocess
+            proc = self.run_bcftools(command=formatted_cmd)
+
+            current_cpu = 0.0  # Initialize to track CPU usage
+            loop_iterations = 0
+
+            try:
+                # Monitor the bcftools subprocess
+                bcftools_proc = psutil.Process(proc.pid)
+                cpu_start = bcftools_proc.cpu_times()
+                logger.info(
+                    f"Started monitoring bcftools PID {proc.pid}, initial CPU: user={cpu_start.user}, system={cpu_start.system}"
+                )
+
+                # Take initial memory sample immediately
+                try:
+                    mem = bcftools_proc.memory_info().rss
+                    memory_samples.append(mem)
+                    peak_memory = max(peak_memory, mem)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+                # Sample memory and CPU while process is running
+                while proc.poll() is None:
+                    loop_iterations += 1
+                    try:
+                        mem = bcftools_proc.memory_info().rss
+                        memory_samples.append(mem)
+                        peak_memory = max(peak_memory, mem)
+
+                        cpu_current = bcftools_proc.cpu_times()
+                        current_cpu = (cpu_current.user + cpu_current.system) - (cpu_start.user + cpu_start.system)
+
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        break
+                    # Set interval between measurements
+                    time.sleep(0.01)
+                    # TODO sleep time could be longer to reduce overhead, but then fast processes might be missed
+
+                logger.info(
+                    f"Monitoring loop completed after {loop_iterations} iterations, current_cpu={current_cpu:.6f}s"
+                )
+
+                # Wait for process to complete and check return code
+                returncode = proc.wait()
+                if returncode != 0:
+                    raise BcftoolsCommandError(
+                        command=formatted_cmd, error_details=f"Process exited with code {returncode}"
+                    ) from None
+
+                # Add CPU to total (will be 0.0 if process was too fast to measure)
+                total_cpu_seconds += current_cpu
+                logger.info(
+                    f"Bcftools subprocess finished: CPU={current_cpu:.6f}s, Peak memory={peak_memory} bytes, Samples={len(memory_samples)}"
+                )
+
+            except psutil.NoSuchProcess:
+                returncode = proc.wait()
+                if returncode != 0:
+                    raise BcftoolsCommandError(
+                        command=formatted_cmd, error_details=f"Process exited with code {returncode}"
+                    ) from None
+                logger.info("Bcftools process finished too quickly to monitor - caught NoSuchProcess")
+
+            self.ensure_csi_index(temp_file)
+
+        # Calculate average memory
+        avg_memory = sum(memory_samples) / len(memory_samples) if memory_samples else 0
+
+        metrics = {
+            "cpu_seconds": total_cpu_seconds,
+            "peak_memory_bytes": peak_memory,
+            "avg_memory_bytes": avg_memory,
+        }
+
+        return output_temp_files, metrics
+
+    def run_bcftools(self, command: str) -> subprocess.Popen:
         """
         Methid to run a bcftools command inside a Docker container that has bcftools installed.
         This method is specifically designed to with a Celery manager in an upper layer of the architechture.
         In short, the CLI layer handles the task management and submission to Celery, which can be either synchronous or asynchronous.
 
         Synchronous tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
-        and runs the command inside it using `docker exec` and `subprocess.run`. I.e. the host machine executes the command
+        and runs the command inside it using `docker exec` and `subprocess.Popen`. I.e. the host machine executes the command
         inside the container.
 
         Asynchronous tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
-        inside the containter with `subprocess.run`. I.e. the container itself executes the command inside itself.
+        inside the containter with `subprocess.Popen`. I.e. the container itself executes the command inside itself.
 
         To identify if the job is running async, the method evaluates if the current process is running inside a docker container by checking
         for the existence of the /.dockerenv file. If the file exists, it assumes that the command is run asynchronously inside the Celery worker
         container. If the file does not exist, it assumes that the command is run synchronously and tries to find the container ID of the running
         bcftools container using the get_container_id() method.
+
+        Returns the subprocess.Popen object so the caller can monitor resource usage.
         """
         logger.info(f"Running: bcftools {command}")
 
@@ -294,21 +405,23 @@ class BcftoolsQueryManager:
         if in_docker or in_k8s:
             logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
             try:
-                subprocess.run(["bcftools"] + command.split(), check=True)
-            except subprocess.CalledProcessError as e:
+                proc = subprocess.Popen(["bcftools"] + command.split())
+                return proc
+            except Exception as e:
                 logger.error(f"Failed to run bcftools directly: {e}")
-                raise BcftoolsCommandError(command=command, error_details=e) from e
+                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
         else:
             try:
                 container_id = self.get_container_id(self.CONTAINER_NAME)
                 logger.debug(f"Executing command in container with ID: {container_id}")
                 docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
-                subprocess.run(docker_cmd, check=True)
+                proc = subprocess.Popen(docker_cmd)
+                return proc
             except BcftoolsEnvironmentError:
                 raise
-            except subprocess.CalledProcessError as e:
+            except Exception as e:
                 logger.error(f"Failed to run bcftools in container: {e}")
-                raise BcftoolsCommandError(command=command, error_details=e) from e
+                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
 
     def ensure_csi_index(self, file: str) -> None:
         """
@@ -320,7 +433,8 @@ class BcftoolsQueryManager:
         index_file = f"{file}.csi"
         if not os.path.exists(index_file):
             index_command = f"index -f {file}"
-            self.run_bcftools(command=index_command)
+            proc = self.run_bcftools(command=index_command)
+            proc.wait()
 
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
         """
@@ -357,7 +471,8 @@ class BcftoolsQueryManager:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
-                self.run_bcftools(command=merge_command)
+                proc = self.run_bcftools(command=merge_command)
+                proc.wait()
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
             else:
                 logger.info(
@@ -370,7 +485,8 @@ class BcftoolsQueryManager:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
                         concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
-                        self.run_bcftools(command=concat_command)
+                        proc = self.run_bcftools(command=concat_command)
+                        proc.wait()
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
                         self.ensure_csi_index(concat_temp)
@@ -381,7 +497,8 @@ class BcftoolsQueryManager:
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
-                    self.run_bcftools(command=merge_command)
+                    proc = self.run_bcftools(command=merge_command)
+                    proc.wait()
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                 elif len(temp_concat_files) == 1:
                     os.rename(temp_concat_files[0], unsorted_output_file)
@@ -396,10 +513,12 @@ class BcftoolsQueryManager:
         annotate_command = (
             f"annotate -h {divbase_header_for_vcf} -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
-        self.run_bcftools(command=annotate_command)
+        proc = self.run_bcftools(command=annotate_command)
+        proc.wait()
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
-        self.run_bcftools(command=sort_command)
+        proc = self.run_bcftools(command=sort_command)
+        proc.wait()
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
         )

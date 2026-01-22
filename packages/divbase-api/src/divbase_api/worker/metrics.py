@@ -13,6 +13,57 @@ logger = logging.getLogger(__name__)
 
 WORKER_NAME = socket.gethostname()
 
+
+class MemoryMonitor:
+    """Monitor memory usage of a process, tracking peak and average usage."""
+
+    def __init__(self, process: psutil.Process, sample_interval: float = 0.5):
+        self.process = process
+        self.sample_interval = sample_interval
+        self.samples = []
+        self.peak_memory = 0
+        self.monitoring = False
+        self._thread = None
+
+    def start(self):
+        """Start monitoring memory in a background thread."""
+        self.monitoring = True
+        self._thread = threading.Thread(target=self._monitor, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        """Stop monitoring and return statistics."""
+        self.monitoring = False
+        if self._thread:
+            self._thread.join(timeout=2)
+
+        if not self.samples:
+            return {"peak_bytes": 0, "avg_bytes": 0}
+
+        return {"peak_bytes": self.peak_memory, "avg_bytes": sum(self.samples) / len(self.samples)}
+
+    def _monitor(self):
+        """Background monitoring loop."""
+        while self.monitoring:
+            try:
+                if self.process.is_running():
+                    mem = self.process.memory_info().rss
+                    self.samples.append(mem)
+                    self.peak_memory = max(self.peak_memory, mem)
+                else:
+                    break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                break
+            time.sleep(self.sample_interval)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+
+
 ## Define Prometheus metrics. Use the same prefix to simplify discovery in Prometheus and Grafana UIs.
 # System metrics
 worker_cpu_percent = Gauge("celery_worker_prom_client_cpu_percent", "CPU usage percent", ["worker_name", "pid"])
@@ -27,16 +78,57 @@ worker_cpu_time_total = Gauge(
 worker_memory_bytes = Gauge("celery_worker_prom_client_memory_bytes", "Memory usage in bytes", ["worker_name", "pid"])
 worker_num_threads = Gauge("celery_worker_prom_client_num_threads", "Number of threads", ["worker_name", "pid"])
 worker_open_fds = Gauge("celery_worker_prom_client_open_fds", "Number of open file descriptors", ["worker_name", "pid"])
-# Per-task metrics
-task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["job_id", "task_name"])
-task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["job_id", "task_name"])
+
+# Per-task metrics - These track resource usage for individual Celery tasks
+# Each task is identified by job_id and task_name labels
+#
+# TASK METRICS: Measure the TOTAL resources for the entire task execution.
+# For tasks with subprocesses, this INCLUDES subprocess resource usage.
+# Task CPU = Python overhead + subprocess CPU (allowing overhead = task - subprocess)
+# Task Memory = Peak memory of the Python worker process (includes subprocess coordination overhead)
+task_cpu_seconds = Gauge(
+    "celery_task_cpu_seconds_total",
+    "Total CPU seconds for entire task (Python overhead + all subprocess CPU). Use task_cpu - bcftools_cpu for overhead.",
+    ["job_id", "task_name"],
+)
+task_memory_bytes = Gauge(
+    "celery_task_memory_bytes",
+    "Memory delta (end - start) for Python worker process in bytes. May be negative if memory released during task.",
+    ["job_id", "task_name"],
+)
+task_memory_peak_bytes = Gauge(
+    "celery_task_memory_peak_bytes",
+    "Peak memory (RSS) of Python worker process during task execution in bytes. Sampled every 0.5s.",
+    ["job_id", "task_name"],
+)
+task_memory_avg_bytes = Gauge(
+    "celery_task_memory_avg_bytes",
+    "Average memory (RSS) of Python worker process during task execution in bytes. Sampled every 0.5s.",
+    ["job_id", "task_name"],
+)
+
+# BCFTOOLS SUBPROCESS METRICS: Measure ONLY the bcftools subprocess portion.
+# For tasks with multiple bcftools commands, CPU is summed and memory peak is the max across all subprocesses.
+# To calculate overhead: python_overhead_cpu = task_cpu - bcftools_cpu
 task_bcftools_step_only_cpu_seconds = Gauge(
     "celery_task_bcftools_cpu_seconds_total",
-    "CPU seconds used by bcftools subprocess in task",
+    "CPU seconds used ONLY by bcftools subprocesses (sum across all bcftools calls). Subtract from task_cpu to get Python overhead.",
     ["job_id", "task_name"],
 )
 task_bcftools_step_only_memory_bytes = Gauge(
-    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["job_id", "task_name"]
+    "celery_task_bcftools_memory_bytes",
+    "Memory delta for bcftools subprocesses. Set to 0 as delta is not meaningful for subprocesses.",
+    ["job_id", "task_name"],
+)
+task_bcftools_memory_peak_bytes = Gauge(
+    "celery_task_bcftools_memory_peak_bytes",
+    "Peak memory (RSS) of bcftools subprocess(es) in bytes. Max value across all bcftools calls. Sampled every 0.01s.",
+    ["job_id", "task_name"],
+)
+task_bcftools_memory_avg_bytes = Gauge(
+    "celery_task_bcftools_memory_avg_bytes",
+    "Average memory (RSS) of bcftools subprocess(es) in bytes. Mean of all samples from all bcftools calls. Sampled every 0.01s.",
+    ["job_id", "task_name"],
 )
 
 # Metrics cache for per-task metrics to persist across multiple task executions
@@ -104,6 +196,21 @@ def purge_old_metrics():
                 gauge.remove(*key)
                 logger.debug(f"Purged old metric: {metric_name} for job_id={key[0]} from Prometheus client memory")
 
+        # Also purge new metrics
+        for metric_name, gauge in [
+            ("task_memory_peak_bytes", task_memory_peak_bytes),
+            ("task_memory_avg_bytes", task_memory_avg_bytes),
+            ("task_bcftools_memory_peak_bytes", task_bcftools_memory_peak_bytes),
+            ("task_bcftools_memory_avg_bytes", task_bcftools_memory_avg_bytes),
+        ]:
+            tasks_to_remove = [
+                key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
+            ]
+            for key in tasks_to_remove:
+                del task_metrics_cache[metric_name][key]
+                gauge.remove(*key)
+                logger.debug(f"Purged old metric: {metric_name} for job_id={key[0]} from Prometheus client memory")
+
 
 def get_all_cached_metrics():
     """Get all cached metrics for exposure via Prometheus."""
@@ -114,7 +221,16 @@ def get_all_cached_metrics():
         }
 
 
-def update_prometheus_gauges_from_cache(task_cpu_gauge, task_mem_gauge, bcftools_cpu_gauge, bcftools_mem_gauge):
+def update_prometheus_gauges_from_cache(
+    task_cpu_gauge,
+    task_mem_gauge,
+    bcftools_cpu_gauge,
+    bcftools_mem_gauge,
+    task_mem_peak_gauge,
+    task_mem_avg_gauge,
+    bcftools_mem_peak_gauge,
+    bcftools_mem_avg_gauge,
+):
     """Update all Prometheus Gauges with values from the cache."""
     cached = get_all_cached_metrics()
 
@@ -124,11 +240,23 @@ def update_prometheus_gauges_from_cache(task_cpu_gauge, task_mem_gauge, bcftools
     for (job_id, task_name), value in cached.get("task_memory_bytes", {}).items():
         task_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
+    for (job_id, task_name), value in cached.get("task_memory_peak_bytes", {}).items():
+        task_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_memory_avg_bytes", {}).items():
+        task_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
     for (job_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
         bcftools_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
     for (job_id, task_name), value in cached.get("task_bcftools_memory_bytes", {}).items():
         bcftools_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_bcftools_memory_peak_bytes", {}).items():
+        bcftools_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_bcftools_memory_avg_bytes", {}).items():
+        bcftools_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
 def metrics_purge_loop():
