@@ -128,5 +128,8 @@ class ChecksumVerificationError(Exception):
         self.expected_checksum = expected_checksum
         self.calculated_checksum = calculated_checksum
 
-        message = f"Checksum verification failed. Expected: {expected_checksum}, Calculated: {calculated_checksum}"
+        message = (
+            f"Checksum verification failed. Expected: {expected_checksum}, Calculated: {calculated_checksum}"
+            f"The file has been deleted to avoid accidental use of a corrupted file."
+        )
         super().__init__(message)

@@ -128,6 +128,7 @@ def _download_single_pre_signed_url(
         try:
             verify_downloaded_checksum(file_path=output_file_path, expected_checksum=server_checksum)
         except ChecksumVerificationError as err:
+            output_file_path.unlink()
             return FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
 
     return SuccessfulDownload(file_path=output_file_path, object_name=object_name)
