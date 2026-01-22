@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
+from typing import Optional
 
 import psutil
 from celery import Celery
@@ -305,16 +306,13 @@ def bcftools_pipe_task(
     cpu_used = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
     mem_used = mem_end - mem_start
 
-    # Store metrics in cache and update the Prometheus metrics server gauges
-    store_task_metric("task_cpu_seconds", task_id, bcftools_pipe_task.name, cpu_used)
-    store_task_metric("task_memory_bytes", task_id, bcftools_pipe_task.name, mem_used)
-    store_task_metric("task_bcftools_cpu_seconds", task_id, bcftools_pipe_task.name, bcftools_cpu_used)
-    store_task_metric("task_bcftools_memory_bytes", task_id, bcftools_pipe_task.name, bcftools_mem_used)
-    update_prometheus_gauges_from_cache(
-        task_cpu_seconds,
-        task_memory_bytes,
-        task_bcftools_step_only_cpu_seconds,
-        task_bcftools_step_only_memory_bytes,
+    _record_task_metrics(
+        task_id=task_id,
+        task_name=bcftools_pipe_task.name,
+        cpu_used=cpu_used,
+        mem_used=mem_used,
+        bcftools_cpu_used=bcftools_cpu_used,
+        bcftools_mem_used=bcftools_mem_used,
     )
 
     return {"status": "completed", "output_file": output_file}
@@ -685,6 +683,36 @@ def _check_that_file_versions_match_dimensions_index(
                 "The VCF dimensions file is not up to date with the VCF files in the project. "
                 "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )
+
+
+def _record_task_metrics(
+    task_id: str,
+    task_name: str,
+    cpu_used: float,
+    mem_used: float,
+    bcftools_cpu_used: Optional[float] = None,
+    bcftools_mem_used: Optional[float] = None,
+) -> None:
+    """
+    Helper function that records task metrics to the cache and updates Prometheus gauges so that they can be served by the worker metrics server.
+    Task specific submetrics (e.g. bcftools resource usage) can be been added as optional parameters.
+
+    Note on Optional args:
+    Use None to mean “not applicable” (the arg was not provided when the task called this function), which makes 0.0 mean “ran, but used no resources".
+    """
+
+    store_task_metric("task_cpu_seconds", task_id, task_name, cpu_used)
+    store_task_metric("task_memory_bytes", task_id, task_name, mem_used)
+    if bcftools_cpu_used is not None:
+        store_task_metric("task_bcftools_cpu_seconds", task_id, task_name, bcftools_cpu_used)
+    if bcftools_mem_used is not None:
+        store_task_metric("task_bcftools_memory_bytes", task_id, task_name, bcftools_mem_used)
+    update_prometheus_gauges_from_cache(
+        task_cpu_seconds,
+        task_memory_bytes,
+        task_bcftools_step_only_cpu_seconds,
+        task_bcftools_step_only_memory_bytes,
+    )
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
