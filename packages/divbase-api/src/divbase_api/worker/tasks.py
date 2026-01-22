@@ -67,6 +67,14 @@ app.conf.update(
 # Define per-task metrics. Tasks can export these metrics during their execution, which will make them available for Prometheus scraping.
 task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["task_id", "task_name"])
 task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["task_id", "task_name"])
+task_bcftools_step_only_cpu_seconds = Gauge(
+    "celery_task_bcftools_cpu_seconds_total",
+    "CPU seconds used by bcftools subprocess in task",
+    ["task_id", "task_name"],
+)
+task_bcftools_step_only_memory_bytes = Gauge(
+    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["task_id", "task_name"]
+)
 
 
 @worker_process_init.connect
@@ -278,9 +286,21 @@ def bcftools_pipe_task(
         )
     )
 
+    # Monitor bcftools resource usage separately
+    bcftools_process = psutil.Process()
+    bcftools_cpu_start = bcftools_process.cpu_times()
+    bcftools_mem_start = bcftools_process.memory_info().rss
+
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
     output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+
+    bcftools_cpu_end = bcftools_process.cpu_times()
+    bcftools_mem_end = bcftools_process.memory_info().rss
+    bcftools_cpu_used = (bcftools_cpu_end.user + bcftools_cpu_end.system) - (
+        bcftools_cpu_start.user + bcftools_cpu_start.system
+    )
+    bcftools_mem_used = bcftools_mem_end - bcftools_mem_start
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
@@ -292,6 +312,12 @@ def bcftools_pipe_task(
 
     task_cpu_seconds.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(cpu_used)
     task_memory_bytes.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(mem_used)
+    task_bcftools_step_only_cpu_seconds.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(
+        bcftools_cpu_used
+    )
+    task_bcftools_step_only_memory_bytes.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(
+        bcftools_mem_used
+    )
 
     return {"status": "completed", "output_file": output_file}
 
