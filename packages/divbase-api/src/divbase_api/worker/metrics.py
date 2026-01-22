@@ -64,8 +64,8 @@ def start_metrics_server(port=8101):
     continue collecting metrics. All metrics are aggregated and served via the
     single HTTP endpoint.
 
-    For local dev with docker compose, any celery concurrency value can be used.
-    Example with concurrency=4: 4 worker processes, 4 collection threads, 1 HTTP server.
+    Celery prefork concurrency=1 is needed both for docker compose and k8s deployments.
+    For local dev with docker compose, it is needed to get the per-task CPU and RAM metrics to work correctly.
 
     For k8s deployment, concurrency must be set to 1 (1 worker process per pod). Scaling will be handled by increasing the number of pods.
     Example with concurrency=1: 1 worker process, 1 collection thread, 1 HTTP server.

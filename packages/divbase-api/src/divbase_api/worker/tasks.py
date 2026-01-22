@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
+import psutil
 from celery import Celery
 from celery.signals import (
     after_task_publish,
     task_prerun,
     worker_process_init,
 )
+from prometheus_client import Gauge
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
@@ -62,12 +64,16 @@ app.conf.update(
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
+# Define per-task metrics. Tasks can export these metrics during their execution, which will make them available for Prometheus scraping.
+task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["task_id", "task_name"])
+task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["task_id", "task_name"])
+
 
 @worker_process_init.connect
 def init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
-    With celery prefork concurrency, only the first worker process to execute will successfully bind to port 8001.
+    With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
     start_metrics_server(port=8101)
 
@@ -205,6 +211,10 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
+    process = psutil.Process()
+    cpu_start = process.cpu_times()
+    mem_start = process.memory_info().rss
+
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
@@ -274,6 +284,14 @@ def bcftools_pipe_task(
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+
+    cpu_end = process.cpu_times()
+    mem_end = process.memory_info().rss
+    cpu_used = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+    mem_used = mem_end - mem_start
+
+    task_cpu_seconds.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(cpu_used)
+    task_memory_bytes.labels(task_id=task_id, task_name=bcftools_pipe_task.name).set(mem_used)
 
     return {"status": "completed", "output_file": output_file}
 
