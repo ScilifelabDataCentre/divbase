@@ -307,7 +307,7 @@ def bcftools_pipe_task(
     mem_used = mem_end - mem_start
 
     _record_task_metrics(
-        task_id=task_id,
+        job_id=job_id,
         task_name=bcftools_pipe_task.name,
         cpu_used=cpu_used,
         mem_used=mem_used,
@@ -686,7 +686,7 @@ def _check_that_file_versions_match_dimensions_index(
 
 
 def _record_task_metrics(
-    task_id: str,
+    job_id: int,
     task_name: str,
     cpu_used: float,
     mem_used: float,
@@ -701,12 +701,12 @@ def _record_task_metrics(
     Use None to mean “not applicable” (the arg was not provided when the task called this function), which makes 0.0 mean “ran, but used no resources".
     """
 
-    store_task_metric("task_cpu_seconds", task_id, task_name, cpu_used)
-    store_task_metric("task_memory_bytes", task_id, task_name, mem_used)
+    store_task_metric("task_cpu_seconds", job_id, task_name, cpu_used)
+    store_task_metric("task_memory_bytes", job_id, task_name, mem_used)
     if bcftools_cpu_used is not None:
-        store_task_metric("task_bcftools_cpu_seconds", task_id, task_name, bcftools_cpu_used)
+        store_task_metric("task_bcftools_cpu_seconds", job_id, task_name, bcftools_cpu_used)
     if bcftools_mem_used is not None:
-        store_task_metric("task_bcftools_memory_bytes", task_id, task_name, bcftools_mem_used)
+        store_task_metric("task_bcftools_memory_bytes", job_id, task_name, bcftools_mem_used)
     update_prometheus_gauges_from_cache(
         task_cpu_seconds,
         task_memory_bytes,

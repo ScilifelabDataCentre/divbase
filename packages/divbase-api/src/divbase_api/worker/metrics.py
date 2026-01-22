@@ -28,19 +28,19 @@ worker_memory_bytes = Gauge("celery_worker_prom_client_memory_bytes", "Memory us
 worker_num_threads = Gauge("celery_worker_prom_client_num_threads", "Number of threads", ["worker_name", "pid"])
 worker_open_fds = Gauge("celery_worker_prom_client_open_fds", "Number of open file descriptors", ["worker_name", "pid"])
 # Per-task metrics
-task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["task_id", "task_name"])
-task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["task_id", "task_name"])
+task_cpu_seconds = Gauge("celery_task_cpu_seconds_total", "CPU seconds used by task", ["job_id", "task_name"])
+task_memory_bytes = Gauge("celery_task_memory_bytes", "RAM used by task", ["job_id", "task_name"])
 task_bcftools_step_only_cpu_seconds = Gauge(
     "celery_task_bcftools_cpu_seconds_total",
     "CPU seconds used by bcftools subprocess in task",
-    ["task_id", "task_name"],
+    ["job_id", "task_name"],
 )
 task_bcftools_step_only_memory_bytes = Gauge(
-    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["task_id", "task_name"]
+    "celery_task_bcftools_memory_bytes", "RAM used by bcftools subprocess in task", ["job_id", "task_name"]
 )
 
 # Metrics cache for per-task metrics to persist across multiple task executions
-# Structure: {metric_name: {(task_id, task_name): {"value": float, "timestamp": datetime}}}
+# Structure: {metric_name: {(job_id, task_name): {"value": float, "timestamp": datetime}}}
 task_metrics_cache = defaultdict(dict)
 metrics_cache_lock = threading.Lock()  # lock threads to avoid race conditions since multiple threads can access the cache (main thread, celery worker threads, purge thread)
 
@@ -74,10 +74,10 @@ def collect_system_metrics():
         time.sleep(5)
 
 
-def store_task_metric(metric_name: str, task_id: str, task_name: str, value: float):
+def store_task_metric(metric_name: str, job_id: int, task_name: str, value: float):
     """Store a task metric in the cache with current timestamp."""
     with metrics_cache_lock:
-        task_metrics_cache[metric_name][(task_id, task_name)] = {
+        task_metrics_cache[metric_name][(job_id, task_name)] = {
             "value": value,
             "timestamp": datetime.now(),
         }
@@ -102,7 +102,7 @@ def purge_old_metrics():
             for key in tasks_to_remove:
                 del task_metrics_cache[metric_name][key]
                 gauge.remove(*key)
-                logger.debug(f"Purged old metric: {metric_name} for task_id={key[0]} from Prometheus client memory")
+                logger.debug(f"Purged old metric: {metric_name} for job_id={key[0]} from Prometheus client memory")
 
 
 def get_all_cached_metrics():
@@ -118,17 +118,17 @@ def update_prometheus_gauges_from_cache(task_cpu_gauge, task_mem_gauge, bcftools
     """Update all Prometheus Gauges with values from the cache."""
     cached = get_all_cached_metrics()
 
-    for (task_id, task_name), value in cached.get("task_cpu_seconds", {}).items():
-        task_cpu_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+    for (job_id, task_name), value in cached.get("task_cpu_seconds", {}).items():
+        task_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
-    for (task_id, task_name), value in cached.get("task_memory_bytes", {}).items():
-        task_mem_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+    for (job_id, task_name), value in cached.get("task_memory_bytes", {}).items():
+        task_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
-    for (task_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
-        bcftools_cpu_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+    for (job_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
+        bcftools_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
-    for (task_id, task_name), value in cached.get("task_bcftools_memory_bytes", {}).items():
-        bcftools_mem_gauge.labels(task_id=task_id, task_name=task_name).set(value)
+    for (job_id, task_name), value in cached.get("task_bcftools_memory_bytes", {}).items():
+        bcftools_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
 def metrics_purge_loop():
