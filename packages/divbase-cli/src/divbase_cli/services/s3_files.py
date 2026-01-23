@@ -133,7 +133,6 @@ def upload_files_command(
             all_files=all_files,
         )
 
-
     files_below_threshold, files_above_threshold = [], []
     for file in all_files:
         if file.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:

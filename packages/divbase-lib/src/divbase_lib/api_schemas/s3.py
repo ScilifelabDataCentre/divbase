@@ -58,9 +58,7 @@ class CreateMultipartUploadResponse(BaseModel):
 
     name: str = Field(..., description="Name of the object to be uploaded")
     upload_id: str = Field(..., description="Upload ID for the multipart upload")
-    number_of_parts: int = Field(
-        ..., description="Total number of parts required for the upload", ge=1, le=10000
-    )
+    number_of_parts: int = Field(..., description="Total number of parts required for the upload", ge=1, le=10000)
 
 
 class GetPresignedPartUrlsRequest(BaseModel):
