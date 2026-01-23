@@ -130,6 +130,6 @@ class ChecksumVerificationError(Exception):
 
         message = (
             f"Checksum verification failed. Expected: {expected_checksum}, Calculated: {calculated_checksum}"
-            f"The file has been deleted to avoid accidental use of a corrupted file."
+            f" The file has been deleted to avoid accidental use of a corrupted file."
         )
         super().__init__(message)

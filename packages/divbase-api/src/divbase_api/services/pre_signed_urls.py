@@ -40,7 +40,7 @@ class S3PreSignedService:
     We have 2 s3 client instances here:
     one for presigning urls,
     one for direct s3 operations with the service account.
-    Both in production and in in local dev these point to different endpoint URLs.
+    Both in production and in local dev these point to different endpoint URLs.
     """
 
     def __init__(self):

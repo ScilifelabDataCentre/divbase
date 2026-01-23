@@ -60,7 +60,7 @@ class CreateMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload")
     number_of_parts: int = Field(
         ..., description="Total number of parts required for the upload", ge=1, le=10000
-    )  # TODO - could be determined client side?
+    )
 
 
 class GetPresignedPartUrlsRequest(BaseModel):

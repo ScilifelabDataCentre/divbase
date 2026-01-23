@@ -1,5 +1,5 @@
 """
-Service layer for DivBase CLI project version opertations.
+Service layer for DivBase CLI project version operations.
 """
 
 from divbase_cli.user_auth import make_authenticated_request

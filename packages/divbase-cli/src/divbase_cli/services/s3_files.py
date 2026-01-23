@@ -132,8 +132,7 @@ def upload_files_command(
             divbase_base_url=divbase_base_url,
             all_files=all_files,
         )
-    else:
-        file_checksums_hex = {}
+
 
     files_below_threshold, files_above_threshold = [], []
     for file in all_files:

@@ -29,7 +29,7 @@ def verify_downloaded_checksum(
     expected_checksum: str,
 ) -> None:
     """
-    Verify a downloaded file against it's S3's ETag.
+    Verify a downloaded file against its S3's ETag.
 
     For files uploaded as single part, this is just the MD5 checksum in hex format.
     For files uploaded as multipart, this is a composite checksum of all the parts

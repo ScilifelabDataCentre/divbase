@@ -1,6 +1,6 @@
 # S3 File Transfers
 
-Each DivBase project is assigned it's own S3 bucket and divbase interacts with S3 object storage in two primary ways:
+Each DivBase project is assigned its own S3 bucket and divbase interacts with S3 object storage in two primary ways:
 
 1. Through `divbase-cli`. A user receives pre-signed URLs from the DivBase API to upload and download files directly to/from S3.
 

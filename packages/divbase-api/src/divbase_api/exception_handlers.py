@@ -322,7 +322,7 @@ async def task_not_found_in_backend_error_handler(request: Request, exc: TaskNot
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=status.HTTP_410_GONE)
+        return await render_error_page(request, exc.message, status_code=status.HTTP_410_GONE)
 
 
 async def downloaded_file_checksum_mismatch_error_handler(request: Request, exc: DownloadedFileChecksumMismatchError):
