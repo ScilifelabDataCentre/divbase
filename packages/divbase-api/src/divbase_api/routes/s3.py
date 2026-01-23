@@ -237,6 +237,7 @@ async def abort_multipart_upload(
         object_name=abort_request.name,
         upload_id=abort_request.upload_id,
     )
+    return AbortMultipartUploadResponse(name=abort_request.name, upload_id=abort_request.upload_id)
 
 
 @s3_router.delete("/", status_code=status.HTTP_200_OK, response_model=list[str])
