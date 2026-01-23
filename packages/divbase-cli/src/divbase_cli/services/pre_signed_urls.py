@@ -104,6 +104,7 @@ def download_multiple_pre_signed_urls(
                     object_name=object_name,
                 )
             except httpx.HTTPError as err:
+                output_file_path.unlink(missing_ok=True)  # Clean up possible partial file
                 result = FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
 
             if isinstance(result, SuccessfulDownload):
