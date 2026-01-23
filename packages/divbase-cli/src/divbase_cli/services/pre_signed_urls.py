@@ -22,6 +22,7 @@ from pathlib import Path
 import httpx
 import stamina
 
+from divbase_cli.retries import retry_only_on_retryable_http_errors
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     CompleteMultipartUploadRequest,
@@ -53,19 +54,6 @@ MB = 1024 * 1024
 # So those are defined in a shared lib.
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
 DOWNLOAD_CHUNK_SIZE = 8 * MB
-
-
-def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
-    """
-    Used by stamina's (library for retries) decorators to determine whether to retry the function or not.
-    We avoid retrying on HTTPStatusError for 4xx errors as no point (e.g. 404 Not Found or 403 Forbidden etc...).
-    """
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
-
-    # Want to retry on other HTTPError (parent of HTTPStatusError),
-    # as this includes timeouts, connection errors, etc.
-    return isinstance(exc, httpx.HTTPError)
 
 
 @dataclass

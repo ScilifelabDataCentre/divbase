@@ -39,7 +39,7 @@ class DivBaseAPIError(DivBaseCLIError):
         self,
         error_details: str = "Not Provided",
         error_type: str = "unknown",
-        status_code: int = None,
+        status_code: int = 500,
         http_method: str = "unknown",
         url: str = "unknown",
     ):
