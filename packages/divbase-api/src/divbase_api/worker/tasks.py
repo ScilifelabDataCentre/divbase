@@ -41,6 +41,10 @@ from divbase_api.worker.metrics import (
     task_memory_avg_bytes,
     task_memory_bytes,
     task_memory_peak_bytes,
+    task_vcf_download_cpu_seconds,
+    task_vcf_download_memory_avg_bytes,
+    task_vcf_download_memory_bytes,
+    task_vcf_download_memory_peak_bytes,
     task_vcf_download_walltime_seconds,
     task_walltime_seconds,
     update_prometheus_gauges_from_cache,
@@ -282,6 +286,13 @@ def bcftools_pipe_task(
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
+    # Measure download operation resources
+    download_cpu_start = process.cpu_times()
+    download_mem_start = process.memory_info().rss
+
+    download_memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+    download_memory_monitor.start()
+
     download_start = time.time()
     _ = _download_vcf_files(
         files_to_download=files_to_download,
@@ -289,7 +300,21 @@ def bcftools_pipe_task(
         s3_file_manager=s3_file_manager,
     )
     download_walltime = time.time() - download_start
-    logger.debug(f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s")
+
+    download_memory_stats = download_memory_monitor.stop()
+    download_cpu_end = process.cpu_times()
+    download_mem_end = process.memory_info().rss
+
+    download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
+        download_cpu_start.user + download_cpu_start.system
+    )
+    download_mem_used = download_mem_end - download_mem_start
+    download_mem_peak = download_memory_stats["peak_bytes"]
+    download_mem_avg = download_memory_stats["avg_bytes"]
+
+    logger.debug(
+        f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+    )
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -342,6 +367,10 @@ def bcftools_pipe_task(
         bcftools_mem_avg=bcftools_mem_avg,
         bcftools_walltime=bcftools_walltime,
         vcf_download_walltime=download_walltime,
+        vcf_download_cpu_used=download_cpu_used,
+        vcf_download_mem_used=download_mem_used,
+        vcf_download_mem_peak=download_mem_peak,
+        vcf_download_mem_avg=download_mem_avg,
         task_walltime=task_walltime,
     )
 
@@ -728,6 +757,10 @@ def _record_task_metrics(
     bcftools_mem_avg: Optional[float] = None,
     bcftools_walltime: Optional[float] = None,
     vcf_download_walltime: Optional[float] = None,
+    vcf_download_cpu_used: Optional[float] = None,
+    vcf_download_mem_used: Optional[float] = None,
+    vcf_download_mem_peak: Optional[float] = None,
+    vcf_download_mem_avg: Optional[float] = None,
     task_walltime: Optional[float] = None,
 ) -> None:
     """
@@ -757,6 +790,14 @@ def _record_task_metrics(
         store_task_metric("task_bcftools_walltime_seconds", job_id, task_name, bcftools_walltime)
     if vcf_download_walltime is not None:
         store_task_metric("task_vcf_download_walltime_seconds", job_id, task_name, vcf_download_walltime)
+    if vcf_download_cpu_used is not None:
+        store_task_metric("task_vcf_download_cpu_seconds", job_id, task_name, vcf_download_cpu_used)
+    if vcf_download_mem_used is not None:
+        store_task_metric("task_vcf_download_memory_bytes", job_id, task_name, vcf_download_mem_used)
+    if vcf_download_mem_peak is not None:
+        store_task_metric("task_vcf_download_memory_peak_bytes", job_id, task_name, vcf_download_mem_peak)
+    if vcf_download_mem_avg is not None:
+        store_task_metric("task_vcf_download_memory_avg_bytes", job_id, task_name, vcf_download_mem_avg)
     if task_walltime is not None:
         store_task_metric("task_walltime_seconds", job_id, task_name, task_walltime)
 
@@ -771,6 +812,10 @@ def _record_task_metrics(
         task_bcftools_memory_avg_bytes,
         task_bcftools_walltime_seconds,
         task_vcf_download_walltime_seconds,
+        task_vcf_download_cpu_seconds,
+        task_vcf_download_memory_bytes,
+        task_vcf_download_memory_peak_bytes,
+        task_vcf_download_memory_avg_bytes,
         task_walltime_seconds,
     )
 

@@ -149,6 +149,26 @@ task_vcf_download_walltime_seconds = Gauge(
     "Walltime (elapsed real time) for downloading VCF files from S3 in seconds.",
     ["job_id", "task_name"],
 )
+task_vcf_download_cpu_seconds = Gauge(
+    "celery_task_vcf_download_cpu_seconds",
+    "CPU seconds used for downloading VCF files from S3 (boto3 operations run in worker process). Sampled every 0.5s.",
+    ["job_id", "task_name"],
+)
+task_vcf_download_memory_bytes = Gauge(
+    "celery_task_vcf_download_memory_bytes",
+    "Memory delta (end - start) for VCF download operation in bytes. May be negative if memory released during download.",
+    ["job_id", "task_name"],
+)
+task_vcf_download_memory_peak_bytes = Gauge(
+    "celery_task_vcf_download_memory_peak_bytes",
+    "Peak memory (RSS) during VCF download from S3 in bytes. Sampled every 0.5s.",
+    ["job_id", "task_name"],
+)
+task_vcf_download_memory_avg_bytes = Gauge(
+    "celery_task_vcf_download_memory_avg_bytes",
+    "Average memory (RSS) during VCF download from S3 in bytes. Sampled every 0.5s.",
+    ["job_id", "task_name"],
+)
 
 task_walltime_seconds = Gauge(
     "celery_task_walltime_seconds",
@@ -228,6 +248,10 @@ def purge_old_metrics():
             ("task_bcftools_memory_avg_bytes", task_bcftools_memory_avg_bytes),
             ("task_bcftools_walltime_seconds", task_bcftools_walltime_seconds),
             ("task_vcf_download_walltime_seconds", task_vcf_download_walltime_seconds),
+            ("task_vcf_download_cpu_seconds", task_vcf_download_cpu_seconds),
+            ("task_vcf_download_memory_bytes", task_vcf_download_memory_bytes),
+            ("task_vcf_download_memory_peak_bytes", task_vcf_download_memory_peak_bytes),
+            ("task_vcf_download_memory_avg_bytes", task_vcf_download_memory_avg_bytes),
             ("task_walltime_seconds", task_walltime_seconds),
         ]:
             tasks_to_remove = [
@@ -259,6 +283,10 @@ def update_prometheus_gauges_from_cache(
     bcftools_mem_avg_gauge,
     bcftools_walltime_gauge,
     vcf_download_walltime_gauge,
+    vcf_download_cpu_gauge,
+    vcf_download_mem_gauge,
+    vcf_download_mem_peak_gauge,
+    vcf_download_mem_avg_gauge,
     task_walltime_gauge,
 ):
     """Update all Prometheus Gauges with values from the cache."""
@@ -296,6 +324,18 @@ def update_prometheus_gauges_from_cache(
 
     for (job_id, task_name), value in cached.get("task_vcf_download_walltime_seconds", {}).items():
         vcf_download_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_vcf_download_cpu_seconds", {}).items():
+        vcf_download_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_vcf_download_memory_bytes", {}).items():
+        vcf_download_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_vcf_download_memory_peak_bytes", {}).items():
+        vcf_download_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_vcf_download_memory_avg_bytes", {}).items():
+        vcf_download_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
 def metrics_purge_loop():
