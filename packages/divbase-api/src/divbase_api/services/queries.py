@@ -140,6 +140,8 @@ class BcftoolsQueryManager:
         for all bcftools subprocesses.
         """
 
+        walltime_start = time.time()
+
         in_docker = os.path.exists("/.dockerenv")
         in_k8s = self._is_in_kubernetes()
         if not in_docker and not in_k8s:
@@ -154,6 +156,11 @@ class BcftoolsQueryManager:
 
         commands_config_structure = self.build_commands_config(command, bcftools_inputs, identifier)
         output_file, metrics = self.process_bcftools_commands(commands_config_structure, identifier)
+
+        walltime_end = time.time()
+        metrics["walltime_seconds"] = walltime_end - walltime_start
+        logger.info(f"Total bcftools pipeline walltime: {metrics['walltime_seconds']:.2f}s")
+
         return output_file, metrics
 
     @contextlib.contextmanager

@@ -139,6 +139,22 @@ task_bcftools_memory_avg_bytes = Gauge(
     "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config).",
     ["job_id", "task_name"],
 )
+task_bcftools_walltime_seconds = Gauge(
+    "celery_task_bcftools_walltime_seconds",
+    "Walltime (elapsed real time) for all bcftools subprocess execution in seconds. Includes all bcftools commands in the pipeline.",
+    ["job_id", "task_name"],
+)
+task_vcf_download_walltime_seconds = Gauge(
+    "celery_task_vcf_download_walltime_seconds",
+    "Walltime (elapsed real time) for downloading VCF files from S3 in seconds.",
+    ["job_id", "task_name"],
+)
+
+task_walltime_seconds = Gauge(
+    "celery_task_walltime_seconds",
+    "Walltime (elapsed real time) for the entire Celery task execution in seconds.",
+    ["job_id", "task_name"],
+)
 
 # Metrics cache for per-task metrics to persist across multiple task executions
 # Structure: {metric_name: {(job_id, task_name): {"value": float, "timestamp": datetime}}}
@@ -210,6 +226,9 @@ def purge_old_metrics():
             ("task_memory_avg_bytes", task_memory_avg_bytes),
             ("task_bcftools_memory_peak_bytes", task_bcftools_memory_peak_bytes),
             ("task_bcftools_memory_avg_bytes", task_bcftools_memory_avg_bytes),
+            ("task_bcftools_walltime_seconds", task_bcftools_walltime_seconds),
+            ("task_vcf_download_walltime_seconds", task_vcf_download_walltime_seconds),
+            ("task_walltime_seconds", task_walltime_seconds),
         ]:
             tasks_to_remove = [
                 key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
@@ -238,6 +257,9 @@ def update_prometheus_gauges_from_cache(
     task_mem_avg_gauge,
     bcftools_mem_peak_gauge,
     bcftools_mem_avg_gauge,
+    bcftools_walltime_gauge,
+    vcf_download_walltime_gauge,
+    task_walltime_gauge,
 ):
     """Update all Prometheus Gauges with values from the cache."""
     cached = get_all_cached_metrics()
@@ -265,6 +287,15 @@ def update_prometheus_gauges_from_cache(
 
     for (job_id, task_name), value in cached.get("task_bcftools_memory_avg_bytes", {}).items():
         bcftools_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_walltime_seconds", {}).items():
+        task_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_bcftools_walltime_seconds", {}).items():
+        bcftools_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_vcf_download_walltime_seconds", {}).items():
+        vcf_download_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
 def metrics_purge_loop():

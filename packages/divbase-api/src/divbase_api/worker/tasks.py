@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
@@ -35,10 +36,13 @@ from divbase_api.worker.metrics import (
     task_bcftools_memory_peak_bytes,
     task_bcftools_step_only_cpu_seconds,
     task_bcftools_step_only_memory_bytes,
+    task_bcftools_walltime_seconds,
     task_cpu_seconds,
     task_memory_avg_bytes,
     task_memory_bytes,
     task_memory_peak_bytes,
+    task_vcf_download_walltime_seconds,
+    task_walltime_seconds,
     update_prometheus_gauges_from_cache,
 )
 from divbase_api.worker.vcf_dimension_indexing import (
@@ -220,11 +224,12 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
+    task_walltime_start = time.time()
+
     process = psutil.Process()
     cpu_start = process.cpu_times()
     mem_start = process.memory_info().rss
 
-    # Start monitoring memory for peak and average tracking
     memory_monitor = MemoryMonitor(process, sample_interval=0.5)
     memory_monitor.start()
 
@@ -277,11 +282,14 @@ def bcftools_pipe_task(
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
+    download_start = time.time()
     _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
+    download_walltime = time.time() - download_start
+    logger.debug(f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s")
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -300,6 +308,7 @@ def bcftools_pipe_task(
     bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
     bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
     bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
+    bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
     # Delta not meaningful from subprocess metrics, use 0
     bcftools_mem_used = 0.0
 
@@ -318,6 +327,8 @@ def bcftools_pipe_task(
     # This allows stacked bar chart: total = bcftools + overhead
     total_task_cpu = python_overhead_cpu + bcftools_cpu_used
 
+    task_walltime = time.time() - task_walltime_start
+
     _record_task_metrics(
         job_id=job_id,
         task_name=bcftools_pipe_task.name,
@@ -329,6 +340,9 @@ def bcftools_pipe_task(
         bcftools_mem_used=bcftools_mem_used,
         bcftools_mem_peak=bcftools_mem_peak,
         bcftools_mem_avg=bcftools_mem_avg,
+        bcftools_walltime=bcftools_walltime,
+        vcf_download_walltime=download_walltime,
+        task_walltime=task_walltime,
     )
 
     return {"status": "completed", "output_file": output_file}
@@ -712,6 +726,9 @@ def _record_task_metrics(
     bcftools_mem_used: Optional[float] = None,
     bcftools_mem_peak: Optional[float] = None,
     bcftools_mem_avg: Optional[float] = None,
+    bcftools_walltime: Optional[float] = None,
+    vcf_download_walltime: Optional[float] = None,
+    task_walltime: Optional[float] = None,
 ) -> None:
     """
     Helper function that records task metrics to the cache and updates Prometheus gauges so that they can be served by the worker metrics server.
@@ -736,6 +753,13 @@ def _record_task_metrics(
     if bcftools_mem_avg is not None:
         store_task_metric("task_bcftools_memory_avg_bytes", job_id, task_name, bcftools_mem_avg)
 
+    if bcftools_walltime is not None:
+        store_task_metric("task_bcftools_walltime_seconds", job_id, task_name, bcftools_walltime)
+    if vcf_download_walltime is not None:
+        store_task_metric("task_vcf_download_walltime_seconds", job_id, task_name, vcf_download_walltime)
+    if task_walltime is not None:
+        store_task_metric("task_walltime_seconds", job_id, task_name, task_walltime)
+
     update_prometheus_gauges_from_cache(
         task_cpu_seconds,
         task_memory_bytes,
@@ -745,6 +769,9 @@ def _record_task_metrics(
         task_memory_avg_bytes,
         task_bcftools_memory_peak_bytes,
         task_bcftools_memory_avg_bytes,
+        task_bcftools_walltime_seconds,
+        task_vcf_download_walltime_seconds,
+        task_walltime_seconds,
     )
 
 
