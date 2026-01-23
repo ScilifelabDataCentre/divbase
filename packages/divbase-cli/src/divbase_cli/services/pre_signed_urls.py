@@ -1,7 +1,17 @@
 """
 Module responsible for taking pre-signed urls and using them to do file download and upload.
 
-TODO: Consider adding retries, error handling, progress bars, etc.
+Grouped into 4 sections:
+- Downloading singlepart files
+- Downloading multipart files (based on size threshold)
+- Uploading singlepart files
+- Uploading multipart files (based on size threshold)
+
+Size thresholds are defined in divbase_lib.divbase_constants and which function to call is determined by the caller.
+
+Retry logic here uses the stamina library.
+
+TODO: Consider adding progress bars
 """
 
 import logging
@@ -43,6 +53,19 @@ MB = 1024 * 1024
 # So those are defined in a shared lib.
 MULTIPART_DOWNLOAD_THRESHOLD = 32 * MB
 DOWNLOAD_CHUNK_SIZE = 8 * MB
+
+
+def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
+    """
+    Used by stamina's (library for retries) decorators to determine whether to retry the function or not.
+    We avoid retrying on HTTPStatusError for 4xx errors as no point (e.g. 404 Not Found or 403 Forbidden etc...).
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+
+    # Want to retry on other HTTPError (parent of HTTPStatusError),
+    # as this includes timeouts, connection errors, etc.
+    return isinstance(exc, httpx.HTTPError)
 
 
 @dataclass
@@ -134,6 +157,7 @@ def _download_single_pre_signed_url(
     return SuccessfulDownload(file_path=output_file_path, object_name=object_name)
 
 
+@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
 def _get_content_length_and_checksum(httpx_client: httpx.Client, pre_signed_url: str) -> tuple[int, str]:
     """
     "HEAD" a pre-signed download URL to get it's content length and checksum.
@@ -148,19 +172,6 @@ def _get_content_length_and_checksum(httpx_client: httpx.Client, pre_signed_url:
         content_length = int(content_range.split("/")[-1])
         server_checksum = head_response.headers["ETag"].strip('"')
     return content_length, server_checksum
-
-
-def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
-    """
-    Used by stamina's (library for retries) decorators to determine whether to retry the function or not.
-    We avoid retrying on HTTPStatusError for 4xx errors as no point (e.g. 404 Not Found or 403 Forbidden etc...).
-    """
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
-
-    # Want to retry on other HTTPError (parent of HTTPStatusError),
-    # as this includes timeouts, connection errors, etc.
-    return isinstance(exc, httpx.HTTPError)
 
 
 @stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
@@ -272,6 +283,7 @@ def upload_multiple_singlepart_pre_signed_urls(
     return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
 
 
+@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
 def _upload_one_singlepart_pre_signed_url(
     httpx_client: httpx.Client,
     pre_signed_url: str,
