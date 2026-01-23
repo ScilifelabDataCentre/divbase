@@ -22,9 +22,11 @@ from pathlib import Path
 import httpx
 import stamina
 
+from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.retries import retry_only_on_retryable_http_errors
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
+    AbortMultipartUploadRequest,
     CompleteMultipartUploadRequest,
     CompleteMultipartUploadResponse,
     CreateMultipartUploadRequest,
@@ -327,38 +329,52 @@ def perform_multipart_upload(
 
     # 2. Upload each part in batches as divbase server limits how many part urls it will give at once
     parts_to_request = list(range(1, object_data.number_of_parts + 1))
+    try:
+        uploaded_parts: list[UploadedPart] = []
+        for i in range(0, len(parts_to_request), MAX_S3_API_BATCH_SIZE):
+            part_batch_numbers = parts_to_request[i : i + MAX_S3_API_BATCH_SIZE]
+            part_urls = _get_part_urls(
+                project_name=project_name,
+                divbase_base_url=divbase_base_url,
+                object_name=object_name,
+                upload_id=object_data.upload_id,
+                part_numbers=part_batch_numbers,
+                file_path=file_path,
+                safe_mode=safe_mode,
+            )
+            batch_uploads = _upload_parts(part_urls=part_urls, file_path=file_path)
+            uploaded_parts.extend(batch_uploads)
 
-    uploaded_parts: list[UploadedPart] = []
-    for i in range(0, len(parts_to_request), MAX_S3_API_BATCH_SIZE):
-        part_batch_numbers = parts_to_request[i : i + MAX_S3_API_BATCH_SIZE]
-        part_urls = _get_part_urls(
-            project_name=project_name,
-            divbase_base_url=divbase_base_url,
-            object_name=object_name,
+        # 3. Complete multipart upload
+        complete_request_body = CompleteMultipartUploadRequest(
+            name=object_name,
             upload_id=object_data.upload_id,
-            part_numbers=part_batch_numbers,
-            file_path=file_path,
-            safe_mode=safe_mode,
+            parts=uploaded_parts,
         )
-        batch_uploads = _upload_parts(part_urls=part_urls, file_path=file_path)
-        uploaded_parts.extend(batch_uploads)
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/upload/multi-part/complete?project_name={project_name}",
+            json=complete_request_body.model_dump(),
+        )
+        completed_upload = CompleteMultipartUploadResponse(**response.json())
+        return SuccessfulUpload(file_path=file_path, object_name=completed_upload.name)
 
-    # 3. Complete multipart upload
-    complete_request_body = CompleteMultipartUploadRequest(
-        name=object_name,
-        upload_id=object_data.upload_id,
-        parts=uploaded_parts,
-    )
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/upload/multi-part/complete?project_name={project_name}",
-        json=complete_request_body.model_dump(),
-    )
-    completed_upload = CompleteMultipartUploadResponse(**response.json())
-    return SuccessfulUpload(file_path=file_path, object_name=completed_upload.name)
+    # 4. If any unexpected error occurs, abort the multipart upload
+    # To avoid leaving incomplete uploads in S3
+    except Exception as e:
+        try:
+            abort_request = AbortMultipartUploadRequest(name=object_name, upload_id=object_data.upload_id)
+            make_authenticated_request(
+                method="DELETE",
+                divbase_base_url=divbase_base_url,
+                api_route=f"v1/s3/upload/multi-part/abort?project_name={project_name}",
+                json=abort_request.model_dump(),
+            )
+        except (DivBaseAPIConnectionError, DivBaseAPIError):
+            logger.error(f"Failed to abort multipart upload for object '{object_name}' after an upload error.")
 
-    # 4. TODO - implement error handling, abort upload and checksum validation for final object - is it needed?
+        return FailedUpload(object_name=object_name, file_path=file_path, exception=e)
 
 
 def _get_part_urls(
