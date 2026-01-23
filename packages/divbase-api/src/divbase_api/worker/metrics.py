@@ -391,6 +391,10 @@ def start_metrics_server(port=8101):
                 logger.info("Metrics purge thread started")
             except OSError as e:
                 if e.errno == 98:  # Address already in use
-                    logger.info(f"Metrics server already running on port {port} (started by another process)")
+                    _metrics_server_started = True
+                    logger.info(
+                        f"Metrics server already running on port {port} (started by another process). "
+                        f"This process (PID {pid}) will collect metrics but not host the HTTP endpoint."
+                    )
                 else:
                     raise
