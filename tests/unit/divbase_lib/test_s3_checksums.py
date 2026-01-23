@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from divbase_lib.api_schemas.divbase_constants import (
+from divbase_lib.divbase_constants import (
     S3_MULTIPART_UPLOAD_THRESHOLD,
 )
 from divbase_lib.exceptions import ChecksumVerificationError

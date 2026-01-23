@@ -13,10 +13,6 @@ import httpx
 import stamina
 
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.divbase_constants import (
-    MAX_S3_API_BATCH_SIZE,
-    S3_MULTIPART_CHUNK_SIZE,
-)
 from divbase_lib.api_schemas.s3 import (
     CompleteMultipartUploadRequest,
     CompleteMultipartUploadResponse,
@@ -27,6 +23,10 @@ from divbase_lib.api_schemas.s3 import (
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
     UploadedPart,
+)
+from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    S3_MULTIPART_CHUNK_SIZE,
 )
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import calculate_md5_checksum_for_chunk, verify_downloaded_checksum

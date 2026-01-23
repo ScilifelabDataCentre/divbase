@@ -13,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Iterator
 
-from divbase_lib.api_schemas.divbase_constants import S3_MULTIPART_CHUNK_SIZE
+from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 from divbase_lib.exceptions import ChecksumVerificationError
 
 logger = logging.getLogger(__name__)

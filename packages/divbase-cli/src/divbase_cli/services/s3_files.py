@@ -19,12 +19,12 @@ from divbase_cli.services.pre_signed_urls import (
 )
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
 )
+from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.s3_checksums import (
     MD5CheckSumFormat,
     calculate_composite_md5_s3_etag,

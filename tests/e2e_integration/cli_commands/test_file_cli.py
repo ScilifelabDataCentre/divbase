@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import FilesAlreadyInProjectError
 from divbase_cli.divbase_cli import app
-from divbase_lib.api_schemas.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
 
 runner = CliRunner()

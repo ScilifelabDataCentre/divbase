@@ -14,11 +14,6 @@ import boto3
 from botocore.config import Config
 
 from divbase_api.api_config import settings
-from divbase_lib.api_schemas.divbase_constants import (
-    DOWNLOAD_URL_EXPIRATION_SECONDS,
-    MULTI_PART_UPLOAD_URL_EXPIRATION_SECONDS,
-    SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
-)
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadResponse,
     CompleteMultipartUploadResponse,
@@ -27,6 +22,11 @@ from divbase_lib.api_schemas.s3 import (
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
     UploadedPart,
+)
+from divbase_lib.divbase_constants import (
+    DOWNLOAD_URL_EXPIRATION_SECONDS,
+    MULTI_PART_UPLOAD_URL_EXPIRATION_SECONDS,
+    SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
