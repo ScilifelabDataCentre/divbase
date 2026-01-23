@@ -1,7 +1,9 @@
 """
 An s3FileManager object that lets you do basic operations with a bucket.
 
-TODO - add some explanation here on single vs multipart and checksum verification etc...
+This class is a wrapper around the boto3 S3 client.
+
+See the 'docs/development/s3_transfers.md' for more info on how S3 transfers are handled.
 """
 
 import logging
