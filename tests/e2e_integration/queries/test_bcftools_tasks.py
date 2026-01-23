@@ -51,7 +51,7 @@ def test_bcftools_pipe_task_with_real_worker(
     task_result = wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
     assert task_result["status"] == "completed"
-    assert task_result["output_file"].startswith("merged_") and task_result["output_file"].endswith(".vcf.gz")
+    assert task_result["output_file"].startswith("result_of_job_") and task_result["output_file"].endswith(".vcf.gz")
 
 
 @pytest.mark.parametrize(

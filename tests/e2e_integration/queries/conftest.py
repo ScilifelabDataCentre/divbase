@@ -190,6 +190,7 @@ def bcftools_pipe_kwargs_fixture():
         "bucket_name": "divbase-local-query-project",
         "project_name": "query-project",
         "user_id": 1,
+        "job_id": 1,  # tests that need unique job ids should override this value with directly in the test
     }
 
 
