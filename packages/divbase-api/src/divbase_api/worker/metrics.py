@@ -110,24 +110,33 @@ task_memory_avg_bytes = Gauge(
 # BCFTOOLS SUBPROCESS METRICS: Measure ONLY the bcftools subprocess portion.
 # For tasks with multiple bcftools commands, CPU is summed and memory peak is the max across all subprocesses.
 # To calculate overhead: python_overhead_cpu = task_cpu - bcftools_cpu
+bcftools_monitoring_config = Info(
+    "celery_task_bcftools_monitoring_config",
+    "Configuration for bcftools subprocess monitoring. Check 'enabled' field to see if monitoring is active.",
+)
 task_bcftools_step_only_cpu_seconds = Gauge(
     "celery_task_bcftools_cpu_seconds_total",
-    "CPU seconds used ONLY by bcftools subprocesses (sum across all bcftools calls). Subtract from task_cpu to get Python overhead.",
+    "CPU seconds used ONLY by bcftools subprocesses (sum across all bcftools calls). Sampled every 0.01s. "
+    "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config). "
+    "Subtract from task_cpu to get Python overhead.",
     ["job_id", "task_name"],
 )
 task_bcftools_step_only_memory_bytes = Gauge(
     "celery_task_bcftools_memory_bytes",
-    "Memory delta for bcftools subprocesses. Set to 0 as delta is not meaningful for subprocesses.",
+    "Memory delta for bcftools subprocesses. Always set to 0.0 as delta is not meaningful for subprocesses. "
+    "Use peak or avg memory metrics instead.",
     ["job_id", "task_name"],
 )
 task_bcftools_memory_peak_bytes = Gauge(
     "celery_task_bcftools_memory_peak_bytes",
-    "Peak memory (RSS) of bcftools subprocess(es) in bytes. Max value across all bcftools calls. Sampled every 0.01s.",
+    "Peak memory (RSS) of bcftools subprocess(es) in bytes. Max value across all bcftools calls. Sampled every 0.01s. "
+    "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config).",
     ["job_id", "task_name"],
 )
 task_bcftools_memory_avg_bytes = Gauge(
     "celery_task_bcftools_memory_avg_bytes",
-    "Average memory (RSS) of bcftools subprocess(es) in bytes. Mean of all samples from all bcftools calls. Sampled every 0.01s.",
+    "Average memory (RSS) of bcftools subprocess(es) in bytes. Mean of all samples from all bcftools calls. Sampled every 0.01s. "
+    "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config).",
     ["job_id", "task_name"],
 )
 
@@ -196,7 +205,6 @@ def purge_old_metrics():
                 gauge.remove(*key)
                 logger.debug(f"Purged old metric: {metric_name} for job_id={key[0]} from Prometheus client memory")
 
-        # Also purge new metrics
         for metric_name, gauge in [
             ("task_memory_peak_bytes", task_memory_peak_bytes),
             ("task_memory_avg_bytes", task_memory_avg_bytes),
@@ -291,6 +299,15 @@ def start_metrics_server(port=8101):
 
     pid = os.getpid()
     worker_info.info({"worker_name": WORKER_NAME, "pid": str(pid)})
+
+    # Import here to avoid circular dependency
+    from divbase_api.services.queries import BcftoolsQueryManager
+
+    bcftools_monitoring_config.info(
+        {"enabled": str(BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING), "sample_interval": "0.01s"}
+    )
+    logger.info(f"Bcftools subprocess monitoring: {BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING}")
+
     thread = threading.Thread(target=collect_system_metrics, daemon=True)
     thread.start()
     logger.info(f"Metrics collection started for PID {pid}")

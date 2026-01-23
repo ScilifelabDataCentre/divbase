@@ -128,6 +128,7 @@ class BcftoolsQueryManager:
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
+    ENABLE_SUBPROCESS_MONITORING = True  # Flag to enable/disable resource monitoring of bcftools subprocesses. Comes with some overhead, hence optional.
 
     def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> tuple[str, dict[str, float]]:
         """
@@ -300,69 +301,78 @@ class BcftoolsQueryManager:
             cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
             formatted_cmd = f"{cmd_with_samples} {file} -Oz -o {temp_file}"
 
-            # Run bcftools and monitor the subprocess
+            # Run bcftools and optionally monitor the subprocess
             proc = self.run_bcftools(command=formatted_cmd)
 
-            current_cpu = 0.0  # Initialize to track CPU usage
-            loop_iterations = 0
+            if self.ENABLE_SUBPROCESS_MONITORING:
+                current_cpu = 0.0  # Initialize to track CPU usage
+                loop_iterations = 0
 
-            try:
-                # Monitor the bcftools subprocess
-                bcftools_proc = psutil.Process(proc.pid)
-                cpu_start = bcftools_proc.cpu_times()
-                logger.info(
-                    f"Started monitoring bcftools PID {proc.pid}, initial CPU: user={cpu_start.user}, system={cpu_start.system}"
-                )
-
-                # Take initial memory sample immediately
                 try:
-                    mem = bcftools_proc.memory_info().rss
-                    memory_samples.append(mem)
-                    peak_memory = max(peak_memory, mem)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
+                    # Monitor the bcftools subprocess
+                    bcftools_proc = psutil.Process(proc.pid)
+                    cpu_start = bcftools_proc.cpu_times()
+                    logger.info(
+                        f"Started monitoring bcftools PID {proc.pid}, initial CPU: user={cpu_start.user}, system={cpu_start.system}"
+                    )
 
-                # Sample memory and CPU while process is running
-                while proc.poll() is None:
-                    loop_iterations += 1
+                    # Take initial memory sample immediately
                     try:
                         mem = bcftools_proc.memory_info().rss
                         memory_samples.append(mem)
                         peak_memory = max(peak_memory, mem)
-
-                        cpu_current = bcftools_proc.cpu_times()
-                        current_cpu = (cpu_current.user + cpu_current.system) - (cpu_start.user + cpu_start.system)
-
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        break
-                    # Set interval between measurements
-                    time.sleep(0.01)
-                    # TODO sleep time could be longer to reduce overhead, but then fast processes might be missed
+                        pass
 
-                logger.info(
-                    f"Monitoring loop completed after {loop_iterations} iterations, current_cpu={current_cpu:.6f}s"
-                )
+                    # Sample memory and CPU while process is running
+                    while proc.poll() is None:
+                        loop_iterations += 1
+                        try:
+                            mem = bcftools_proc.memory_info().rss
+                            memory_samples.append(mem)
+                            peak_memory = max(peak_memory, mem)
 
-                # Wait for process to complete and check return code
+                            cpu_current = bcftools_proc.cpu_times()
+                            current_cpu = (cpu_current.user + cpu_current.system) - (cpu_start.user + cpu_start.system)
+
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            break
+                        # Set interval between measurements
+                        time.sleep(0.01)
+                        # TODO sleep time could be longer to reduce overhead, but then fast processes might be missed
+
+                    logger.info(
+                        f"Monitoring loop completed after {loop_iterations} iterations, current_cpu={current_cpu:.6f}s"
+                    )
+
+                    # Wait for process to complete and check return code
+                    returncode = proc.wait()
+                    if returncode != 0:
+                        raise BcftoolsCommandError(
+                            command=formatted_cmd, error_details=f"Process exited with code {returncode}"
+                        ) from None
+
+                    # Add CPU to total (will be 0.0 if process was too fast to measure)
+                    total_cpu_seconds += current_cpu
+                    logger.info(
+                        f"Bcftools subprocess finished: CPU={current_cpu:.6f}s, Peak memory={peak_memory} bytes, Samples={len(memory_samples)}"
+                    )
+
+                except psutil.NoSuchProcess:
+                    returncode = proc.wait()
+                    if returncode != 0:
+                        raise BcftoolsCommandError(
+                            command=formatted_cmd, error_details=f"Process exited with code {returncode}"
+                        ) from None
+                    logger.info("Bcftools process finished too quickly to monitor - caught NoSuchProcess")
+            else:
+                # Monitoring disabled, just wait for process to complete
                 returncode = proc.wait()
                 if returncode != 0:
                     raise BcftoolsCommandError(
                         command=formatted_cmd, error_details=f"Process exited with code {returncode}"
                     ) from None
-
-                # Add CPU to total (will be 0.0 if process was too fast to measure)
-                total_cpu_seconds += current_cpu
-                logger.info(
-                    f"Bcftools subprocess finished: CPU={current_cpu:.6f}s, Peak memory={peak_memory} bytes, Samples={len(memory_samples)}"
-                )
-
-            except psutil.NoSuchProcess:
-                returncode = proc.wait()
-                if returncode != 0:
-                    raise BcftoolsCommandError(
-                        command=formatted_cmd, error_details=f"Process exited with code {returncode}"
-                    ) from None
-                logger.info("Bcftools process finished too quickly to monitor - caught NoSuchProcess")
+                logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             self.ensure_csi_index(temp_file)
 
