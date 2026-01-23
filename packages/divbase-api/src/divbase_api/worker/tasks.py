@@ -35,15 +35,13 @@ from divbase_api.worker.metrics import (
     task_bcftools_memory_avg_bytes,
     task_bcftools_memory_peak_bytes,
     task_bcftools_step_only_cpu_seconds,
-    task_bcftools_step_only_memory_bytes,
     task_bcftools_walltime_seconds,
     task_cpu_seconds,
     task_memory_avg_bytes,
-    task_memory_bytes,
     task_memory_peak_bytes,
+    task_python_overhead_cpu_seconds,
     task_vcf_download_cpu_seconds,
     task_vcf_download_memory_avg_bytes,
-    task_vcf_download_memory_bytes,
     task_vcf_download_memory_peak_bytes,
     task_vcf_download_walltime_seconds,
     task_walltime_seconds,
@@ -232,7 +230,6 @@ def bcftools_pipe_task(
 
     process = psutil.Process()
     cpu_start = process.cpu_times()
-    mem_start = process.memory_info().rss
 
     memory_monitor = MemoryMonitor(process, sample_interval=0.5)
     memory_monitor.start()
@@ -287,10 +284,11 @@ def bcftools_pipe_task(
     )
 
     # Measure download operation resources
+    # Memory: Capture baseline before download, then measure incremental memory increase (delta)
     download_cpu_start = process.cpu_times()
-    download_mem_start = process.memory_info().rss
+    download_mem_baseline = process.memory_info().rss
 
-    download_memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+    download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
     download_memory_monitor.start()
 
     download_start = time.time()
@@ -303,14 +301,12 @@ def bcftools_pipe_task(
 
     download_memory_stats = download_memory_monitor.stop()
     download_cpu_end = process.cpu_times()
-    download_mem_end = process.memory_info().rss
 
     download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
         download_cpu_start.user + download_cpu_start.system
     )
-    download_mem_used = download_mem_end - download_mem_start
-    download_mem_peak = download_memory_stats["peak_bytes"]
-    download_mem_avg = download_memory_stats["avg_bytes"]
+    download_mem_peak_delta = download_memory_stats["peak_bytes"]
+    download_mem_avg_delta = download_memory_stats["avg_bytes"]
 
     logger.debug(
         f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
@@ -329,27 +325,18 @@ def bcftools_pipe_task(
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
     output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
 
-    # Extract bcftools subprocess metrics
     bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
     bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
     bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
     bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
-    # Delta not meaningful from subprocess metrics, use 0
-    bcftools_mem_used = 0.0
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    # Stop monitoring and get final stats
     memory_stats = memory_monitor.stop()
-
     cpu_end = process.cpu_times()
-    mem_end = process.memory_info().rss
     python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
-    mem_used = mem_end - mem_start
 
-    # Total task CPU = Python overhead + bcftools subprocess CPU
-    # This allows stacked bar chart: total = bcftools + overhead
     total_task_cpu = python_overhead_cpu + bcftools_cpu_used
 
     task_walltime = time.time() - task_walltime_start
@@ -358,19 +345,17 @@ def bcftools_pipe_task(
         job_id=job_id,
         task_name=bcftools_pipe_task.name,
         cpu_used=total_task_cpu,
-        mem_used=mem_used,
+        python_overhead_cpu=python_overhead_cpu,
         mem_peak=memory_stats["peak_bytes"],
         mem_avg=memory_stats["avg_bytes"],
         bcftools_cpu_used=bcftools_cpu_used,
-        bcftools_mem_used=bcftools_mem_used,
         bcftools_mem_peak=bcftools_mem_peak,
         bcftools_mem_avg=bcftools_mem_avg,
         bcftools_walltime=bcftools_walltime,
         vcf_download_walltime=download_walltime,
         vcf_download_cpu_used=download_cpu_used,
-        vcf_download_mem_used=download_mem_used,
-        vcf_download_mem_peak=download_mem_peak,
-        vcf_download_mem_avg=download_mem_avg,
+        vcf_download_mem_peak=download_mem_peak_delta,
+        vcf_download_mem_avg=download_mem_avg_delta,
         task_walltime=task_walltime,
     )
 
@@ -748,17 +733,15 @@ def _record_task_metrics(
     job_id: int,
     task_name: str,
     cpu_used: float,
-    mem_used: float,
+    python_overhead_cpu: Optional[float] = None,
     mem_peak: float = None,
     mem_avg: float = None,
     bcftools_cpu_used: Optional[float] = None,
-    bcftools_mem_used: Optional[float] = None,
     bcftools_mem_peak: Optional[float] = None,
     bcftools_mem_avg: Optional[float] = None,
     bcftools_walltime: Optional[float] = None,
     vcf_download_walltime: Optional[float] = None,
     vcf_download_cpu_used: Optional[float] = None,
-    vcf_download_mem_used: Optional[float] = None,
     vcf_download_mem_peak: Optional[float] = None,
     vcf_download_mem_avg: Optional[float] = None,
     task_walltime: Optional[float] = None,
@@ -769,18 +752,19 @@ def _record_task_metrics(
 
     Note on Optional args:
     Use None to mean “not applicable” (the arg was not provided when the task called this function), which makes 0.0 mean “ran, but used no resources".
+
+    Note: cpu_used is the ARTIFICIAL SUM (python_overhead + bcftools), while python_overhead_cpu is the ACTUAL MEASURED value.
     """
 
     store_task_metric("task_cpu_seconds", job_id, task_name, cpu_used)
-    store_task_metric("task_memory_bytes", job_id, task_name, mem_used)
+    if python_overhead_cpu is not None:
+        store_task_metric("task_python_overhead_cpu_seconds", job_id, task_name, python_overhead_cpu)
     if mem_peak is not None:
         store_task_metric("task_memory_peak_bytes", job_id, task_name, mem_peak)
     if mem_avg is not None:
         store_task_metric("task_memory_avg_bytes", job_id, task_name, mem_avg)
     if bcftools_cpu_used is not None:
         store_task_metric("task_bcftools_cpu_seconds", job_id, task_name, bcftools_cpu_used)
-    if bcftools_mem_used is not None:
-        store_task_metric("task_bcftools_memory_bytes", job_id, task_name, bcftools_mem_used)
     if bcftools_mem_peak is not None:
         store_task_metric("task_bcftools_memory_peak_bytes", job_id, task_name, bcftools_mem_peak)
     if bcftools_mem_avg is not None:
@@ -792,8 +776,6 @@ def _record_task_metrics(
         store_task_metric("task_vcf_download_walltime_seconds", job_id, task_name, vcf_download_walltime)
     if vcf_download_cpu_used is not None:
         store_task_metric("task_vcf_download_cpu_seconds", job_id, task_name, vcf_download_cpu_used)
-    if vcf_download_mem_used is not None:
-        store_task_metric("task_vcf_download_memory_bytes", job_id, task_name, vcf_download_mem_used)
     if vcf_download_mem_peak is not None:
         store_task_metric("task_vcf_download_memory_peak_bytes", job_id, task_name, vcf_download_mem_peak)
     if vcf_download_mem_avg is not None:
@@ -803,9 +785,8 @@ def _record_task_metrics(
 
     update_prometheus_gauges_from_cache(
         task_cpu_seconds,
-        task_memory_bytes,
+        task_python_overhead_cpu_seconds,
         task_bcftools_step_only_cpu_seconds,
-        task_bcftools_step_only_memory_bytes,
         task_memory_peak_bytes,
         task_memory_avg_bytes,
         task_bcftools_memory_peak_bytes,
@@ -813,7 +794,6 @@ def _record_task_metrics(
         task_bcftools_walltime_seconds,
         task_vcf_download_walltime_seconds,
         task_vcf_download_cpu_seconds,
-        task_vcf_download_memory_bytes,
         task_vcf_download_memory_peak_bytes,
         task_vcf_download_memory_avg_bytes,
         task_walltime_seconds,

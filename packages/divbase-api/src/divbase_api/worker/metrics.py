@@ -17,9 +17,10 @@ WORKER_NAME = socket.gethostname()
 class MemoryMonitor:
     """Monitor memory usage of a process, tracking peak and average usage."""
 
-    def __init__(self, process: psutil.Process, sample_interval: float = 0.5):
+    def __init__(self, process: psutil.Process, sample_interval: float = 0.5, baseline_memory: int = 0):
         self.process = process
         self.sample_interval = sample_interval
+        self.baseline_memory = baseline_memory
         self.samples = []
         self.peak_memory = 0
         self.monitoring = False
@@ -40,7 +41,12 @@ class MemoryMonitor:
         if not self.samples:
             return {"peak_bytes": 0, "avg_bytes": 0}
 
-        return {"peak_bytes": self.peak_memory, "avg_bytes": sum(self.samples) / len(self.samples)}
+        # If baseline is set, return delta from baseline
+        peak_delta = max(0, self.peak_memory - self.baseline_memory)
+        avg_value = sum(self.samples) / len(self.samples)
+        avg_delta = max(0, avg_value - self.baseline_memory)
+
+        return {"peak_bytes": peak_delta, "avg_bytes": avg_delta}
 
     def _monitor(self):
         """Background monitoring loop."""
@@ -83,27 +89,32 @@ worker_open_fds = Gauge("celery_worker_prom_client_open_fds", "Number of open fi
 # Each task is identified by job_id and task_name labels
 #
 # TASK METRICS: Measure the TOTAL resources for the entire task execution.
-# For tasks with subprocesses, this INCLUDES subprocess resource usage.
-# Task CPU = Python overhead + subprocess CPU (allowing overhead = task - subprocess)
-# Task Memory = Peak memory of the Python worker process (includes subprocess coordination overhead)
+# Task CPU = Python worker process CPU + bcftools subprocess CPU (artificially summed in tasks.py)
+#   - This is NOT a real measurement, but a constructed sum for visualization purposes
+#   - Use python_overhead_cpu for actual measured Python worker CPU
+# Task Memory = Peak/avg memory (RSS) of Python worker process ONLY (separate from bcftools subprocess)
+#   - This is the worker process memory, NOT including bcftools subprocess memory (separate process).
+#   - Memory used by bcftools subprocesses is measured separately and is not included in the Python worker’s memory metrics.
+#   - Memory overhead cannot be calculated by subtraction (separate process memory spaces).
+#   - Memory metrics for the Python worker and bcftools subprocesses are measured independently. Due to separate process memory spaces, these values should not be summed or directly compared as parts of a whole.
 task_cpu_seconds = Gauge(
     "celery_task_cpu_seconds_total",
-    "Total CPU seconds for entire task (Python overhead + all subprocess CPU). Use task_cpu - bcftools_cpu for overhead.",
+    "ARTIFICIAL SUM: Python overhead CPU + bcftools subprocess CPU. Not a real measurement. Use for stacked visualizations only.",
     ["job_id", "task_name"],
 )
-task_memory_bytes = Gauge(
-    "celery_task_memory_bytes",
-    "Memory delta (end - start) for Python worker process in bytes. May be negative if memory released during task.",
+task_python_overhead_cpu_seconds = Gauge(
+    "celery_task_python_overhead_cpu_seconds",
+    "ACTUAL MEASURED: CPU seconds used by Python worker process (overhead). Does NOT include bcftools subprocess.",
     ["job_id", "task_name"],
 )
 task_memory_peak_bytes = Gauge(
     "celery_task_memory_peak_bytes",
-    "Peak memory (RSS) of Python worker process during task execution in bytes. Sampled every 0.5s.",
+    "Peak memory (RSS) of Python worker process only. Does NOT include bcftools subprocess memory (separate process). Includes VCF download. Sampled every 0.5s.",
     ["job_id", "task_name"],
 )
 task_memory_avg_bytes = Gauge(
     "celery_task_memory_avg_bytes",
-    "Average memory (RSS) of Python worker process during task execution in bytes. Sampled every 0.5s.",
+    "Average memory (RSS) of Python worker process only. Does NOT include bcftools subprocess memory (separate process). Includes VCF download. Sampled every 0.5s.",
     ["job_id", "task_name"],
 )
 
@@ -121,21 +132,15 @@ task_bcftools_step_only_cpu_seconds = Gauge(
     "Subtract from task_cpu to get Python overhead.",
     ["job_id", "task_name"],
 )
-task_bcftools_step_only_memory_bytes = Gauge(
-    "celery_task_bcftools_memory_bytes",
-    "Memory delta for bcftools subprocesses. Always set to 0.0 as delta is not meaningful for subprocesses. "
-    "Use peak or avg memory metrics instead.",
-    ["job_id", "task_name"],
-)
 task_bcftools_memory_peak_bytes = Gauge(
     "celery_task_bcftools_memory_peak_bytes",
-    "Peak memory (RSS) of bcftools subprocess(es) in bytes. Max value across all bcftools calls. Sampled every 0.01s. "
+    "Peak memory (RSS) of bcftools subprocess(es) in bytes. Max peak observed in any single bcftools subprocess (not summed). Sampled every 0.01s. "
     "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config).",
     ["job_id", "task_name"],
 )
 task_bcftools_memory_avg_bytes = Gauge(
     "celery_task_bcftools_memory_avg_bytes",
-    "Average memory (RSS) of bcftools subprocess(es) in bytes. Mean of all samples from all bcftools calls. Sampled every 0.01s. "
+    "Average memory (RSS) of bcftools subprocess(es) in bytes. Mean of all samples from all bcftools calls (not an average of averages). Sampled every 0.01s. "
     "Value of 0.0 may indicate: (1) process was too fast to measure, or (2) monitoring is disabled (check celery_task_bcftools_monitoring_config).",
     ["job_id", "task_name"],
 )
@@ -151,22 +156,17 @@ task_vcf_download_walltime_seconds = Gauge(
 )
 task_vcf_download_cpu_seconds = Gauge(
     "celery_task_vcf_download_cpu_seconds",
-    "CPU seconds used for downloading VCF files from S3 (boto3 operations run in worker process). Sampled every 0.5s.",
-    ["job_id", "task_name"],
-)
-task_vcf_download_memory_bytes = Gauge(
-    "celery_task_vcf_download_memory_bytes",
-    "Memory delta (end - start) for VCF download operation in bytes. May be negative if memory released during download.",
+    "CPU seconds used for downloading VCF files from S3 (boto3 operations run in worker process).",
     ["job_id", "task_name"],
 )
 task_vcf_download_memory_peak_bytes = Gauge(
     "celery_task_vcf_download_memory_peak_bytes",
-    "Peak memory (RSS) during VCF download from S3 in bytes. Sampled every 0.5s.",
+    "Peak INCREMENTAL memory used during VCF download from S3 (delta from baseline). Measures actual memory increase, not a separate allocation. Do not add this to Python worker memory; it is already included during download. Sampled every 0.5s.",
     ["job_id", "task_name"],
 )
 task_vcf_download_memory_avg_bytes = Gauge(
     "celery_task_vcf_download_memory_avg_bytes",
-    "Average memory (RSS) during VCF download from S3 in bytes. Sampled every 0.5s.",
+    "Average INCREMENTAL memory used during VCF download from S3 (delta from baseline). Measures actual memory increase, not a separate allocation. Do not add this to Python worker memory; it is already included during download. Sampled every 0.5s.",
     ["job_id", "task_name"],
 )
 
@@ -229,9 +229,8 @@ def purge_old_metrics():
     with metrics_cache_lock:
         for metric_name, gauge in [
             ("task_cpu_seconds", task_cpu_seconds),
-            ("task_memory_bytes", task_memory_bytes),
+            ("task_python_overhead_cpu_seconds", task_python_overhead_cpu_seconds),
             ("task_bcftools_cpu_seconds", task_bcftools_step_only_cpu_seconds),
-            ("task_bcftools_memory_bytes", task_bcftools_step_only_memory_bytes),
         ]:
             tasks_to_remove = [
                 key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
@@ -249,7 +248,6 @@ def purge_old_metrics():
             ("task_bcftools_walltime_seconds", task_bcftools_walltime_seconds),
             ("task_vcf_download_walltime_seconds", task_vcf_download_walltime_seconds),
             ("task_vcf_download_cpu_seconds", task_vcf_download_cpu_seconds),
-            ("task_vcf_download_memory_bytes", task_vcf_download_memory_bytes),
             ("task_vcf_download_memory_peak_bytes", task_vcf_download_memory_peak_bytes),
             ("task_vcf_download_memory_avg_bytes", task_vcf_download_memory_avg_bytes),
             ("task_walltime_seconds", task_walltime_seconds),
@@ -274,9 +272,8 @@ def get_all_cached_metrics():
 
 def update_prometheus_gauges_from_cache(
     task_cpu_gauge,
-    task_mem_gauge,
+    python_overhead_cpu_gauge,
     bcftools_cpu_gauge,
-    bcftools_mem_gauge,
     task_mem_peak_gauge,
     task_mem_avg_gauge,
     bcftools_mem_peak_gauge,
@@ -284,7 +281,6 @@ def update_prometheus_gauges_from_cache(
     bcftools_walltime_gauge,
     vcf_download_walltime_gauge,
     vcf_download_cpu_gauge,
-    vcf_download_mem_gauge,
     vcf_download_mem_peak_gauge,
     vcf_download_mem_avg_gauge,
     task_walltime_gauge,
@@ -295,20 +291,17 @@ def update_prometheus_gauges_from_cache(
     for (job_id, task_name), value in cached.get("task_cpu_seconds", {}).items():
         task_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
-    for (job_id, task_name), value in cached.get("task_memory_bytes", {}).items():
-        task_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+    for (job_id, task_name), value in cached.get("task_python_overhead_cpu_seconds", {}).items():
+        python_overhead_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+
+    for (job_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
+        bcftools_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
     for (job_id, task_name), value in cached.get("task_memory_peak_bytes", {}).items():
         task_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
     for (job_id, task_name), value in cached.get("task_memory_avg_bytes", {}).items():
         task_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
-        bcftools_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_memory_bytes", {}).items():
-        bcftools_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
     for (job_id, task_name), value in cached.get("task_bcftools_memory_peak_bytes", {}).items():
         bcftools_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
@@ -327,9 +320,6 @@ def update_prometheus_gauges_from_cache(
 
     for (job_id, task_name), value in cached.get("task_vcf_download_cpu_seconds", {}).items():
         vcf_download_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_vcf_download_memory_bytes", {}).items():
-        vcf_download_mem_gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
     for (job_id, task_name), value in cached.get("task_vcf_download_memory_peak_bytes", {}).items():
         vcf_download_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
