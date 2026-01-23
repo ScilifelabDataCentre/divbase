@@ -109,7 +109,6 @@ class CompleteMultipartUploadResponse(BaseModel):
     md5_hash: str = Field(..., description="MD5 hash of the uploaded object")
 
 
-# TODO - look into lifecycle rules for deleting incomplete multipart uploads.
 class AbortMultipartUploadRequest(BaseModel):
     """Request model to abort a multipart upload and clean up parts."""
 
