@@ -128,7 +128,9 @@ class BcftoolsQueryManager:
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
-    ENABLE_SUBPROCESS_MONITORING = True  # Flag to enable/disable resource monitoring of bcftools subprocesses. Comes with some overhead, hence optional.
+    ENABLE_SUBPROCESS_MONITORING = (
+        os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
+    )  # Monitoring bcftools subprocesses is controled with an environment variable. Comes with some overhead, hence optional.
 
     def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> tuple[str, dict[str, float]]:
         """

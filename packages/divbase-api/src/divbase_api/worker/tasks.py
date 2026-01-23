@@ -83,6 +83,8 @@ app.conf.update(
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
+ENABLE_WORKER_METRICS = os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
+
 
 @worker_process_init.connect
 def init_worker_metrics(**kwargs):
@@ -90,7 +92,10 @@ def init_worker_metrics(**kwargs):
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    start_metrics_server(port=8101)
+    if ENABLE_WORKER_METRICS:
+        start_metrics_server(port=8101)
+    else:
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS=false)")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -226,13 +231,17 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
-    task_walltime_start = time.time()
+    task_walltime_start = time.time() if ENABLE_WORKER_METRICS else None
 
-    process = psutil.Process()
-    cpu_start = process.cpu_times()
-
-    memory_monitor = MemoryMonitor(process, sample_interval=0.5)
-    memory_monitor.start()
+    if ENABLE_WORKER_METRICS:
+        process = psutil.Process()
+        cpu_start = process.cpu_times()
+        memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+        memory_monitor.start()
+    else:
+        process = None
+        cpu_start = None
+        memory_monitor = None
 
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
@@ -285,32 +294,36 @@ def bcftools_pipe_task(
 
     # Measure download operation resources
     # Memory: Capture baseline before download, then measure incremental memory increase (delta)
-    download_cpu_start = process.cpu_times()
-    download_mem_baseline = process.memory_info().rss
+    if ENABLE_WORKER_METRICS:
+        download_cpu_start = process.cpu_times()
+        download_mem_baseline = process.memory_info().rss
+        download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
+        download_memory_monitor.start()
+        download_start = time.time()
 
-    download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
-    download_memory_monitor.start()
-
-    download_start = time.time()
     _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
-    download_walltime = time.time() - download_start
 
-    download_memory_stats = download_memory_monitor.stop()
-    download_cpu_end = process.cpu_times()
-
-    download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
-        download_cpu_start.user + download_cpu_start.system
-    )
-    download_mem_peak_delta = download_memory_stats["peak_bytes"]
-    download_mem_avg_delta = download_memory_stats["avg_bytes"]
-
-    logger.debug(
-        f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
-    )
+    if ENABLE_WORKER_METRICS:
+        download_walltime = time.time() - download_start
+        download_memory_stats = download_memory_monitor.stop()
+        download_cpu_end = process.cpu_times()
+        download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
+            download_cpu_start.user + download_cpu_start.system
+        )
+        download_mem_peak_delta = download_memory_stats["peak_bytes"]
+        download_mem_avg_delta = download_memory_stats["avg_bytes"]
+        logger.debug(
+            f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+        )
+    else:
+        download_walltime = None
+        download_cpu_used = None
+        download_mem_peak_delta = None
+        download_mem_avg_delta = None
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -333,31 +346,30 @@ def bcftools_pipe_task(
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    memory_stats = memory_monitor.stop()
-    cpu_end = process.cpu_times()
-    python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+    if ENABLE_WORKER_METRICS:
+        memory_stats = memory_monitor.stop()
+        cpu_end = process.cpu_times()
+        python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+        total_task_cpu = python_overhead_cpu + bcftools_cpu_used
+        task_walltime = time.time() - task_walltime_start
 
-    total_task_cpu = python_overhead_cpu + bcftools_cpu_used
-
-    task_walltime = time.time() - task_walltime_start
-
-    _record_task_metrics(
-        job_id=job_id,
-        task_name=bcftools_pipe_task.name,
-        cpu_used=total_task_cpu,
-        python_overhead_cpu=python_overhead_cpu,
-        mem_peak=memory_stats["peak_bytes"],
-        mem_avg=memory_stats["avg_bytes"],
-        bcftools_cpu_used=bcftools_cpu_used,
-        bcftools_mem_peak=bcftools_mem_peak,
-        bcftools_mem_avg=bcftools_mem_avg,
-        bcftools_walltime=bcftools_walltime,
-        vcf_download_walltime=download_walltime,
-        vcf_download_cpu_used=download_cpu_used,
-        vcf_download_mem_peak=download_mem_peak_delta,
-        vcf_download_mem_avg=download_mem_avg_delta,
-        task_walltime=task_walltime,
-    )
+        _record_task_metrics(
+            job_id=job_id,
+            task_name=bcftools_pipe_task.name,
+            cpu_used=total_task_cpu,
+            python_overhead_cpu=python_overhead_cpu,
+            mem_peak=memory_stats["peak_bytes"],
+            mem_avg=memory_stats["avg_bytes"],
+            bcftools_cpu_used=bcftools_cpu_used,
+            bcftools_mem_peak=bcftools_mem_peak,
+            bcftools_mem_avg=bcftools_mem_avg,
+            bcftools_walltime=bcftools_walltime,
+            vcf_download_walltime=download_walltime,
+            vcf_download_cpu_used=download_cpu_used,
+            vcf_download_mem_peak=download_mem_peak_delta,
+            vcf_download_mem_avg=download_mem_avg_delta,
+            task_walltime=task_walltime,
+        )
 
     return {"status": "completed", "output_file": output_file}
 

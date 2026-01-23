@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 WORKER_NAME = socket.gethostname()
 
+ENABLE_WORKER_METRICS = os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
+
 
 class MemoryMonitor:
     """Monitor memory usage of a process, tracking peak and average usage."""
@@ -41,7 +43,6 @@ class MemoryMonitor:
         if not self.samples:
             return {"peak_bytes": 0, "avg_bytes": 0}
 
-        # If baseline is set, return delta from baseline
         peak_delta = max(0, self.peak_memory - self.baseline_memory)
         avg_value = sum(self.samples) / len(self.samples)
         avg_delta = max(0, avg_value - self.baseline_memory)
@@ -356,6 +357,9 @@ def start_metrics_server(port=8101):
     For k8s deployment, concurrency must be set to 1 (1 worker process per pod). Scaling will be handled by increasing the number of pods.
     Example with concurrency=1: 1 worker process, 1 collection thread, 1 HTTP server.
     """
+    if not ENABLE_WORKER_METRICS:
+        logger.info("Metrics collection disabled via ENABLE_WORKER_METRICS environment variable")
+        return
     global _metrics_server_started
 
     pid = os.getpid()
