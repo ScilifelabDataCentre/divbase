@@ -56,9 +56,11 @@ $$
 \frac{120\ \text{CPU-seconds}}{1\ \text{core}} = 120\ \text{seconds (Wall time)}
 $$
 
-To configure this for the k8s deployment use `requests` for the minimum guaranteed CPU resources and `limits` for the maximum allowed CPU resources. Thus, `limits` dictate the fastest possible wall time. Kustomize manifest example:
+To configure this for the k8s deployment use `requests` for the minimum guaranteed CPU resources and `limits` for the maximum allowed CPU resources. Thus, `limits` dictate the fastest possible wall time.
 
 ```
+# Kustomize manifest example
+
 resources:
     requests:
         cpu: "200m"
@@ -68,8 +70,30 @@ resources:
 
 ## Memory Usage: Not Additive Across Processes
 
-TODO
+Memory usage monitoring in DivBase is based on measuring RSS (Resident Set Size). How Linux system use memory is a much bigger topic than this document can ambition to describe, but in short, there is [RSS and VSZ (virtual memory)](https://stackoverflow.com/questions/7880784/what-is-rss-and-vsz-in-linux-memory-management). RSS is the memory allocation of a process the in physical memory (RAM). Unlike CPU time, RSS Memory usage is not additive across processes because operating systems allow processes to share memory regions, as for instance discussed in this forum [thread](https://stackoverflow.com/questions/131303/how-can-i-measure-the-actual-memory-usage-of-an-application-or-process) and in this [thread] (<https://unix.stackexchange.com/questions/34795/correctly-determining-memory-usage-in-linux>). See also: [Kerrisk, M. (2010). The Linux programming interface: A Linux and UNIX system programming handbook. No Starch Press](https://www.man7.org/tlpi/). There are other tools and methods to monitor memory, but RSS provides a decent estimate for the needs of DivBase optimisation.
 
-## Implementation
+Monitoring RSS memory usage is done per process. This means that for DivBase, the Python process that runs the task has its own memory usage, and each `bcftools` subprocess have their own memory usages. Note that although the Python process waits for the `bcftools` subprocess to finish, the memory used by the `bcftools` subprocesses is not reflected in the memory usage of the Python process during that time.
 
-TODO
+For DivBase, two memory metrics are calculated: Average memory usage (RSS, bytes) and Peak memory usage (RSS, bytes). The average is used to find the baseline RSS memory usage for the processes running during a task, and the peak is the highest RSS usage that was observed. These are used to set up the kubernetes memory request and limits, as described later below. To collect this data, the RSS memory usage of the Python process and each `bcftools` subprocess is sampled at frequent intervals and stored in a data pool. The average and peak RSS is then calculated for each process based on these data pools. Note that total cumulative memory is not tracked since RSS is not additive.
+
+### Memory resource considerations for Kubernetes (k8s) deployment
+
+As described above in the CPU section, resource specifications for memory in Kubernetes are enforced per container and not per pod. Memory is measured in bytes, and can be specified using units like Mi (mebibytes) or Gi (gibibytes). It is important to know that when a container exceeds its memory limit in Kubernetes, it is terminated (OOMKilled; Out Of Memory Killed). This is different from how CPU resources are handled, as exceeding the CPU limit results in throttling of the container but not termination. Therefore, setting adequate memory allocations is important for kubernetes!
+
+To set appropriate memory constraints, both the average and peak memory usage (RSS) observed during task execution should be considered. As mententioned earlier `requests` is the minimum guaranteed resources and `limits` for the maximum allowed resources. By capturing metrics from a range of real task loads, the `requests` should be set to the encounterd average memory usage (plus a safety margin; 10-30%?) of the benchmarked tasks, and `limits` to the peak memory usage (plus a safety margin; 10-30%?). The `limits` value should be high enough to accommodate rare spikes, but not so high as to waste resources.
+
+**Example:**
+
+If a task's average memory usage is 600 MiB and the peak observed is 900 MiB, applying a 20% safety margin gives:
+
+```
+# Kustomize manifest example
+
+resources:
+    requests:
+        memory: "720Mi"   # average (600 MiB) + 20% safety margin
+    limits:
+        memory: "1080Mi"  # peak (900 MiB) + 20% safety margin
+```
+
+This ensures the container is scheduled on a node with at least 700 MiB available, and will be killed if it ever exceeds 1 GiB. These values should be adjusted after monitoring real use-cases.
