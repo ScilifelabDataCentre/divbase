@@ -1,10 +1,10 @@
-# Resource Usage Metrics: CPU vs Memory in DivBase
+# Monitoring: Custom metrics collection for Celery worker
 
-This document explains how resource usage metrics are tracked and reported for Celery tasks and bcftools subprocesses in DivBase, with a focus on the differences between CPU and memory accounting.
-
-DivBase uses `bcftools` for operations that act directly on VCF files. `bcftools` is a compiled binary and is considered to be a very efficient way to process VCF files. When measuring any resource metric for a DivBase task, it’s thus relevant to distinguish between the time spent in the core VCF processing step (handled by `bcftools`) and the time spent in supporting operations (the DivBase overhead). While bcftools sets the lower bound for how fast VCF processing can be, the overall task duration also depends on DivBase-specific steps such as downloading files from S3, checking data compatibility, and managing metadata. Ideally, the DivBase overhead should be as small as possible, giving users a performance similar to that of just running `bcftools` on the files.
+This document explains how resource usage metrics are tracked and reported for the Celery Workers in DivBase. Using a custom `prometheus-client` metrics server, wall time, CPU time, and Memory Usage can be collected on a per-task basis (togglable with the `ENABLE_WORKER_METRICS` environment variable). The metrics are collected with custom code written for DivBase, and this document collects the definition and rationale behind the units and calculations used to capture the metrics. This is specifically for the custom per-task resource monitoring; it is possible to set up system/cluster wide resource monitoring in addition to this (e.g. `cAdvisor`, `node-exporter` etc.)
 
 This document was written with the Celery tasks that call on `bcftools` in mind. These are the most resource intensive tasks in DivBase and include e.g. downloading of VCF files from the S3 object store to the Celery workers and running of `bcftools`. The text still applies to any Celery task in DivBase: if `bcftools` is not used in a task the element of the calculations will be 0.
+
+DivBase uses `bcftools` for operations that act directly on VCF files. `bcftools` is a compiled binary and is considered to be a very efficient way to process VCF files. When measuring any resource metric for a DivBase task, it’s thus relevant to distinguish between the time spent in the core VCF processing step (handled by `bcftools`) and the time spent in supporting operations (the DivBase overhead). While bcftools sets the lower bound for how fast VCF processing can be, the overall task duration also depends on DivBase-specific steps such as downloading files from S3, checking data compatibility, and managing metadata. Ideally, the DivBase overhead should be as small as possible, giving users a performance similar to that of just running `bcftools` on the files.
 
 ## Wall time: total time elapsed from process start to end
 
@@ -13,13 +13,13 @@ Wall time (also known as ["wall clock time", "real elapsed time", and other name
 As will be discussed in the section on CPU time below, `bcftools` will be run in one or several subprocesses. Wall time is measured for the Python proccess and for the `bcftools` subprocesses with the `time` python library. The wall time for the Python process is measured from the start to the finish of the task, meaning that:
 
 $$
-    \text{Total wall time for a DivBase task} = \text{Python process wall time}
+\text{Total wall time for a DivBase task} = \text{Python process wall time}
 $$
 
 The wall time is also measured seperatelly for the time it takes to run the `bcftools` calls of the task. Since the wall time for total task and the `bcftools` subprocess are measured, the DivBase task overhead can be calculated as:
 
 $$
- \text{DivBase overhead wall time} = \text{Python process wall time} - \sum_{i=1}^N \text{bcftools subprocess}_i \text{ wall time}
+\text{DivBase overhead wall time} = \text{Python process wall time} - \sum_{i=1}^N \text{bcftools subprocess}_i \text{ wall time}
 $$
 
 To optimize wall time, other metrics such as CPU time and memory usage need to be considered.
@@ -37,7 +37,7 @@ $$
 Because all DivBase-specific operations (such as file downloads, metadata checks, and orchestration) are performed in the main Python process, and bcftools subprocesses are measured separately, the DivBase task overhead for CPU time is simply the CPU time of the Python process:
 
 $$
- \text{DivBase overhead CPU time} = \text{Python process CPU time}
+\text{DivBase overhead CPU time} = \text{Python process CPU time}
 $$
 
 Note that this is different from how wall time is measured in DivBase: task start to finish.
