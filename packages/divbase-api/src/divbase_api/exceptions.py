@@ -4,6 +4,8 @@ DivBase API custom exceptions.
 All exceptions in this module should inherit from DivBaseAPIException, so we can catch for that externally.
 """
 
+from pathlib import Path
+
 from fastapi import status
 
 
@@ -106,3 +108,15 @@ class TaskNotFoundInBackendError(DivBaseAPIException):
         message: str = "Task ID not found in results backend. It may have been purged during cleanup of old task records.",
     ):
         super().__init__(message=message, status_code=status.HTTP_410_GONE)
+
+
+class DownloadedFileChecksumMismatchError(DivBaseAPIException):
+    """Raised when a worker downloads a file but the calculated checksum does not match the checksum provided by s3."""
+
+    def __init__(self, file_path: Path, calculated_checksum: str, expected_checksum: str):
+        message = (
+            f"Downloaded file checksum mismatch for file '{file_path.name}'. "
+            f"Expected: {expected_checksum}, "
+            f"but calculated: {calculated_checksum}."
+        )
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)

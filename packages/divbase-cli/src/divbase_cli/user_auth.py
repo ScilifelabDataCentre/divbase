@@ -10,12 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+import stamina
 import yaml
 from pydantic import SecretStr
 
 from divbase_api.schemas.auth import LogoutRequest
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.retries import retry_only_on_retryable_divbase_api_errors
 from divbase_cli.user_config import load_user_config
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
@@ -76,6 +78,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
+@stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
 def login_to_divbase(email: str, password: SecretStr, divbase_url: str, config_path: Path) -> None:
     """
     Log in to the DivBase server and return user tokens.
@@ -182,6 +185,7 @@ def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
     )
 
 
+@stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
 def make_authenticated_request(
     method: str,
     divbase_base_url: str,
@@ -235,13 +239,15 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     Use the refresh token to get a new access token and update the token file.
 
     Returns the new TokenData object which can be used immediately in a new request.
+    NOTE: We do not need retry logic inside this function as the calling function has it.
     """
-    response = httpx.post(
-        f"{divbase_base_url}/v1/auth/refresh",
-        json={
-            "refresh_token": token_data.refresh_token.get_secret_value(),
-        },
-    )
+    try:
+        response = httpx.post(
+            url=f"{divbase_base_url}/v1/auth/refresh",
+            json={"refresh_token": token_data.refresh_token.get_secret_value()},
+        )
+    except httpx.HTTPError as e:
+        raise DivBaseAPIConnectionError() from e
 
     # Possible if e.g. token revoked on server side.
     if response.status_code == 401:
@@ -251,7 +257,16 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
         config.set_login_status(url=None, email=None)
         raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise DivBaseAPIError(
+            error_details=response.json().get("detail", "No error details provided"),
+            status_code=response.status_code,
+            error_type=response.json().get("type", "unknown"),
+            http_method="POST",
+            url=f"{divbase_base_url}/v1/auth/refresh",
+        ) from e
     data = response.json()
 
     new_token_data = TokenData(
