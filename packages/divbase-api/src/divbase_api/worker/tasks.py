@@ -231,14 +231,14 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
-    task_walltime_start = time.time() if ENABLE_WORKER_METRICS else None
-
     if ENABLE_WORKER_METRICS:
+        task_walltime_start = time.time()
         process = psutil.Process()
         cpu_start = process.cpu_times()
         memory_monitor = MemoryMonitor(process, sample_interval=0.5)
         memory_monitor.start()
     else:
+        task_walltime_start = None
         process = None
         cpu_start = None
         memory_monitor = None
