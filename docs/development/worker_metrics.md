@@ -40,23 +40,17 @@ $$
 \text{DivBase overhead CPU time} = \text{Python process CPU time}
 $$
 
-Note that this is different from how wall time is measured in DivBase: task start to finish.
+Note 1: this is different from how wall time is measured in DivBase: task start to finish.
+
+Note 2: At the time of writing, the `bcftools` subprocesses in DivBase are implemented to be executed sequentially in a loop. They are NOT runing running in parallel. This means that CPU time accumulates across subprocesses that execute one after another. Each subprocess is currently single-threaded (since `bcftools` [docs](https://samtools.github.io/bcftools/howtos/scaling.html) mentions that "The --threads option is less useful than you think" and only is used for compressing input and output files).
 
 ### CPU resource considerations for Kubernetes (k8s) deployment
 
-Resource specifications in k8s is enforced per container (not per pod, the pod resouce usage is the sum of all its containers). CPU is measured in cores: 1 = one full core, 500m (millicore) is half a core, etc. Important to know is that when a container exceedes its CPU limitations in k8s, it is throttled but not killed; exceeding memory limitations result in containers being kill, but more on that in the memory section below. Essentially, the CPU requests and limits can be used to control wall time by:
+Resource specifications in k8s is enforced per container (not per pod, the pod resouce usage is the sum of all its containers). CPU is measured in cores: 1 = one full core, 500m (millicore) is half a core, etc. Important to know is that when a container exceedes its CPU limitations in k8s, it is throttled but not killed; exceeding memory limitations result in containers being kill, but more on that in the memory section below.
 
-$$
-\text{Wall time (seconds)} = \frac{\text{Total CPU time (seconds)}}{\text{Allocated CPU cores}}
-$$
+In the current DivBase implementation, bcftools subprocesses run sequentially and not in parallel. Each subprocess completes before the next one starts (see `run_current_command()` in `packages/divbase-api/src/divbase_api/services/queries.py`). This means that **allocating more CPU cores will NOT reduce wall time** in the current implementation.
 
-**Example:**
-
-$$
-\frac{120\ \text{CPU-seconds}}{1\ \text{core}} = 120\ \text{seconds (Wall time)}
-$$
-
-To configure this for the k8s deployment use `requests` for the minimum guaranteed CPU resources and `limits` for the maximum allowed CPU resources. Thus, `limits` dictate the fastest possible wall time.
+CPU limits in k8s still matter for preventing throttling, but won't speed up tasks unless parallelization is implemented. To configure this for the k8s deployment use `requests` for the minimum guaranteed CPU resources and `limits` for the maximum allowed CPU resources to avoid throttling.
 
 ```
 # Kustomize manifest example
@@ -97,3 +91,19 @@ resources:
 ```
 
 This ensures the container is scheduled on a node with at least 700 MiB available, and will be killed if it ever exceeds 1 GiB. These values should be adjusted after monitoring real use-cases.
+
+## Implementation
+
+The per-task metrics are implemented using the `prometheus-client` and `psutil` Python libraries. Wall time is collected using the `time` standard library. The code that controls the metrics endpoint is found in `packages/divbase-api/src/divbase_api/worker/metrics.py`. This file defines each metric as a Prometheus Gauge (i.e. a current value) as well as helper functions to collect and cache the metrics and start a metrics server.
+
+The metrics are captured in the tasks themselves in `packages/divbase-api/src/divbase_api/worker/tasks.py`. Per-task metrics comes with a computational overhead and the boolean environment variable `ENABLE_WORKER_METRICS` can be used to toggle per-task metrics.  Not all tasks might have metrics capturing setup, but see `bcftools_pipe_task()` for an example.
+
+Metrics for wall time is captured with `time.time()`, and CPU time, average and peak RSS memory is captured with `psutil`. The Python process and the `bcftools` subprocesses are monitored separately. The Python process monitoring is initiated with `process = psutil.Process()`; CPU monitoring is started with `process.cpu_times()`; memory usage is collected by sampling RSS over the course of the process with `process.memory_info().rss` as explained in the [Memory Usage](#memory-usage-not-additive-across-processes) section above and this is implemented as a class named `MemoryMonitor` in `packages/divbase-api/src/divbase_api/worker/metrics.py`.
+
+The `bcftools` subprocesses CPU and memory monitoring is found in `packages/divbase-api/src/divbase_api/services/queries.py`. When the code spawns a subprocess, it uses `subprocess.Popen` (instead of the commonly used `subprocess.run`). The PID of each spawned process is collected and `psutil.Process(proc.pid)` is used to collect the data from each PID with the `psutil` methods `.cpu_times()` and `.memory_info().rss` just like for the Python process.
+
+After a task completes (regardless of Celery task status, e.g. SUCCESS or FAILED), the metrics are stored in an in-memory cache structured as a dictionary of dictionaries. This is done with the helper function `_record_task_metrics` in `packages/divbase-api/src/divbase_api/worker/tasks.py`, which calls `store_task_metric()` to save each metric value along with a timestamp. The cached values are then used to update the respective Prometheus gauges via `update_prometheus_gauges_from_cache()` in `packages/divbase-api/src/divbase_api/worker/metrics.py`. The metrics are stored per task using the DivBase job ID (not the Celery task UUID!) and task name as labels. The metrics are exposed via the Prometheus metrics endpoint at `/metrics`.
+
+The cache for per-task metrics is needed because metrics must persist after task completion and remain available for Prometheus to scrape, even when multiple tasks run concurrently. To balance accessible task metrics history against unnecessary memory growth, each task metric is timestamped and evicted based on a Time-To-Live (TTL) strategy. The TTL period is set with `TASK_METRICS_CACHE_TTL_MINUTES` and defaults to 5 minutes. If Prometheus is configured to scrape the endpoint every 15 seconds, this means it has approximately 20 scrape attempts to collect the data before the metric is purged from cache.
+
+The metrics server is started once per worker and exposes an HTTP endpoint (port 8101) that can be scraped by Prometheus. For the local Docker Compose environment, the scraping is configured in `docker/prometheus.yml`. The server is started using a Celery signal (`@worker_process_init.connect`) in `packages/divbase-api/src/divbase_api/worker/tasks.py` that fires when a Celery worker process first starts. There is logic in place to make this compatible with running Celery workers as multi-process with prefork concurrency>1 so that each Celery process in the worker is captured but only one metrics server is started per worker. In case of multiple Celery processes, the metrics server collects metrics from all of them and displays them in the endpoint.
