@@ -15,6 +15,7 @@ YAML example:
 jobs:
   - job_id: 23
     date: 2026-01-28
+    comment: "Optional, but will be saved to the output JSON if included"
   - job_id: 28
     date: 2026-01-29
 
@@ -23,10 +24,15 @@ Usage:
 
 python scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py --yaml scripts/benchmarking/task_metrics.yaml
 
+Optional flags:
+--verbose
+    Print metrics to terminal in addition to JSON file (default: False)
 """
 
 import argparse
+import datetime
 import json
+import os
 import subprocess
 
 import yaml
@@ -80,7 +86,7 @@ def extract_single_value(data):
         parsed = json.loads(data)
         results = parsed.get("data", {}).get("result", [])
         if results and "values" in results[0] and results[0]["values"]:
-            # Take the last value (timestamp, value)
+            # Use the last value (timestamp, value)
             _, value = results[0]["values"][-1]
             return value
         else:
@@ -89,21 +95,52 @@ def extract_single_value(data):
         return f"Error: {e}"
 
 
+def write_results_to_json(results, yaml_path):
+    """
+    Write the fetched results to a JSON file, using the input YAML filename as a substring in the output filename.
+    """
+
+    def convert(obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        return obj
+
+    yaml_base = os.path.splitext(os.path.basename(yaml_path))[0]
+    output_dir = os.path.join(os.path.dirname(__file__), "results")
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, f"fetched_metrics_{yaml_base}.json")
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2, default=convert)
+    print(f"\nResults saved to {output_file}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch per-task metrics from Prometheus for specified job IDs.")
     parser.add_argument("--yaml", "-y", required=True, help="Path to the YAML file with job IDs and dates.")
+    parser.add_argument(
+        "--verbose", action="store_true", default=False, help="Print metrics to terminal (default: False)"
+    )
     args = parser.parse_args()
 
     jobs = load_jobs(args.yaml)
+    results = []
     for job in jobs:
         job_id = job["job_id"]
         date = job["date"]
         start = f"{date}T06:00:00Z"
         end = f"{date}T18:00:00Z"
+        job_result = {"job_id": job_id, "date": date, "metrics": {}}
+        if "comment" in job:
+            job_result["comment"] = job["comment"]
         for metric in METRICS:
             data = fetch_metric(metric, job_id, start, end)
             value = extract_single_value(data)
-            print(f"Job {job_id}, Metric {metric}: {value}")
+            job_result["metrics"][metric] = value
+            if args.verbose:
+                print(f"Job {job_id}, Metric {metric}: {value}")
+        results.append(job_result)
+
+    write_results_to_json(results, args.yaml)
 
 
 if __name__ == "__main__":
