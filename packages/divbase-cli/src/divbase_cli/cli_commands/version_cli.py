@@ -11,7 +11,7 @@ from rich.table import Table
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
-from divbase_cli.services import (
+from divbase_cli.services.project_versions import (
     add_version_command,
     delete_version_command,
     get_version_details_command,

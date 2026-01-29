@@ -1,11 +1,16 @@
 import dataclasses
 import logging
 import os
+import random
 import re
+import shutil
+import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
+from typing import Optional
 
+import psutil
 from celery import Celery
 from celery.signals import (
     after_task_publish,
@@ -25,7 +30,26 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
-from divbase_api.worker.metrics import start_metrics_server
+from divbase_api.worker.metrics import (
+    ENABLE_WORKER_METRICS_PER_TASK,
+    MemoryMonitor,
+    start_metrics_server,
+    store_task_metric,
+    task_bcftools_memory_avg_bytes,
+    task_bcftools_memory_peak_bytes,
+    task_bcftools_step_only_cpu_seconds,
+    task_bcftools_walltime_seconds,
+    task_cpu_seconds,
+    task_memory_avg_bytes,
+    task_memory_peak_bytes,
+    task_python_overhead_cpu_seconds,
+    task_vcf_download_cpu_seconds,
+    task_vcf_download_memory_avg_bytes,
+    task_vcf_download_memory_peak_bytes,
+    task_vcf_download_walltime_seconds,
+    task_walltime_seconds,
+    update_prometheus_gauges_from_cache,
+)
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -67,9 +91,12 @@ app.conf.update(
 def init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
-    With celery prefork concurrency, only the first worker process to execute will successfully bind to port 8001.
+    With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    start_metrics_server(port=8101)
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        start_metrics_server(port=8101)
+    else:
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK=false)")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -96,6 +123,8 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
     if name == "tasks.sample_metadata_query":
         return {"queue": "quick"}
     if name == "tasks.bcftools_query":
+        return {"queue": "long"}
+    if name == "tasks.test_s3_transfer":
         return {"queue": "long"}
     if name == "tasks.update_vcf_dimensions_task":
         return {"queue": "long"}  # can take minutes for large VCF files
@@ -205,6 +234,18 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        task_walltime_start = time.time()
+        process = psutil.Process()
+        cpu_start = process.cpu_times()
+        memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+        memory_monitor.start()
+    else:
+        task_walltime_start = None
+        process = None
+        cpu_start = None
+        memory_monitor = None
+
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
@@ -254,11 +295,42 @@ def bcftools_pipe_task(
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
+    # Measure download operation resources
+    # Memory: Capture baseline before download, then measure incremental memory increase (delta)
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        download_cpu_start = process.cpu_times()
+        download_mem_baseline = process.memory_info().rss
+        download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
+        download_memory_monitor.start()
+        download_start = time.time()
+
+    logger.info("Started downloading VCF files from S3 to worker")
+
     _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
+
+    logger.info("Finished downloading VCF files from S3 to worker")
+
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        download_walltime = time.time() - download_start
+        download_memory_stats = download_memory_monitor.stop()
+        download_cpu_end = process.cpu_times()
+        download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
+            download_cpu_start.user + download_cpu_start.system
+        )
+        download_mem_peak_delta = download_memory_stats["peak_bytes"]
+        download_mem_avg_delta = download_memory_stats["avg_bytes"]
+        logger.debug(
+            f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+        )
+    else:
+        download_walltime = None
+        download_cpu_used = None
+        download_mem_peak_delta = None
+        download_mem_avg_delta = None
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -268,12 +340,47 @@ def bcftools_pipe_task(
         )
     )
 
+    logger.info("Started bcftools subprocesses")
+
+    # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+    output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+
+    logger.info("Finished bcftools subprocesses")
+
+    bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
+    bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
+    bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
+    bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        memory_stats = memory_monitor.stop()
+        cpu_end = process.cpu_times()
+        python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+        total_task_cpu = python_overhead_cpu + bcftools_cpu_used
+        task_walltime = time.time() - task_walltime_start
+
+        _record_task_metrics(
+            job_id=job_id,
+            task_name=bcftools_pipe_task.name,
+            cpu_used=total_task_cpu,
+            python_overhead_cpu=python_overhead_cpu,
+            mem_peak=memory_stats["peak_bytes"],
+            mem_avg=memory_stats["avg_bytes"],
+            bcftools_cpu_used=bcftools_cpu_used,
+            bcftools_mem_peak=bcftools_mem_peak,
+            bcftools_mem_avg=bcftools_mem_avg,
+            bcftools_walltime=bcftools_walltime,
+            vcf_download_walltime=download_walltime,
+            vcf_download_cpu_used=download_cpu_used,
+            vcf_download_mem_peak=download_mem_peak_delta,
+            vcf_download_mem_avg=download_mem_avg_delta,
+            task_walltime=task_walltime,
+        )
 
     return {"status": "completed", "output_file": output_file}
 
@@ -410,6 +517,73 @@ def update_vcf_dimensions_task(
 
     # Convert to dict since celery serializes to JSON when writing to results backend. Pydantic model serialization is not supported by celery
     return result.model_dump()
+
+
+@app.task(name="tasks.test_s3_transfer", tags=["slow"])
+def test_s3_transfer(
+    bucket_name: str,
+    num_files: int,
+    file_size_mib: int,
+    job_id: int,
+):
+    """
+    A task to test the S3 upload and download functionality of the workers.
+    TODO - remove once manual testing is done.
+
+    It creates a specified number of large files, uploads them, downloads them,
+    verifies their checksums, and then cleans up. It reports timings for each step.
+    """
+    task_id = test_s3_transfer.request.id
+    logger.info(
+        f"Starting S3 transfer test task. Task ID: {task_id}, Job ID: {job_id}. "
+        f"Creating {num_files} file(s) of {file_size_mib} MiB in bucket '{bucket_name}'."
+    )
+    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    one_mib_in_bytes = 1024 * 1024
+
+    base_test_dir = Path(f"/tmp/s3_transfer_test_{task_id}")
+    upload_dir = base_test_dir / "to_upload"
+    download_dir = base_test_dir / "downloaded"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    timings = {}
+
+    logger.info("Creating local files for upload...")
+    original_files = {}
+    start_time = time.monotonic()
+    random.seed(job_id)
+    for i in range(num_files):
+        file_path = upload_dir / f"test_file_{i}_{task_id}.bin"
+        with open(file_path, "wb") as f:
+            for _ in range(file_size_mib):
+                f.write(random.randbytes(one_mib_in_bytes))
+        original_files[file_path.name] = file_path
+    timings["file_creation_seconds"] = time.monotonic() - start_time
+    logger.info(f"Successfully created {len(original_files)} files in {timings['file_creation_seconds']:.2f}s.")
+
+    logger.info(f"Uploading files to bucket '{bucket_name}'...")
+    start_time = time.monotonic()
+    s3_file_manager.upload_files(to_upload=original_files, bucket_name=bucket_name)
+    timings["upload_seconds"] = time.monotonic() - start_time
+    logger.info(f"Upload complete in {timings['upload_seconds']:.2f}s.")
+
+    logger.info("Downloading files from bucket")
+    start_time = time.monotonic()
+    objects_to_download = {file_name: None for file_name in original_files}
+    s3_file_manager.download_files(objects=objects_to_download, download_dir=download_dir, bucket_name=bucket_name)
+    timings["download_seconds"] = time.monotonic() - start_time
+    logger.info(f"Download complete in {timings['download_seconds']:.2f}s.")
+
+    logger.info("deleting all temp files from worker volumes using Pathlib")
+    shutil.rmtree(base_test_dir)
+
+    return {
+        "status": "SUCCESS",
+        "files_tested": num_files,
+        "file_size_mib": file_size_mib,
+        "timings": timings,
+    }
 
 
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
@@ -643,6 +817,77 @@ def _check_that_file_versions_match_dimensions_index(
                 "The VCF dimensions file is not up to date with the VCF files in the project. "
                 "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )
+
+
+def _record_task_metrics(
+    job_id: int,
+    task_name: str,
+    cpu_used: float,
+    python_overhead_cpu: Optional[float] = None,
+    mem_peak: float = None,
+    mem_avg: float = None,
+    bcftools_cpu_used: Optional[float] = None,
+    bcftools_mem_peak: Optional[float] = None,
+    bcftools_mem_avg: Optional[float] = None,
+    bcftools_walltime: Optional[float] = None,
+    vcf_download_walltime: Optional[float] = None,
+    vcf_download_cpu_used: Optional[float] = None,
+    vcf_download_mem_peak: Optional[float] = None,
+    vcf_download_mem_avg: Optional[float] = None,
+    task_walltime: Optional[float] = None,
+) -> None:
+    """
+    Helper function that records task metrics to the cache and updates Prometheus gauges so that they can be served by the worker metrics server.
+    Task specific submetrics (e.g. bcftools resource usage) can be been added as optional parameters.
+
+    Note on Optional args:
+    Use None to mean “not applicable” (the arg was not provided when the task called this function), which makes 0.0 mean “ran, but used no resources".
+
+    Note: cpu_used is the ARTIFICIAL SUM (python_overhead + bcftools), while python_overhead_cpu is the ACTUAL MEASURED value.
+    """
+
+    store_task_metric("task_cpu_seconds", job_id, task_name, cpu_used)
+    if python_overhead_cpu is not None:
+        store_task_metric("task_python_overhead_cpu_seconds", job_id, task_name, python_overhead_cpu)
+    if mem_peak is not None:
+        store_task_metric("task_memory_peak_bytes", job_id, task_name, mem_peak)
+    if mem_avg is not None:
+        store_task_metric("task_memory_avg_bytes", job_id, task_name, mem_avg)
+    if bcftools_cpu_used is not None:
+        store_task_metric("task_bcftools_cpu_seconds", job_id, task_name, bcftools_cpu_used)
+    if bcftools_mem_peak is not None:
+        store_task_metric("task_bcftools_memory_peak_bytes", job_id, task_name, bcftools_mem_peak)
+    if bcftools_mem_avg is not None:
+        store_task_metric("task_bcftools_memory_avg_bytes", job_id, task_name, bcftools_mem_avg)
+
+    if bcftools_walltime is not None:
+        store_task_metric("task_bcftools_walltime_seconds", job_id, task_name, bcftools_walltime)
+    if vcf_download_walltime is not None:
+        store_task_metric("task_vcf_download_walltime_seconds", job_id, task_name, vcf_download_walltime)
+    if vcf_download_cpu_used is not None:
+        store_task_metric("task_vcf_download_cpu_seconds", job_id, task_name, vcf_download_cpu_used)
+    if vcf_download_mem_peak is not None:
+        store_task_metric("task_vcf_download_memory_peak_bytes", job_id, task_name, vcf_download_mem_peak)
+    if vcf_download_mem_avg is not None:
+        store_task_metric("task_vcf_download_memory_avg_bytes", job_id, task_name, vcf_download_mem_avg)
+    if task_walltime is not None:
+        store_task_metric("task_walltime_seconds", job_id, task_name, task_walltime)
+
+    update_prometheus_gauges_from_cache(
+        task_cpu_seconds,
+        task_python_overhead_cpu_seconds,
+        task_bcftools_step_only_cpu_seconds,
+        task_memory_peak_bytes,
+        task_memory_avg_bytes,
+        task_bcftools_memory_peak_bytes,
+        task_bcftools_memory_avg_bytes,
+        task_bcftools_walltime_seconds,
+        task_vcf_download_walltime_seconds,
+        task_vcf_download_cpu_seconds,
+        task_vcf_download_memory_peak_bytes,
+        task_vcf_download_memory_avg_bytes,
+        task_walltime_seconds,
+    )
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.

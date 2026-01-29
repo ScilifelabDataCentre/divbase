@@ -78,7 +78,10 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
     is_error_result = isinstance(result_data, dict) and (
         "exc_type" in result_data or "exc_message" in result_data or result_data.get("status") == "error"
     )
-    if is_error_result:
+
+    is_started_result = isinstance(result_data, dict) and ("pid" in result_data and "hostname" in result_data)
+
+    if is_error_result or is_started_result:
         parsed_result = result_data
         parsed_kwargs = kwargs
     else:
