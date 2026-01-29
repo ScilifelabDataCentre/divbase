@@ -30,6 +30,7 @@ vcf_dimensions.tsv
 mock*.tsv
 task_records*.json
 split_scaffold_files.txt
+scripts/benchmarking/*.yaml
 
 #MacOS artifacts
 .DS_Store
