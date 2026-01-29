@@ -23,13 +23,16 @@ Usage:
     python scripts/benchmarking/run_mouse_vcf_job.py
 """
 
+import contextlib
 import os
+import re
 import shlex
 import subprocess
 import sys
+import time
 
 import boto3
-import yaml
+import httpx
 from _benchmarking_shared_utils import LOCAL_ENV
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -40,12 +43,40 @@ local_dev_setup.PROJECTS = [
     {
         "name": "benchmarking-mouse",
         "description": "Benchmarking project",
-        "bucket_name": "benchmarking-mouse",
+        "bucket_name": "divbase-local-benchmarking-mouse",  # to comply with s3_service_account_policy.json
         "storage_quota_bytes": 10737418240,
         "files": ["README.md"],
     }
 ]
 # they way this is implemented in local_dev_setup.py, files cannot be empty. So just upload README.md for now
+
+
+def ensure_minio_bucket_exists(bucket_name: str) -> None:
+    """Ensure the Minio bucket exists and has versioning enabled."""
+    print(f"Ensuring Minio bucket '{bucket_name}' exists...")
+
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=local_dev_setup.MINIO_URL,
+        aws_access_key_id=local_dev_setup.MINIO_FAKE_ACCESS_KEY,
+        aws_secret_access_key=local_dev_setup.MINIO_FAKE_SECRET_KEY,
+    )
+
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+        print(f"Bucket '{bucket_name}' already exists.")
+    except (s3_client.exceptions.NoSuchBucket, s3_client.exceptions.ClientError):
+        print(f"Creating bucket '{bucket_name}'...")
+        with contextlib.suppress(
+            s3_client.exceptions.BucketAlreadyOwnedByYou, s3_client.exceptions.BucketAlreadyExists
+        ):
+            s3_client.create_bucket(Bucket=bucket_name)
+
+    s3_client.put_bucket_versioning(
+        Bucket=bucket_name,
+        VersioningConfiguration={"Status": "Enabled"},
+    )
+    print(f"Bucket '{bucket_name}' is ready.")
 
 
 def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metadata: str, url: str) -> None:
@@ -57,7 +88,11 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
     env = dict(os.environ)
     env["DIVBASE_ENV"] = "local"
 
-    result = subprocess.run(shlex.split(cmd), env=env, capture_output=True, text=True, check=True)
+    result = subprocess.run(shlex.split(cmd), env=env, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"ERROR running 'divbase-cli files list': {result.stderr}")
+        print(f"stdout: {result.stdout}")
+        raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
     output = result.stdout
     filenames_to_check = [filename, mock_metadata]
 
@@ -87,58 +122,49 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
             subprocess.run(cmd_upload, check=True, env=LOCAL_ENV)
 
 
-def upload_mock_vcf_dimensions_file(project_name: str, filename: str) -> None:
+def wait_for_task_completion(
+    job_id: str, project_name: str, admin_token: str, timeout: int = 600, poll_interval: int = 5
+) -> bool:
     """
-    Upload a pre-calculated dimensions file to the bucket to save time (and avoid timing issues since the query task requires the file).
-    Need to patch the fixture with the version number of the latest version of the VCF file in the bucket.
+    Poll the task history API until the task completes successfully or fails.
+    Uses direct API calls to get task status.
+    Returns True if task completed successfully, raises exception otherwise.
     """
+    print(f"Waiting for task {job_id} to complete...")
+    start_time = time.time()
 
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=local_dev_setup.MINIO_URL,
-        aws_access_key_id=local_dev_setup.MINIO_FAKE_ACCESS_KEY,
-        aws_secret_access_key=local_dev_setup.MINIO_FAKE_SECRET_KEY,
-    )
+    while time.time() - start_time < timeout:
+        try:
+            response = httpx.get(
+                f"{local_dev_setup.BASE_URL}/v1/task-history/projects/{project_name}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                params={"limit": 50},
+            )
+            response.raise_for_status()
+            tasks = response.json()
 
-    response = s3.list_object_versions(Bucket=project_name, Prefix=filename)
-    latest_version = None
-    for version in response.get("Versions", []):
-        if version.get("IsLatest"):
-            latest_version = version["VersionId"]
-            break
+            for task in tasks:
+                if str(task.get("id")) == str(job_id):
+                    status = task.get("status")
+                    if status == "SUCCESS":
+                        print(f"Task {job_id} completed successfully!")
+                        return True
+                    elif status == "FAILURE":
+                        print(f"Task {job_id} failed!")
+                        print(f"Result: {task.get('result')}")
+                        raise RuntimeError(f"Task {job_id} failed")
+                    else:
+                        print(f"Task {job_id} status: {status} (elapsed: {int(time.time() - start_time)}s)")
+                        break
+            else:
+                print(f"Task {job_id} not yet visible in history... (elapsed: {int(time.time() - start_time)}s)")
 
-    # Check if there is a .vcf_dimensions.yaml in the bucket already, and which VCF file version it refers to
-    try:
-        response = s3.get_object(Bucket=project_name, Key=".vcf_dimensions.yaml")
-        s3_yaml_str = response["Body"].read().decode("utf-8")
-    except s3.exceptions.NoSuchKey:
-        s3_yaml_str = None
+        except Exception as e:
+            print(f"Error checking task status: {e}")
 
-    if s3_yaml_str:
-        dimensions_data = yaml.safe_load(s3_yaml_str)
-        for entry in dimensions_data.get("dimensions", []):
-            if (
-                entry.get("filename") == "mgp.v3.snps.rsIDdbSNPv137.vcf.gz"
-                and entry.get("file_version_ID_in_bucket") == latest_version
-            ):
-                print("Bucket already contains .vcf_dimensions.yaml with the latest version ID. Skipping upload.")
-                return
+        time.sleep(poll_interval)
 
-    # If not latest VCF version  .vcf_dimensions.yaml in the bucket in update and upload a new version
-    with open("tests/fixtures/vcf_dimensions_mgp.v3.snps.rsIDdbSNPv137.yaml", "r") as f:
-        dimensions_data = yaml.safe_load(f)
-
-    for entry in dimensions_data.get("dimensions", []):
-        if entry.get("filename") == "mgp.v3.snps.rsIDdbSNPv137.vcf.gz":
-            entry["file_version_ID_in_bucket"] = latest_version
-
-    with open(".vcf_dimensions.yaml", "w") as f:
-        yaml.safe_dump(dimensions_data, f)
-
-    cmd_upload = shlex.split(f"divbase-cli files upload --project {project_name} .vcf_dimensions.yaml")
-    subprocess.run(cmd_upload, check=True, env=LOCAL_ENV)
-    os.remove(".vcf_dimensions.yaml")
-    print("Uploaded new .vcf_dimensions.yaml with updated version ID.")
+    raise TimeoutError(f"Task {job_id} did not complete within {timeout} seconds")
 
 
 def ensure_project_exists_and_assign_manager(project_name: str, admin_token: str) -> None:
@@ -184,17 +210,40 @@ def main():
     mock_metadata = "mock_metadata_mgpv3snps.tsv"
     project = local_dev_setup.PROJECTS[0]
     project_name = project["name"]
+    bucket_name = project["bucket_name"]
+
+    ensure_minio_bucket_exists(bucket_name)
 
     admin_token = local_dev_setup.get_admin_access_token()
     ensure_project_exists_and_assign_manager(project_name=project_name, admin_token=admin_token)
 
     local_dev_setup.create_local_config()
 
-    local_dev_setup.setup_minio_buckets()
+    # Login non-interactively by providing 'y' to the prompt, using credentials from local_dev_setup
+    admin_email = local_dev_setup.ADMIN_CREDENTIALS["username"]
+    admin_password = local_dev_setup.ADMIN_CREDENTIALS["password"]
+    cmd = shlex.split(f"divbase-cli auth login {admin_email} --password {admin_password}")
+    subprocess.run(cmd, input="y\n", text=True, check=True, env=LOCAL_ENV)
 
     ensure_required_files_in_bucket(project_name=project_name, filename=filename, mock_metadata=mock_metadata, url=url)
 
-    upload_mock_vcf_dimensions_file(project_name=project_name, filename=filename)
+    # Run dimensions update and wait for completion
+    print("\nUpdating VCF dimensions...")
+    cmd_dimensions = f"divbase-cli dimensions update --project {project_name}"
+    result = subprocess.run(shlex.split(cmd_dimensions), env=LOCAL_ENV, capture_output=True, text=True, check=True)
+
+    # Extract job_id from the output
+    # Expected format: "Job submitted successfully with task id: 102"
+    match = re.search(r"task id:\s*(\d+)", result.stdout)
+    if not match:
+        print(f"Could not extract job_id from dimensions update command output:\n{result.stdout}")
+        raise ValueError("Failed to extract job_id from dimensions update command")
+
+    dimensions_job_id = match.group(1)
+    print(f"Dimensions update job ID: {dimensions_job_id}")
+
+    # Wait for dimensions update to complete
+    wait_for_task_completion(dimensions_job_id, project_name=project_name, admin_token=admin_token, timeout=600)
 
     print("\nSubmitting query job to task queue...")
     cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project {project_name}"
