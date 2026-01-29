@@ -17,6 +17,7 @@ sample_metadata_*.tsv
 *.vcf
 *.vcf.gz
 *.vcf.gz.csi
+*.vcf.gz.tbi
 !tests/fixtures/*.vcf.gz
 tests/fixtures/temp*
 tests/fixtures/merged*
