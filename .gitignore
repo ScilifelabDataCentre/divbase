@@ -29,6 +29,7 @@ bcftools_divbase_job_config.json
 vcf_dimensions.tsv
 mock*.tsv
 task_records*.json
+split_scaffold_files.txt
 
 #MacOS artifacts
 .DS_Store

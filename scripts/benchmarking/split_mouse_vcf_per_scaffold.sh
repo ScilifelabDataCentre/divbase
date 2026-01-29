@@ -41,4 +41,14 @@ for scaffold in $scaffolds; do
   fi
 done
 
+
+# 5. Create a file list for divbase-cli upload
+filelist="split_scaffold_files.txt"
+rm -f "$filelist"
+for scaffold in $scaffolds; do
+  outvcf="mgp.v3.snps.rsIDdbSNPv137.$scaffold.vcf.gz"
+  echo "$outvcf" >> "$filelist"
+done
+
+echo "File list for upload written to $filelist"
 echo "Done."
