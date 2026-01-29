@@ -304,7 +304,7 @@ def bcftools_pipe_task(
         download_memory_monitor.start()
         download_start = time.time()
 
-    logger.info("Started downloading VCF files from S3 to worker at " + datetime.now(timezone.utc).isoformat())
+    logger.info("Started downloading VCF files from S3 to worker")
 
     _ = _download_vcf_files(
         files_to_download=files_to_download,
@@ -312,7 +312,7 @@ def bcftools_pipe_task(
         s3_file_manager=s3_file_manager,
     )
 
-    logger.info("Finished downloading VCF files from S3 to worker at " + datetime.now(timezone.utc).isoformat())
+    logger.info("Finished downloading VCF files from S3 to worker")
 
     if ENABLE_WORKER_METRICS_PER_TASK:
         download_walltime = time.time() - download_start
@@ -340,14 +340,14 @@ def bcftools_pipe_task(
         )
     )
 
-    logger.info("Started bcftools subprocesses at" + datetime.now(timezone.utc).isoformat())
+    logger.info("Started bcftools subprocesses")
 
     # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
     output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
 
-    logger.info("Finished bcftools subprocesses at" + datetime.now(timezone.utc).isoformat())
+    logger.info("Finished bcftools subprocesses")
 
     bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
     bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
