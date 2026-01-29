@@ -58,7 +58,8 @@ services:
       - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
       - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
-      - ENABLE_WORKER_METRICS=True # Enable metrics collection in the worker. Optional, as it comes with some overhead.
+      - ENABLE_WORKER_METRICS=True # Enable metrics collection and metrics server in the worker. Optional, as it comes with some overhead.
+      - ENABLE_WORKER_METRICS_PER_TASK=True # Enable per-task metrics collection in the worker. Optional, as it comes with some overhead.
     develop: &watch-celery-src
       watch:
         - action: sync+restart

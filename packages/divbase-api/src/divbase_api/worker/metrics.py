@@ -13,7 +13,14 @@ logger = logging.getLogger(__name__)
 
 WORKER_NAME = socket.gethostname()
 
+
+# Controls whether the Prometheus metrics server is started (system metrics, etc.)
 ENABLE_WORKER_METRICS = os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
+
+# Controls whether per-task metrics (task/bcftools/VCF download) are collected and exposed
+# If false, only system-level metrics are collected.
+# If this flag is set true, ENABLE_WORKER_METRICS should also be set to true to be able to collect the metrics.
+ENABLE_WORKER_METRICS_PER_TASK = os.environ.get("ENABLE_WORKER_METRICS_PER_TASK", "true").lower() == "true"
 
 
 class MemoryMonitor:

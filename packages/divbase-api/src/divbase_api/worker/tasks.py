@@ -31,6 +31,7 @@ from divbase_api.worker.crud_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.worker.metrics import (
+    ENABLE_WORKER_METRICS_PER_TASK,
     MemoryMonitor,
     start_metrics_server,
     store_task_metric,
@@ -85,8 +86,6 @@ app.conf.update(
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
 
-ENABLE_WORKER_METRICS = os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
-
 
 @worker_process_init.connect
 def init_worker_metrics(**kwargs):
@@ -94,10 +93,10 @@ def init_worker_metrics(**kwargs):
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    if ENABLE_WORKER_METRICS:
+    if ENABLE_WORKER_METRICS_PER_TASK:
         start_metrics_server(port=8101)
     else:
-        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS=false)")
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK=false)")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -235,7 +234,7 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
-    if ENABLE_WORKER_METRICS:
+    if ENABLE_WORKER_METRICS_PER_TASK:
         task_walltime_start = time.time()
         process = psutil.Process()
         cpu_start = process.cpu_times()
@@ -298,7 +297,7 @@ def bcftools_pipe_task(
 
     # Measure download operation resources
     # Memory: Capture baseline before download, then measure incremental memory increase (delta)
-    if ENABLE_WORKER_METRICS:
+    if ENABLE_WORKER_METRICS_PER_TASK:
         download_cpu_start = process.cpu_times()
         download_mem_baseline = process.memory_info().rss
         download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
@@ -311,7 +310,7 @@ def bcftools_pipe_task(
         s3_file_manager=s3_file_manager,
     )
 
-    if ENABLE_WORKER_METRICS:
+    if ENABLE_WORKER_METRICS_PER_TASK:
         download_walltime = time.time() - download_start
         download_memory_stats = download_memory_monitor.stop()
         download_cpu_end = process.cpu_times()
@@ -350,7 +349,7 @@ def bcftools_pipe_task(
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    if ENABLE_WORKER_METRICS:
+    if ENABLE_WORKER_METRICS_PER_TASK:
         memory_stats = memory_monitor.stop()
         cpu_end = process.cpu_times()
         python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
