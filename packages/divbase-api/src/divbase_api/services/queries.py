@@ -4,7 +4,6 @@ TODO - consider split metadata query and bcftools query into two separate module
 
 import contextlib
 import datetime
-import gzip
 import logging
 import os
 import subprocess
@@ -210,7 +209,7 @@ class BcftoolsQueryManager:
                 )
 
             output_temp_files = [
-                f"temp_subset_{identifier}_{c_counter}_{f_counter}.vcf.gz" for f_counter, _ in enumerate(current_inputs)
+                f"temp_subset_{identifier}_{c_counter}_{f_counter}.bcf" for f_counter, _ in enumerate(current_inputs)
             ]
 
             command_details = {
@@ -308,7 +307,7 @@ class BcftoolsQueryManager:
             samples_in_file_bcftools_formatted = ",".join(samples_in_file)
 
             cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
-            formatted_cmd = f"{cmd_with_samples} {file} -Oz -o {temp_file}"
+            formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
             proc = self.run_bcftools(command=formatted_cmd)
@@ -502,8 +501,8 @@ class BcftoolsQueryManager:
                     logger.debug(f"Processing sample set with {len(files)} files ({files}) and samples: {sample_set}")
                     if len(files) > 1:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
-                        concat_temp = f"concat_{identifier}_{hash(sample_set)}.vcf.gz"
-                        concat_command = f"concat -Oz -o {concat_temp} {' '.join(files)}"
+                        concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
+                        concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
                         proc = self.run_bcftools(command=concat_command)
                         proc.wait()
                         temp_concat_files.append(concat_temp)
@@ -581,15 +580,23 @@ class BcftoolsQueryManager:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
         If they do, bcftools concat is needed instead of bcftools merge.
+
+        Use bcftools query to extract sample names from BCF/VCF files since it is designed for such operations.
         """
         sample_names_per_VCF = {}
         for vcf_file in output_temp_files:
-            with gzip.open(vcf_file, "rt") as file:
-                for line in file:
-                    if line.startswith("#CHROM"):
-                        header = line.strip().split("\t")
-                        sample_names_per_VCF[vcf_file] = header[9:]
-                        break
+            try:
+                result = subprocess.run(
+                    ["bcftools", "query", "-l", vcf_file],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                sample_names = result.stdout.strip().split("\n")
+                sample_names_per_VCF[vcf_file] = sample_names if sample_names != [""] else []
+            except subprocess.SubprocessError as e:
+                logger.error(f"Failed to get sample names from {vcf_file}: {e}")
+                raise
 
         return sample_names_per_VCF
 
