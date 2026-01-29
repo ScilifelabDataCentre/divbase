@@ -383,6 +383,7 @@ class BcftoolsQueryManager:
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             self.ensure_csi_index(temp_file)
+            self._log_file_size(temp_file)
 
         # Calculate average memory
         avg_memory = sum(memory_samples) / len(memory_samples) if memory_samples else 0
@@ -492,6 +493,7 @@ class BcftoolsQueryManager:
                 proc = self.run_bcftools(command=merge_command)
                 proc.wait()
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
+                self._log_file_size(unsorted_output_file)
             else:
                 logger.info(
                     "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible."
@@ -508,6 +510,7 @@ class BcftoolsQueryManager:
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
                         self.ensure_csi_index(concat_temp)
+                        self._log_file_size(concat_temp)
                     elif len(files) == 1:
                         logger.debug(
                             "Sample set only occurs in a single file, will use this file as is for merging in a downstream step."
@@ -518,14 +521,18 @@ class BcftoolsQueryManager:
                     proc = self.run_bcftools(command=merge_command)
                     proc.wait()
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
+                    self._log_file_size(unsorted_output_file)
                 elif len(temp_concat_files) == 1:
+                    self._log_file_size(temp_concat_files[0])
                     os.rename(temp_concat_files[0], unsorted_output_file)
                     logger.info(
                         f"Only one file remained after concatenation, renamed this file to '{unsorted_output_file}'."
                     )
+                    self._log_file_size(unsorted_output_file)
         elif len(output_temp_files) == 1:
             logger.info(f"Only one file was produced by the query, renamed this file to '{unsorted_output_file}'.")
             os.rename(output_temp_files[0], unsorted_output_file)
+            self._log_file_size(unsorted_output_file)
 
         self._prepare_txt_with_divbase_header_for_vcf(header_filename=divbase_header_for_vcf)
         annotate_command = (
@@ -533,10 +540,12 @@ class BcftoolsQueryManager:
         )
         proc = self.run_bcftools(command=annotate_command)
         proc.wait()
+        self._log_file_size(annotated_unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
         proc = self.run_bcftools(command=sort_command)
         proc.wait()
+        self._log_file_size(output_file)
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
         )
@@ -641,6 +650,20 @@ class BcftoolsQueryManager:
                 logger.info("Added header to VCF saying that this results file was created with DivBase.")
         except Exception as e:
             logger.warning(f"Could not write {header_filename}: {e}")
+
+    def _log_file_size(self, file_path: str):
+        """
+        Log the size of the a given file in both GB and GiB.
+        """
+
+        # TODO consider changing to logger debug later in the dev process
+        try:
+            size_bytes = os.path.getsize(file_path)
+            size_gb = size_bytes / (1024 * 1024 * 1024)
+            size_gi = size_bytes / (1024**3)
+            logger.info(f"File '{file_path}' size: {size_gb:.2f} GB, {size_gi:.2f} Gi")
+        except Exception as e:
+            logger.warning(f"Could not determine size of file '{file_path}': {e}")
 
 
 class SidecarQueryManager:
