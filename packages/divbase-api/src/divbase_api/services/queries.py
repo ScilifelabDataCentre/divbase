@@ -470,8 +470,8 @@ class BcftoolsQueryManager:
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
-        unsorted_output_file = f"merged_unsorted_{identifier}.vcf.gz"
-        annotated_unsorted_output_file = f"merged_annotated_unsorted_{identifier}.vcf.gz"
+        unsorted_output_file = f"merged_unsorted_{identifier}.bcf"
+        annotated_unsorted_output_file = f"merged_annotated_unsorted_{identifier}.bcf"
         divbase_header_for_vcf = "divbase_header.txt"
         self.temp_files.append(unsorted_output_file)
         self.temp_files.append(annotated_unsorted_output_file)
@@ -487,7 +487,7 @@ class BcftoolsQueryManager:
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
-                merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
                 proc = self.run_bcftools(command=merge_command)
                 proc.wait()
@@ -514,7 +514,7 @@ class BcftoolsQueryManager:
                         )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
-                    merge_command = f"merge --force-samples -Oz -o {unsorted_output_file} {' '.join(temp_concat_files)}"
+                    merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
                     proc = self.run_bcftools(command=merge_command)
                     proc.wait()
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
@@ -529,7 +529,7 @@ class BcftoolsQueryManager:
 
         self._prepare_txt_with_divbase_header_for_vcf(header_filename=divbase_header_for_vcf)
         annotate_command = (
-            f"annotate -h {divbase_header_for_vcf} -Oz -o {annotated_unsorted_output_file} {unsorted_output_file}"
+            f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
         proc = self.run_bcftools(command=annotate_command)
         proc.wait()
