@@ -34,7 +34,9 @@ import datetime
 import json
 import os
 import subprocess
+import sys
 
+import requests
 import yaml
 
 PROM_URL = "http://localhost:9090/api/v1/query_range"
@@ -121,6 +123,15 @@ def main():
         "--verbose", action="store_true", default=False, help="Print metrics to terminal (default: False)"
     )
     args = parser.parse_args()
+
+    try:
+        resp = requests.get("http://localhost:9090/-/ready", timeout=3)
+        if resp.status_code != 200:
+            print("Error: Prometheus server is not ready or returned non-200 status.")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: Could not connect to Prometheus server at http://localhost:9090.\n{e}")
+        sys.exit(1)
 
     jobs = load_jobs(args.yaml)
     results = []
