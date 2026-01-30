@@ -1,0 +1,29 @@
+name: Publish divbase-lib and divbase-cli packages to Test PyPI
+on:
+  workflow_dispatch:
+
+jobs:
+  build-divbase-lib-and-cli:
+    uses: ./.github/workflows/build-pypi-packages.yaml
+
+  publish-to-test-pypi:
+    name: Publish divbase-lib and divbase-cli to Test PyPI
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    needs: build-divbase-lib-and-cli
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # For trusted publishing
+    environment:
+        name: testpypi
+  
+    steps:
+      - name: Download previously built packages
+        uses: actions/download-artifact@v7
+        with:
+          name: Packages
+          path: dist/
+
+      - name: Publish to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
