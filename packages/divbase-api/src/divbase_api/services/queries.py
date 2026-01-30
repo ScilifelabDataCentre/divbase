@@ -307,7 +307,7 @@ class BcftoolsQueryManager:
             samples_in_file_bcftools_formatted = ",".join(samples_in_file)
 
             cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
-            formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
+            formatted_cmd = f"{cmd_with_samples} {file} -Ob -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
             proc = self.run_bcftools(command=formatted_cmd)
@@ -488,7 +488,7 @@ class BcftoolsQueryManager:
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
-                merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                merge_command = f"merge --force-samples -Ob -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
                 proc = self.run_bcftools(command=merge_command)
                 proc.wait()
@@ -504,7 +504,7 @@ class BcftoolsQueryManager:
                     if len(files) > 1:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
-                        concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
+                        concat_command = f"concat -Ob -o {concat_temp} {' '.join(files)}"
                         proc = self.run_bcftools(command=concat_command)
                         proc.wait()
                         temp_concat_files.append(concat_temp)
@@ -517,7 +517,7 @@ class BcftoolsQueryManager:
                         )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
-                    merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
+                    merge_command = f"merge --force-samples -Ob -o {unsorted_output_file} {' '.join(temp_concat_files)}"
                     proc = self.run_bcftools(command=merge_command)
                     proc.wait()
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
@@ -536,7 +536,7 @@ class BcftoolsQueryManager:
 
         self._prepare_txt_with_divbase_header_for_vcf(header_filename=divbase_header_for_vcf)
         annotate_command = (
-            f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
+            f"annotate -h {divbase_header_for_vcf} -Ob -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
         proc = self.run_bcftools(command=annotate_command)
         proc.wait()
