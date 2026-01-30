@@ -16,6 +16,7 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
+from divbase_lib.api_schemas.s3 import ObjectInfoResponse, ObjectVersionInfo
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
@@ -66,6 +67,49 @@ class S3FileManager:
             for obj in page.get("Contents", []):
                 files.append(obj["Key"])
         return files
+
+    def get_detailed_object_info(self, bucket_name: str, object_name: str) -> ObjectInfoResponse:
+        """
+        Retrieves all versions of a specific object in an S3 bucket, with details about each version in the bucket.
+        Incuded in the response object is whether the object is currently deleted (i.e., has a deletion marker as the latest version).
+
+        This is the level of detail a user needs to know about (i.e., then don't need to know about older deletion markers).
+        """
+        object_exists = False
+        is_currently_deleted = False
+
+        response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=object_name)
+
+        all_versions = []
+        for version in response.get("Versions", []):
+            if version["Key"] == object_name:
+                object_exists = True
+                all_versions.append(
+                    ObjectVersionInfo(
+                        version_id=version["VersionId"],
+                        is_latest=version["IsLatest"],
+                        last_modified=version["LastModified"],
+                        size=version["Size"],
+                        etag=version["ETag"].strip('"'),
+                    )
+                )
+
+        if not object_exists:
+            raise ObjectDoesNotExistError(key=object_name, bucket_name=bucket_name)
+
+        for delete_marker in response.get("DeleteMarkers", []):
+            if delete_marker["Key"] == object_name and delete_marker["IsLatest"]:
+                is_currently_deleted = True
+                break
+
+        # Sort the results object by last_modified date
+        all_versions.sort(key=lambda v: v.last_modified, reverse=True)
+
+        return ObjectInfoResponse(
+            object_name=object_name,
+            is_currently_deleted=is_currently_deleted,
+            versions=all_versions,
+        )
 
     def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[Path]:
         """

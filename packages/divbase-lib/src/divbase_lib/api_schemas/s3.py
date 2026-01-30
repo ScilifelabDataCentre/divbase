@@ -7,6 +7,8 @@ using the HTTP range header when downloading (so you only need 1 pre-signed URL 
 Pre-signed upload URLs need to account for single vs multipart uploads hence all the extra schemas below.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
@@ -14,8 +16,28 @@ from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 MB = 1024 * 1024
 
 
+## listing/file info models ##
+class ObjectVersionInfo(BaseModel):
+    """Detailed information about a single version of an S3 object."""
+
+    version_id: str = Field(..., description="The version ID of the object.")
+    last_modified: datetime = Field(..., description="The date and time the object version was last modified.")
+    size: int = Field(..., description="The size of the object in bytes.")  # TODO - make more friendly?
+    etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
+    is_latest: bool = Field(..., description="Indicates if this is the latest version of the object.")
+
+
+class ObjectInfoResponse(BaseModel):
+    """Response model for detailed information about an object stored in S3, including all of its versions."""
+
+    object_name: str = Field(..., description="The name of the object.")
+    is_currently_deleted: bool = Field(..., description="True if the latest version of the object is a delete marker.")
+    versions: list[ObjectVersionInfo] = Field(..., description="A list of all versions of the object.")
+
+
+## download models ##
 class DownloadObjectRequest(BaseModel):
-    """Request model to upload a single object using a pre-signed URL."""
+    """Request model to download a single object using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be downloaded")
     version_id: str | None = Field(..., description="Version ID of the object, None if latest version")

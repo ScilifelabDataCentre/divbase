@@ -36,6 +36,7 @@ from divbase_lib.api_schemas.s3 import (
     DownloadObjectRequest,
     FileChecksumResponse,
     GetPresignedPartUrlsRequest,
+    ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
@@ -106,6 +107,30 @@ async def list_files(
     )
 
     return await run_in_threadpool(s3_file_manager.list_files, bucket_name=project.bucket_name)
+
+
+@s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)
+async def get_object_info(
+    project_name: str,
+    object_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """Get details about all versions of a specific object/file in the project's store."""
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to list files in this project.")
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.endpoint_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    return await run_in_threadpool(
+        s3_file_manager.get_detailed_object_info,
+        bucket_name=project.bucket_name,
+        object_name=object_name,
+    )
 
 
 @s3_router.post(
