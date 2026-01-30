@@ -8,9 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "divbase-lib==0.1.0.dev2",
     "typer>=0.21.1,<1",
-    "httpx>=0.28.1,<2",
+    "httpx>=0.28.1,<1",
+    "stamina>=25.2.0",
+    "divbase-lib==0.1.0.dev2",
 ]
 dynamic = ["version"]
 

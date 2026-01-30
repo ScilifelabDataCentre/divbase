@@ -21,6 +21,8 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    DownloadedFileChecksumMismatchError,
+    ObjectDoesNotExistError,
     ProjectCreationError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
@@ -321,7 +323,35 @@ async def task_not_found_in_backend_error_handler(request: Request, exc: TaskNot
             headers=exc.headers,
         )
     else:
-        return render_error_page(request, exc.message, status_code=status.HTTP_410_GONE)
+        return await render_error_page(request, exc.message, status_code=status.HTTP_410_GONE)
+
+
+async def downloaded_file_checksum_mismatch_error_handler(request: Request, exc: DownloadedFileChecksumMismatchError):
+    logger.warning(
+        f"Downloaded file checksum mismatch error for {request.method} {request.url.path}: {exc.message}", exc_info=True
+    )
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "downloaded_file_checksum_mismatch_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
+async def object_does_not_exist_error_handler(request: Request, exc: ObjectDoesNotExistError):
+    logger.debug(f"Object does not exist error for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "object_does_not_exist_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(
+            request, "The requested file does not exist or you don't have access.", status_code=exc.status_code
+        )
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -345,6 +375,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore
+    app.add_exception_handler(DownloadedFileChecksumMismatchError, downloaded_file_checksum_mismatch_error_handler)  # type: ignore
+    app.add_exception_handler(ObjectDoesNotExistError, object_does_not_exist_error_handler)  # type: ignore
 
     # These cover more generic/unexpected HTTP errors - the exceptions above take precedence
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore

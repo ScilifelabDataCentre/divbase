@@ -1,5 +1,9 @@
 """
 An s3FileManager object that lets you do basic operations with a bucket.
+
+This class is a wrapper around the boto3 S3 client.
+
+See the 'docs/development/s3_transfers.md' for more info on how S3 transfers are handled.
 """
 
 import logging
@@ -7,19 +11,49 @@ import os
 from pathlib import Path
 
 import boto3
+import stamina
+from boto3.s3.transfer import TransferConfig
+from botocore.config import Config
 
-from divbase_lib.exceptions import ObjectDoesNotExistError
+from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
+from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.exceptions import ChecksumVerificationError
+from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
 
 
+def retry_on_retriable_checksum_errors(exception: Exception) -> bool:
+    """
+    Retry condition function for stamina to decorators to only retry on checksum verification errors.
+
+    (We don't need retry logic for other S3 errors as boto3 has inbuilt retry logic for these.)
+    """
+    return isinstance(exception, DownloadedFileChecksumMismatchError)
+
+
 class S3FileManager:
+    """An S3 client wrapper to do basic S3 operations."""
+
     def __init__(self, url: str, access_key: str, secret_key: str):
         self.s3_client = boto3.client(
             "s3",
             endpoint_url=url,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            config=Config(
+                retries={
+                    "max_attempts": 5,
+                    "mode": "adaptive",
+                }
+            ),
+        )
+        # multipart up/download config
+        self.transfer_config = TransferConfig(
+            multipart_threshold=S3_MULTIPART_UPLOAD_THRESHOLD,
+            multipart_chunksize=S3_MULTIPART_CHUNK_SIZE,
+            max_concurrency=10,
+            use_threads=True,
         )
 
     def list_files(self, bucket_name: str) -> list[str]:
@@ -71,16 +105,11 @@ class S3FileManager:
                 Filename=str(source),
                 Bucket=bucket_name,
                 Key=key,
+                Config=self.transfer_config,
             )
             uploaded_files[key] = source.resolve()
 
         return uploaded_files
-
-    def upload_str_as_s3_object(self, key: str, content: str, bucket_name: str) -> None:
-        """
-        Upload a string (e.g. output of yaml.safe_dump()) as a new file to the S3 bucket.
-        """
-        self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content.encode("utf-8"))
 
     def soft_delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
         """
@@ -130,16 +159,26 @@ class S3FileManager:
                     files[obj["Key"]] = obj["VersionId"]
         return files
 
+    @stamina.retry(on=retry_on_retriable_checksum_errors, attempts=3)
     def _download_single_file(self, key: str, dest: Path, bucket_name: str, version_id: str | None = None) -> str:
         """
         Download a file from S3 to a local path.
         Downloads the latest version of the file by default unless the the version_id is provided.
 
         Returns the key of the downloaded file.
+
+        A failed checksum verification will raise a DownloadedFileChecksumMismatchError, which will trigger a retry with stamina.
+        boto3 has its own retry logic for other S3 errors.
         """
         extra_args = {"VersionId": version_id} if version_id else None
         try:
-            self.s3_client.download_file(Bucket=bucket_name, Key=key, Filename=str(dest), ExtraArgs=extra_args)
+            self.s3_client.download_file(
+                Bucket=bucket_name,
+                Key=key,
+                Filename=str(dest),
+                ExtraArgs=extra_args,
+                Config=self.transfer_config,
+            )
         except self.s3_client.exceptions.ClientError as err:
             if err.response["Error"]["Code"] == "404":
                 raise ObjectDoesNotExistError(
@@ -149,15 +188,43 @@ class S3FileManager:
 
             raise err
 
+        # validate the etag on s3 matches the downloaded file
+        expected_checksum = self.get_object_checksum_if_exists(
+            bucket_name=bucket_name,
+            object_name=key,
+            version_id=version_id,
+        )
+        if not expected_checksum:
+            raise ObjectDoesNotExistError(key=key, bucket_name=bucket_name)
+
+        try:
+            verify_downloaded_checksum(file_path=dest, expected_checksum=expected_checksum)
+        except ChecksumVerificationError as err:
+            dest.unlink()  # delete the invalid file as will try again instead.
+            logger.warning(
+                f"Checksum verification failed for downloaded file '{dest}'. "
+                f"Expected: {err.expected_checksum}, Calculated: {err.calculated_checksum}.  Retrying download..."
+            )
+            raise DownloadedFileChecksumMismatchError(
+                file_path=dest,
+                expected_checksum=err.expected_checksum,
+                calculated_checksum=err.calculated_checksum,
+            ) from None
+
         return key
 
-    def get_file_checksum(self, bucket_name: str, object_name: str) -> str | None:
+    def get_object_checksum_if_exists(
+        self, bucket_name: str, object_name: str, version_id: str | None = None
+    ) -> str | None:
         """
         Get the MD5 checksum of a file in the bucket, if it exists.
         Returns None if the file does not exist.
         """
+        args = {"Bucket": bucket_name, "Key": object_name}
+        if version_id:
+            args["VersionId"] = version_id
         try:
-            response = self.s3_client.head_object(Bucket=bucket_name, Key=object_name)
+            response = self.s3_client.head_object(**args)
         except self.s3_client.exceptions.ClientError as err:
             if err.response["Error"]["Code"] == "404":
                 return None
@@ -168,26 +235,8 @@ class S3FileManager:
                 return None
         return response.get("ETag", "").strip('"')
 
-    def get_multiple_checksums(self, bucket_name: str, object_names: list[str]) -> dict[str, str]:
-        """
-        Given a list of potential file names in the bucket, return a dict of those that exists with their checksums.
 
-        Note, this is used when uploading multiple files and want to check which already exist in the bucket.
-        So it should not be assumed all files provided actually exist in the bucket.
-        """
-        matches = {}
-        paginator = self.s3_client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket_name):
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                if key in object_names:
-                    matches[key] = obj.get("ETag", "").strip('"')
-        return matches
-
-
-def create_s3_file_manager(
-    url: str,
-) -> S3FileManager:
+def create_s3_file_manager(url: str) -> S3FileManager:
     """Helper function to creates an S3FileManager instance using the S3 service account's credentials"""
     access_key = os.environ["S3_SERVICE_ACCOUNT_ACCESS_KEY"]
     secret_key = os.environ["S3_SERVICE_ACCOUNT_SECRET_KEY"]
