@@ -21,7 +21,6 @@ from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
-    test_s3_transfer,
 )
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -136,46 +135,6 @@ async def create_bcftools_jobs(
     )
 
     result = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())
-
-    await update_task_history_entry_with_celery_task_id(
-        job_id=job_id,
-        task_id=result.id,
-        db=db,
-    )
-
-    return job_id
-
-
-@query_router.post("/test_s3_transfer/projects/{project_name}", status_code=status.HTTP_201_CREATED)
-async def create_test_s3_transfer_job(
-    number_of_files: int,
-    file_size_mib: int,
-    project_name: str,
-    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-    db: AsyncSession = Depends(get_db),
-) -> int:
-    """
-    Create a new test S3 transfer job for the specified project.
-    """
-    project, current_user, role = project_and_user_and_role
-
-    if not has_required_role(role, ProjectRoles.MANAGE):
-        raise AuthorizationError("You don't have permission to run a test S3 transfer for this project.")
-
-    job_id = await create_task_history_entry(
-        user_id=current_user.id,
-        project_id=project.id,
-        db=db,
-    )
-
-    task_kwargs = {
-        "bucket_name": project.bucket_name,
-        "num_files": number_of_files,
-        "file_size_mib": file_size_mib,
-        "job_id": job_id,
-    }
-
-    result = test_s3_transfer.apply_async(kwargs=task_kwargs)
 
     await update_task_history_entry_with_celery_task_id(
         job_id=job_id,
