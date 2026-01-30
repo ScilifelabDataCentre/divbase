@@ -21,6 +21,7 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
 )
@@ -40,8 +41,17 @@ def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
         divbase_base_url=divbase_base_url,
         api_route=f"v1/s3/?project_name={project_name}",
     )
-
     return response.json()
+
+
+def get_file_info_command(divbase_base_url: str, project_name: str, object_name: str) -> ObjectInfoResponse:
+    """Get detailed information about a specific file/object in a project."""
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/info?project_name={project_name}&object_name={object_name}",
+    )
+    return ObjectInfoResponse(**response.json())
 
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:

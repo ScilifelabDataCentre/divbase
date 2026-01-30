@@ -7,9 +7,11 @@ TODO - skip checked option (aka skip files that already exist in same local dir 
 """
 
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
+from rich.table import Table
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
@@ -17,10 +19,12 @@ from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.s3_files import (
     download_files_command,
+    get_file_info_command,
     list_files_command,
     soft_delete_objects_command,
     upload_files_command,
 )
+from divbase_cli.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
@@ -47,6 +51,60 @@ def list_files(
         print(f"Files in the project '{project_config.name}':")
         for file in files:
             print(f"- '{file}'")
+
+
+@file_app.command("info")
+def file_info(
+    file_name: str = typer.Argument(..., help="Name of the file to get information about."),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Get detailed information about a specific file in the project's DivBase store.
+    This includes all versions of the file and whether the file is currently marked as soft deleted.
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    file_info = get_file_info_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        object_name=file_name,
+    )
+
+    if not file_info.versions:
+        # API should never return an object with no versions, but just in case
+        print("No available versions for this file.")
+        return
+
+    # TODO - implement the restore command..
+    if file_info.is_currently_deleted:
+        print(
+            "[bold red]Warning: This file is marked as soft deleted.\n[/bold red]"
+            + "[italic]   To restore a deleted file, use the 'divbase-cli file restore' command.\n"
+            + "   Or upload the file again using the 'divbase-cli file upload' command.\n[/italic]",
+        )
+
+    table = Table(
+        title=f"Available Versions for '[bold]{file_info.object_name}[/bold]'",
+        caption="Versions shown are ordered with the latest/current version first/at the top",
+    )
+    table.add_column("File size", justify="left", style="magenta", no_wrap=True)
+    table.add_column("Upload date (CET)", justify="left", style="green", no_wrap=True)
+    table.add_column("MD5 checksum", justify="left", style="yellow")
+    table.add_column("Version ID", justify="left", style="cyan")
+
+    for version in file_info.versions:
+        cet_timestamp = version.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        file_size = format_file_size(size_bytes=version.size)
+        table.add_row(
+            file_size,
+            cet_timestamp,
+            version.etag,
+            version.version_id,
+        )
+
+    print(table)
 
 
 @file_app.command("download")
