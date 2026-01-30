@@ -120,3 +120,11 @@ class DownloadedFileChecksumMismatchError(DivBaseAPIException):
             f"but calculated: {calculated_checksum}."
         )
         super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
+
+
+class ObjectDoesNotExistError(DivBaseAPIException):
+    """Raised when an S3 object/key does not exist in the project's bucket."""
+
+    def __init__(self, key: str, bucket_name: str):
+        message = f"The file/object '{key}' does not exist in the project '{bucket_name}'. "
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)

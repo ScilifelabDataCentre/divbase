@@ -10,20 +10,6 @@ we ensure that when you manually raise a specific exception the error message lo
 from pathlib import Path
 
 
-class ObjectDoesNotExistError(FileNotFoundError):
-    """Raised when an S3 object/key does not exist in the bucket."""
-
-    def __init__(self, key: str, bucket_name: str):
-        error_message = f"The file/object '{key}' does not exist in the bucket '{bucket_name}'. "
-        super().__init__(error_message)
-        self.key = key
-        self.bucket = bucket_name
-        self.error_message = error_message
-
-    def __str__(self):
-        return self.error_message
-
-
 class BcftoolsEnvironmentError(Exception):
     """Raised when there's an issue with the execution environment (Docker, etc.)."""
 
