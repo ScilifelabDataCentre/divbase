@@ -1,0 +1,28 @@
+name: Publish divbase-lib and divbase-cli packages to PyPI
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-divbase-lib-and-cli:
+    uses: ./.github/workflows/build-pypi-packages.yaml
+
+  publish-to-pypi:
+    name: Publish divbase-lib and divbase-cli to PyPI
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    needs: build-divbase-lib-and-cli
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # For trusted publishing
+    environment:
+        name: pypi
+  
+    steps:
+      - name: Download previously built packages
+        uses: actions/download-artifact@v7
+        with:
+          name: Packages
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
