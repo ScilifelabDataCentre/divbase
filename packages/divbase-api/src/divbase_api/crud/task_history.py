@@ -4,7 +4,7 @@ CRUD operations for task history.
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
@@ -77,15 +77,36 @@ async def get_tasks_pg(
 
 async def create_task_history_entry(
     db: AsyncSession,
-    task_id: str,
     user_id: int,
     project_id: int,
+    task_id: str | None = None,
 ) -> int:
     """
-    Create a new task history entry. Returns the primary key ID from the table, which is the user's job id (but different from celery task_id).
+    Create a new task history entry. Returns the primary key ID from the table, which is the DivBase job ID
+    (which is an integer rather than the celery task_id which is a UUID).
+
+    The task_id parameter is optional to allow creating entries before the celery task is created (e.g., for bcftools pipe tasks).
+
     """
     task_history_entry = TaskHistoryDB(task_id=task_id, user_id=user_id, project_id=project_id)
     db.add(task_history_entry)
     await db.commit()
     await db.refresh(task_history_entry)
     return task_history_entry.id
+
+
+async def update_task_history_entry_with_celery_task_id(
+    db: AsyncSession,
+    job_id: int,
+    task_id: str | None = None,
+) -> None:
+    """
+    Updates an existing task history entry with the celery task ID. The intended use case is to first create a table entry without a celery task ID using
+    create_task_history_entry(), then submit a celery task with .apply_async and get the celery task ID, and then update the table entry with the celery task ID using this function.
+    """
+
+    stmt = update(TaskHistoryDB).where(TaskHistoryDB.id == job_id).values(task_id=task_id)
+    result = await db.execute(stmt)
+    if result.rowcount == 0:
+        raise ValueError(f"TaskHistoryDB entry with id={job_id} not found")
+    await db.commit()

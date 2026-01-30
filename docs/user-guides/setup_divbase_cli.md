@@ -5,7 +5,7 @@ This section covers how to configure divbase-cli to know which projects you're a
 
 ## Prerequisites
 
-- Installed divbase-cli, see the [quickstart guide](quick-start.md) guide or [installation section](installation.md) of the documentation.
+- Installed divbase-cli, see the [quickstart guide](quick-start.md) or [installation section](installation.md) of the documentation.
 - Have created a [DivBase account via the website](https://divbase.scilifelab.se) and have access to at least one DivBase project. See the [account management guide](account-management.md) for more information on how to get access to a project.
 
 ## 1. Create a user config file and add your project(s)
@@ -54,7 +54,7 @@ divbase-cli files download file1.vcf.gz file2.vcf.gz --project my-non-default-pr
 divbase-cli files upload file1.vcf.gz file2.vcf.gz --project my-non-default-project
 ```
 
-Notice above how we sometimes specified the project name with `--project` flag since we wanted to use a non-default project You can do this for all DivBase CLI commands that relate to working with a specific project.
+Notice above how we sometimes specified the project name with `--project` flag since we wanted to use a non-default project. You can do this for all DivBase CLI commands that relate to working with a specific project.
 
 If you're ever unsure which project is the default project you can run:
 

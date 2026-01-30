@@ -45,6 +45,7 @@ class BcftoolsQueryKwargs(BaseModel):
     project_id: int
     project_name: str
     user_id: int
+    job_id: int
 
 
 class SampleMetadataQueryTaskResult(BaseModel):

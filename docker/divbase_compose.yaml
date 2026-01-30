@@ -5,9 +5,13 @@ networks:
     driver: bridge
   external-s3:
     driver: bridge
+  # External network for monitoring services defined in monitoring_compose.yaml
+  divbase-observability:
+    name: divbase-observability
+    driver: bridge
 services:
   rabbitmq:
-    image: "rabbitmq:alpine"
+    image: "rabbitmq:4.2.1-management-alpine"
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 5s
@@ -15,11 +19,19 @@ services:
       retries: 5
     ports:
       - 5672:5672
+      - 15692:15692 # Prometheus metrics endpoint
+    environment:
+      - RABBITMQ_DEFAULT_USER=celery_user
+      - RABBITMQ_DEFAULT_PASS=badpassword
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_prometheus true
+      - RABBITMQ_PROMETHEUS_RETURN_PER_OBJECT_METRICS=true # enable per-queue metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq #to avoid anonymous volumes being created
     networks: &internal-network
       - internal 
+      - divbase-observability
   worker-quick:
+    hostname: worker-quick
     build: &worker-build
       context: .. 
       dockerfile: docker/worker.dockerfile
@@ -39,7 +51,7 @@ services:
       db-migrator:
         condition: service_completed_successfully
     environment: &worker-env
-      - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+      - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
@@ -58,7 +70,10 @@ services:
           path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4", "-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
     networks: *internal-network
+    ports:
+      - "8101:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
   worker-long:
+    hostname: worker-long
     build: *worker-build
     healthcheck: *worker-healthcheck
     depends_on: *worker-api-depends
@@ -66,6 +81,8 @@ services:
     develop: *watch-celery-src
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
     networks: *internal-network
+    ports:
+      - "8102:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
   minio:
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     ports:
@@ -150,8 +167,8 @@ services:
     environment:
     - DIVBASE_ENV=local_dev
     - FRONTEND_BASE_URL=http://localhost:8000
-    - MKDOCS_SITE_URL=http://localhost:8001/divbase 
-    - CELERY_BROKER_URL=pyamqp://guest@rabbitmq:5672//
+    - MKDOCS_SITE_URL=http://localhost:8008/divbase 
+    - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
     - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.

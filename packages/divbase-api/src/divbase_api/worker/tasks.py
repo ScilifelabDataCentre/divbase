@@ -10,6 +10,7 @@ from celery import Celery
 from celery.signals import (
     after_task_publish,
     task_prerun,
+    worker_process_init,
 )
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -24,6 +25,7 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
+from divbase_api.worker.metrics import start_metrics_server
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -59,6 +61,15 @@ app.conf.update(
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
+
+
+@worker_process_init.connect
+def init_worker_metrics(**kwargs):
+    """
+    Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
+    With celery prefork concurrency, only the first worker process to execute will successfully bind to port 8001.
+    """
+    start_metrics_server(port=8101)
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -189,12 +200,13 @@ def bcftools_pipe_task(
     project_id: int,
     project_name: str,
     user_id: int,
+    job_id: int,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
     task_id = bcftools_pipe_task.request.id
-    logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}")
+    logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
@@ -258,7 +270,7 @@ def bcftools_pipe_task(
 
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, task_id)
+    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)

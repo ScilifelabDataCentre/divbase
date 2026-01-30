@@ -127,7 +127,7 @@ class BcftoolsQueryManager:
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict, task_id: str = None) -> str:
+    def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> str:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
@@ -144,7 +144,7 @@ class BcftoolsQueryManager:
             except BcftoolsEnvironmentError:
                 raise
 
-        identifier = task_id if task_id else datetime.datetime.now().timestamp()
+        identifier = job_id if job_id else datetime.datetime.now().timestamp()
 
         commands_config_structure = self.build_commands_config(command, bcftools_inputs, identifier)
         output_file = self.process_bcftools_commands(commands_config_structure, identifier)
@@ -345,7 +345,7 @@ class BcftoolsQueryManager:
         self.temp_files.append(annotated_unsorted_output_file)
         self.temp_files.append(divbase_header_for_vcf)
 
-        output_file = f"merged_{identifier}.vcf.gz"
+        output_file = f"result_of_job_{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
 
         sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)

@@ -18,11 +18,15 @@ if TYPE_CHECKING:
 class TaskHistoryDB(BaseDBModel):
     """
     DB model for history of tasks executed by Celery.
+
+    The ID field inherited from BaseDBModel serves as the primary key for this table and is the DivBase job ID.
+    The task_id field corresponds to the Celery task ID (UUID string) and is nullable since there are cases such as the bcftools pipe task
+    that need the DivBase job ID as input, meaning that a table entry is needed before the Celery task is created.
     """
 
     __tablename__ = "task_history"
 
-    task_id: Mapped[str] = mapped_column(String, index=True, unique=True)
+    task_id: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("user.id", ondelete="CASCADE"),

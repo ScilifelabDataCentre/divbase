@@ -1,0 +1,46 @@
+{
+  "id": null,
+  "title": "Container CPU & Memory Usage (cAdvisor)",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage (cores/s, 5m avg; cAdvisor)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{cpu=\"total\"}[5m])",
+          "legendFormat": "{{id}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores"
+        }
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Memory Usage (working set bytes; cAdvisor)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes",
+          "legendFormat": "{{id}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 }
+    }
+  ]
+}

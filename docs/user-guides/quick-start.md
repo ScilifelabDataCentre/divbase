@@ -89,7 +89,7 @@ divbase-cli files list
 
 ## Step 7: Upload sample metadata
 
-Sample metadata must be upload as follows:
+Sample metadata must be uploaded as follows:
 
 - In TSV format and be named "sample_metadata.tsv"
 - Must contain a column named "sample_id" which matches the sample IDs in your VCF files
@@ -141,7 +141,7 @@ divbase-cli task-history user
 Once a `bcftools-pipe` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/results/
 ```
 
 Replacing [JOB_ID] with the actual job ID from the task history.

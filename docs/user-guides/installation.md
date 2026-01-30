@@ -44,7 +44,7 @@ uv tool upgrade divbase-cli
 
 ### pip with a Virtual Environment
 
-If you would prefer to manually create a virtual enviroment with for example `conda`/`mamba`/`venv` then you can install `divbase-cli` with pip after activating your virtual enviroment.
+If you would prefer to manually create a virtual environment with for example `conda`/`mamba`/`venv` then you can install `divbase-cli` with pip after activating your virtual environment.
 
 For example, with conda:
 
