@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 s3_router = APIRouter()
 
+UPLOAD_AUTHORIZATION_ERROR_MSG = "You don't have permission to upload files to this project."
+
 
 def check_too_many_objects_in_request(
     numb_objects: int,
@@ -125,7 +127,7 @@ async def generate_single_part_upload_urls(
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to upload files to this project.")
+        raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     check_too_many_objects_in_request(numb_objects=len(objects))
 
@@ -153,7 +155,7 @@ async def create_multi_part_upload(
 ):
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to upload files to this project.")
+        raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     return await run_in_threadpool(
         s3_signer_service.create_multipart_upload,
@@ -176,7 +178,7 @@ async def get_pre_signed_urls_parts(
 ):
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to upload files to this project.")
+        raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     numb_parts = parts_request.parts_range_end - parts_request.parts_range_start + 1
     check_too_many_objects_in_request(numb_objects=numb_parts)
@@ -208,7 +210,7 @@ async def complete_multipart_upload(
 ):
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to upload files to this project.")
+        raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     return await run_in_threadpool(
         s3_signer_service.complete_multipart_upload,
@@ -230,7 +232,7 @@ async def abort_multipart_upload(
 ):
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to upload files to this project.")
+        raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     s3_signer_service.abort_multipart_upload(
         bucket_name=project.bucket_name,
