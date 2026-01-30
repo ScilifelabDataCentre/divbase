@@ -164,7 +164,7 @@ def test_bcftools_pipe_query(
     user_task_id = result.stdout.strip().split()[-1]
     _ = wait_for_task_complete(user_task_id=user_task_id)
 
-    command = f"files list --project {project_name} "
+    command = f"files ls --project {project_name} "
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0

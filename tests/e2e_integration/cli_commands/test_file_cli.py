@@ -65,8 +65,8 @@ def large_file_for_multipart(tmp_path_factory):
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """Test basic usage of files list command."""
-    command = "files list"
+    """Test basic usage of files ls command."""
+    command = "files ls"
 
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -82,7 +82,7 @@ def test_list_non_default_project(logged_in_edit_user_with_existing_config, CONS
     non_default_project = CONSTANTS["NON_DEFAULT_PROJECT"]
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][non_default_project]
 
-    command = f"files list --project {non_default_project}"
+    command = f"files ls --project {non_default_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for file in files_in_project:
@@ -91,7 +91,7 @@ def test_list_non_default_project(logged_in_edit_user_with_existing_config, CONS
 
 def test_list_files_empty_project(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test list files for an empty project."""
-    command = f"files list --project {CONSTANTS['EMPTY_PROJECT']}"
+    command = f"files ls --project {CONSTANTS['EMPTY_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "No files found" in result.stdout
@@ -191,7 +191,7 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
     assert result.exit_code != 0
     assert isinstance(result.exception, FilesAlreadyInProjectError)
 
-    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert test_files[0].name in result.stdout
@@ -226,7 +226,7 @@ def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing
     for i in range(num_files):
         assert f"test_file_{i}.txt" in result.stdout
 
-    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for i in range(num_files):
@@ -261,7 +261,7 @@ def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
     assert duplicate_file.name in str(result.exception)
 
     # Verify that none of the files were uploaded.
-    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
@@ -513,13 +513,13 @@ def test_upload_and_download_large_file_triggers_multipart(
 def test_remove_with_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
 
-    command = f"files remove {file_name} --dry-run"
+    command = f"files rm {file_name} --dry-run"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"{file_name}" in result.stdout
 
-    command = "files list"
+    command = "files ls"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name in result.stdout
@@ -536,18 +536,18 @@ def test_remove_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtur
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"files list --project {clean_project}"
+    command = f"files ls --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name in result.stdout
 
-    command = f"files remove {file_name} --project {clean_project}"
+    command = f"files rm {file_name} --project {clean_project}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     assert f"{file_name}" in result.stdout
 
-    command = f"files list --project {clean_project}"
+    command = f"files ls --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name not in result.stdout

@@ -16,13 +16,14 @@ $ divbase-cli files [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `list`: list all files in the project&#x27;s DivBase...
+* `ls`: # TODO - paginate results list all files...
 * `download`: Download files from the project&#x27;s store on...
 * `upload`: Upload files to your project&#x27;s store on...
-* `remove`: Remove files from the project&#x27;s store on...
+* `rm`: Remove files from the project&#x27;s store on...
 
-## `divbase-cli files list`
+## `divbase-cli files ls`
 
+# TODO - paginate results
 list all files in the project&#x27;s DivBase store.
 
 To see files at a user specified project version (controlled by the &#x27;divbase-cli version&#x27; subcommand),
@@ -31,7 +32,7 @@ you can instead use the &#x27;divbase-cli version info [VERSION_NAME]&#x27; comm
 **Usage**:
 
 ```console
-$ divbase-cli files list [OPTIONS]
+$ divbase-cli files ls [OPTIONS]
 ```
 
 **Options**:
@@ -95,7 +96,7 @@ $ divbase-cli files upload [OPTIONS] [FILES]...
 * `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
-## `divbase-cli files remove`
+## `divbase-cli files rm`
 
 Remove files from the project&#x27;s store on DivBase by either:
     1. providing a list of files paths directly in the command line
@@ -106,7 +107,7 @@ Remove files from the project&#x27;s store on DivBase by either:
 **Usage**:
 
 ```console
-$ divbase-cli files remove [OPTIONS] [FILES]...
+$ divbase-cli files rm [OPTIONS] [FILES]...
 ```
 
 **Arguments**:

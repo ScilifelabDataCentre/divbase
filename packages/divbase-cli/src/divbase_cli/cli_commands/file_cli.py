@@ -25,7 +25,7 @@ from divbase_cli.services.s3_files import (
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 
-@file_app.command("list")
+@file_app.command("ls")
 def list_files(
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
@@ -191,7 +191,7 @@ def upload_files(
         raise typer.Exit(1)
 
 
-@file_app.command("remove")
+@file_app.command("rm")
 def remove_files(
     files: list[str] | None = typer.Argument(
         None, help="Space seperated list of files/objects in the project's store on DivBase to delete."

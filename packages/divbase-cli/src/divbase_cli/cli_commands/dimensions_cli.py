@@ -82,7 +82,7 @@ def show_dimensions_index(
         else:
             print(
                 f"No entry found for filename: {filename}. Please check that the filename is correct and that it is a VCF file (extension: .vcf or .vcf.gz)."
-                "\nHint: use 'divbase-cli files list' to view all files in the project."
+                "\nHint: use 'divbase-cli files ls' to view all files in the project."
             )
         return
 
