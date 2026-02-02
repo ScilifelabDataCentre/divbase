@@ -40,6 +40,7 @@ from divbase_lib.api_schemas.s3 import (
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
+    RestoreObjectsResponse,
     UploadSinglePartObjectRequest,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE
@@ -272,7 +273,11 @@ async def soft_delete_files(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
-    """Soft delete files in the project's bucket. This adds a deletion marker to the files, but does not actually delete them."""
+    """
+    Soft delete files in the projects store.
+
+    This adds a deletion marker to the files, but does not actually delete them.
+    """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to soft delete files in this project.")
@@ -288,6 +293,37 @@ async def soft_delete_files(
     return await run_in_threadpool(
         s3_file_manager.soft_delete_objects, objects=objects, bucket_name=project.bucket_name
     )
+
+
+@s3_router.post("/restore", status_code=status.HTTP_200_OK, response_model=RestoreObjectsResponse)
+async def restore_soft_deleted_files(
+    objects: list[str],
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    Restore soft-deleted files from a project's store by removing the soft delete marker.
+
+    This finds the latest version of each file provided, and if it has a delete marker it removes it,
+    effectively restoring the previous version of the file.
+
+    NOTE: If you want to restore an older version of a file, you need to either:
+        1. download and upload the file again.
+        2. Hard delete the versions after the version you want to restore (making the latest version, the version you want).
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError("You don't have permission to restore files in this project.")
+
+    check_too_many_objects_in_request(numb_objects=len(objects))
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.endpoint_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    return await run_in_threadpool(s3_file_manager.restore_objects, objects=objects, bucket_name=project.bucket_name)
 
 
 # using POST as GET with body is not considered good practice

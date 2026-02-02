@@ -149,13 +149,26 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
-class CheckFileExistsRequest(BaseModel):
-    """Request model to check if a file already exists in the bucket (using the checksum)"""
+class RestoreObjectsResponse(BaseModel):
+    """Response model for restoring soft-deleted objects in a bucket."""
 
-    object_name: str
-    md5_checksum: str
+    restored: list[str] = Field(
+        ...,
+        description="List of object names that were successfully restored, this includes objects that were already live",
+    )
+    not_restored: list[str] = Field(
+        ...,
+        description=(
+            "List of object names that could not be processed.\n"
+            "This could be due to several reasons:\n"
+            "1. The object does not exist in the bucket (e.g., a typo in the name).\n"
+            "2. The object was hard-deleted and is unrecoverable.\n"
+            "3. An unexpected server error occurred during the restore attempt."
+        ),
+    )
 
 
+## checksum models ##
 class FileChecksumResponse(BaseModel):
     """Response model for reporting a file's checksum in the bucket."""
 
