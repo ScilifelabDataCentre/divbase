@@ -67,7 +67,7 @@ app.add_typer(task_history_app, name="task-history")
 
 def main():
     if cli_settings.LOGGING_ON:
-        logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stdout)])
+        logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stderr)])
         logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
     app()
 

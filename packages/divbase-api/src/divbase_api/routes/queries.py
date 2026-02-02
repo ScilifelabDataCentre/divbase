@@ -30,7 +30,7 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryTaskResult,
 )
 
-logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 
