@@ -21,6 +21,7 @@ from divbase_cli.services.s3_files import (
     download_files_command,
     get_file_info_command,
     list_files_command,
+    restore_objects_command,
     soft_delete_objects_command,
     stream_file_command,
     upload_files_command,
@@ -333,6 +334,53 @@ def remove_files(
             print(f"- '{file}'")
     else:
         print("No files were deleted.")
+
+
+@file_app.command("restore")
+def restore_soft_deleted_files(
+    files: list[str] | None = typer.Argument(
+        None, help="Space seperated list of files/objects in the project's store on DivBase to restore."
+    ),
+    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to restore."),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Restore soft deleted files from the project's store on DivBase
+
+    To provide files to restore you can either:
+        1. provide a list of files directly in the command line.
+        2. provide a text file with a list of files to restore (new file on each line).
+
+    NOTE: Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live. This means you can repeatedly run this command on the same file and get the same response.
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    all_files = _resolve_file_inputs(files, file_list)
+
+    restored_objects_response = restore_objects_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        all_files=all_files,
+    )
+
+    if restored_objects_response.restored:
+        print("Restored files:")
+        for file in restored_objects_response.restored:
+            print(f"- '{file}'")
+
+    if restored_objects_response.not_restored:
+        print("[bold red]WARNING: Some files could not be restored:[/bold red]")
+        for file in restored_objects_response.not_restored:
+            print(f"[red]- '{file}'[/red]")
+
+        print(
+            "Possible reasons for failed restores:\n"
+            "1. The object does not exist in the bucket (e.g., a typo in the name).\n"
+            "2. The object was hard-deleted and is unrecoverable.\n"
+            "3. An unexpected server error occurred during the restore attempt."
+        )
 
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:

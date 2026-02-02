@@ -27,6 +27,7 @@ from divbase_lib.api_schemas.s3 import (
     ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
+    RestoreObjectsResponse,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.s3_checksums import (
@@ -69,6 +70,20 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
         json=all_files,
     )
     return response.json()
+
+
+def restore_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> RestoreObjectsResponse:
+    """
+    Restore soft_deleted objects in the project's bucket.
+    Returns an object containing a list of the restored objects, and those that were not restored.
+    """
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/restore?project_name={project_name}",
+        json=all_files,
+    )
+    return RestoreObjectsResponse(**response.json())
 
 
 def download_files_command(
