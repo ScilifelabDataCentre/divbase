@@ -14,7 +14,7 @@ Could be nice to have a detailed list route (so version IDs, sizes, last modifie
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
 from divbase_api.api_config import settings
@@ -70,7 +70,7 @@ def check_too_many_objects_in_request(
 @s3_router.post("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
 async def generate_download_urls(
     project_name: str,
-    objects_to_download: list[DownloadObjectRequest],
+    objects_to_download: Annotated[list[DownloadObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -139,7 +139,7 @@ async def get_object_info(
 )
 async def generate_single_part_upload_urls(
     project_name: str,
-    objects: list[UploadSinglePartObjectRequest],
+    objects: Annotated[list[UploadSinglePartObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -269,8 +269,8 @@ async def abort_multipart_upload(
 
 @s3_router.delete("/", status_code=status.HTTP_200_OK, response_model=list[str])
 async def soft_delete_files(
-    objects: list[str],
     project_name: str,
+    objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -297,8 +297,8 @@ async def soft_delete_files(
 
 @s3_router.post("/restore", status_code=status.HTTP_200_OK, response_model=RestoreObjectsResponse)
 async def restore_soft_deleted_files(
-    objects: list[str],
     project_name: str,
+    objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -329,8 +329,8 @@ async def restore_soft_deleted_files(
 # using POST as GET with body is not considered good practice
 @s3_router.post("/checksums", status_code=status.HTTP_200_OK, response_model=list[FileChecksumResponse])
 async def get_files_checksums(
-    object_names: list[str],
     project_name: str,
+    object_names: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
