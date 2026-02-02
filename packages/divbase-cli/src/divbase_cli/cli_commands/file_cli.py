@@ -22,6 +22,7 @@ from divbase_cli.services.s3_files import (
     get_file_info_command,
     list_files_command,
     soft_delete_objects_command,
+    stream_file_command,
     upload_files_command,
 )
 from divbase_cli.utils import format_file_size
@@ -35,8 +36,9 @@ def list_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    # TODO - paginate results
     list all files in the project's DivBase store.
+
+    # TODO - paginate results
 
     To see files at a user specified project version (controlled by the 'divbase-cli version' subcommand),
     you can instead use the 'divbase-cli version info [VERSION_NAME]' command.
@@ -61,6 +63,7 @@ def file_info(
 ):
     """
     Get detailed information about a specific file in the project's DivBase store.
+
     This includes all versions of the file and whether the file is currently marked as soft deleted.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
@@ -137,7 +140,9 @@ def download_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Download files from the project's store on DivBase. This can be done by either:
+    Download files from the project's store on DivBase.
+
+    This can be done by either:
         1. providing a list of files paths directly in the command line
         2. providing a directory to download the files to.
     """
@@ -182,9 +187,42 @@ def download_files(
         raise typer.Exit(1)
 
 
+@file_app.command("stream")
+def stream_file(
+    file_name: str = typer.Argument(..., help="Name of the file you want to stream."),
+    version_id: str | None = typer.Option(
+        default=None,
+        help="Specify this if you want to look at an older/specific version of the file. "
+        "If not provided, the latest version of the file is used. "
+        "To get a file's version ids, use the 'divbase-cli file info [FILE_NAME]' command.",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+):
+    """
+    Stream a file's content to standard output.
+
+    This allows your to pipe the output to other tools like 'less', 'head', 'zcat' and 'bcftools'.
+
+    Examples:
+    - View a file: divbase-cli files stream my_file.tsv | less
+    - View a gzipped file: divbase-cli files stream my_file.vcf.gz | zcat | less
+    - Run a bcftools command: divbase-cli files stream my_file.vcf.gz | bcftools view -h -  # The "-" tells bcftools to read from standard input
+    """
+    project_config = resolve_project(project_name=project, config_path=config_file)
+    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+
+    stream_file_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        file_name=file_name,
+        version_id=version_id,
+    )
+
+
 @file_app.command("upload")
 def upload_files(
-    files: list[Path] | None = typer.Argument(None, help="Space seperated list of files to upload."),
+    files: list[Path] | None = typer.Argument(None, help="Space separated list of files to upload."),
     upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     disable_safe_mode: Annotated[
@@ -201,10 +239,12 @@ def upload_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Upload files to your project's store on DivBase by either:
-        1. providing a list of files paths directly in the command line
-        2. providing a directory to upload
-        3. providing a text file with or a file list.
+    Upload files to your project's store on DivBase:
+
+    To provide files to upload you can either:
+        1. provide a list of files paths directly in the command line
+        2. provide a directory to upload
+        3. provide a text file with or a file list.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
@@ -262,9 +302,11 @@ def remove_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Remove files from the project's store on DivBase by either:
-        1. providing a list of files paths directly in the command line
-        2. providing a text file with or a file list.
+    Remove files from the project's store on DivBase
+
+    To provide files to delete you can either:
+        1. provide a list of files paths directly in the command line
+        2. provide a text file with or a file list.
 
     'dry_run' mode will not actually delete the files, just print what would be deleted.
     """

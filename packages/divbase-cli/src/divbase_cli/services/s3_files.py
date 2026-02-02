@@ -2,7 +2,10 @@
 Service layer for DivBase CLI S3 file operations.
 """
 
+import sys
 from pathlib import Path
+
+import httpx
 
 from divbase_cli.cli_exceptions import (
     FileDoesNotExistInSpecifiedVersionError,
@@ -122,6 +125,30 @@ def download_files_command(
         failed_downloads.extend(batch_download_failed)
 
     return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
+
+
+def stream_file_command(
+    divbase_base_url: str, project_name: str, file_name: str, version_id: str | None = None
+) -> None:
+    """Stream the contents of a single file in the project's S3 bucket to stdout."""
+    json_data = [{"name": file_name, "version_id": version_id}]
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/download?project_name={project_name}",
+        json=json_data,
+    )
+    pre_signed_url = PreSignedDownloadResponse(**response.json()[0]).pre_signed_url
+
+    try:
+        with httpx.stream("GET", pre_signed_url, timeout=None) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                sys.stdout.buffer.write(chunk)
+    except BrokenPipeError:
+        # This happens when the user pipes to a command that closes early
+        # (e.g., `[divbase-cli stream command] | head -n 10`).
+        pass
 
 
 def upload_files_command(
