@@ -605,6 +605,30 @@ def test_upload_and_download_large_file_triggers_multipart(
     assert downloaded_checksum == expected_checksum
 
 
+def test_stream_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+    """Test streaming a simple text file."""
+    query_project = CONSTANTS["QUERY_PROJECT"]
+    file_to_stream = "sample_metadata.tsv"
+    file_path = fixtures_dir / file_to_stream
+    expected_content = file_path.read_text()
+
+    result = runner.invoke(app, f"files stream {file_to_stream} --project {query_project}")
+    assert result.exit_code == 0
+    assert result.stdout == expected_content
+
+
+def test_stream_gzipped_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+    """Test streaming a gzipped file."""
+    query_project = CONSTANTS["QUERY_PROJECT"]
+    file_to_stream = "HOM_20ind_17SNPs_first_10_samples.vcf.gz"
+    file_path = fixtures_dir / file_to_stream
+    expected_content = file_path.read_bytes()
+
+    result = runner.invoke(app, f"files stream {file_to_stream} --project {query_project}")
+    assert result.exit_code == 0
+    assert result.stdout_bytes == expected_content
+
+
 def test_remove_with_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
 
