@@ -30,6 +30,8 @@ from divbase_cli.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
+NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+
 
 @file_app.command("ls")
 def list_files(
@@ -164,7 +166,7 @@ def download_files(
                 all_files.add(object_name.strip())
 
     if not all_files:
-        print("No files specified for download.")
+        print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
 
     download_results = download_files_command(
@@ -267,7 +269,7 @@ def upload_files(
                     all_files.add(path)
 
     if not all_files:
-        print("No files specified for upload.")
+        print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
 
     uploaded_results = upload_files_command(
@@ -398,6 +400,6 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
                 all_files.add(line.strip())
 
     if not all_files:
-        print("No files specified, exiting..")
+        print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
     return list(all_files)

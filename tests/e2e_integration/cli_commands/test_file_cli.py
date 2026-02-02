@@ -12,6 +12,7 @@ import boto3
 import pytest
 from typer.testing import CliRunner
 
+from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
 from divbase_cli.cli_exceptions import DivBaseAPIError, FilesAlreadyInProjectError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
@@ -71,6 +72,25 @@ def calculate_numb_table_rows_printed(stdout: str) -> int:
     """
     table_size = [line for line in stdout.splitlines() if line.strip().startswith(("│", "┃"))]
     return len(table_size) - 1  # Subtract 1 for the header
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "upload",
+        "download",
+        "rm",
+        "restore",
+    ],
+)
+def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_config, CONSTANTS, command):
+    """Test that different files subcommands that require file inputs fail when none are provided."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    full_command = f"files {command} --project {clean_project}"
+
+    result = runner.invoke(app, full_command)
+    assert result.exit_code == 1
+    assert NO_FILES_SPECIFIED_MSG in result.stdout
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
