@@ -294,7 +294,7 @@ def remove_files(
     files: list[str] | None = typer.Argument(
         None, help="Space seperated list of files/objects in the project's store on DivBase to delete."
     ),
-    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
+    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to delete."),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="If set, will not actually delete the files, just print what would be deleted."
     ),
@@ -302,29 +302,18 @@ def remove_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    Remove files from the project's store on DivBase
+    Soft delete files from the project's store on DivBase
 
     To provide files to delete you can either:
-        1. provide a list of files paths directly in the command line
-        2. provide a text file with or a file list.
+        1. provide a list of file names directly in the command line
+        2. provide a text file with a list of files to delete.
 
-    'dry_run' mode will not actually delete the files, just print what would be deleted.
+    Note that deleting a non existent file will be treated as a successful deletion.
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    if bool(files) + bool(file_list) > 1:
-        print("Please specify only one of --files or --file-list.")
-        raise typer.Exit(1)
-
-    all_files = set()
-
-    if files:
-        all_files.update(files)
-    if file_list:
-        with open(file_list) as f:
-            for line in f:
-                all_files.add(line.strip())
+    all_files = _resolve_file_inputs(files, file_list)
 
     if dry_run:
         print("Dry run mode enabled. The following files would have been deleted:")
@@ -335,7 +324,7 @@ def remove_files(
     deleted_files = soft_delete_objects_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
-        all_files=list(all_files),
+        all_files=all_files,
     )
 
     if deleted_files:
@@ -344,3 +333,23 @@ def remove_files(
             print(f"- '{file}'")
     else:
         print("No files were deleted.")
+
+
+def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
+    """Helper function to resolve file inputs from command line arguments."""
+    if bool(files) + bool(file_list) > 1:
+        print("Please specify only one of --files or --file-list.")
+        raise typer.Exit(1)
+
+    all_files = set()
+    if files:
+        all_files.update(files)
+    if file_list:
+        with open(file_list) as f:
+            for line in f:
+                all_files.add(line.strip())
+
+    if not all_files:
+        print("No files specified, exiting..")
+        raise typer.Exit(1)
+    return list(all_files)
