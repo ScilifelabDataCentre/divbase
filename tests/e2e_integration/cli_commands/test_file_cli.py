@@ -690,3 +690,64 @@ def test_remove_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtur
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert file_name not in result.stdout
+
+
+def test_restore_deleted_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test restoring a file that was soft-deleted."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    test_file = tmp_path / "file_to_restore.txt"
+    test_file.write_text("This file will be deleted and then restored.")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files rm {test_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
+    assert result.exit_code != 0
+    assert "404" in result.stdout
+    assert test_file.name in result.stdout
+
+    result = runner.invoke(app, f"files restore {test_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "restored files:" in result.stdout.lower()
+    assert test_file.name in result.stdout
+
+    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "404" not in result.stdout
+    assert test_file.name in result.stdout
+    assert "successfully downloaded" in result.stdout.lower()
+
+
+def test_restore_already_live_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that attempting to restore a multiple times does no harm and operation is idempotent."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    test_file = tmp_path / "already_alive_file.txt"
+    test_file.write_text("This file was never deleted.")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    for _ in range(3):
+        result = runner.invoke(app, f"files restore {test_file.name} --project {clean_project}")
+        assert result.exit_code == 0
+        assert "restored files:" in result.stdout.lower()
+        assert test_file.name in result.stdout
+
+        result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
+        assert result.exit_code == 0
+        assert "404" not in result.stdout
+        assert test_file.name in result.stdout
+        assert "successfully downloaded" in result.stdout.lower()
+
+
+def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that attempting to restore a non-existent file reports it as 'not found'."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    non_existent_file = "i_do_not_exist.txt"
+
+    result = runner.invoke(app, f"files restore {non_existent_file} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "warning: some files could not be restored" in result.stdout.lower()
+    assert non_existent_file in result.stdout
