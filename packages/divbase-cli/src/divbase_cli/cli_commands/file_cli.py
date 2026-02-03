@@ -27,7 +27,7 @@ from divbase_cli.services.s3_files import (
     stream_file_command,
     upload_files_command,
 )
-from divbase_cli.utils import format_file_size
+from divbase_cli.utils import format_file_size, print_rich_table_as_tsv
 from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
@@ -63,6 +63,11 @@ def list_files(
 @file_app.command("info")
 def file_info(
     file_name: str = typer.Argument(..., help="Name of the file to get information about."),
+    format_as_tsv: bool = typer.Option(
+        False,
+        "--tsv",
+        help="If set, will print the file info in TSV format for easier programmatic parsing.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
@@ -85,12 +90,11 @@ def file_info(
         print("No available versions for this file.")
         return
 
-    # TODO - implement the restore command..
     if file_info.is_currently_deleted:
         print(
             "[bold red]Warning: This file is marked as soft deleted.\n[/bold red]"
-            + "[italic]   To restore a deleted file, use the 'divbase-cli file restore' command.\n"
-            + "   Or upload the file again using the 'divbase-cli file upload' command.\n[/italic]",
+            + "[italic]   To restore a deleted file, use the 'divbase-cli files restore' command.\n"
+            + "   Or upload the file again using the 'divbase-cli files upload' command.\n[/italic]",
         )
 
     table = Table(
@@ -112,7 +116,10 @@ def file_info(
             version.version_id,
         )
 
-    print(table)
+    if not format_as_tsv:
+        print(table)
+    else:
+        print_rich_table_as_tsv(table=table)
 
 
 @file_app.command("download")
