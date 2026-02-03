@@ -44,6 +44,7 @@ theme:
   - navigation.tabs.sticky
   - navigation.top
   - navigation.tracking
+  - navigation.expand
   - search.highlight
   - search.share
   - search.suggest
@@ -72,9 +73,15 @@ nav:
     - Installation: user-guides/installation.md
     - Setup DivBase CLI: user-guides/setup_divbase_cli.md
     - Working with VCF Files: user-guides/vcf-files.md
-    - Running Queries: user-guides/running-queries.md
+    - Running Queries: 
+      - Overview: user-guides/running-queries.md
+      - "Sidecar Metadata TSV files: creating and querying sample metadata files": user-guides/sidecar-metadata.md
+      - VCF Dimensions caching: user-guides/vcf-dimensions.md
+      - DivBase Query Syntax for VCF data: user-guides/query-syntax.md
+      - How to create efficient DivBase queries: user-guides/how-to-create-efficient-divbase-queries.md
+      - "Tutorial: Running a query on a public dataset": user-guides/tutorial-query-on-public-data.md
     - Managing Project Versions: user-guides/project-versioning.md
-    - Troubleshooting: user-guides/troubleshooting.md
+    - Troubleshooting: user-guides/troubleshooting.md      
   - CLI Command Reference: 
     - Overview: cli/index.md
     - divbase-cli: cli/_auto_generated/divbase-cli.md
