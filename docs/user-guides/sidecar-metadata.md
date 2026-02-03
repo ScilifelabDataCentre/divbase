@@ -34,3 +34,11 @@ String consisting of keys:values in the tsv file to filter on. The syntax is 'Ke
 - [TO BE IMPLEMENTED] add more Set Operations: union, intersection, difference, symmetric difference. Be clear on the default behaviour
 
 ## Trying out a query
+
+```bash
+divbase-cli query tsv "Area:Northern Portugal"
+```
+
+- [TO BE IMPLEMENTED] what to do if a query references a column that does not exist. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Area does not exist? This should probably give a warning and not just return nothing
+
+- [TO BE IMPLEMENTED] what to do if a query references a column value. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Northern Portugal does not exist in the column? This should probably also give a warning and not just return nothing, but nothing is a result here and not a syntax problem...
