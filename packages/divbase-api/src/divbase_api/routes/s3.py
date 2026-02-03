@@ -162,7 +162,6 @@ async def create_multi_part_upload(
         bucket_name=project.bucket_name,
         object_name=upload_request.name,
         content_length=upload_request.content_length,
-        part_size=upload_request.part_size,
     )
 
 

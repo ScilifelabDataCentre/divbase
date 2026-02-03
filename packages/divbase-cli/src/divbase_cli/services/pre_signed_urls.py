@@ -307,19 +307,13 @@ def perform_multipart_upload(
 ) -> SuccessfulUpload | FailedUpload:
     """
     Manages the entire multi-part upload process for a single file.
-    Protocol as follows: TODO
-
-    # TODO - error handling, which leads to abort the upload
+    See the docs docs/development/s3_transfers.md for high level overview of the process.
     """
     object_name = file_path.name
     file_size = file_path.stat().st_size
 
     # 1. Create multipart upload
-    create_request = CreateMultipartUploadRequest(
-        name=object_name,
-        content_length=file_size,
-        part_size=S3_MULTIPART_CHUNK_SIZE,
-    )
+    create_request = CreateMultipartUploadRequest(name=object_name, content_length=file_size)
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
