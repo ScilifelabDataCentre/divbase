@@ -4,6 +4,8 @@ Custom exceptions for the divbase CLI.
 
 from pathlib import Path
 
+from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES
+
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -149,3 +151,18 @@ class ConfigFileNotFoundError(DivBaseCLIError):
         ),
     ):
         super().__init__(error_message)
+
+
+class UnsupportedFileTypeError(DivBaseCLIError):
+    """Raised when one or more files to be uploaded are not supported by DivBase (based on file extension)."""
+
+    def __init__(self, unsupported_files: list[Path], supported_types: tuple[str, ...] = SUPPORTED_DIVBASE_FILE_TYPES):
+        self.unsupported_files = unsupported_files
+        self.supported_types = supported_types
+        message = (
+            f"The following file have types are not supported by DivBase and therefore cannot be uploaded: \n"
+            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
+            f"DivBase currently supports the following file types: {', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}\n"
+            "If you want us to support another file type, please let us know."
+        )
+        super().__init__(message)

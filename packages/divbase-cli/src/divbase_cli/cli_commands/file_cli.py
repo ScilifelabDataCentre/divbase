@@ -16,6 +16,7 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_exceptions import UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.s3_files import (
     download_files_command,
@@ -27,6 +28,7 @@ from divbase_cli.services.s3_files import (
     upload_files_command,
 )
 from divbase_cli.utils import format_file_size
+from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
@@ -256,7 +258,7 @@ def upload_files(
         print("Please specify only one of --files, --upload_dir, or --file-list.")
         raise typer.Exit(1)
 
-    all_files = set()
+    all_files: set[Path] = set()
     if files:
         all_files.update(files)
     if upload_dir:
@@ -271,6 +273,8 @@ def upload_files(
     if not all_files:
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
+
+    _check_for_unsupported_file_types(all_files)
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
@@ -403,3 +407,18 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
     return list(all_files)
+
+
+def _check_for_unsupported_file_types(all_files: set[Path]) -> None:
+    """
+    Helper fn to check if any of the files to be uploaded are unsupported by DivBase.
+    Raises error if so.
+
+    This is not a security feature, just for UX purposes.
+    """
+    unsupported_files = []
+    for file_path in all_files:
+        if not any(file_path.name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
+            unsupported_files.append(file_path)
+    if unsupported_files:
+        raise UnsupportedFileTypeError(unsupported_files=unsupported_files)

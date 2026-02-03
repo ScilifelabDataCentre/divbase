@@ -28,3 +28,8 @@ DOWNLOAD_URL_EXPIRATION_SECONDS = 36000  # 10 hours
 # This is limited by our fixing of the chunk size and S3's limit to the number of chunks allowed (10,000)
 # 320 GiB if using 32 MiB chunks
 LARGEST_FILE_UPLOADABLE_TO_DIVBASE_BYTES = 10_000 * S3_MULTIPART_CHUNK_SIZE
+
+# File types that DivBase supports
+# Whilst we can't realistically limit what file types a user actually uploads,
+# this is here to say what we know should work in DivBase.
+SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi")
