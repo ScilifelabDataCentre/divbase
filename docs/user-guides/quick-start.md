@@ -53,7 +53,7 @@ Add your project(s) to the configuration file:
 divbase-cli config add PROJECT_NAME --default
 ```
 
-By setting this as the default project, you won't need to specify the project name in future commands. To select a different project in any future command, you can add the `--project` flag to any command.
+By setting this as the default project, you won't need to specify the project name in future commands. To select a different project in any future command, you can add the `--project` flag to any command. Note that the rest of the example commands in this quick start guide will omit the `--project` flag for brevity.
 
 !!! note
     On the divbase website you can see your project's name(s) under the "Projects" tab after logging in.
@@ -95,7 +95,7 @@ Sample metadata must be uploaded as follows:
 - Must contain a column named "sample_id" which matches the sample IDs in your VCF files
 - The names and values of all other columns are optional.
 
-TODO - do we support numerical columns, including queries on them, i.e in range 31 - 50. etc...
+TODO update this after `sidecar-metadata.md` docs are done, there are changes planned for some details.
 
 ```bash
 divbase-cli files upload path/to/your/sample_metadata.tsv
@@ -103,11 +103,20 @@ divbase-cli files upload path/to/your/sample_metadata.tsv
 
 ## Step 8: Dimensions update
 
-Update the project dimensions after uploading your files:
+For DivBase to be able to efficiently handle the VCF files in the the project, some key information about each VCF files is fetched from the files. In DivBase, this is refered to as "VCF dimensions". These include for instance which samples and scaffolds that a VCF file contains.
+
+Update the project dimensions after uploading your files.
 
 ```bash
 divbase-cli dimensions update
 ```
+
+This submits a task to the DivBase task management system. The task will wait in a queue until the system is ready to work on it. Depending on the size of the VCF files, this make take a couple of minutes.
+
+!!! notes
+    1. Please note that it is not possible to run VCF queries in DivBase until the dimensions update task has finished. The reason for this is that the VCF queries use the dimensions data ensure that the queries are feasible and to know which VCF files from the project to process.
+
+    2. Please also note that the `divbase-cli dimensions update` command needs to be done every time a new VCF or a new version of a VCF file is uploaded.
 
 ## Step 9: Confirm dimensions update job completion
 
@@ -119,16 +128,49 @@ divbase-cli task-history user
 
 Once complete, you can run any queries on the uploaded data.
 
-## Step 10: Run your queries
-
-Query your VCF data:
+It is possible to inspect the cached VCF dimensions data for the project at any time with the command:
 
 ```bash
-# TODO - some simple examples to show what kind of queries can be run
+divbase-cli dimensions show
 ```
 
-!!! note
-    For more detailed information on running queries, refer to the [Running Queries Guide](running-queries.md).
+## Step 10: Run your queries
+
+There are three types of queries in DivBase:
+
+- Sample metadata query
+- VCF data query
+- Combined sample metadata and VCF data query
+
+!!! notes
+    Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries.md) after reading this quick start.
+
+### Running sample metadata queries
+
+As an example, let's assume that user-defined sidecar sample metadata TSV file contains a custom column name `Area` and that `Northern Portugal` is one of the values in the column. To filter on all samples on that column and value:
+
+```bash
+divbase-cli query tsv "Area:Northern Portugal"
+```
+
+!!! notes
+    Please see [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md) for more details on the syntax for writing sample metadata queries.
+
+### Running VCF data queries
+
+DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF data and therefore the query syntax is based on `bcftools view` syntax (as described in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view)).
+
+For instance, to subset all VCF files in the project on a chromosomal region in a scaffold named `21`:
+
+```bash
+divbase-cli query bcftools-pipe --command "view -r 21:15000000-25000000"
+```
+
+The VCF queries can be combined with sidecar sample metadata queries with `--tsv-filter` and the fixed expression `view -s SAMPLES` (where `SAMPLES` tells DivBase to use the results from the sidecar filtering as input for `bcftools view -s`). In this way, only the VCF files that fulfil the sample metadata query will be used in the `bcftools` subset commands. An example:
+
+```bash
+divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
+```
 
 ## Step 11: Download any results files
 
