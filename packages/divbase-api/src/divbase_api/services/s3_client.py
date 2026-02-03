@@ -16,7 +16,13 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
-from divbase_lib.api_schemas.s3 import ObjectInfoResponse, ObjectVersionInfo, RestoreObjectsResponse
+from divbase_lib.api_schemas.s3 import (
+    ObjectDetails,
+    ObjectInfoResponse,
+    ObjectVersionInfo,
+    RestoreObjectsResponse,
+    listObjectsResponse,
+)
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
@@ -60,6 +66,9 @@ class S3FileManager:
     def list_files(self, bucket_name: str) -> list[str]:
         """
         Return a list of all files in the S3 bucket.
+
+        This will run multiple requests if there are more than 1000 files in the bucket.
+        Used by worker to list all vcf.gz files for processing.
         """
         files = []
         paginator = self.s3_client.get_paginator("list_objects_v2")
@@ -68,10 +77,44 @@ class S3FileManager:
                 files.append(obj["Key"])
         return files
 
+    def list_files_detailed(
+        self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
+    ) -> listObjectsResponse:
+        """
+        Return a list of up to 1000 TODO - decide number files in the S3 bucket with detailed info about each file.
+        This is used by CLI users via the API.
+
+        Pagination is supported via the next_token parameter, so a client may need to make multiple calls to get all files.
+        """
+        request_args = {
+            "Bucket": bucket_name,
+            "MaxKeys": 10,  # TODO, temp for testing...
+        }
+        if prefix:
+            request_args["Prefix"] = prefix
+        if next_token:
+            request_args["ContinuationToken"] = next_token
+
+        response = self.s3_client.list_objects_v2(**request_args)
+
+        items = []
+        for obj in response.get("Contents", []):
+            items.append(
+                ObjectDetails(
+                    name=obj["Key"],
+                    size=obj["Size"],
+                    last_modified=obj["LastModified"],
+                    etag=obj["ETag"].strip('"'),
+                )
+            )
+
+        new_next_token: str | None = response.get("NextContinuationToken")
+        return listObjectsResponse(objects=items, next_token=new_next_token)
+
     def get_detailed_object_info(self, bucket_name: str, object_name: str) -> ObjectInfoResponse:
         """
         Retrieves all versions of a specific object in an S3 bucket, with details about each version in the bucket.
-        Incuded in the response object is whether the object is currently deleted (i.e., has a deletion marker as the latest version).
+        Included in the response object is whether the object is currently deleted (i.e., has a deletion marker as the latest version).
 
         This is the level of detail a user needs to know about (i.e., then don't need to know about older deletion markers).
         """

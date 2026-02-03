@@ -42,6 +42,8 @@ from divbase_lib.api_schemas.s3 import (
     PresignedUploadPartUrlResponse,
     RestoreObjectsResponse,
     UploadSinglePartObjectRequest,
+    listObjectsRequest,
+    listObjectsResponse,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE
 
@@ -91,9 +93,11 @@ async def generate_download_urls(
     return response
 
 
-@s3_router.get("/", status_code=status.HTTP_200_OK, response_model=list[str])
-async def list_files(
+# Post request instead of GET as GET doesn't support/encourage body content.
+@s3_router.post("/", status_code=status.HTTP_200_OK, response_model=listObjectsResponse)
+async def list_file_details(
     project_name: str,
+    list_request: listObjectsRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """List all files in the project's bucket"""
@@ -107,7 +111,12 @@ async def list_files(
         secret_key=settings.s3.secret_key.get_secret_value(),
     )
 
-    return await run_in_threadpool(s3_file_manager.list_files, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        s3_file_manager.list_files_detailed,
+        bucket_name=project.bucket_name,
+        prefix=list_request.prefix,
+        next_token=list_request.next_token,
+    )
 
 
 @s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)

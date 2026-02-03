@@ -16,19 +16,49 @@ from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 MB = 1024 * 1024
 
 
-## listing/file info models ##
+## list objects models ##
+class listObjectsRequest(BaseModel):
+    """Request model for listing objects in an S3 bucket."""
+
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
+    next_token: str | None = Field(
+        None, description="Token to continue listing files from the end of a previous request."
+    )
+
+
+class ObjectDetails(BaseModel):
+    """Details about a single object in an S3 bucket."""
+
+    name: str = Field(..., description="The name of the object in the bucket.")
+    size: int = Field(..., description="The size of the object in bytes.")
+    last_modified: datetime = Field(..., description="The date and time the object was last modified.")
+    etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
+
+
+class listObjectsResponse(BaseModel):
+    """Response model for listing objects in an S3 bucket."""
+
+    objects: list[ObjectDetails] = Field(
+        ..., description="A list of objects in the bucket.", min_length=0, max_length=1000
+    )
+    next_token: str | None = Field(
+        None, description="Token for fetching the next page of results. If None, no more results."
+    )
+
+
+## file info models ##
 class ObjectVersionInfo(BaseModel):
     """Detailed information about a single version of an S3 object."""
 
     version_id: str = Field(..., description="The version ID of the object.")
     last_modified: datetime = Field(..., description="The date and time the object version was last modified.")
-    size: int = Field(..., description="The size of the object in bytes.")  # TODO - make more friendly?
+    size: int = Field(..., description="The size of the object in bytes.")
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
     is_latest: bool = Field(..., description="Indicates if this is the latest version of the object.")
 
 
 class ObjectInfoResponse(BaseModel):
-    """Response model for detailed information about an object stored in S3, including all of its versions."""
+    """Response model for detailed information about all versions of a single object stored in S3."""
 
     object_name: str = Field(..., description="The name of the object.")
     is_currently_deleted: bool = Field(..., description="True if the latest version of the object is a delete marker.")
