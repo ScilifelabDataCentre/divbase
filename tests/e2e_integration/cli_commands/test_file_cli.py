@@ -56,7 +56,7 @@ def large_file_for_multipart(tmp_path_factory):
     Returns path to the file.
     """
     one_mib = 1024 * 1024
-    large_file_path = tmp_path_factory.mktemp("large_files") / "large_random_file.bin"
+    large_file_path = tmp_path_factory.mktemp("large_files") / "large_random_file.vcf.gz"
     file_size = S3_MULTIPART_UPLOAD_THRESHOLD + one_mib
 
     with open(large_file_path, "wb") as f:
@@ -742,7 +742,7 @@ def test_restore_deleted_file(logged_in_edit_user_with_existing_config, CONSTANT
     result = runner.invoke(app, f"files rm {test_file.name} --project {clean_project}")
     assert result.exit_code == 0
 
-    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
+    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project} --download-dir {tmp_path}")
     assert result.exit_code != 0
     assert "404" in result.stdout
     assert test_file.name in result.stdout
@@ -752,7 +752,7 @@ def test_restore_deleted_file(logged_in_edit_user_with_existing_config, CONSTANT
     assert "restored files:" in result.stdout.lower()
     assert test_file.name in result.stdout
 
-    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
+    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project} --download-dir {tmp_path}")
     assert result.exit_code == 0
     assert "404" not in result.stdout
     assert test_file.name in result.stdout
@@ -774,11 +774,11 @@ def test_restore_already_live_file(logged_in_edit_user_with_existing_config, CON
         assert "restored files:" in result.stdout.lower()
         assert test_file.name in result.stdout
 
-        result = runner.invoke(app, f"files download {test_file.name} --project {clean_project}")
-        assert result.exit_code == 0
-        assert "404" not in result.stdout
-        assert test_file.name in result.stdout
-        assert "successfully downloaded" in result.stdout.lower()
+    result = runner.invoke(app, f"files download {test_file.name} --project {clean_project} --download-dir {tmp_path}")
+    assert result.exit_code == 0
+    assert "404" not in result.stdout
+    assert test_file.name in result.stdout
+    assert "successfully downloaded" in result.stdout.lower()
 
 
 def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
