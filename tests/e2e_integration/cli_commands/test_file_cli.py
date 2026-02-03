@@ -13,7 +13,7 @@ import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
-from divbase_cli.cli_exceptions import DivBaseAPIError, FilesAlreadyInProjectError
+from divbase_cli.cli_exceptions import DivBaseAPIError, FilesAlreadyInProjectError, UnsupportedFileTypeError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
@@ -129,7 +129,7 @@ def test_list_files_empty_project(logged_in_edit_user_with_existing_config, CONS
 def test_file_info_single_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test the 'files info' command for a file with a single version."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "info_test.txt"
+    test_file = tmp_path / "info_test.tsv"
     test_file.write_text("some content")
 
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -144,7 +144,7 @@ def test_file_info_single_version(logged_in_edit_user_with_existing_config, CONS
 def test_file_info_deleted_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test the 'files info' command for a file that has been deleted."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "deleted_info_test.txt"
+    test_file = tmp_path / "deleted_info_test.tsv"
     test_file.write_text("this file will be deleted")
 
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -161,7 +161,7 @@ def test_file_info_deleted_file(logged_in_edit_user_with_existing_config, CONSTA
 def test_file_info_multiple_versions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test 'files info' for a file with multiple versions."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "multi_version_test.txt"
+    test_file = tmp_path / "multi_version_test.tsv"
 
     test_file.write_text("version 1")
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -184,7 +184,7 @@ def test_file_info_multiple_versions(logged_in_edit_user_with_existing_config, C
 def test_file_info_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test 'files info' for a file that does not exist."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    result = runner.invoke(app, f"files info nonexistent.txt --project {clean_project}")
+    result = runner.invoke(app, f"files info nonexistent.tsv --project {clean_project}")
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "404" in str(result.exception)
@@ -194,7 +194,7 @@ def test_file_info_non_existent_file(logged_in_edit_user_with_existing_config, C
 def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test 'files info' after a file is deleted and then re-uploaded."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "reupload_test.txt"
+    test_file = tmp_path / "reupload_test.tsv"
     test_file.write_text("initial upload")
 
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -214,7 +214,7 @@ def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONS
 
 def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
     """Test upload 1 file to the project."""
-    test_file = tmp_path / "fake_test_file.txt"
+    test_file = tmp_path / "fake_test_file.tsv"
     test_file.write_text("testing, testing 1 2 3...")
 
     command = f"files upload {test_file}"
@@ -315,11 +315,50 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
 
 
 def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
-    command = "files upload nonexistent_file.txt"
+    command = "files upload nonexistent_file.tsv"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
     assert isinstance(result.exception, FileNotFoundError)
+
+
+@pytest.mark.parametrize(
+    "file_names, should_succeed",
+    [
+        (["data.tsv"], True),
+        (["variants.vcf.gz"], True),
+        (["index.csi"], True),
+        (["index.tbi"], True),
+        (["unsupported.txt"], False),
+        (["archive.zip"], False),
+        (["data.tsv", "variants.mine.vcf.gz"], True),
+        (["data.tsv", "unsupported.txt", "unsupported2.txt"], False),
+        (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], True),
+        (["unsupported.txt", "another_unsupported.zip", "supported.vcf.gz"], False),
+    ],
+)
+def test_upload_non_supported_files_types(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, should_succeed
+):
+    """
+    Tests that the upload command correctly handles supported and unsupported file types
+    """
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    test_files = []
+    for file_name in file_names:
+        test_file = tmp_path / file_name
+        test_file.write_text("file content")
+        test_files.append(str(test_file))
+
+    command = f"files upload {' '.join(test_files)} --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    if should_succeed:
+        assert result.exit_code == 0
+        assert "successfully uploaded" in result.stdout.lower()
+    else:
+        assert result.exit_code != 0
+        assert isinstance(result.exception, UnsupportedFileTypeError)
 
 
 def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -332,20 +371,20 @@ def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing
     num_files = MAX_S3_API_BATCH_SIZE + 5
 
     for i in range(num_files):
-        (upload_dir / f"test_file_{i}.txt").write_text(f"content_{i}")
+        (upload_dir / f"test_file_{i}.tsv").write_text(f"content_{i}")
 
     command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     for i in range(num_files):
-        assert f"test_file_{i}.txt" in result.stdout
+        assert f"test_file_{i}.tsv" in result.stdout
 
     command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for i in range(num_files):
-        assert f"test_file_{i}.txt" in result.stdout
+        assert f"test_file_{i}.tsv" in result.stdout
 
 
 def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
@@ -362,9 +401,9 @@ def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
     num_files = MAX_S3_API_BATCH_SIZE + 5
 
     for i in range(num_files):
-        (upload_dir / f"safe_mode_test_{i}.txt").write_text(f"content_{i}")
+        (upload_dir / f"safe_mode_test_{i}.tsv").write_text(f"content_{i}")
 
-    duplicate_file = upload_dir / f"safe_mode_test_{MAX_S3_API_BATCH_SIZE + 4}.txt"
+    duplicate_file = upload_dir / f"safe_mode_test_{MAX_S3_API_BATCH_SIZE + 4}.tsv"
     command = f"files upload {duplicate_file} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -381,18 +420,18 @@ def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
     assert result.exit_code == 0
 
     for i in range(num_files - 1):
-        file_name = f"safe_mode_test_{i}.txt"
+        file_name = f"safe_mode_test_{i}.tsv"
         if file_name == duplicate_file.name:
-            assert f"safe_mode_test_{i}.txt" in result.stdout
+            assert f"safe_mode_test_{i}.tsv" in result.stdout
         else:
-            assert f"safe_mode_test_{i}.txt" not in result.stdout
+            assert f"safe_mode_test_{i}.tsv" not in result.stdout
 
     # Now run the upload again without safe_mode turned off, should work
     command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for i in range(num_files):
-        assert f"safe_mode_test_{i}.txt" in result.stdout
+        assert f"safe_mode_test_{i}.tsv" in result.stdout
 
 
 def test_safe_mode_fails_with_large_file_duplicate(
@@ -469,7 +508,7 @@ def test_download_using_file_list(logged_in_edit_user_with_existing_config, CONS
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    file_list = tmp_path / "file_list.txt"
+    file_list = tmp_path / "file_list.tsv"
     with open(file_list, "w") as f:
         f.write("\n".join(files_in_project))
 
@@ -486,12 +525,12 @@ def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download nonexistent_file.txt --download-dir {download_dir}"
+    command = f"files download nonexistent_file.tsv --download-dir {download_dir}"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
     assert "ERROR: Failed to download the following files:" in result.stdout
-    assert "nonexistent_file.txt" in result.stdout
+    assert "nonexistent_file.tsv" in result.stdout
 
 
 def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -504,21 +543,21 @@ def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_
     num_files = 105
 
     for i in range(num_files):
-        (upload_dir / f"download_test_{i}.txt").write_text(f"content_{i}")
+        (upload_dir / f"download_test_{i}.tsv").write_text(f"content_{i}")
     command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     download_dir = tmp_path / "downloads_dir"
     download_dir.mkdir()
-    file_names_to_download = [f"download_test_{i}.txt" for i in range(num_files)]
+    file_names_to_download = [f"download_test_{i}.tsv" for i in range(num_files)]
 
     command = f"files download {' '.join(file_names_to_download)} --download-dir {download_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     for i in range(num_files):
-        file_name = f"download_test_{i}.txt"
+        file_name = f"download_test_{i}.tsv"
         assert file_name in result.stdout
         assert (download_dir / file_name).exists()
         assert (download_dir / file_name).read_text() == f"content_{i}"
@@ -531,7 +570,7 @@ def test_download_at_a_project_version(logged_in_edit_user_with_existing_config,
     download_dir = tmp_path / "download_v1"
     download_dir.mkdir()
 
-    file_name = "test_file.txt"
+    file_name = "test_file.tsv"
     file_path = tmp_path / file_name
     v1_content = "This is version 1.0.0 content"
     v2_content = "This is version 2.0.0 content - UPDATED"
@@ -695,7 +734,7 @@ def test_remove_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtur
 def test_restore_deleted_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test restoring a file that was soft-deleted."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "file_to_restore.txt"
+    test_file = tmp_path / "file_to_restore.tsv"
     test_file.write_text("This file will be deleted and then restored.")
 
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -723,7 +762,7 @@ def test_restore_deleted_file(logged_in_edit_user_with_existing_config, CONSTANT
 def test_restore_already_live_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that attempting to restore a multiple times does no harm and operation is idempotent."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    test_file = tmp_path / "already_alive_file.txt"
+    test_file = tmp_path / "already_alive_file.tsv"
     test_file.write_text("This file was never deleted.")
 
     result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
@@ -745,7 +784,7 @@ def test_restore_already_live_file(logged_in_edit_user_with_existing_config, CON
 def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test that attempting to restore a non-existent file reports it as 'not found'."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
-    non_existent_file = "i_do_not_exist.txt"
+    non_existent_file = "i_do_not_exist.tsv"
 
     result = runner.invoke(app, f"files restore {non_existent_file} --project {clean_project}")
     assert result.exit_code == 0

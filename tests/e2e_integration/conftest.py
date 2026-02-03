@@ -80,7 +80,7 @@ def CONSTANTS():
         # Mappings of project names to S3 bucket names
         "PROJECT_TO_BUCKET_MAP": project_name_bucket_map,
         "PROJECT_CONTENTS": project_name_files_map,
-        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
+        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.tsv", "file2.tsv", "file3.tsv"],
         "ADMIN_CREDENTIALS": API_ADMIN_CREDENTIALS,
         "TEST_USERS": TEST_USERS,
     }
