@@ -33,41 +33,79 @@ from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+FORMAT_AS_TSV_OPTION = typer.Option(
+    False,
+    "--tsv",
+    help="If set, will print the output in .TSV format for easier programmatic parsing.",
+)
 
 
 @file_app.command("ls")
 def list_files(
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
+    prefix_filter: str | None = typer.Option(
+        None,
+        "--prefix",
+        "-p",
+        help="Optional prefix to filter the listed files by name (only list files starting with this prefix).",
+    ),
+    include_results_files: bool = typer.Option(
+        False,
+        "--include-results-files",  # TODO - do this CLI side so API is easier with prefix handling..
+        "-r",
+        help="If set, will also show DivBase query results files which are hidden by default.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
-    list all files in the project's DivBase store.
+    list all currently available files in the project's DivBase store.
 
-    # TODO - paginate results
-
-    To see files at a user specified project version (controlled by the 'divbase-cli version' subcommand),
-    you can instead use the 'divbase-cli version info [VERSION_NAME]' command.
+    You can optionally filter the listed files by providing a prefix.
+    By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
+    To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    files = list_files_command(divbase_base_url=logged_in_url, project_name=project_config.name)
+    files = list_files_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        prefix_filter=prefix_filter,
+    )
     if not files:
         print("No files found in the project's store on DivBase.")
+        return
+
+    table = Table(title=f"Files in [bold]{project_config.name}'s [/bold] DivBase Store:")
+    table.add_column("Name", justify="left", style="cyan")
+    table.add_column("File size", justify="left", style="magenta", no_wrap=True)
+    table.add_column("Upload date (CET)", justify="left", style="green", no_wrap=True)
+    table.add_column("MD5 checksum", justify="left", style="yellow")
+
+    for file_details in files:
+        cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        file_size = format_file_size(size_bytes=file_details.size)
+        table.add_row(
+            file_details.name,
+            file_size,
+            cet_timestamp,
+            file_details.etag,
+        )
+
+    # Filter out results files if not including them here.
+    # Otherwise would be hard to
+
+    if not format_output_as_tsv:
+        print(table)
     else:
-        print(f"Files in the project '{project_config.name}':")
-        for file in files:
-            print(f"- '{file}'")
+        print_rich_table_as_tsv(table=table)
 
 
 @file_app.command("info")
 def file_info(
     file_name: str = typer.Argument(..., help="Name of the file to get information about."),
-    format_as_tsv: bool = typer.Option(
-        False,
-        "--tsv",
-        help="If set, will print the file info in TSV format for easier programmatic parsing.",
-    ),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
     config_file: Path = CONFIG_FILE_OPTION,
 ):
@@ -116,7 +154,7 @@ def file_info(
             version.version_id,
         )
 
-    if not format_as_tsv:
+    if not format_output_as_tsv:
         print(table)
     else:
         print_rich_table_as_tsv(table=table)

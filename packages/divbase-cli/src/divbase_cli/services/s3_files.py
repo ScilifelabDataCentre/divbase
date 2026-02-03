@@ -24,10 +24,13 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ObjectDetails,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     RestoreObjectsResponse,
+    listObjectsRequest,
+    listObjectsResponse,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.s3_checksums import (
@@ -38,14 +41,47 @@ from divbase_lib.s3_checksums import (
 )
 
 
-def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
-    """List all files in a project."""
-    response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/?project_name={project_name}",
+def list_files_command(
+    divbase_base_url: str, project_name: str, prefix_filter: str | None = None
+) -> list[ObjectDetails]:
+    """
+    List all files in a project optionally filtered by a prefix.
+    We page through results if there are more than can be returned in a single API call.
+
+    NOTE: The current implementation is not very efficient as we page through all results before returning any.
+    Keeping simple for now as we don't expect projects to have huge numbers of files.
+    But could be revisted later if performance becomes an issue.
+    """
+    api_route = f"v1/s3/list?project_name={project_name}"
+    initial_request = listObjectsRequest(
+        prefix=prefix_filter,
+        next_token=None,
     )
-    return response.json()
+
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=api_route,
+        json=initial_request.model_dump(),
+    )
+    response_data = listObjectsResponse(**response.json())
+    all_matches = response_data.objects
+
+    # page through any remaining results
+    while response_data.next_token:
+        next_request = listObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=api_route,
+            json=next_request.model_dump(),
+        )
+        next_page_data = listObjectsResponse(**response.json())
+
+        all_matches.extend(next_page_data.objects)
+        response_data.next_token = next_page_data.next_token
+
+    return all_matches
 
 
 def get_file_info_command(divbase_base_url: str, project_name: str, object_name: str) -> ObjectInfoResponse:

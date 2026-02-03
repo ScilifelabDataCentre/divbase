@@ -26,7 +26,12 @@ def format_file_size(size_bytes: int | float | None) -> str:
 
 
 def print_rich_table_as_tsv(table: Table) -> None:
-    """Helper function to print a rich Table as a TSV file to standard output."""
+    """
+    Helper function to print a rich Table as a TSV file to standard output.
+
+    This is useful for CLI commands that want to offer both rich table output
+    for human users as well as TSV output for programmatic parsing.
+    """
     writer = csv.writer(sys.stdout, delimiter="\t")
 
     headers = [str(col.header) for col in table.columns]

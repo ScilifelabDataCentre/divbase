@@ -94,7 +94,7 @@ async def generate_download_urls(
 
 
 # Post request instead of GET as GET doesn't support/encourage body content.
-@s3_router.post("/", status_code=status.HTTP_200_OK, response_model=listObjectsResponse)
+@s3_router.post("/list", status_code=status.HTTP_200_OK, response_model=listObjectsResponse)
 async def list_file_details(
     project_name: str,
     list_request: listObjectsRequest,
