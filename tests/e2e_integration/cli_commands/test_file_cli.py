@@ -6,12 +6,16 @@ All tests are run against the docker compose test overlay
 A clean project (its bucket is auto emptied before each test) is available to any test that requires a clean slate.
 """
 
+import os
+
 import boto3
 import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import FilesAlreadyInProjectError
 from divbase_cli.divbase_cli import app
+from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
 
 runner = CliRunner()
 
@@ -40,6 +44,24 @@ def start_with_clean_project(CONSTANTS):
     bucket.object_versions.delete()
 
     yield
+
+
+@pytest.fixture(scope="module")
+def large_file_for_multipart(tmp_path_factory):
+    """
+    Fixture that creates a large file just above the multipart upload threshold
+    with random data to test multipart upload and downloads
+
+    Returns path to the file.
+    """
+    one_mib = 1024 * 1024
+    large_file_path = tmp_path_factory.mktemp("large_files") / "large_random_file.bin"
+    file_size = S3_MULTIPART_UPLOAD_THRESHOLD + one_mib
+
+    with open(large_file_path, "wb") as f:
+        for _ in range(file_size // one_mib):
+            f.write(os.urandom(one_mib))
+    return large_file_path
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -185,6 +207,106 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
     assert isinstance(result.exception, FileNotFoundError)
 
 
+def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Validates that the batching logic for single-part uploads works correctly when uploading
+    more than MAX_S3_API_BATCH_SIZE files at once.
+    """
+    upload_dir = tmp_path / "many_files"
+    upload_dir.mkdir()
+    num_files = MAX_S3_API_BATCH_SIZE + 5
+
+    for i in range(num_files):
+        (upload_dir / f"test_file_{i}.txt").write_text(f"content_{i}")
+
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"test_file_{i}.txt" in result.stdout
+
+    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"test_file_{i}.txt" in result.stdout
+
+
+def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """
+    Tests that safe mode correctly identifies a duplicate file and raises FilesAlreadyInProjectError,
+    even when the check involves more than MAX_S3_API_BATCH_SIZE files.
+
+    The duplicated file would be in the 2nd batch of files to be uploaded as well.
+    """
+    upload_dir = tmp_path / "uploads_dir"
+    upload_dir.mkdir()
+    num_files = MAX_S3_API_BATCH_SIZE + 5
+
+    for i in range(num_files):
+        (upload_dir / f"safe_mode_test_{i}.txt").write_text(f"content_{i}")
+
+    duplicate_file = upload_dir / f"safe_mode_test_{MAX_S3_API_BATCH_SIZE + 4}.txt"
+    command = f"files upload {duplicate_file} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code != 0
+    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert duplicate_file.name in str(result.exception)
+
+    # Verify that none of the files were uploaded.
+    command = f"files list --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    for i in range(num_files - 1):
+        file_name = f"safe_mode_test_{i}.txt"
+        if file_name == duplicate_file.name:
+            assert f"safe_mode_test_{i}.txt" in result.stdout
+        else:
+            assert f"safe_mode_test_{i}.txt" not in result.stdout
+
+    # Now run the upload again without safe_mode turned off, should work
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    for i in range(num_files):
+        assert f"safe_mode_test_{i}.txt" in result.stdout
+
+
+def test_safe_mode_fails_with_large_file_duplicate(
+    logged_in_edit_user_with_existing_config, CONSTANTS, large_file_for_multipart
+):
+    """
+    Tests that safe mode correctly identifies a duplicate large file (which has a composite ETag)
+    and prevents the re-upload.
+
+    Turning off safe mode should allow the re-upload.
+    """
+    large_file_path = large_file_for_multipart
+
+    command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, command)
+    assert result.exit_code != 0
+    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert large_file_path.name in str(result.exception)
+
+    # validate turning off safe mode allows re-upload
+    command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert large_file_path.name in result.stdout
+
+
 def test_download_1_file(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     file_name = CONSTANTS["PROJECT_CONTENTS"][CONSTANTS["DEFAULT_PROJECT"]][0]
     download_dir = tmp_path / "downloads"
@@ -257,6 +379,36 @@ def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp
     assert "nonexistent_file.txt" in result.stdout
 
 
+def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Tests that the batching logic for downloads works correctly when downloading
+    more than MAX_S3_API_BATCH_SIZE (100) files at once.
+    """
+    upload_dir = tmp_path / "many_files_for_download"
+    upload_dir.mkdir()
+    num_files = 105
+
+    for i in range(num_files):
+        (upload_dir / f"download_test_{i}.txt").write_text(f"content_{i}")
+    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    download_dir = tmp_path / "downloads_dir"
+    download_dir.mkdir()
+    file_names_to_download = [f"download_test_{i}.txt" for i in range(num_files)]
+
+    command = f"files download {' '.join(file_names_to_download)} --download-dir {download_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for i in range(num_files):
+        file_name = f"download_test_{i}.txt"
+        assert file_name in result.stdout
+        assert (download_dir / file_name).exists()
+        assert (download_dir / file_name).read_text() == f"content_{i}"
+
+
 def test_download_at_a_project_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, fixtures_dir):
     """Test downloading at specified project versions."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
@@ -326,6 +478,36 @@ def test_download_at_a_project_version(logged_in_edit_user_with_existing_config,
     with open(download_dir / file_name) as f:
         downloaded_content = f.read()
     assert downloaded_content == v2_content
+
+
+def test_upload_and_download_large_file_triggers_multipart(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, large_file_for_multipart
+):
+    """
+    Tests that a file large enough to trigger the multipart protocol can be successfully
+    uploaded and then downloaded, verifying its checksum.
+    """
+    large_file_path = large_file_for_multipart
+    expected_checksum = calculate_composite_md5_s3_etag(file_path=large_file_path)
+
+    command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert large_file_path.name in result.stdout
+
+    download_dir = tmp_path / "large_file_downloads"
+    download_dir.mkdir()
+    command = (
+        f"files download {large_file_path.name} --project {CONSTANTS['CLEANED_PROJECT']} --download-dir {download_dir}"
+    )
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    # manually verify checksum of downloaded file (should have also been verified during download)
+    downloaded_file_path = download_dir / large_file_path.name
+    assert downloaded_file_path.exists()
+    downloaded_checksum = calculate_composite_md5_s3_etag(file_path=downloaded_file_path)
+    assert downloaded_checksum == expected_checksum
 
 
 def test_remove_with_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS):

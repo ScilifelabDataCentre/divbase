@@ -97,6 +97,7 @@ nav:
     - Deployment: development/deployment.md
     - Documentation: development/documentation.md
     - Sending Emails: development/sending-emails.md
+    - S3 Transfers: development/s3_transfers.md
     - Testing: development/testing.md
   - "Go to DivBase Website": https://divbase.scilifelab.se
 

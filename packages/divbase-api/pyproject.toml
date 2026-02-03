@@ -4,7 +4,7 @@ dynamic = ["version"]
 readme = "../../README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi[standard]>=0.128.0,<1", 
+    "fastapi[standard]>=0.128.0,<1",
     "uvicorn>=0.40.0,<1",
     "httpx>=0.28.1,<1",
     "asyncpg>=0.30.0,<1",
@@ -19,10 +19,11 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.45,<2.1", # a minor bump is considered a major change for sqlalchemy
     "prometheus-client>=0.24.0,<1",
     "psutil>=7.2.0,<8",
-    "python-multipart>=0.0.22", # TODO determine if can remove these deps of deps listings. 
+    "python-multipart>=0.0.22", # TODO determine if can remove these deps of deps listings.
     "filelock>=3.20.3",
     "urllib3>=2.6.3",
     "divbase-lib", # always uses version in repo, handled by uv
+    "stamina>=25.2.0",
 ]
 
 [build-system]

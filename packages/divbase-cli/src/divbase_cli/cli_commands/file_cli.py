@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
-from divbase_cli.services import (
+from divbase_cli.services.s3_files import (
     download_files_command,
     list_files_command,
     soft_delete_objects_command,
@@ -31,6 +31,7 @@ def list_files(
     config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
+    # TODO - paginate results
     list all files in the project's DivBase store.
 
     To see files at a user specified project version (controlled by the 'divbase-cli version' subcommand),
@@ -70,7 +71,7 @@ def download_files(
             "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
         ),
     ] = False,
-    project_version: str = typer.Option(
+    project_version: str | None = typer.Option(
         default=None,
         help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
     ),

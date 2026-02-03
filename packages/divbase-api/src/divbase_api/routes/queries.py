@@ -92,9 +92,12 @@ async def sample_metadata_query(
             f"divbase-cli task-history id {results.id}"
         )
         raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail=error_message) from None
-    except Exception as e:
-        error_msg = str(e)
-        raise HTTPException(status_code=500, detail=error_msg) from e
+    except FileNotFoundError:
+        error_message = (
+            f"The sample metadata TSV file named: {sample_metadata_query_request.metadata_tsv_name} was not found in your project {project.name} \n"
+            "Please make sure to upload it first ('divbase-cli files upload ...') and try again."
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_message) from None
 
     return SampleMetadataQueryTaskResult(**result_dict)
 
