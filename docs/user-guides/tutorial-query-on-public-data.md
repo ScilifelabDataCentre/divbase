@@ -24,8 +24,44 @@ We then need to upload the file to the DivBase project. If the project you want 
 divbase-cli files upload mgp.v3.snps.rsIDdbSNPv137.vcf.gz --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
-TODO
-upload a mock_metadata_mgpv3snps.tsv fixture
+For the sake of demonstration, we can create a sidecar metadata file for the 18 samples in this dataset so that we can use that for the query. In fact, a file prepared for this demo can be downloaded from the DivBase repo with:
+
+```bash
+curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/docs-on-queries/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
+```
+
+TODO update the TSV url when it has been merged to main.
+
+And then upload it to the DivBase project with:
+
+```bash
+divbase-cli files upload tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
+```
+
+With this, we are set in terms of the files we need in the DivBase project to be able to run the query.
+
+### A comment on the mock sidecar metadata TSV
+
+If we look at the first few lines of this TSV, we see that the first column has the SAMPLE IDs from the VCF. There is a column for population grouping, and a column for the geographical area the sample comes from. All of this is made up for the tutorial, just to illustrate what a sidecar metadata file can look like. We will use the Area column later on to subset on samples.
+
+```bash
+head tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
+
+#Sample_ID      Population      Area
+129P2   1       North
+129S1   2       East
+129S5   3       South
+AJ      4       West
+```
+
+For comparison, we can inspect all the samples in the VCF with:
+
+```bash
+# On MacOS, use gzcat instead of zcat
+zcat mgp.v3.snps.rsIDdbSNPv137.vcf.gz | grep "#CHROM"
+
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  129P2   129S1   129S5   AJ      AKRJ    BALBcJ  C3HHeJ  C57BL6NJ        CASTEiJ CBAJ    DBA2J   FVBNJ   LPJ     NODShiLtJ       NZOHlLtJ   PWKPhJ  SPRETEiJ        WSBEiJ
+```
 
 ## 2. Submit a job to cache the VCF dimensions in the DivBase backend
 
@@ -35,16 +71,14 @@ DivBase needs this to make calculations. It can be seen as a pre-processing step
 divbase-cli dimensions update --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
-The task should now have been submitted. The terminal prints a DivBase Job ID with a message like this:
+The task should now have been submitted. The terminal prints a DivBase Task ID with a message like this:
 
 ```
-# Example with Job ID 102
+# Example with Task ID 102
 Job submitted successfully with task id: 102
 ```
 
-TODO: the message when submitting the task should say DivBase Job ID and not task ID.
-
-Make note of the Job ID integer for for now; we will use it later in the tutorial for a variable named <THE_JOB_ID_OF_THE_QUERY>.
+Make note of the Task ID integer for for now; we will use it later in the tutorial for a variable named `<THE_JOB_ID_OF_THE_QUERY>`.
 
 We need to wait until this has finished before we can send the actual DivBase query.
 
@@ -55,8 +89,10 @@ divbase-cli task-history user
 ## 3. Submit a query job
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
+
+note that we are specifically using the `tutorial_mock_metadata_mgpv3snps.tsv` sample metadata. If this is not specified, the query will default to `sample_metadata.tsv`.
 
 Depending on queue length, this job will take some time to run. Check that it has started, and then leave it running for half an hour.
 
