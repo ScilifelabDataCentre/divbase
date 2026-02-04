@@ -1,7 +1,6 @@
 """
 Command line interface for managing files in a DivBase project's store on DivBase.
 
-TODO - support for specifying versions of files when downloading files?
 TODO - Download all files option.
 TODO - skip checked option (aka skip files that already exist in same local dir with correct checksum).
 """

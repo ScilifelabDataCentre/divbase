@@ -6,7 +6,9 @@ All tests are run against the docker compose test overlay
 A clean project (its bucket is auto emptied before each test) is available to any test that requires a clean slate.
 """
 
+import csv
 import os
+from io import StringIO
 
 import boto3
 import pytest
@@ -640,6 +642,59 @@ def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_
         assert file_name in result.stdout
         assert (download_dir / file_name).exists()
         assert (download_dir / file_name).read_text() == f"content_{i}"
+
+
+def test_download_specific_file_versions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Tests that the download command can fetch a specific older version of one file
+    and the latest version of another file in the same command.
+    """
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "download_version_test"
+    download_dir.mkdir()
+
+    versioned_file = tmp_path / "versioned_file.tsv"
+    versioned_file.write_text("content v1")
+    result = runner.invoke(app, f"files upload {versioned_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    versioned_file.write_text("content latest v2")
+    result = runner.invoke(app, f"files upload {versioned_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    latest_file = tmp_path / "latest_file.tsv"
+    latest_file.write_text("content latest v1")
+    result = runner.invoke(app, f"files upload {latest_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    latest_file.write_text("content latest v2")
+    result = runner.invoke(app, f"files upload {latest_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # Get the version ID for versioned_file
+    info_command = f"files info {versioned_file.name} --project {clean_project} --tsv"
+    info_result = runner.invoke(app, info_command)
+    assert info_result.exit_code == 0
+    tsv_reader = csv.reader(StringIO(info_result.stdout), delimiter="\t")
+    rows = list(tsv_reader)
+    # The first data row is the latest version (v2), the second is the older one (v1)
+    version_id_v1 = rows[2][3]
+
+    download_command = (
+        f"files download {versioned_file.name}:{version_id_v1} {latest_file.name} "
+        f"--project {clean_project} --download-dir {download_dir}"
+    )
+    download_result = runner.invoke(app, download_command)
+    assert download_result.exit_code == 0
+    assert "Successfully downloaded" in download_result.stdout
+
+    downloaded_versioned_file = download_dir / versioned_file.name
+    assert downloaded_versioned_file.exists()
+    assert downloaded_versioned_file.read_text() == "content v1"
+
+    downloaded_latest_file = download_dir / latest_file.name
+    assert downloaded_latest_file.exists()
+    assert downloaded_latest_file.read_text() == "content latest v2"
 
 
 def test_download_at_a_project_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, fixtures_dir):
