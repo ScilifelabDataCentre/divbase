@@ -7,6 +7,7 @@ import datetime
 import gzip
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -528,7 +529,9 @@ class SidecarQueryManager:
         # TODO: pandas will likely read all plain files to df, so perhaps there should be a check that the file is a TSV file? or at least has properly formatted tabular columns and rows?
         try:
             logger.info(f"Loading sidecar metadata file: {self.file}")
-            self.df = pd.read_csv(self.file, sep="\t")
+            self.df = pd.read_csv(
+                self.file, sep="\t"
+            )  # Pandas has Type Inference and will detect numberic and string columns automatically
             self.df.columns = self.df.columns.str.lstrip("#")
             if "Sample_ID" not in self.df.columns:
                 raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
@@ -580,18 +583,55 @@ class SidecarQueryManager:
                 continue
             try:
                 key, values = key_value.split(":", 1)
-                values_list = values.split(",")
+                key = key.strip()
+                values = values.strip()
 
-                if key in self.df.columns:
+                if key not in self.df.columns:
+                    logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
+                    continue
+
+                # Check if column is numeric
+                is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
+
+                # Handle numeric range filtering
+                range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", values)
+
+                if is_numeric and range_match:
+                    min_val = float(range_match.group(1))
+                    max_val = float(range_match.group(2))
+                    condition = (self.df[key] >= min_val) & (self.df[key] <= max_val)
+                    if not condition.any():
+                        logger.warning(f"No values in column '{key}' fall within range {min_val}-{max_val}")
+                    filter_conditions.append(condition)
+                    logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
+                else:
+                    values_list = values.split(",")
+
+                    # Convert query str values to numeric if the column is numeric
+                    if is_numeric:
+                        # User input in the CLI query is always string (e.g. "Group:1,3,8")
+                        converted_values = []
+                        for v in values_list:
+                            try:
+                                converted_values.append(float(v) if "." in v else int(v))
+                            except ValueError:
+                                # Handle cases such as "Group:1,three,8" where "three" cannot be converted to numeric, however unlikely their occurance may be.
+                                logger.warning(
+                                    f"Cannot convert '{v}' to numeric for column '{key}'. Skipping this value."
+                                )
+                        if not converted_values:
+                            logger.warning(
+                                f"No valid numeric values provided for the numeric column '{key}'. Filter condition will not match any rows."
+                            )
+                        values_list = converted_values
+
                     condition = self.df[key].isin(values_list)
                     if not condition.any():
                         logger.warning(f"None of the values {values_list} were found in column '{key}'")
                     filter_conditions.append(condition)
-                else:
-                    logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
             except Exception as e:
                 raise SidecarInvalidFilterError(
-                    f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2'"
+                    f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2' or 'key:min-max' for numeric ranges"
                 ) from e
 
         if filter_conditions:
