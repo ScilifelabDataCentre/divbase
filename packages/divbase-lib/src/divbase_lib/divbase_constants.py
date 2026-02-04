@@ -33,3 +33,8 @@ LARGEST_FILE_UPLOADABLE_TO_DIVBASE_BYTES = 10_000 * S3_MULTIPART_CHUNK_SIZE
 # Whilst we can't realistically limit what file types a user actually uploads,
 # this is here to say what we know should work in DivBase.
 SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi")
+
+# This prefix is used for all *.vcf.gz results files from a query job/task.
+# After the prefix comes the job id which is a rolling integer.
+# E.g. format: result_of_job_<job-id>.vcf.gz , where <job-id> = 1 and is auto-incremented for every new job.
+QUERY_RESULTS_FILE_PREFIX = "result_of_job_"

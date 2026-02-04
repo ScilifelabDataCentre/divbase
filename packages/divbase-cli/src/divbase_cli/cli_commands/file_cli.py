@@ -51,7 +51,7 @@ def list_files(
     ),
     include_results_files: bool = typer.Option(
         False,
-        "--include-results-files",  # TODO - do this CLI side so API is easier with prefix handling..
+        "--include-results-files",
         "-r",
         help="If set, will also show DivBase query results files which are hidden by default.",
     ),
@@ -72,7 +72,9 @@ def list_files(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         prefix_filter=prefix_filter,
+        include_results_files=include_results_files,
     )
+
     if not files:
         print("No files found in the project's store on DivBase.")
         return
@@ -92,9 +94,6 @@ def list_files(
             cet_timestamp,
             file_details.etag,
         )
-
-    # Filter out results files if not including them here.
-    # Otherwise would be hard to
 
     if not format_output_as_tsv:
         print(table)
@@ -194,32 +193,25 @@ def download_files(
 
     This can be done by either:
         1. providing a list of files paths directly in the command line
-        2. providing a directory to download the files to.
+        2. providing a text file with a list of files to download (new file on each line).
+
+    To download the latest version of a file, just provide its name. "file1" "file2" etc.
+    To download a specific/older version of a file, use the format: "file_name:version_id"
+    You can get a file's version id using the 'divbase-cli file info [FILE_NAME]' command.
+    You can mix and match latest and specific versions in the same command.
+    E.g. to download the latest version of file1 and version "3xcdsdsdiw829x"
+    of file2: 'divbase-cli files download file1 file2:3xcdsdsdiw829x'
     """
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
 
-    if bool(files) + bool(file_list) > 1:
-        print("Please specify only one of --files or --file-list.")
-        raise typer.Exit(1)
-
-    all_files: set[str] = set()
-    if files:
-        all_files.update(files)
-    if file_list:
-        with open(file_list) as f:
-            for object_name in f:
-                all_files.add(object_name.strip())
-
-    if not all_files:
-        print(NO_FILES_SPECIFIED_MSG)
-        raise typer.Exit(1)
+    raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
 
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
-        all_files=list(all_files),
+        raw_files_input=raw_files_input,
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
         project_version=project_version,
@@ -365,7 +357,7 @@ def remove_files(
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    all_files = _resolve_file_inputs(files, file_list)
+    all_files = _resolve_file_inputs(files=files, file_list=file_list)
 
     if dry_run:
         print("Dry run mode enabled. The following files would have been deleted:")
@@ -408,7 +400,7 @@ def restore_soft_deleted_files(
     project_config = resolve_project(project_name=project, config_path=config_file)
     logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
 
-    all_files = _resolve_file_inputs(files, file_list)
+    all_files = _resolve_file_inputs(files=files, file_list=file_list)
 
     restored_objects_response = restore_objects_command(
         divbase_base_url=logged_in_url,

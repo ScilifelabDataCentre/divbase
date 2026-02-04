@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import httpx
+import typer
 
 from divbase_cli.cli_exceptions import (
     FileDoesNotExistInSpecifiedVersionError,
@@ -32,7 +33,11 @@ from divbase_lib.api_schemas.s3 import (
     listObjectsRequest,
     listObjectsResponse,
 )
-from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    QUERY_RESULTS_FILE_PREFIX,
+    S3_MULTIPART_UPLOAD_THRESHOLD,
+)
 from divbase_lib.s3_checksums import (
     MD5CheckSumFormat,
     calculate_composite_md5_s3_etag,
@@ -42,7 +47,10 @@ from divbase_lib.s3_checksums import (
 
 
 def list_files_command(
-    divbase_base_url: str, project_name: str, prefix_filter: str | None = None
+    divbase_base_url: str,
+    project_name: str,
+    prefix_filter: str | None = None,
+    include_results_files: bool = False,
 ) -> list[ObjectDetails]:
     """
     List all files in a project optionally filtered by a prefix.
@@ -80,6 +88,12 @@ def list_files_command(
 
         all_matches.extend(next_page_data.objects)
         response_data.next_token = next_page_data.next_token
+
+    # To enable us to both search by prefix and optionally hide/include query results files,
+    # we hide DivBase query results/job files now instead of via S3.
+    # so the prefix param can be used for the optional filter the user wants.
+    if not include_results_files:
+        all_matches = [obj for obj in all_matches if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
 
     return all_matches
 
@@ -125,7 +139,7 @@ def restore_objects_command(divbase_base_url: str, project_name: str, all_files:
 def download_files_command(
     divbase_base_url: str,
     project_name: str,
-    all_files: list[str],
+    raw_files_input: list[str],
     download_dir: Path,
     verify_checksums: bool,
     project_version: str | None = None,
@@ -138,23 +152,44 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
+    if project_version is not None:
+        offending_files = [file for file in raw_files_input if ":" in file]
+        if offending_files:
+            print(
+                "[red] ERROR: bad Input: If you provide a global project version (using --project-version) "
+                "you cannot also specify specific versions of individual files to download. \n"
+                "offending files in your input: \n"
+                f"{'\n'.join(offending_files)} \n"
+                "Exiting..."
+            )
+            raise typer.Exit(1)
+
     if project_version:
         project_version_details = get_version_details_command(
             project_name=project_name, divbase_base_url=divbase_base_url, version_name=project_version
         )
 
         # check if all files specified exist for download exist at this project version
-        missing_objects = [f for f in all_files if f not in project_version_details.files]
+        missing_objects = [f for f in raw_files_input if f not in project_version_details.files]
         if missing_objects:
             raise FileDoesNotExistInSpecifiedVersionError(
                 project_name=project_name,
                 project_version=project_version,
                 missing_files=missing_objects,
             )
-        to_download = {file: project_version_details.files[file] for file in all_files}
-        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in all_files]
+        # we validated in CLI command that
+        to_download = {file: project_version_details.files[file] for file in raw_files_input}
+        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in raw_files_input]
     else:
-        json_data = [{"name": obj, "version_id": None} for obj in all_files]
+        # parse raw file inputs to see if any specific version ids were provided using format:
+        # file_name:version_id (not possible when using project_version)
+        json_data = []
+        for file_input in raw_files_input:
+            if ":" in file_input:
+                name, version_id = file_input.split(sep=":", maxsplit=1)
+                json_data.append({"name": name, "version_id": version_id})
+            else:
+                json_data.append({"name": file_input, "version_id": None})
 
     successful_downloads, failed_downloads = [], []
     for i in range(0, len(json_data), MAX_S3_API_BATCH_SIZE):
