@@ -15,7 +15,11 @@ from typer.testing import CliRunner
 from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
 from divbase_cli.cli_exceptions import DivBaseAPIError, FilesAlreadyInProjectError, UnsupportedFileTypeError
 from divbase_cli.divbase_cli import app
-from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    QUERY_RESULTS_FILE_PREFIX,
+    S3_MULTIPART_UPLOAD_THRESHOLD,
+)
 from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
 
 runner = CliRunner()
@@ -96,14 +100,16 @@ def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_con
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test basic usage of files ls command."""
     command = "files ls"
-
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
     default_project = CONSTANTS["DEFAULT_PROJECT"]
 
     for file in CONSTANTS["PROJECT_CONTENTS"][default_project]:
-        assert file in result.stdout, f"File {file} not found in the output of the list_files command"
+        assert file in result.stdout
+
+    column_names = ["Name", "File size", "Upload date (CET)", "MD5 checksum"]
+    assert all(header in result.stdout for header in column_names)
 
 
 def test_list_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -124,6 +130,79 @@ def test_list_files_empty_project(logged_in_edit_user_with_existing_config, CONS
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "No files found" in result.stdout
+
+
+@pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
+def test_list_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Tests that the list files command can paginate correctly by going through all results when a project
+    contains more than s3 limit for a single API call.
+    """
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    upload_dir = tmp_path / "many_files_dir"
+    upload_dir.mkdir()
+    # S3 hard limits at 1000, so guarantee pagination by going over that
+    num_files = 1005
+
+    file_names = {f"test_file_{i}.tsv" for i in range(num_files)}
+    for name in file_names:
+        (upload_dir / name).write_text(f"content_{name}")
+
+    upload_command = f"files upload --upload-dir {upload_dir} --project {clean_project}"
+    upload_result = runner.invoke(app, upload_command)
+    assert upload_result.exit_code == 0
+
+    list_command = f"files ls --project {clean_project}"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+
+    for name in file_names:
+        assert name in list_result.stdout
+    assert calculate_numb_table_rows_printed(list_result.stdout) == num_files
+
+
+def test_list_files_with_prefix_filter(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that the --prefix flag correctly filters the file list."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    (tmp_path / "prefix_a_1.tsv").write_text("a1")
+    (tmp_path / "prefix_a_2.tsv").write_text("a2")
+    (tmp_path / "prefix_b_1.tsv").write_text("b1")
+
+    upload_command = f"files upload {tmp_path / 'prefix_a_1.tsv'} {tmp_path / 'prefix_a_2.tsv'} {tmp_path / 'prefix_b_1.tsv'} --project {clean_project}"
+    upload_result = runner.invoke(app, upload_command)
+    assert upload_result.exit_code == 0
+
+    list_command = f"files ls --project {clean_project} --prefix prefix_a"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+    assert "prefix_a_1.tsv" in list_result.stdout
+    assert "prefix_a_2.tsv" in list_result.stdout
+    assert "prefix_b_1.tsv" not in list_result.stdout
+
+
+def test_list_files_hides_results_files_by_default(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that query result files are hidden by default and shown with the --include-results-files flag."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    results_file = tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz"
+    normal_file = tmp_path / "my_data.tsv"
+    results_file.write_text("results file")
+    normal_file.write_text("data file")
+
+    upload_command = f"files upload {results_file} {normal_file} --project {clean_project}"
+    upload_result = runner.invoke(app, upload_command)
+    assert upload_result.exit_code == 0
+
+    list_command = f"files ls --project {clean_project}"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+    assert "my_data.tsv" in list_result.stdout
+    assert f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz" not in list_result.stdout
+
+    list_command_include = f"files ls --project {clean_project} --include-results-files"
+    list_result_include = runner.invoke(app, list_command_include)
+    assert list_result_include.exit_code == 0
+    assert "my_data.tsv" in list_result_include.stdout
+    assert f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz" in list_result_include.stdout
 
 
 def test_file_info_single_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):

@@ -100,7 +100,14 @@ async def list_file_details(
     list_request: listObjectsRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
-    """List all files in the project's bucket"""
+    """
+    List all files in the project's bucket
+
+    You can provide a prefix to only list files that start with that prefix.
+    The response object includes a next_token if there are more files to list.
+    Which you can append to the next request to get the next page of results.
+    1000 files are returned at most per request.
+    """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")

@@ -38,6 +38,16 @@ runner = CliRunner()
 logger = logging.getLogger(__name__)
 
 
+def pytest_addoption(parser):
+    """Custom command-line options to pytest. In this case to run tests marked as slow"""
+    parser.addoption(
+        "--run-slow",
+        action="store_true",
+        default=False,
+        help="Run slow tests",
+    )
+
+
 @pytest.fixture(autouse=True, scope="function")
 def clean_tmp_config_token_dir():
     """

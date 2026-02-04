@@ -81,14 +81,14 @@ class S3FileManager:
         self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
     ) -> listObjectsResponse:
         """
-        Return a list of up to 1000 TODO - decide number files in the S3 bucket with detailed info about each file.
+        Return a list of up to 1000 files in the S3 bucket with detailed info about each file.
         This is used by CLI users via the API.
 
         Pagination is supported via the next_token parameter, so a client may need to make multiple calls to get all files.
         """
         request_args = {
             "Bucket": bucket_name,
-            "MaxKeys": 10,  # TODO, temp for testing...
+            "MaxKeys": 1000,
         }
         if prefix:
             request_args["Prefix"] = prefix
