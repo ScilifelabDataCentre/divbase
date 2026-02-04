@@ -7,6 +7,7 @@ from divbase_api.worker.tasks import (
     _check_if_samples_can_be_combined_with_bcftools,
     bcftools_pipe_task,
 )
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -51,7 +52,9 @@ def test_bcftools_pipe_task_with_real_worker(
     task_result = wait_for_celery_task_completion(task_id=task_id, max_wait=30)
 
     assert task_result["status"] == "completed"
-    assert task_result["output_file"].startswith("result_of_job_") and task_result["output_file"].endswith(".vcf.gz")
+    assert task_result["output_file"].startswith(QUERY_RESULTS_FILE_PREFIX) and task_result["output_file"].endswith(
+        ".vcf.gz"
+    )
 
 
 @pytest.mark.parametrize(

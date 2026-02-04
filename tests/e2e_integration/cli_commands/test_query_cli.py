@@ -32,6 +32,7 @@ from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -164,12 +165,12 @@ def test_bcftools_pipe_query(
     user_task_id = result.stdout.strip().split()[-1]
     _ = wait_for_task_complete(user_task_id=user_task_id)
 
-    command = f"files ls --project {project_name} "
+    command = f"files ls --project {project_name} --include-results-files"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert any("result_of_job_" in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
-        "No result_of_job_ VCF file found in output"
+    assert any(QUERY_RESULTS_FILE_PREFIX in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
+        f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output"
     )
 
 
@@ -390,7 +391,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Only one file remained after concatenation, renamed this file to",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
+                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
                 "Cleaning up 14 temporary files",
             ],
@@ -438,7 +439,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Only one file remained after concatenation, renamed this file to",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
+                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
             ],
             [],
@@ -462,7 +463,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
                 "No unsupported sample sets found. Proceeding with bcftools pipeline.",
                 "Sample names do not overlap between temp files, will continue with 'bcftools merge'",
                 "Merged all temporary files into 'merged_unsorted_",
-                "Sorting the results file to ensure proper order of variants. Final results are in 'result_of_job_",
+                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
                 "Cleaning up 7 temporary files",
             ],
