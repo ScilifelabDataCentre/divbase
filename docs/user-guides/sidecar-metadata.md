@@ -42,6 +42,16 @@ String consisting of keys:values in the tsv file to filter on. The syntax is 'Ke
 - [TO BE IMPLEMENTED] filtering based on ranges (ints and maybe floats) and not just on strings, e.g. in range 31 - 50. etc...
 - [TO BE IMPLEMENTED] add more Set Operations: union, intersection, difference, symmetric difference. Be clear on the default behaviour
 
+Please do not mix numerical and string values in the same column!
+
+For numeric columns, you can filter on:
+
+- Inequalities: 'Weight:>25' or "Weight:>=20,<=40" or "Weight:<100". The inequality operator must be expressed relative to the Key, i.e. for 'Weight:>25' the reverse notation 'Weight:25<' is not supported.
+- Range (inclusive): 'Weight:20-40'
+- Discrete values: 'Weight:25,30,35'
+
+The syntax only accepts `<=` and `>=` since this is the syntax of Python. The forms =< and => are not accepted and will return an error.
+
 ## Trying out a query
 
 ```bash

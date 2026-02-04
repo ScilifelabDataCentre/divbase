@@ -593,7 +593,51 @@ class SidecarQueryManager:
                 # Check if column is numeric
                 is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
 
-                # Handle numeric range filtering
+                # Handle numeric inequality filtering (e.g., "Weight:>25", "Weight:>=20,<=40")
+                if is_numeric and re.search(r"[<>]=?", values):
+                    inequality_parts = values.split(",")
+                    conditions = []
+
+                    for part in inequality_parts:
+                        part = part.strip()
+
+                        # Check for common mistakes: =< or => instead of <= or >=
+                        if re.match(r"^=<\d+\.?\d*$", part) or re.match(r"^=>\d+\.?\d*$", part):
+                            raise SidecarInvalidFilterError(
+                                f"Invalid operator format '{part[:2]}' in filter '{key}:{values}'. "
+                                f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
+                            )
+
+                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", part)
+                        if inequality_match:
+                            operator = inequality_match.group(1)
+                            value = float(inequality_match.group(2))
+
+                            if operator == ">":
+                                conditions.append(self.df[key] > value)
+                            elif operator == ">=":
+                                conditions.append(self.df[key] >= value)
+                            elif operator == "<":
+                                conditions.append(self.df[key] < value)
+                            elif operator == "<=":
+                                conditions.append(self.df[key] <= value)
+
+                            logger.debug(f"Applied inequality filter on '{key}': {operator} {value}")
+                        else:
+                            logger.warning(f"Invalid inequality format: '{part}' for column '{key}'. Skipping.")
+
+                    if conditions:
+                        # Combine multiple conditions with AND
+                        combined = conditions[0]
+                        for cond in conditions[1:]:
+                            combined = combined & cond
+
+                        if not combined.any():
+                            logger.warning(f"No values in column '{key}' satisfy the inequality conditions: {values}")
+                        filter_conditions.append(combined)
+                    continue
+
+                # Handle numeric range filtering (e.g., "Weight:20-40")
                 range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", values)
 
                 if is_numeric and range_match:
@@ -607,15 +651,16 @@ class SidecarQueryManager:
                 else:
                     values_list = values.split(",")
 
-                    # Convert query str values to numeric if the column is numeric
+                    # Handle discrete numberical values
                     if is_numeric:
-                        # User input in the CLI query is always string (e.g. "Group:1,3,8")
+                        # Convert query str values to numeric if the column is numeric
+                        # User input in the CLI query is always string (e.g. "Weight:1,3,8")
                         converted_values = []
                         for v in values_list:
                             try:
                                 converted_values.append(float(v) if "." in v else int(v))
                             except ValueError:
-                                # Handle cases such as "Group:1,three,8" where "three" cannot be converted to numeric, however unlikely their occurance may be.
+                                # Handle cases such as "Weight:1,three,8" where "three" cannot be converted to numeric, however unlikely their occurance may be.
                                 logger.warning(
                                     f"Cannot convert '{v}' to numeric for column '{key}'. Skipping this value."
                                 )
