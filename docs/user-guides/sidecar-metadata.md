@@ -6,12 +6,17 @@ TODO
 
 ## Creating a sidecar TSV for a DivBase project
 
+If the dimensions VCF files in the project have been cached in DivBase, a template metadata file with the sample names pre-filled can be created with:
+
+```bash
+divbase-cli dimensions create-metadata-template
+```
+
 Note! there can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag.
 
 TODOs:
 
 - [TO BE IMPLEMENTED] consider changing the mandatory column name from `Sample_ID` to `Sample`
-- [TO BE IMPLEMENTED] CLI command to generate template (empty template and template with the samples from the DivBase project pre-filled). Pre-filling the template will require that dimensions update has been run
 - [TO BE IMPLEMENTED] what happens if a TSV does not contain all the samples in the DivBase project? There should probably be a warning, but not an error?
 - [TO BE IMPLEMENTED] what happens if a sample name is misspelled in the TSV? a warning? can this be checked against the dimensions show?
 

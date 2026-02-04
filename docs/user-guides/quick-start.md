@@ -87,23 +87,7 @@ Check your uploaded files:
 divbase-cli files list
 ```
 
-## Step 7: Upload sample metadata
-
-TODO It might make more sense to have run the dimensions update job before this if we are to use a pre-populated template file
-
-Sample metadata must be uploaded as follows:
-
-- In TSV format and be named "sample_metadata.tsv"
-- Must contain a column named "sample_id" which matches the sample IDs in your VCF files
-- The names and values of all other columns are optional.
-
-TODO update this after `sidecar-metadata.md` docs are done, there are changes planned for some details.
-
-```bash
-divbase-cli files upload path/to/your/sample_metadata.tsv
-```
-
-## Step 8: Dimensions update
+## Step 7: Dimensions update
 
 For DivBase to be able to efficiently handle the VCF files in the the project, some key information about each VCF files is fetched from the files. In DivBase, this is refered to as "VCF dimensions". These include for instance which samples and scaffolds that a VCF file contains.
 
@@ -120,7 +104,7 @@ This submits a task to the DivBase task management system. The task will wait in
 
     2. Please also note that the `divbase-cli dimensions update` command needs to be done every time a new VCF or a new version of a VCF file is uploaded.
 
-## Step 9: Confirm dimensions update job completion
+## Step 8: Confirm dimensions update job completion
 
 Check the task history to confirm the dimensions update job has completed:
 
@@ -134,6 +118,34 @@ It is possible to inspect the cached VCF dimensions data for the project at any 
 
 ```bash
 divbase-cli dimensions show
+```
+
+## Step 9: Upload sample metadata
+
+DivBase can checkout data based the VCF files themselves, but can also take an optional sidecar sample metadata file into account. The metadata file must be a TSV (tab-separated variables) file. The metadata contents of the file is defined by the users. If the VCF dimensions command has been run for the project, the cached dimensions data can be used create a template where the samples of the project have been pre-filled:
+
+```bash
+divbase-cli dimensions create-metadata-template
+```
+
+Details on how to write this file are given in [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md). In short, the first row starts with `#` and contains the headers for different metadata columns. The first column (`Sample_ID`) is mandatory and can be created by the system as just described; if created manually just make. The rest of the columns are free for the user to define.
+
+Example of a sidecar metadata TSV file with the mandatory `Sample_ID` column and two user defined columns.
+
+```
+#Sample_ID Population Area
+129P2 1 North
+129S1 2 East
+129S5 3 South
+```
+
+!!! note
+    Please use a text editor than preserves the tabs when the file is saved. Incorrect tabs can lead to issues with running metadata queries in DivBase.
+
+The sample metadata file should then be uploaded the the DivBase project with follows:
+
+```bash
+divbase-cli files upload path/to/your/sample_metadata.tsv
 ```
 
 ## Step 10: Run your queries
