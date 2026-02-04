@@ -72,7 +72,7 @@ nav:
     - Account Management: user-guides/account-management.md
     - Installation: user-guides/installation.md
     - Setup DivBase CLI: user-guides/setup_divbase_cli.md
-    - Working with VCF Files: user-guides/vcf-files.md
+    - Working with VCF Files in DivBase: user-guides/vcf-files.md
     - Running Queries: 
       - Overview: user-guides/running-queries.md
       - "Sidecar Metadata TSV files: creating and querying sample metadata files": user-guides/sidecar-metadata.md

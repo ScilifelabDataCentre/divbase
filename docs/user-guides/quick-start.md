@@ -89,6 +89,8 @@ divbase-cli files list
 
 ## Step 7: Upload sample metadata
 
+TODO It might make more sense to have run the dimensions update job before this if we are to use a pre-populated template file
+
 Sample metadata must be uploaded as follows:
 
 - In TSV format and be named "sample_metadata.tsv"
@@ -142,7 +144,7 @@ There are three types of queries in DivBase:
 - VCF data query
 - Combined sample metadata and VCF data query
 
-!!! notes
+!!! note
     Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries.md) after reading this quick start.
 
 ### Running sample metadata queries
@@ -153,7 +155,7 @@ As an example, let's assume that user-defined sidecar sample metadata TSV file c
 divbase-cli query tsv "Area:Northern Portugal"
 ```
 
-!!! notes
+!!! note
     Please see [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md) for more details on the syntax for writing sample metadata queries.
 
 ### Running VCF data queries
@@ -171,6 +173,9 @@ The VCF queries can be combined with sidecar sample metadata queries with `--tsv
 ```bash
 divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
 ```
+
+!!! note
+    DivBase only allows `bcftools view` in its query syntax and no other `bcftools` commands. The `merge`, `concat`, and `annotate` commands are used when processing a query, but should not be defined by the user.
 
 ## Step 11: Download any results files
 

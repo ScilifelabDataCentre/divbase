@@ -15,9 +15,13 @@ TODOs:
 - [TO BE IMPLEMENTED] what happens if a TSV does not contain all the samples in the DivBase project? There should probably be a warning, but not an error?
 - [TO BE IMPLEMENTED] what happens if a sample name is misspelled in the TSV? a warning? can this be checked against the dimensions show?
 
+- [TO BE IMPLEMENTED] what happens if a sample is duplicated in the file. what happens if the sample name is duplicated but not the values (diverging duplicate)?
+
 1 mandatory column: sample name.
 
 any other columns are optional and user defined
+
+it is possible to have more than one sidecar sample metadata file in each DivBase project.
 
 example
 

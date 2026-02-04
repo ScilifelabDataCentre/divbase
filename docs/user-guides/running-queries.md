@@ -12,6 +12,12 @@ TODO
 
 - [TO BE IMPLEMENTED] think about the `divbase-cli query` commands. it would make sense to use `sample-metadata` (perhaps with `tsv` as a short form) and `vcf`
 
+The system will use the latest version the the files for all queries.
+
+TODO COPIED OVER FROM QUICKSTART REIMPLEMENT
+
+DivBase only allows `bcftools view` in its query syntax and no other `bcftools` commands. The `merge`, `concat`, and `annotate` commands are used when processing a query, but should not be defined by the user.
+
 ## Side car sample metadata queries
 
 For more details, see [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md).
