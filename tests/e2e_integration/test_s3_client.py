@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from divbase_api.exceptions import ObjectDoesNotExistError
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_lib.divbase_constants import S3_MULTIPART_UPLOAD_THRESHOLD
-from divbase_lib.exceptions import ObjectDoesNotExistError
 
 
 @pytest.fixture(scope="module")

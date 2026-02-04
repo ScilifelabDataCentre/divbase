@@ -9,6 +9,8 @@ Pre-signed upload URLs need to account for single vs multipart uploads hence all
 
 from pydantic import BaseModel, Field
 
+from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
+
 MB = 1024 * 1024
 
 
@@ -50,7 +52,6 @@ class CreateMultipartUploadRequest(BaseModel):
 
     name: str = Field(..., description="Name of the object to be uploaded")
     content_length: int = Field(..., description="Size of the file in bytes")
-    part_size: int = Field(..., description="Size of each part in bytes", ge=8 * MB, le=64 * MB)
 
 
 class CreateMultipartUploadResponse(BaseModel):
@@ -59,6 +60,9 @@ class CreateMultipartUploadResponse(BaseModel):
     name: str = Field(..., description="Name of the object to be uploaded")
     upload_id: str = Field(..., description="Upload ID for the multipart upload")
     number_of_parts: int = Field(..., description="Total number of parts required for the upload", ge=1, le=10000)
+    part_size: int = Field(
+        S3_MULTIPART_CHUNK_SIZE, description="Size of each part in bytes (the last part may be smaller)."
+    )
 
 
 class GetPresignedPartUrlsRequest(BaseModel):

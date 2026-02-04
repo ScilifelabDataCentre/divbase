@@ -33,7 +33,7 @@ from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 
-logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 

@@ -1,15 +1,41 @@
 [project]
 name = "divbase-cli"
-dynamic = ["version"]
 description = "Command Line Interface for Divbase"
-readme = "../../README.md"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "SciLifeLab Data Centre", email = "datacentre@scilifelab.se" },
+]
 requires-python = ">=3.12"
 dependencies = [
-    "typer>=0.15.4",
-    "httpx>=0.28.1",
-    "divbase-lib",
+    "typer>=0.21.1,<1",
+    "httpx>=0.28.1,<1",
     "stamina>=25.2.0",
+    "divbase-lib==0.1.0.dev2",
 ]
+dynamic = ["version"]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+[project.urls]
+Homepage = "https://divbase.scilifelab.se"
+Documentation = "https://scilifelabdatacentre.github.io/divbase"
+Repository = "https://github.com/ScilifelabDataCentre/divbase"
+Issues = "https://github.com/ScilifelabDataCentre/divbase/issues"
+
+[project.scripts]
+divbase = "divbase_cli.divbase_cli:main"
+divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 
 
 [build-system]
 requires = ["hatchling >= 1.26"]
@@ -21,5 +47,8 @@ path = "src/divbase_cli/__init__.py"
 [tool.uv.sources]
 divbase-lib = { workspace = true }
 
-[project.scripts]
-divbase-cli = "divbase_cli.divbase_cli:main"
+[tool.ruff]
+extend = "../../ruff.toml"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"divbase_api" = { msg = "divbase-cli cannot use code from divbase-api. Move shared code to divbase-lib." }

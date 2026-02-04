@@ -1,10 +1,7 @@
 import dataclasses
 import logging
 import os
-import random
 import re
-import shutil
-import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
@@ -123,8 +120,6 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
     if name == "tasks.sample_metadata_query":
         return {"queue": "quick"}
     if name == "tasks.bcftools_query":
-        return {"queue": "long"}
-    if name == "tasks.test_s3_transfer":
         return {"queue": "long"}
     if name == "tasks.update_vcf_dimensions_task":
         return {"queue": "long"}  # can take minutes for large VCF files
@@ -517,73 +512,6 @@ def update_vcf_dimensions_task(
 
     # Convert to dict since celery serializes to JSON when writing to results backend. Pydantic model serialization is not supported by celery
     return result.model_dump()
-
-
-@app.task(name="tasks.test_s3_transfer", tags=["slow"])
-def test_s3_transfer(
-    bucket_name: str,
-    num_files: int,
-    file_size_mib: int,
-    job_id: int,
-):
-    """
-    A task to test the S3 upload and download functionality of the workers.
-    TODO - remove once manual testing is done.
-
-    It creates a specified number of large files, uploads them, downloads them,
-    verifies their checksums, and then cleans up. It reports timings for each step.
-    """
-    task_id = test_s3_transfer.request.id
-    logger.info(
-        f"Starting S3 transfer test task. Task ID: {task_id}, Job ID: {job_id}. "
-        f"Creating {num_files} file(s) of {file_size_mib} MiB in bucket '{bucket_name}'."
-    )
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
-    one_mib_in_bytes = 1024 * 1024
-
-    base_test_dir = Path(f"/tmp/s3_transfer_test_{task_id}")
-    upload_dir = base_test_dir / "to_upload"
-    download_dir = base_test_dir / "downloaded"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    download_dir.mkdir(parents=True, exist_ok=True)
-
-    timings = {}
-
-    logger.info("Creating local files for upload...")
-    original_files = {}
-    start_time = time.monotonic()
-    random.seed(job_id)
-    for i in range(num_files):
-        file_path = upload_dir / f"test_file_{i}_{task_id}.bin"
-        with open(file_path, "wb") as f:
-            for _ in range(file_size_mib):
-                f.write(random.randbytes(one_mib_in_bytes))
-        original_files[file_path.name] = file_path
-    timings["file_creation_seconds"] = time.monotonic() - start_time
-    logger.info(f"Successfully created {len(original_files)} files in {timings['file_creation_seconds']:.2f}s.")
-
-    logger.info(f"Uploading files to bucket '{bucket_name}'...")
-    start_time = time.monotonic()
-    s3_file_manager.upload_files(to_upload=original_files, bucket_name=bucket_name)
-    timings["upload_seconds"] = time.monotonic() - start_time
-    logger.info(f"Upload complete in {timings['upload_seconds']:.2f}s.")
-
-    logger.info("Downloading files from bucket")
-    start_time = time.monotonic()
-    objects_to_download = {file_name: None for file_name in original_files}
-    s3_file_manager.download_files(objects=objects_to_download, download_dir=download_dir, bucket_name=bucket_name)
-    timings["download_seconds"] = time.monotonic() - start_time
-    logger.info(f"Download complete in {timings['download_seconds']:.2f}s.")
-
-    logger.info("deleting all temp files from worker volumes using Pathlib")
-    shutil.rmtree(base_test_dir)
-
-    return {
-        "status": "SUCCESS",
-        "files_tested": num_files,
-        "file_size_mib": file_size_mib,
-        "timings": timings,
-    }
 
 
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:

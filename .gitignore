@@ -38,3 +38,5 @@ scripts/benchmarking/results
 
 # mkdocs build cache
 .cache/
+# pypi 
+dist/

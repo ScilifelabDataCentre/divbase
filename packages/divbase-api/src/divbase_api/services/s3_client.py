@@ -11,15 +11,25 @@ import os
 from pathlib import Path
 
 import boto3
+import stamina
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
-from divbase_api.exceptions import DownloadedFileChecksumMismatchError
+from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
-from divbase_lib.exceptions import ChecksumVerificationError, ObjectDoesNotExistError
+from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
+
+
+def retry_on_retriable_checksum_errors(exception: Exception) -> bool:
+    """
+    Retry condition function for stamina to decorators to only retry on checksum verification errors.
+
+    (We don't need retry logic for other S3 errors as boto3 has inbuilt retry logic for these.)
+    """
+    return isinstance(exception, DownloadedFileChecksumMismatchError)
 
 
 class S3FileManager:
@@ -149,6 +159,7 @@ class S3FileManager:
                     files[obj["Key"]] = obj["VersionId"]
         return files
 
+    @stamina.retry(on=retry_on_retriable_checksum_errors, attempts=3)
     def _download_single_file(self, key: str, dest: Path, bucket_name: str, version_id: str | None = None) -> str:
         """
         Download a file from S3 to a local path.
@@ -156,7 +167,8 @@ class S3FileManager:
 
         Returns the key of the downloaded file.
 
-        # TODO - implement retry logic for checksum verification failures, s3 inbuilt logic doesn't cover this.
+        A failed checksum verification will raise a DownloadedFileChecksumMismatchError, which will trigger a retry with stamina.
+        boto3 has its own retry logic for other S3 errors.
         """
         extra_args = {"VersionId": version_id} if version_id else None
         try:
@@ -183,16 +195,16 @@ class S3FileManager:
             version_id=version_id,
         )
         if not expected_checksum:
-            raise DownloadedFileChecksumMismatchError(
-                file_path=dest,
-                expected_checksum="<missing>",
-                calculated_checksum="not yet calculated - expected behavior",
-            )
+            raise ObjectDoesNotExistError(key=key, bucket_name=bucket_name)
 
         try:
             verify_downloaded_checksum(file_path=dest, expected_checksum=expected_checksum)
         except ChecksumVerificationError as err:
             dest.unlink()  # delete the invalid file as will try again instead.
+            logger.warning(
+                f"Checksum verification failed for downloaded file '{dest}'. "
+                f"Expected: {err.expected_checksum}, Calculated: {err.calculated_checksum}.  Retrying download..."
+            )
             raise DownloadedFileChecksumMismatchError(
                 file_path=dest,
                 expected_checksum=err.expected_checksum,

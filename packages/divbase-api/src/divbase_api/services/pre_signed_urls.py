@@ -26,6 +26,7 @@ from divbase_lib.api_schemas.s3 import (
 from divbase_lib.divbase_constants import (
     DOWNLOAD_URL_EXPIRATION_SECONDS,
     MULTI_PART_UPLOAD_URL_EXPIRATION_SECONDS,
+    S3_MULTIPART_CHUNK_SIZE,
     SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
 )
 
@@ -126,13 +127,13 @@ class S3PreSignedService:
         )
 
     def create_multipart_upload(
-        self, bucket_name: str, object_name: str, content_length: int, part_size: int
+        self, bucket_name: str, object_name: str, content_length: int, part_size: int = S3_MULTIPART_CHUNK_SIZE
     ) -> CreateMultipartUploadResponse:
         """
         Tell S3 to start a multipart upload.
-        S3 gives us back and upload id, which is included in each part we then upload.
+        S3 gives us back an upload id, which is included in each part we then upload.
 
-        This action performed by service account so we use the s3_client not the presigning client.
+        This action is performed by service account so we use the s3_client not the presigning client.
         """
         response = self.s3_client.create_multipart_upload(Bucket=bucket_name, Key=object_name)
         number_of_parts = ceil(content_length / part_size)
@@ -140,6 +141,7 @@ class S3PreSignedService:
             name=object_name,
             upload_id=response["UploadId"],
             number_of_parts=number_of_parts,
+            part_size=part_size,
         )
 
     def create_presigned_upload_part_urls(
