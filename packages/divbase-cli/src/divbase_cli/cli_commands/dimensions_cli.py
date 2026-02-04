@@ -1,4 +1,6 @@
+import csv
 import logging
+import os
 from pathlib import Path
 
 import typer
@@ -160,3 +162,57 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
         "indexed_files": dimensions_list,
         "skipped_files": skipped_list,
     }
+
+
+@dimensions_app.command("create-metadata-template")
+def create_metadata_template_with_project_samples_names(
+    project: str | None = PROJECT_NAME_OPTION,
+    config_file: Path = CONFIG_FILE_OPTION,
+) -> None:
+    """
+    Use the samples index in a projects dimensions cache to create a TSV metadata template file
+    that has the sample names as pre-filled as the first column.
+    """
+
+    # TODO this duplicates some code with show_dimensions_index() above. A refactoring should probably include creating a separate CRUD function
+    # so that the client does not need to parse all data.
+
+    project_config = resolve_project(project_name=project, config_path=config_file)
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+    )
+    vcf_dimensions_data = DimensionsShowResult(**response.json())
+
+    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
+
+    unique_sample_names = set()
+    for entry in dimensions_info.get("indexed_files", []):
+        unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
+
+    unique_sample_names_sorted = sorted(unique_sample_names)
+    sample_count = len(unique_sample_names_sorted)
+    print(
+        f"There were {sample_count} unique samples found in the dimensions file for the {project_config.name} project."
+    )
+
+    if sample_count == 0:
+        # Fallback in case there are no samples in the dimensions index. If no dimensions entry for the project
+        # VCFDimensionsEntryMissingError will be returned. But for some reason, there are no samples in the VCF, this will catch that.
+        print("No samples found for this project. No file written.")
+        return
+
+    output_filename = "divbase_metadata_template.tsv"
+    output_path = os.path.join(os.getcwd(), output_filename)
+
+    with open(output_path, mode="w", newline="") as tsvfile:
+        writer = csv.writer(tsvfile, delimiter="\t")
+        writer.writerow(["#Sample_ID"])
+        for sample in unique_sample_names_sorted:
+            writer.writerow([sample])
+
+    print(f"A sample metadata template with these sample names was written to: {output_path}")
+
+    # TODO perhaps add a message on how to fill in additional columns and how to upload the metadata file to DivBase?
