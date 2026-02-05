@@ -232,7 +232,7 @@ class S3FileManager:
 
         markers_to_delete = []
         for obj_key in objects:
-            response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=obj_key, MaxKeys=1)
+            response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=obj_key)
 
             is_deleted = response.get("DeleteMarkers") and response["DeleteMarkers"][0]["IsLatest"]
             is_not_deleted = response.get("Versions") and response["Versions"][0]["IsLatest"]
