@@ -26,18 +26,14 @@ Usage:
 """
 
 import contextlib
-import contextlib
 import os
-import re
 import re
 import shlex
 import subprocess
 import sys
 import time
-import time
 
 import boto3
-import httpx
 import httpx
 from _benchmarking_shared_utils import LOCAL_ENV
 
@@ -49,7 +45,6 @@ local_dev_setup.PROJECTS = [
     {
         "name": "benchmarking-mouse",
         "description": "Benchmarking project",
-        "bucket_name": "divbase-local-benchmarking-mouse",  # to comply with s3_service_account_policy.json
         "bucket_name": "divbase-local-benchmarking-mouse",  # to comply with s3_service_account_policy.json
         "storage_quota_bytes": 10737418240,
         "files": ["README.md"],
@@ -94,11 +89,6 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
         print(f"ERROR running 'divbase-cli files list': {result.stderr}")
         print(f"stdout: {result.stdout}")
         raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
-    result = subprocess.run(shlex.split(cmd), env=env, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        print(f"ERROR running 'divbase-cli files list': {result.stderr}")
-        print(f"stdout: {result.stdout}")
-        raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
     output = result.stdout
     filenames_to_check = [filename, mock_metadata]
 
@@ -131,49 +121,7 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
 def wait_for_task_completion(
     job_id: str, project_name: str, admin_token: str, timeout: int = 600, poll_interval: int = 5
 ) -> bool:
-def wait_for_task_completion(
-    job_id: str, project_name: str, admin_token: str, timeout: int = 600, poll_interval: int = 5
-) -> bool:
     """
-    Poll the task history API until the task completes successfully or fails.
-    Uses direct API calls to get task status.
-    Returns True if task completed successfully, raises exception otherwise.
-    """
-    print(f"Waiting for task {job_id} to complete...")
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        try:
-            response = httpx.get(
-                f"{local_dev_setup.BASE_URL}/v1/task-history/projects/{project_name}",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                params={"limit": 50},
-            )
-            response.raise_for_status()
-            tasks = response.json()
-
-            for task in tasks:
-                if str(task.get("id")) == str(job_id):
-                    status = task.get("status")
-                    if status == "SUCCESS":
-                        print(f"Task {job_id} completed successfully!")
-                        return True
-                    elif status == "FAILURE":
-                        print(f"Task {job_id} failed!")
-                        print(f"Result: {task.get('result')}")
-                        raise RuntimeError(f"Task {job_id} failed")
-                    else:
-                        print(f"Task {job_id} status: {status} (elapsed: {int(time.time() - start_time)}s)")
-                        break
-            else:
-                print(f"Task {job_id} not yet visible in history... (elapsed: {int(time.time() - start_time)}s)")
-
-        except Exception as e:
-            print(f"Error checking task status: {e}")
-
-        time.sleep(poll_interval)
-
-    raise TimeoutError(f"Task {job_id} did not complete within {timeout} seconds")
     Poll the task history API until the task completes successfully or fails.
     Uses direct API calls to get task status.
     Returns True if task completed successfully, raises exception otherwise.
@@ -261,9 +209,6 @@ def main():
     bucket_name = project["bucket_name"]
 
     ensure_minio_bucket_exists(bucket_name)
-    bucket_name = project["bucket_name"]
-
-    ensure_minio_bucket_exists(bucket_name)
 
     admin_token = local_dev_setup.get_admin_access_token()
     ensure_project_exists_and_assign_manager(project_name=project_name, admin_token=admin_token)
@@ -275,31 +220,9 @@ def main():
     admin_password = local_dev_setup.ADMIN_CREDENTIALS["password"]
     cmd = shlex.split(f"divbase-cli auth login {admin_email} --password {admin_password}")
     subprocess.run(cmd, input="y\n", text=True, check=True, env=LOCAL_ENV)
-    # Login non-interactively by providing 'y' to the prompt, using credentials from local_dev_setup
-    admin_email = local_dev_setup.ADMIN_CREDENTIALS["username"]
-    admin_password = local_dev_setup.ADMIN_CREDENTIALS["password"]
-    cmd = shlex.split(f"divbase-cli auth login {admin_email} --password {admin_password}")
-    subprocess.run(cmd, input="y\n", text=True, check=True, env=LOCAL_ENV)
 
     ensure_required_files_in_bucket(project_name=project_name, filename=filename, mock_metadata=mock_metadata, url=url)
 
-    # Run dimensions update and wait for completion
-    print("\nUpdating VCF dimensions...")
-    cmd_dimensions = f"divbase-cli dimensions update --project {project_name}"
-    result = subprocess.run(shlex.split(cmd_dimensions), env=LOCAL_ENV, capture_output=True, text=True, check=True)
-
-    # Extract job_id from the output
-    # Expected format: "Job submitted successfully with task id: 102"
-    match = re.search(r"task id:\s*(\d+)", result.stdout)
-    if not match:
-        print(f"Could not extract job_id from dimensions update command output:\n{result.stdout}")
-        raise ValueError("Failed to extract job_id from dimensions update command")
-
-    dimensions_job_id = match.group(1)
-    print(f"Dimensions update job ID: {dimensions_job_id}")
-
-    # Wait for dimensions update to complete
-    wait_for_task_completion(dimensions_job_id, project_name=project_name, admin_token=admin_token, timeout=600)
     # Run dimensions update and wait for completion
     print("\nUpdating VCF dimensions...")
     cmd_dimensions = f"divbase-cli dimensions update --project {project_name}"
