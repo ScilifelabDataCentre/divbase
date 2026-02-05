@@ -17,11 +17,11 @@ from botocore.config import Config
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
 from divbase_lib.api_schemas.s3 import (
+    ListObjectsResponse,
     ObjectDetails,
     ObjectInfoResponse,
     ObjectVersionInfo,
     RestoreObjectsResponse,
-    listObjectsResponse,
 )
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ChecksumVerificationError
@@ -79,7 +79,7 @@ class S3FileManager:
 
     def list_files_detailed(
         self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
-    ) -> listObjectsResponse:
+    ) -> ListObjectsResponse:
         """
         Return a list of up to 1000 files in the S3 bucket with detailed info about each file.
         This is used by CLI users via the API.
@@ -109,7 +109,7 @@ class S3FileManager:
             )
 
         new_next_token: str | None = response.get("NextContinuationToken")
-        return listObjectsResponse(objects=items, next_token=new_next_token)
+        return ListObjectsResponse(objects=items, next_token=new_next_token)
 
     def get_detailed_object_info(self, bucket_name: str, object_name: str) -> ObjectInfoResponse:
         """

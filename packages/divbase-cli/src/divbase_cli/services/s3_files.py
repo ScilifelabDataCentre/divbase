@@ -25,13 +25,13 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ListObjectsRequest,
+    ListObjectsResponse,
     ObjectDetails,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     RestoreObjectsResponse,
-    listObjectsRequest,
-    listObjectsResponse,
 )
 from divbase_lib.divbase_constants import (
     MAX_S3_API_BATCH_SIZE,
@@ -61,7 +61,7 @@ def list_files_command(
     But could be revisted later if performance becomes an issue.
     """
     api_route = f"v1/s3/list?project_name={project_name}"
-    initial_request = listObjectsRequest(
+    initial_request = ListObjectsRequest(
         prefix=prefix_filter,
         next_token=None,
     )
@@ -72,19 +72,19 @@ def list_files_command(
         api_route=api_route,
         json=initial_request.model_dump(),
     )
-    response_data = listObjectsResponse(**response.json())
+    response_data = ListObjectsResponse(**response.json())
     all_matches = response_data.objects
 
     # page through any remaining results
     while response_data.next_token:
-        next_request = listObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
+        next_request = ListObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=api_route,
             json=next_request.model_dump(),
         )
-        next_page_data = listObjectsResponse(**response.json())
+        next_page_data = ListObjectsResponse(**response.json())
 
         all_matches.extend(next_page_data.objects)
         response_data.next_token = next_page_data.next_token

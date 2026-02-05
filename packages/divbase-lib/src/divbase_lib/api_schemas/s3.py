@@ -17,7 +17,7 @@ MB = 1024 * 1024
 
 
 ## list objects models ##
-class listObjectsRequest(BaseModel):
+class ListObjectsRequest(BaseModel):
     """Request model for listing objects in an S3 bucket."""
 
     prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
@@ -35,7 +35,7 @@ class ObjectDetails(BaseModel):
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
 
 
-class listObjectsResponse(BaseModel):
+class ListObjectsResponse(BaseModel):
     """Response model for listing objects in an S3 bucket."""
 
     objects: list[ObjectDetails] = Field(
