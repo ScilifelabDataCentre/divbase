@@ -21,6 +21,10 @@ We have accounts on both [PyPI](https://pypi.org/) and [TestPyPI](https://test.p
 
 (Login credentials are in bitwarden, but if you use the GH actions below you don't need to use them.)
 
+## Considerations for Kubernetes deployment
+
+TODO: add some lessons learned from the k8s deployment, e.g. on resources needed for the celery worker.
+
 ### Good to know
 
 1. You cannot upload the same version of a package to PyPI or TestPyPI if that version already exists (even if you delete the existing package). So in such cases you need to bump the version number in the packages before uploading new versions.
