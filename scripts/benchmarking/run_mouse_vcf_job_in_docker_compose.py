@@ -3,6 +3,8 @@ A script that runs commands with divbase CLI and auxiliary scripts to perform th
 and to run a bcftools query on the files. It downloads a large public VCF file and submits a divbase bcftools-query job.
 The query (=celery task) is expected to take about 10 minutes to complete, depending on the machine.
 
+NOTE! this script is intended to be run with the Docker Compose stack for local development. It has not been tested against a remote deployment of DivBase.
+
 In addition to the query, the pre-processing will take a few minutes too
 (downloading the file with curl, generating mock-metadata, check if there is a bucket called 'benchmarking',
 uploading files to the local bucket if not already there).
@@ -62,15 +64,9 @@ def ensure_minio_bucket_exists(bucket_name: str) -> None:
         aws_secret_access_key=local_dev_setup.MINIO_FAKE_SECRET_KEY,
     )
 
-    try:
-        s3_client.head_bucket(Bucket=bucket_name)
-        print(f"Bucket '{bucket_name}' already exists.")
-    except (s3_client.exceptions.NoSuchBucket, s3_client.exceptions.ClientError):
-        print(f"Creating bucket '{bucket_name}'...")
-        with contextlib.suppress(
-            s3_client.exceptions.BucketAlreadyOwnedByYou, s3_client.exceptions.BucketAlreadyExists
-        ):
-            s3_client.create_bucket(Bucket=bucket_name)
+    # Try to create bucket, suppress exception (=exit) if it already exists
+    with contextlib.suppress(s3_client.exceptions.BucketAlreadyOwnedByYou, s3_client.exceptions.BucketAlreadyExists):
+        s3_client.create_bucket(Bucket=bucket_name)
 
     s3_client.put_bucket_versioning(
         Bucket=bucket_name,
