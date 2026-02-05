@@ -1,5 +1,5 @@
 """
-Top-level pytest configuration for the DivBase project.
+pytest configuration for e2e/integration tests for DivBase project.
 It handles spinning up the job system docker stack for the duration of the test session, and the tear-down afterwards.
 
 It also collects fixtures and constants that are needed across multiple test modules.
@@ -36,16 +36,6 @@ from tests.e2e_integration.helpers.setup_test_data import (
 runner = CliRunner()
 
 logger = logging.getLogger(__name__)
-
-
-def pytest_addoption(parser):
-    """Custom command-line options to pytest. In this case to run tests marked as slow"""
-    parser.addoption(
-        "--run-slow",
-        action="store_true",
-        default=False,
-        help="Run slow tests",
-    )
 
 
 @pytest.fixture(autouse=True, scope="function")
