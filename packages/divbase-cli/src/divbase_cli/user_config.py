@@ -136,10 +136,10 @@ class UserConfig:
         self.dump_config()
 
 
-def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig:
+def load_user_config() -> UserConfig:
     """Helper function to load the user config file"""
     try:
-        with open(config_path, "r") as file:
+        with open(cli_settings.CONFIG_PATH, "r") as file:
             config_contents = yaml.safe_load(file)
     except FileNotFoundError:
         raise ConfigFileNotFoundError from None
@@ -147,7 +147,7 @@ def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
     return UserConfig(
-        config_path=config_path,
+        config_path=cli_settings.CONFIG_PATH,
         logged_in_url=config_contents.get("logged_in_url"),
         logged_in_email=config_contents.get("logged_in_email"),
         projects=projects,

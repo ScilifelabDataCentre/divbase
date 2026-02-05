@@ -108,12 +108,11 @@ class ProjectNameNotSpecifiedError(DivBaseCLIError):
     no default project is set in the user config file.
     """
 
-    def __init__(self, config_path: Path):
-        self.config_path = config_path
+    def __init__(self):
         error_message = (
-            "No project name provided. \n"
-            f"Please either set a default project in your user configuration file at '{config_path.resolve()}'.\n"
-            f"or pass the flag '--project <project_name>' to this command.\n"
+            "No project name provided.\n"
+            "Please either set a default project in your user configuration file.\n"
+            "or pass the flag '--project <project_name>' to this command.\n"
         )
         super().__init__(error_message)
 

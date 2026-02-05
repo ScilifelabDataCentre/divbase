@@ -12,7 +12,7 @@ from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecif
 from divbase_cli.user_config import ProjectConfig, load_user_config
 
 
-def ensure_logged_in(config_path: Path, desired_url: str | None = None) -> str:
+def ensure_logged_in(desired_url: str | None = None) -> str:
     """
     Ensure the user is logged in by checking the logged_in_url value in the user config.
 
@@ -20,7 +20,7 @@ def ensure_logged_in(config_path: Path, desired_url: str | None = None) -> str:
 
     Returns the logged_in_url if valid, otherwise raises an AuthenticationError.
     """
-    config = load_user_config(config_path)
+    config = load_user_config()
     if not config.logged_in_url:
         raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
     if desired_url and config.logged_in_url != desired_url:
@@ -30,7 +30,7 @@ def ensure_logged_in(config_path: Path, desired_url: str | None = None) -> str:
     return config.logged_in_url
 
 
-def resolve_project(project_name: str | None, config_path: Path) -> ProjectConfig:
+def resolve_project(project_name: str | None) -> ProjectConfig:
     """
     Helper function to resolve the project to use for a CLI command.
     Falls back to the default project set in the user config if not explicitly provided.
@@ -38,15 +38,15 @@ def resolve_project(project_name: str | None, config_path: Path) -> ProjectConfi
     Once the project is resolved a ProjectConfig object is returned,
     which contains the name and API URL of the project.
     """
-    config = load_user_config(config_path)
+    config = load_user_config()
     if not project_name:
         project_name = config.default_project
     if not project_name:
-        raise ProjectNameNotSpecifiedError(config_path=config_path)
+        raise ProjectNameNotSpecifiedError()
     return config.project_info(project_name)
 
 
-def resolve_divbase_api_url(url: str | None, config_path: Path) -> str:
+def resolve_divbase_api_url(url: str | None) -> str:
     """
     Helper function to resolve the DivBase API URL to use for a CLI command.
 
@@ -56,7 +56,7 @@ def resolve_divbase_api_url(url: str | None, config_path: Path) -> str:
     if url:
         return url
 
-    config = load_user_config(config_path=config_path)
+    config = load_user_config()
 
     if not config.default_project:
         raise ValueError(
@@ -68,7 +68,7 @@ def resolve_divbase_api_url(url: str | None, config_path: Path) -> str:
     return project_config.divbase_url
 
 
-def resolve_download_dir(download_dir: str | None, config_path: Path) -> Path:
+def resolve_download_dir(download_dir: str | None) -> Path:
     """
     Helper function to resolve the download directory to use for a CLI command involving downloading files.
 
@@ -76,7 +76,7 @@ def resolve_download_dir(download_dir: str | None, config_path: Path) -> Path:
     Note: "." or None should default to the current working directory.
     """
     if not download_dir:
-        config = load_user_config(config_path)
+        config = load_user_config()
         download_dir = config.default_download_dir
 
     if download_dir and download_dir != ".":
