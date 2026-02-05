@@ -31,6 +31,8 @@ def print_rich_table_as_tsv(table: Table) -> None:
 
     This is useful for CLI commands that want to offer both rich table output
     for human users as well as TSV output for programmatic parsing.
+
+    NOTE: This function expects all table rows to be of same length (you can have None values in cells).
     """
     writer = csv.writer(sys.stdout, delimiter="\t")
 
@@ -39,7 +41,7 @@ def print_rich_table_as_tsv(table: Table) -> None:
 
     columns_data = [col._cells for col in table.columns]
 
-    num_rows = len(columns_data[0])
+    num_rows = min(len(col) for col in columns_data)
     for row_index in range(num_rows):
         row = [str(columns_data[col_index][row_index]) for col_index in range(len(columns_data))]
         writer.writerow(row)
