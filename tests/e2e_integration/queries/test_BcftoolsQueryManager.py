@@ -35,7 +35,7 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
         if key == "output_temp_files":
             assert len(cmd_config[key]) == len(expected_value)
             for filename in cmd_config[key]:
-                assert filename.startswith("temp_subset_") and filename.endswith(".vcf.gz")
+                assert filename.startswith("temp_subset_") and filename.endswith(".bcf")
         else:
             assert cmd_config[key] == expected_value, (
                 f"Expected {key} to be {expected_value}, but got {cmd_config[key]}"
@@ -69,7 +69,7 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
             "input_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
             "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
             "output_temp_files": [
-                f"temp_subset_1_{i}.vcf.gz"
+                f"temp_subset_1_{i}.bcf"
                 for i in range(len(example_sidecar_metadata_inputs_outputs["output_temp_files"]))
             ],
             "output_files_count": len(example_sidecar_metadata_inputs_outputs["output_temp_files"]),
@@ -94,7 +94,7 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
                         f"Command {i + 1}: {file_key} file {filename} does not match expected {expected_filename}"
                     )
                 else:
-                    assert filename.startswith("temp_subset_") and filename.endswith(".vcf.gz"), (
+                    assert filename.startswith("temp_subset_") and filename.endswith(".bcf"), (
                         f"Command {i + 1}: {file_key} file {filename} does not match expected pattern"
                     )
 
@@ -276,10 +276,12 @@ def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_contai
 
 
 @pytest.mark.unit
-@patch("subprocess.run")
+@patch("subprocess.Popen")
 @patch("divbase_api.services.queries.BcftoolsQueryManager.get_container_id")
 @patch("os.path.exists")
-def test_command_failure_exec_into_container(mock_exists_in_docker, mock_get_container_id, mock_run, bcftools_manager):
+def test_command_failure_exec_into_container(
+    mock_exists_in_docker, mock_get_container_id, mock_popen, bcftools_manager
+):
     """Test that BcftoolsCommandError is raised when a command fails in the container.
 
     The mock_exists_in_docker simulate the synchronous scenario when the code is not executed in a Docker container (i.e., no /.dockerenv file),
@@ -293,9 +295,7 @@ def test_command_failure_exec_into_container(mock_exists_in_docker, mock_get_con
     mock_exists_in_docker.return_value = False
     mock_get_container_id.return_value = "abc123"
 
-    command_error = subprocess.CalledProcessError(returncode=1, cmd=["bcftools", "view", "-h", "sample.vcf"])
-    command_error.stderr = "non-zero exit status 1d"
-    mock_run.side_effect = command_error
+    mock_popen.side_effect = OSError("non-zero exit status 1")
 
     with pytest.raises(BcftoolsCommandError) as excinfo:
         bcftools_manager.run_bcftools("view -h sample.vcf")
@@ -305,9 +305,9 @@ def test_command_failure_exec_into_container(mock_exists_in_docker, mock_get_con
 
 
 @pytest.mark.unit
-@patch("subprocess.run")
+@patch("subprocess.Popen")
 @patch("os.path.exists")
-def test_command_failure_async_inside_container(mock_exists_in_docker, mock_run, bcftools_manager):
+def test_command_failure_async_inside_container(mock_exists_in_docker, mock_popen, bcftools_manager):
     """
     Test that BcftoolsCommandError is raised when a command fails inside a container after being recived from the task queue.
 
@@ -319,9 +319,7 @@ def test_command_failure_async_inside_container(mock_exists_in_docker, mock_run,
     """
     mock_exists_in_docker.return_value = True
 
-    command_error = subprocess.CalledProcessError(returncode=1, cmd=["bcftools", "view", "-h", "sample.vcf"])
-    command_error.stderr = "non-zero exit status 1"
-    mock_run.side_effect = command_error
+    mock_popen.side_effect = OSError("non-zero exit status 1")
 
     with pytest.raises(BcftoolsCommandError) as excinfo:
         bcftools_manager.run_bcftools("view -h sample.vcf")

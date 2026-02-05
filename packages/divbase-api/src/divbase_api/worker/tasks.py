@@ -2,10 +2,12 @@ import dataclasses
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
+import psutil
 from celery import Celery
 from celery.signals import (
     after_task_publish,
@@ -25,7 +27,14 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
-from divbase_api.worker.metrics import start_metrics_server
+from divbase_api.worker.metrics import (
+    ENABLE_WORKER_METRICS_PER_TASK,
+    MemoryMonitor,
+    TaskMetrics,
+    start_metrics_server,
+    store_task_metric_in_cache,
+    update_prometheus_gauges_from_cache,
+)
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -34,6 +43,7 @@ from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.exceptions import NoVCFFilesFoundError
 
 logger = logging.getLogger(__name__)
+
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get(
@@ -67,9 +77,12 @@ app.conf.update(
 def init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
-    With celery prefork concurrency, only the first worker process to execute will successfully bind to port 8001.
+    With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    start_metrics_server(port=8101)
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        start_metrics_server(port=8101)
+    else:
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK=false)")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -205,6 +218,13 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        task_walltime_start = time.time()
+        process = psutil.Process()
+        cpu_start = process.cpu_times()
+        memory_monitor = MemoryMonitor(process, sample_interval=0.5)
+        memory_monitor.start()
+
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
@@ -254,11 +274,37 @@ def bcftools_pipe_task(
         vcf_dimensions_data=vcf_dimensions_data,
     )
 
+    # Measure download operation resources
+    # Memory: Capture baseline before download, then measure incremental memory increase (delta)
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        download_cpu_start = process.cpu_times()
+        download_mem_baseline = process.memory_info().rss
+        download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
+        download_memory_monitor.start()
+        download_start = time.time()
+
+    logger.info("Started downloading VCF files from S3 to worker")
+
     _ = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
     )
+
+    logger.info("Finished downloading VCF files from S3 to worker")
+
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        download_walltime = time.time() - download_start
+        download_memory_stats = download_memory_monitor.stop()
+        download_cpu_end = process.cpu_times()
+        download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
+            download_cpu_start.user + download_cpu_start.system
+        )
+        download_mem_peak_delta = download_memory_stats["peak_bytes"]
+        download_mem_avg_delta = download_memory_stats["avg_bytes"]
+        logger.debug(
+            f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+        )
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -268,12 +314,48 @@ def bcftools_pipe_task(
         )
     )
 
+    logger.info("Started bcftools subprocesses")
+
+    # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+    output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
+
+    logger.info("Finished bcftools subprocesses")
+
+    bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
+    bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
+    bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
+    bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
 
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+
+    if ENABLE_WORKER_METRICS_PER_TASK:
+        memory_stats = memory_monitor.stop()
+        cpu_end = process.cpu_times()
+        python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
+        total_task_cpu = python_overhead_cpu + bcftools_cpu_used
+        task_walltime = time.time() - task_walltime_start
+
+        task_metrics = TaskMetrics(
+            job_id=job_id,
+            task_name=bcftools_pipe_task.name,
+            task_cpu_seconds=total_task_cpu,
+            task_python_overhead_cpu_seconds=python_overhead_cpu,
+            task_memory_peak_bytes=memory_stats["peak_bytes"],
+            task_memory_avg_bytes=memory_stats["avg_bytes"],
+            task_bcftools_cpu_seconds=bcftools_cpu_used,
+            task_bcftools_memory_peak_bytes=bcftools_mem_peak,
+            task_bcftools_memory_avg_bytes=bcftools_mem_avg,
+            task_bcftools_walltime_seconds=bcftools_walltime,
+            task_vcf_download_walltime_seconds=download_walltime,
+            task_vcf_download_cpu_seconds=download_cpu_used,
+            task_vcf_download_memory_peak_bytes=download_mem_peak_delta,
+            task_vcf_download_memory_avg_bytes=download_mem_avg_delta,
+            task_walltime_seconds=task_walltime,
+        )
+        _record_task_metrics(task_metrics)
 
     return {"status": "completed", "output_file": output_file}
 
@@ -643,6 +725,30 @@ def _check_that_file_versions_match_dimensions_index(
                 "The VCF dimensions file is not up to date with the VCF files in the project. "
                 "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
             )
+
+
+def _record_task_metrics(task_metrics: TaskMetrics) -> None:
+    """
+    Helper function that records task metrics to the cache and updates Prometheus gauges
+    so that they can be served by the worker metrics server.
+
+    Note 1: There is a distinction between None (not captured) and 0.0 (ran but used no resources).
+    None values are not stored in the cache or shown in Prometheus, while 0.0 values are.
+
+    Note 2: task_cpu_seconds is the ARTIFICIAL SUM (python_overhead + bcftools),
+    while task_python_overhead_cpu_seconds is the ACTUAL MEASURED value.
+    """
+
+    for field in dataclasses.fields(task_metrics):
+        field_name = field.name
+        if field_name in ("job_id", "task_name"):
+            continue
+
+        value = getattr(task_metrics, field_name)
+        if value is not None:
+            store_task_metric_in_cache(field_name, task_metrics.job_id, task_metrics.task_name, value)
+
+    update_prometheus_gauges_from_cache()
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.
