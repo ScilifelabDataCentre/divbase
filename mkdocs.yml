@@ -44,6 +44,7 @@ theme:
   - navigation.tabs.sticky
   - navigation.top
   - navigation.tracking
+  - navigation.expand
   - search.highlight
   - search.share
   - search.suggest
@@ -71,10 +72,16 @@ nav:
     - Account Management: user-guides/account-management.md
     - Installation: user-guides/installation.md
     - Setup DivBase CLI: user-guides/setup_divbase_cli.md
-    - Working with VCF Files: user-guides/vcf-files.md
-    - Running Queries: user-guides/running-queries.md
+    - Working with VCF Files in DivBase: user-guides/vcf-files.md
+    - Running Queries: 
+      - Overview: user-guides/running-queries.md
+      - "Sidecar Metadata TSV files: creating and querying sample metadata files": user-guides/sidecar-metadata.md
+      - VCF Dimensions caching: user-guides/vcf-dimensions.md
+      - DivBase Query Syntax for VCF data: user-guides/query-syntax.md
+      - How to create efficient DivBase queries: user-guides/how-to-create-efficient-divbase-queries.md
+      - "Tutorial: Running a query on a public dataset": user-guides/tutorial-query-on-public-data.md
     - Managing Project Versions: user-guides/project-versioning.md
-    - Troubleshooting: user-guides/troubleshooting.md
+    - Troubleshooting: user-guides/troubleshooting.md      
   - CLI Command Reference: 
     - Overview: cli/index.md
     - divbase-cli: cli/_auto_generated/divbase-cli.md
@@ -99,6 +106,8 @@ nav:
     - Sending Emails: development/sending-emails.md
     - S3 Transfers: development/s3_transfers.md
     - Testing: development/testing.md
+    - Monitoring and observability: development/monitoring_and_observability.md
+    - "Monitoring: Celery Worker Metrics": development/worker_metrics.md
   - "Go to DivBase Website": https://divbase.scilifelab.se
 
 hooks:
@@ -126,6 +135,8 @@ markdown_extensions:
   - pymdownx.mark
   - pymdownx.superfences
   - pymdownx.tilde
+  - pymdownx.arithmatex:
+      generic: true
 
 extra:
   social:
@@ -134,3 +145,6 @@ extra:
     - icon: fontawesome/solid/globe
       link: https://divbase.scilifelab.se
       name: Website
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js # for rendering LaTeX math expressions; use together with pymdownx.arithmatex

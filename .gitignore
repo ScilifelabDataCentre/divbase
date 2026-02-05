@@ -17,6 +17,7 @@ sample_metadata_*.tsv
 *.vcf
 *.vcf.gz
 *.vcf.gz.csi
+*.vcf.gz.tbi
 !tests/fixtures/*.vcf.gz
 tests/fixtures/temp*
 tests/fixtures/merged*
@@ -28,6 +29,9 @@ bcftools_divbase_job_config.json
 vcf_dimensions.tsv
 mock*.tsv
 task_records*.json
+split_scaffold_files.txt
+scripts/benchmarking/*.yaml
+scripts/benchmarking/results
 
 #MacOS artifacts
 .DS_Store

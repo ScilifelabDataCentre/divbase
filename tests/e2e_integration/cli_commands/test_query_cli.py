@@ -612,11 +612,32 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         """
         Patches the working dir used when running bcftools commands inside the Docker container.
         """
+
+        class DummyProc:
+            """
+            Dummy process object to mock subprocess.Popen for testing.
+            Provides a .pid attribute and minimal methods so that code
+            expecting a real process (for per-task resource monitoring/metrics)
+            does not fail. Used to simulate a running process in tests
+            where no actual subprocess is started.
+            """
+
+            def __init__(self):
+                self.pid = 12345
+
+            # Simulate sucessful completion using 0
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
         container_id = self.get_container_id(self.CONTAINER_NAME)
         logger = logging.getLogger("divbase_lib.queries")
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
         subprocess.run(docker_cmd, check=True)
+        return DummyProc()
 
     @contextmanager
     def patched_temp_file_management(self):
