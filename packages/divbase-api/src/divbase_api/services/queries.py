@@ -590,86 +590,100 @@ class SidecarQueryManager:
                     logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
                     continue
 
-                # Check if column is numeric
                 is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
 
-                # Handle numeric inequality filtering (e.g., "Weight:>25", "Weight:>=20,<=40")
-                if is_numeric and re.search(r"[<>]=?", values):
-                    inequality_parts = values.split(",")
-                    conditions = []
+                # Handle numeric filtering: inequalities, ranges, and discrete values (all with OR logic)
+                # e.g., "Weight:>25,<30,50" or "Weight:20-40,50,>100"
+                if is_numeric:
+                    values_list = values.split(",")
+                    inequality_conditions = []
+                    range_conditions = []
+                    discrete_values = []
 
-                    for part in inequality_parts:
-                        part = part.strip()
+                    for v in values_list:
+                        v = v.strip()
 
                         # Check for common mistakes: =< or => instead of <= or >=
-                        if re.match(r"^=<\d+\.?\d*$", part) or re.match(r"^=>\d+\.?\d*$", part):
+                        if re.match(r"^=<\d+\.?\d*$", v) or re.match(r"^=>\d+\.?\d*$", v):
                             raise SidecarInvalidFilterError(
-                                f"Invalid operator format '{part[:2]}' in filter '{key}:{values}'. "
+                                f"Invalid operator format '{v[:2]}' in filter '{key}:{values}'. "
                                 f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
                             )
 
-                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", part)
+                        # Check if it's an inequality (e.g., ">25", "<=40")
+                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", v)
                         if inequality_match:
                             operator = inequality_match.group(1)
                             value = float(inequality_match.group(2))
 
                             if operator == ">":
-                                conditions.append(self.df[key] > value)
+                                inequality_conditions.append(self.df[key] > value)
                             elif operator == ">=":
-                                conditions.append(self.df[key] >= value)
+                                inequality_conditions.append(self.df[key] >= value)
                             elif operator == "<":
-                                conditions.append(self.df[key] < value)
+                                inequality_conditions.append(self.df[key] < value)
                             elif operator == "<=":
-                                conditions.append(self.df[key] <= value)
+                                inequality_conditions.append(self.df[key] <= value)
 
                             logger.debug(f"Applied inequality filter on '{key}': {operator} {value}")
-                        else:
-                            logger.warning(f"Invalid inequality format: '{part}' for column '{key}'. Skipping.")
+                            continue
+
+                        # Check if it's a range (e.g., "20-40")
+                        range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", v)
+                        if range_match:
+                            min_val = float(range_match.group(1))
+                            max_val = float(range_match.group(2))
+                            range_condition = (self.df[key] >= min_val) & (self.df[key] <= max_val)
+                            range_conditions.append(range_condition)
+                            logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
+                            continue
+
+                        # Otherwise, treat as discrete value
+                        try:
+                            discrete_values.append(float(v) if "." in v else int(v))
+                        except ValueError:
+                            logger.warning(f"Cannot convert '{v}' to numeric for column '{key}'. Skipping this value.")
+
+                    # If multiple conditions (inequality, range, discrete values), combine them with with OR logic
+                    # In short, this builds a boolean filter that Pandas will apply to the dataframe column
+                    conditions = []
+
+                    if inequality_conditions:
+                        # Seperately combine multiple inequalities with OR
+                        combined_inequalities = inequality_conditions[0]
+                        for cond in inequality_conditions[1:]:
+                            # Compare bools pairwise. As long as one of the two are true, set bool filter to true. The bar (|)is pandas syntax for element-wise OR between boolean Series.
+                            combined_inequalities = combined_inequalities | cond
+                        conditions.append(combined_inequalities)
+
+                    if range_conditions:
+                        # Seperately combine multiple ranges with OR
+                        combined_ranges = range_conditions[0]
+                        for cond in range_conditions[1:]:
+                            combined_ranges = combined_ranges | cond
+                        conditions.append(combined_ranges)
+
+                    if discrete_values:
+                        discrete_condition = self.df[key].isin(discrete_values)
+                        conditions.append(discrete_condition)
 
                     if conditions:
-                        # Combine multiple conditions with AND
+                        # Combine inequalities, ranges, and discrete values with OR
                         combined = conditions[0]
                         for cond in conditions[1:]:
-                            combined = combined & cond
+                            combined = combined | cond
 
                         if not combined.any():
-                            logger.warning(f"No values in column '{key}' satisfy the inequality conditions: {values}")
+                            logger.warning(f"No values in column '{key}' match the filter: {values}")
                         filter_conditions.append(combined)
-                    continue
-
-                # Handle numeric range filtering (e.g., "Weight:20-40")
-                range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", values)
-
-                if is_numeric and range_match:
-                    min_val = float(range_match.group(1))
-                    max_val = float(range_match.group(2))
-                    condition = (self.df[key] >= min_val) & (self.df[key] <= max_val)
-                    if not condition.any():
-                        logger.warning(f"No values in column '{key}' fall within range {min_val}-{max_val}")
-                    filter_conditions.append(condition)
-                    logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
+                        logger.info("filter_conditions: " + str(filter_conditions))  # debug
+                    else:
+                        logger.warning(
+                            f"No valid numeric values, ranges, or inequalities provided for column '{key}'. Filter condition will not match any rows."
+                        )
                 else:
+                    # Non-numeric column: handle as discrete string values
                     values_list = values.split(",")
-
-                    # Handle discrete numberical values
-                    if is_numeric:
-                        # Convert query str values to numeric if the column is numeric
-                        # User input in the CLI query is always string (e.g. "Weight:1,3,8")
-                        converted_values = []
-                        for v in values_list:
-                            try:
-                                converted_values.append(float(v) if "." in v else int(v))
-                            except ValueError:
-                                # Handle cases such as "Weight:1,three,8" where "three" cannot be converted to numeric, however unlikely their occurance may be.
-                                logger.warning(
-                                    f"Cannot convert '{v}' to numeric for column '{key}'. Skipping this value."
-                                )
-                        if not converted_values:
-                            logger.warning(
-                                f"No valid numeric values provided for the numeric column '{key}'. Filter condition will not match any rows."
-                            )
-                        values_list = converted_values
-
                     condition = self.df[key].isin(values_list)
                     if not condition.any():
                         logger.warning(f"None of the values {values_list} were found in column '{key}'")

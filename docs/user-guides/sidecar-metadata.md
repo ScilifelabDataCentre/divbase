@@ -52,6 +52,15 @@ For numeric columns, you can filter on:
 
 The syntax only accepts `<=` and `>=` since this is the syntax of Python. The forms =< and => are not accepted and will return an error.
 
+It is possible to combine filters on inequalities, ranges, and discrete values to an OR logic if desired. For example:
+
+Weight:<2,4 → values less than 2 OR equal to 4
+Weight:1-2,4 → values in range 1-2 OR equal to 4
+Weight:>5,1-2,4 → values greater than 5 OR in range 1-2 OR equal to 4
+Weight:>10,<2,5-7 → values >10 OR <2 OR in range 5-7
+
+TODO write pytests that ensure that these numerical filters work
+
 ## Trying out a query
 
 ```bash
