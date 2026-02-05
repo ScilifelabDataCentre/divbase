@@ -58,6 +58,8 @@ services:
       - S3_PRESIGNING_URL=http://localhost:9000
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
       - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
+      - ENABLE_WORKER_METRICS=False # Enable metrics collection and metrics server in the worker. Optional, as it comes with some overhead.
+      - ENABLE_WORKER_METRICS_PER_TASK=False # Enable per-task metrics collection in the worker. Optional, as it comes with some overhead.
     develop: &watch-celery-src
       watch:
         - action: sync+restart
@@ -68,7 +70,7 @@ services:
           target: /usr/local/lib/python3.12/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
-    command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=4", "-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
+    command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=1", "-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
     networks: *internal-network
     ports:
       - "8101:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
@@ -79,7 +81,7 @@ services:
     depends_on: *worker-api-depends
     environment: *worker-env
     develop: *watch-celery-src
-    command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=4"]
+    command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=1"]
     networks: *internal-network
     ports:
       - "8102:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
