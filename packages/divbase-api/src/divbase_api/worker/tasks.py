@@ -6,7 +6,6 @@ import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
-from typing import Optional
 
 import psutil
 from celery import Celery
@@ -31,21 +30,9 @@ from divbase_api.worker.crud_dimensions import (
 from divbase_api.worker.metrics import (
     ENABLE_WORKER_METRICS_PER_TASK,
     MemoryMonitor,
+    TaskMetrics,
     start_metrics_server,
-    store_task_metric,
-    task_bcftools_memory_avg_bytes,
-    task_bcftools_memory_peak_bytes,
-    task_bcftools_step_only_cpu_seconds,
-    task_bcftools_walltime_seconds,
-    task_cpu_seconds,
-    task_memory_avg_bytes,
-    task_memory_peak_bytes,
-    task_python_overhead_cpu_seconds,
-    task_vcf_download_cpu_seconds,
-    task_vcf_download_memory_avg_bytes,
-    task_vcf_download_memory_peak_bytes,
-    task_vcf_download_walltime_seconds,
-    task_walltime_seconds,
+    store_task_metric_in_cache,
     update_prometheus_gauges_from_cache,
 )
 from divbase_api.worker.vcf_dimension_indexing import (
@@ -56,6 +43,7 @@ from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.exceptions import NoVCFFilesFoundError
 
 logger = logging.getLogger(__name__)
+
 
 BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
 RESULT_BACKEND = os.environ.get(
@@ -360,23 +348,24 @@ def bcftools_pipe_task(
         total_task_cpu = python_overhead_cpu + bcftools_cpu_used
         task_walltime = time.time() - task_walltime_start
 
-        _record_task_metrics(
+        task_metrics = TaskMetrics(
             job_id=job_id,
             task_name=bcftools_pipe_task.name,
-            cpu_used=total_task_cpu,
-            python_overhead_cpu=python_overhead_cpu,
-            mem_peak=memory_stats["peak_bytes"],
-            mem_avg=memory_stats["avg_bytes"],
-            bcftools_cpu_used=bcftools_cpu_used,
-            bcftools_mem_peak=bcftools_mem_peak,
-            bcftools_mem_avg=bcftools_mem_avg,
-            bcftools_walltime=bcftools_walltime,
-            vcf_download_walltime=download_walltime,
-            vcf_download_cpu_used=download_cpu_used,
-            vcf_download_mem_peak=download_mem_peak_delta,
-            vcf_download_mem_avg=download_mem_avg_delta,
-            task_walltime=task_walltime,
+            task_cpu_seconds=total_task_cpu,
+            task_python_overhead_cpu_seconds=python_overhead_cpu,
+            task_memory_peak_bytes=memory_stats["peak_bytes"],
+            task_memory_avg_bytes=memory_stats["avg_bytes"],
+            task_bcftools_cpu_seconds=bcftools_cpu_used,
+            task_bcftools_memory_peak_bytes=bcftools_mem_peak,
+            task_bcftools_memory_avg_bytes=bcftools_mem_avg,
+            task_bcftools_walltime_seconds=bcftools_walltime,
+            task_vcf_download_walltime_seconds=download_walltime,
+            task_vcf_download_cpu_seconds=download_cpu_used,
+            task_vcf_download_memory_peak_bytes=download_mem_peak_delta,
+            task_vcf_download_memory_avg_bytes=download_mem_avg_delta,
+            task_walltime_seconds=task_walltime,
         )
+        _record_task_metrics(task_metrics)
 
     return {"status": "completed", "output_file": output_file}
 
@@ -748,75 +737,25 @@ def _check_that_file_versions_match_dimensions_index(
             )
 
 
-def _record_task_metrics(
-    job_id: int,
-    task_name: str,
-    cpu_used: float,
-    python_overhead_cpu: Optional[float] = None,
-    mem_peak: float = None,
-    mem_avg: float = None,
-    bcftools_cpu_used: Optional[float] = None,
-    bcftools_mem_peak: Optional[float] = None,
-    bcftools_mem_avg: Optional[float] = None,
-    bcftools_walltime: Optional[float] = None,
-    vcf_download_walltime: Optional[float] = None,
-    vcf_download_cpu_used: Optional[float] = None,
-    vcf_download_mem_peak: Optional[float] = None,
-    vcf_download_mem_avg: Optional[float] = None,
-    task_walltime: Optional[float] = None,
-) -> None:
+def _record_task_metrics(task_metrics: TaskMetrics) -> None:
     """
-    Helper function that records task metrics to the cache and updates Prometheus gauges so that they can be served by the worker metrics server.
-    Task specific submetrics (e.g. bcftools resource usage) can be been added as optional parameters.
+    Helper function that records task metrics to the cache and updates Prometheus gauges
+    so that they can be served by the worker metrics server.
 
-    Note on Optional args:
-    Use None to mean “not applicable” (the arg was not provided when the task called this function), which makes 0.0 mean “ran, but used no resources".
-
-    Note: cpu_used is the ARTIFICIAL SUM (python_overhead + bcftools), while python_overhead_cpu is the ACTUAL MEASURED value.
+    Note: task_cpu_seconds is the ARTIFICIAL SUM (python_overhead + bcftools),
+    while task_python_overhead_cpu_seconds is the ACTUAL MEASURED value.
     """
 
-    store_task_metric("task_cpu_seconds", job_id, task_name, cpu_used)
-    if python_overhead_cpu is not None:
-        store_task_metric("task_python_overhead_cpu_seconds", job_id, task_name, python_overhead_cpu)
-    if mem_peak is not None:
-        store_task_metric("task_memory_peak_bytes", job_id, task_name, mem_peak)
-    if mem_avg is not None:
-        store_task_metric("task_memory_avg_bytes", job_id, task_name, mem_avg)
-    if bcftools_cpu_used is not None:
-        store_task_metric("task_bcftools_cpu_seconds", job_id, task_name, bcftools_cpu_used)
-    if bcftools_mem_peak is not None:
-        store_task_metric("task_bcftools_memory_peak_bytes", job_id, task_name, bcftools_mem_peak)
-    if bcftools_mem_avg is not None:
-        store_task_metric("task_bcftools_memory_avg_bytes", job_id, task_name, bcftools_mem_avg)
+    for field in dataclasses.fields(task_metrics):
+        field_name = field.name
+        if field_name in ("job_id", "task_name"):
+            continue
 
-    if bcftools_walltime is not None:
-        store_task_metric("task_bcftools_walltime_seconds", job_id, task_name, bcftools_walltime)
-    if vcf_download_walltime is not None:
-        store_task_metric("task_vcf_download_walltime_seconds", job_id, task_name, vcf_download_walltime)
-    if vcf_download_cpu_used is not None:
-        store_task_metric("task_vcf_download_cpu_seconds", job_id, task_name, vcf_download_cpu_used)
-    if vcf_download_mem_peak is not None:
-        store_task_metric("task_vcf_download_memory_peak_bytes", job_id, task_name, vcf_download_mem_peak)
-    if vcf_download_mem_avg is not None:
-        store_task_metric("task_vcf_download_memory_avg_bytes", job_id, task_name, vcf_download_mem_avg)
-    if task_walltime is not None:
-        store_task_metric("task_walltime_seconds", job_id, task_name, task_walltime)
+        value = getattr(task_metrics, field_name)
+        if value is not None:
+            store_task_metric_in_cache(field_name, task_metrics.job_id, task_metrics.task_name, value)
 
-    update_prometheus_gauges_from_cache(
-        task_cpu_seconds,
-        task_python_overhead_cpu_seconds,
-        task_bcftools_step_only_cpu_seconds,
-        task_memory_peak_bytes,
-        task_memory_avg_bytes,
-        task_bcftools_memory_peak_bytes,
-        task_bcftools_memory_avg_bytes,
-        task_bcftools_walltime_seconds,
-        task_vcf_download_walltime_seconds,
-        task_vcf_download_cpu_seconds,
-        task_vcf_download_memory_peak_bytes,
-        task_vcf_download_memory_avg_bytes,
-        task_walltime_seconds,
-    )
+    update_prometheus_gauges_from_cache()
 
 
 # Import cron_tasks at the end to register all periodic tasks with the app. This avoids timing and circular import issues.

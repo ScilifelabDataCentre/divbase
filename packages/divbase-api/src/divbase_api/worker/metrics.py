@@ -4,7 +4,9 @@ import socket
 import threading
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Optional
 
 import psutil
 from prometheus_client import Gauge, Info, start_http_server
@@ -76,6 +78,27 @@ class MemoryMonitor:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+
+
+@dataclass
+class TaskMetrics:
+    """Dataclass to hold per-task metrics."""
+
+    job_id: int
+    task_name: str
+    task_cpu_seconds: float
+    task_python_overhead_cpu_seconds: Optional[float] = None
+    task_memory_peak_bytes: Optional[float] = None
+    task_memory_avg_bytes: Optional[float] = None
+    task_bcftools_cpu_seconds: Optional[float] = None
+    task_bcftools_memory_peak_bytes: Optional[float] = None
+    task_bcftools_memory_avg_bytes: Optional[float] = None
+    task_bcftools_walltime_seconds: Optional[float] = None
+    task_vcf_download_walltime_seconds: Optional[float] = None
+    task_vcf_download_cpu_seconds: Optional[float] = None
+    task_vcf_download_memory_peak_bytes: Optional[float] = None
+    task_vcf_download_memory_avg_bytes: Optional[float] = None
+    task_walltime_seconds: Optional[float] = None
 
 
 ## Define Prometheus metrics. Use the same prefix to simplify discovery in Prometheus and Grafana UIs.
@@ -184,10 +207,28 @@ task_walltime_seconds = Gauge(
     ["job_id", "task_name"],
 )
 
+
 # Metrics cache for per-task metrics to persist across multiple task executions
 # Structure: {metric_name: {(job_id, task_name): {"value": float, "timestamp": datetime}}}
 task_metrics_cache = defaultdict(dict)
 metrics_cache_lock = threading.Lock()  # lock threads to avoid race conditions since multiple threads can access the cache (main thread, celery worker threads, purge thread)
+
+# Mapping of metric name to Prometheus Gauge (used for both cache updates and purging)
+GAUGE_MAPPING = {
+    "task_cpu_seconds": task_cpu_seconds,
+    "task_python_overhead_cpu_seconds": task_python_overhead_cpu_seconds,
+    "task_bcftools_cpu_seconds": task_bcftools_step_only_cpu_seconds,
+    "task_memory_peak_bytes": task_memory_peak_bytes,
+    "task_memory_avg_bytes": task_memory_avg_bytes,
+    "task_bcftools_memory_peak_bytes": task_bcftools_memory_peak_bytes,
+    "task_bcftools_memory_avg_bytes": task_bcftools_memory_avg_bytes,
+    "task_walltime_seconds": task_walltime_seconds,
+    "task_bcftools_walltime_seconds": task_bcftools_walltime_seconds,
+    "task_vcf_download_walltime_seconds": task_vcf_download_walltime_seconds,
+    "task_vcf_download_cpu_seconds": task_vcf_download_cpu_seconds,
+    "task_vcf_download_memory_peak_bytes": task_vcf_download_memory_peak_bytes,
+    "task_vcf_download_memory_avg_bytes": task_vcf_download_memory_avg_bytes,
+}
 
 # Prometheus scrapes every 15 seconds in DivBase setup. A TLL of 5 min means it is available for 20 scrapes. Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
 TASK_METRICS_CACHE_TTL_MINUTES = int(os.environ.get("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
@@ -219,7 +260,7 @@ def collect_system_metrics():
         time.sleep(5)
 
 
-def store_task_metric(metric_name: str, job_id: int, task_name: str, value: float):
+def store_task_metric_in_cache(metric_name: str, job_id: int, task_name: str, value: float):
     """Store a task metric in the cache with current timestamp."""
     with metrics_cache_lock:
         task_metrics_cache[metric_name][(job_id, task_name)] = {
@@ -228,38 +269,14 @@ def store_task_metric(metric_name: str, job_id: int, task_name: str, value: floa
         }
 
 
-def purge_old_metrics():
+def purge_old_metrics_from_cache():
     """
     Remove metrics older than TASK_METRICS_CACHE_TTL_MINUTES from cache.
     Each metric is timestamped when stored and can thus be purged individually based on age.
     """
     cutoff_time = datetime.now() - timedelta(minutes=TASK_METRICS_CACHE_TTL_MINUTES)
     with metrics_cache_lock:
-        for metric_name, gauge in [
-            ("task_cpu_seconds", task_cpu_seconds),
-            ("task_python_overhead_cpu_seconds", task_python_overhead_cpu_seconds),
-            ("task_bcftools_cpu_seconds", task_bcftools_step_only_cpu_seconds),
-        ]:
-            tasks_to_remove = [
-                key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
-            ]
-            for key in tasks_to_remove:
-                del task_metrics_cache[metric_name][key]
-                gauge.remove(*key)
-                logger.debug(f"Purged old metric: {metric_name} for job_id={key[0]} from Prometheus client memory")
-
-        for metric_name, gauge in [
-            ("task_memory_peak_bytes", task_memory_peak_bytes),
-            ("task_memory_avg_bytes", task_memory_avg_bytes),
-            ("task_bcftools_memory_peak_bytes", task_bcftools_memory_peak_bytes),
-            ("task_bcftools_memory_avg_bytes", task_bcftools_memory_avg_bytes),
-            ("task_bcftools_walltime_seconds", task_bcftools_walltime_seconds),
-            ("task_vcf_download_walltime_seconds", task_vcf_download_walltime_seconds),
-            ("task_vcf_download_cpu_seconds", task_vcf_download_cpu_seconds),
-            ("task_vcf_download_memory_peak_bytes", task_vcf_download_memory_peak_bytes),
-            ("task_vcf_download_memory_avg_bytes", task_vcf_download_memory_avg_bytes),
-            ("task_walltime_seconds", task_walltime_seconds),
-        ]:
+        for metric_name, gauge in GAUGE_MAPPING.items():
             tasks_to_remove = [
                 key for key, data in task_metrics_cache[metric_name].items() if data["timestamp"] < cutoff_time
             ]
@@ -278,50 +295,19 @@ def get_all_cached_metrics():
         }
 
 
-def update_prometheus_gauges_from_cache(
-    task_cpu_gauge,
-    python_overhead_cpu_gauge,
-    bcftools_cpu_gauge,
-    task_mem_peak_gauge,
-    task_mem_avg_gauge,
-    bcftools_mem_peak_gauge,
-    bcftools_mem_avg_gauge,
-    bcftools_walltime_gauge,
-    vcf_download_walltime_gauge,
-    vcf_download_cpu_gauge,
-    vcf_download_mem_peak_gauge,
-    vcf_download_mem_avg_gauge,
-    task_walltime_gauge,
-):
+def update_prometheus_gauges_from_cache():
     """Update all Prometheus Gauges with values from the cache."""
     cached = get_all_cached_metrics()
-
-    gauge_mapping = {
-        "task_cpu_seconds": task_cpu_gauge,
-        "task_python_overhead_cpu_seconds": python_overhead_cpu_gauge,
-        "task_bcftools_cpu_seconds": bcftools_cpu_gauge,
-        "task_memory_peak_bytes": task_mem_peak_gauge,
-        "task_memory_avg_bytes": task_mem_avg_gauge,
-        "task_bcftools_memory_peak_bytes": bcftools_mem_peak_gauge,
-        "task_bcftools_memory_avg_bytes": bcftools_mem_avg_gauge,
-        "task_walltime_seconds": task_walltime_gauge,
-        "task_bcftools_walltime_seconds": bcftools_walltime_gauge,
-        "task_vcf_download_walltime_seconds": vcf_download_walltime_gauge,
-        "task_vcf_download_cpu_seconds": vcf_download_cpu_gauge,
-        "task_vcf_download_memory_peak_bytes": vcf_download_mem_peak_gauge,
-        "task_vcf_download_memory_avg_bytes": vcf_download_mem_avg_gauge,
-    }
-
-    for cache_key, gauge in gauge_mapping.items():
+    for cache_key, gauge in GAUGE_MAPPING.items():
         for (job_id, task_name), value in cached.get(cache_key, {}).items():
             gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
-def metrics_purge_loop():
+def metrics_cache_purge_loop():
     """Background thread that periodically purges old metrics."""
     while True:
         time.sleep(60)
-        purge_old_metrics()
+        purge_old_metrics_from_cache()
 
 
 _metrics_server_started = False
@@ -374,7 +360,7 @@ def start_metrics_server(port=8101):
                 logger.info(f"Metrics cache TTL: {TASK_METRICS_CACHE_TTL_MINUTES} minutes")
 
                 # Start background thread for purging old metrics
-                purge_thread = threading.Thread(target=metrics_purge_loop, daemon=True)
+                purge_thread = threading.Thread(target=metrics_cache_purge_loop, daemon=True)
                 purge_thread.start()
                 logger.info("Metrics purge thread started")
             except OSError as e:
