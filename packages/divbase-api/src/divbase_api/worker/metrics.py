@@ -296,44 +296,25 @@ def update_prometheus_gauges_from_cache(
     """Update all Prometheus Gauges with values from the cache."""
     cached = get_all_cached_metrics()
 
-    for (job_id, task_name), value in cached.get("task_cpu_seconds", {}).items():
-        task_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+    gauge_mapping = {
+        "task_cpu_seconds": task_cpu_gauge,
+        "task_python_overhead_cpu_seconds": python_overhead_cpu_gauge,
+        "task_bcftools_cpu_seconds": bcftools_cpu_gauge,
+        "task_memory_peak_bytes": task_mem_peak_gauge,
+        "task_memory_avg_bytes": task_mem_avg_gauge,
+        "task_bcftools_memory_peak_bytes": bcftools_mem_peak_gauge,
+        "task_bcftools_memory_avg_bytes": bcftools_mem_avg_gauge,
+        "task_walltime_seconds": task_walltime_gauge,
+        "task_bcftools_walltime_seconds": bcftools_walltime_gauge,
+        "task_vcf_download_walltime_seconds": vcf_download_walltime_gauge,
+        "task_vcf_download_cpu_seconds": vcf_download_cpu_gauge,
+        "task_vcf_download_memory_peak_bytes": vcf_download_mem_peak_gauge,
+        "task_vcf_download_memory_avg_bytes": vcf_download_mem_avg_gauge,
+    }
 
-    for (job_id, task_name), value in cached.get("task_python_overhead_cpu_seconds", {}).items():
-        python_overhead_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_cpu_seconds", {}).items():
-        bcftools_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_memory_peak_bytes", {}).items():
-        task_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_memory_avg_bytes", {}).items():
-        task_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_memory_peak_bytes", {}).items():
-        bcftools_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_memory_avg_bytes", {}).items():
-        bcftools_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_walltime_seconds", {}).items():
-        task_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_bcftools_walltime_seconds", {}).items():
-        bcftools_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_vcf_download_walltime_seconds", {}).items():
-        vcf_download_walltime_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_vcf_download_cpu_seconds", {}).items():
-        vcf_download_cpu_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_vcf_download_memory_peak_bytes", {}).items():
-        vcf_download_mem_peak_gauge.labels(job_id=job_id, task_name=task_name).set(value)
-
-    for (job_id, task_name), value in cached.get("task_vcf_download_memory_avg_bytes", {}).items():
-        vcf_download_mem_avg_gauge.labels(job_id=job_id, task_name=task_name).set(value)
+    for cache_key, gauge in gauge_mapping.items():
+        for (job_id, task_name), value in cached.get(cache_key, {}).items():
+            gauge.labels(job_id=job_id, task_name=task_name).set(value)
 
 
 def metrics_purge_loop():
