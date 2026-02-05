@@ -86,7 +86,7 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
 
     result = subprocess.run(shlex.split(cmd), env=env, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        print(f"ERROR running 'divbase-cli files list': {result.stderr}")
+        print(f"ERROR running 'divbase-cli files ls': {result.stderr}")
         print(f"stdout: {result.stdout}")
         raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
     output = result.stdout
