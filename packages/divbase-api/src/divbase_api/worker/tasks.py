@@ -224,11 +224,6 @@ def bcftools_pipe_task(
         cpu_start = process.cpu_times()
         memory_monitor = MemoryMonitor(process, sample_interval=0.5)
         memory_monitor.start()
-    else:
-        task_walltime_start = None
-        process = None
-        cpu_start = None
-        memory_monitor = None
 
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
@@ -310,11 +305,6 @@ def bcftools_pipe_task(
         logger.debug(
             f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
         )
-    else:
-        download_walltime = None
-        download_cpu_used = None
-        download_mem_peak_delta = None
-        download_mem_avg_delta = None
 
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
@@ -742,7 +732,10 @@ def _record_task_metrics(task_metrics: TaskMetrics) -> None:
     Helper function that records task metrics to the cache and updates Prometheus gauges
     so that they can be served by the worker metrics server.
 
-    Note: task_cpu_seconds is the ARTIFICIAL SUM (python_overhead + bcftools),
+    Note 1: There is a distinction between None (not captured) and 0.0 (ran but used no resources).
+    None values are not stored in the cache or shown in Prometheus, while 0.0 values are.
+
+    Note 2: task_cpu_seconds is the ARTIFICIAL SUM (python_overhead + bcftools),
     while task_python_overhead_cpu_seconds is the ACTUAL MEASURED value.
     """
 
