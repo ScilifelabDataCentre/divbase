@@ -659,8 +659,8 @@ class BcftoolsQueryManager:
         # TODO consider changing to logger debug later in the dev process
         try:
             size_bytes = os.path.getsize(file_path)
-            size_gb = size_bytes / (1024 * 1024 * 1024)
-            size_gi = size_bytes / (1024**3)
+            size_gb = size_bytes / (1000 * 1000 * 1000)
+            size_gi = size_bytes / (1024 * 1024 * 1024)
             logger.info(f"File '{file_path}' size: {size_gb:.2f} GB, {size_gi:.2f} Gi")
         except Exception as e:
             logger.warning(f"Could not determine size of file '{file_path}': {e}")
