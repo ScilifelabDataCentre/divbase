@@ -234,11 +234,15 @@ class S3FileManager:
         for obj_key in objects:
             response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=obj_key)
 
-            is_deleted = response.get("DeleteMarkers") and response["DeleteMarkers"][0]["IsLatest"]
-            is_not_deleted = response.get("Versions") and response["Versions"][0]["IsLatest"]
+            # Filters to make sure working with the exact object key, not just objects with the same prefix
+            delete_markers = [marker for marker in response.get("DeleteMarkers", []) if marker["Key"] == obj_key]
+            versions = [version for version in response.get("Versions", []) if version["Key"] == obj_key]
+
+            is_deleted = delete_markers and delete_markers[0]["IsLatest"]
+            is_not_deleted = versions and versions[0]["IsLatest"]
 
             if is_deleted:
-                version_id = response["DeleteMarkers"][0]["VersionId"]
+                version_id = delete_markers[0]["VersionId"]
                 markers_to_delete.append({"Key": obj_key, "VersionId": version_id})
             elif is_not_deleted:
                 restored_objects.append(obj_key)

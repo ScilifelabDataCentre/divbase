@@ -924,3 +924,42 @@ def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CON
     assert result.exit_code == 0
     assert "warning: some files could not be restored" in result.stdout.lower()
     assert non_existent_file in result.stdout
+
+
+def test_restore_file_with_exact_key_match_among_similar_prefixes(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """
+    Test that the 'files restore' command restores the correct file when there are multiple files in the bucket
+    with similar prefixes. Verifies that only the file with the exact key match is restored, and that the other files
+    with matching prefix is not affected.
+
+    This test is because of how s3 lets you list objects with a prefix (but not do exact match listing),
+    which can lead to multiple files being returned if they share a common prefix.
+    """
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    prefix_matching_file = tmp_path / "i_am_a_file.tsv"
+    exact_file = tmp_path / "i_am_a_file.txt.vcf.gz"
+    prefix_matching_file.write_text("This file will be deleted and NOT restored.")
+    exact_file.write_text("This file will be deleted and then restored.")
+
+    result = runner.invoke(app, f"files upload {prefix_matching_file} {exact_file} --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files rm {prefix_matching_file.name} {exact_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files restore {exact_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "restored files:" in result.stdout.lower()
+    assert exact_file.name in result.stdout
+
+    # Confirm by attempting to download each file
+    result = runner.invoke(app, f"files download {exact_file.name} --project {clean_project} --download-dir {tmp_path}")
+    assert result.exit_code == 0
+    assert "successfully downloaded" in result.stdout.lower()
+    result = runner.invoke(
+        app, f"files download {prefix_matching_file.name} --project {clean_project} --download-dir {tmp_path}"
+    )
+    assert result.exit_code != 0
+    assert "404" in result.stdout
