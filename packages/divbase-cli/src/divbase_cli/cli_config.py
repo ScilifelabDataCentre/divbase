@@ -31,8 +31,8 @@ class DivBaseCLISettings:
     TODO - TESTS could override the config and tokens path
     """
 
-    CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CONFIG_PATH", CONFIG_PATH))
-    TOKENS_PATH: Path = Path(os.getenv("DIVBASE_TOKENS_PATH", TOKENS_PATH))
+    CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", CONFIG_PATH))
+    TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
     LOGGING_ON: bool = bool(os.getenv("DIVBASE_LOGGING_ON", "True") == "True")
