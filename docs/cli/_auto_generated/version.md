@@ -39,12 +39,12 @@ $ divbase-cli version add [OPTIONS] NAME
 
 * `--description TEXT`: Optional description of the version.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli version list`
 
 List all entries in the project versioning file.
+# TODO - add --tsv option for easier parsing
 
 Displays version name, creation timestamp, and description for each project version.
 If you specify --include-deleted, soft-deleted versions will also be shown.
@@ -59,7 +59,6 @@ $ divbase-cli version list [OPTIONS]
 **Options**:
 
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--include-deleted / --no-include-deleted`: Include soft-deleted versions in the listing.  [default: no-include-deleted]
 * `--help`: Show this message and exit.
 
@@ -80,7 +79,6 @@ $ divbase-cli version info [OPTIONS] VERSION
 **Options**:
 
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli version delete`
@@ -102,5 +100,4 @@ $ divbase-cli version delete [OPTIONS] NAME
 **Options**:
 
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.

@@ -49,7 +49,6 @@ $ divbase-cli query tsv [OPTIONS] FILTER
 * `--show-sample-results / --no-show-sample-results`: Print sample_ID and Filename results from the query.  [default: no-show-sample-results]
 * `--metadata-tsv-name TEXT`: Name of the sample metadata TSV file in the project&#x27;s data store on DivBase.  [default: sample_metadata.tsv]
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli query bcftools-pipe`
@@ -81,5 +80,4 @@ will be performed. E.g. &#x27;Area:West of Ireland,Northern Portugal;Sex:F&#x27;
 * `--command TEXT`: String consisting of the bcftools command to run on the files returned by the tsv query.  [required]
 * `--metadata-tsv-name TEXT`: Name of the sample metadata TSV file in the project&#x27;s data store on DivBase.  [default: sample_metadata.tsv]
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
