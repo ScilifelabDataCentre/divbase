@@ -15,7 +15,12 @@ import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
-from divbase_cli.cli_exceptions import DivBaseAPIError, FilesAlreadyInProjectError, UnsupportedFileTypeError
+from divbase_cli.cli_exceptions import (
+    DivBaseAPIError,
+    FilesAlreadyInProjectError,
+    UnsupportedFileNameError,
+    UnsupportedFileTypeError,
+)
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
     MAX_S3_API_BATCH_SIZE,
@@ -404,25 +409,25 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
 
 
 @pytest.mark.parametrize(
-    "file_names, should_succeed",
+    "file_names, expected_exception",
     [
-        (["data.tsv"], True),
-        (["variants.vcf.gz"], True),
-        (["index.csi"], True),
-        (["index.tbi"], True),
-        (["unsupported.txt"], False),
-        (["archive.zip"], False),
-        (["data.tsv", "variants.mine.vcf.gz"], True),
-        (["data.tsv", "unsupported.txt", "unsupported2.txt"], False),
-        (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], True),
-        (["unsupported.txt", "another_unsupported.zip", "supported.vcf.gz"], False),
+        (["data.tsv", "variants.vcf.gz", "index.csi", "index.tbi"], None),
+        (["unsupported.txt"], UnsupportedFileTypeError),
+        (["archive.zip"], UnsupportedFileTypeError),
+        (["data.tsv", "variants.mine.vcf.gz"], None),
+        (["data.tsv", "unsupported.txt", "unsupported2.txt"], UnsupportedFileTypeError),
+        (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], None),
+        (["unsupported.txt", "another_unsupported.zip", "supported.vcf.gz"], UnsupportedFileTypeError),
+        (["dat:a.tsv"], UnsupportedFileNameError),
+        (["variants2.vcf.gz", "invalid:file.tsv"], UnsupportedFileNameError),
     ],
 )
-def test_upload_non_supported_files_types(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, should_succeed
+def test_upload_non_supported_files(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_exception
 ):
     """
-    Tests that the upload command correctly handles supported and unsupported file types
+    Tests that the upload command correctly handles
+    supported and unsupported file types and file names with not supported characters.
     """
     clean_project = CONSTANTS["CLEANED_PROJECT"]
     test_files = []
@@ -434,12 +439,15 @@ def test_upload_non_supported_files_types(
     command = f"files upload {' '.join(test_files)} --project {clean_project}"
     result = runner.invoke(app, command)
 
-    if should_succeed:
+    if expected_exception is None:
         assert result.exit_code == 0
         assert "successfully uploaded" in result.stdout.lower()
-    else:
+    elif expected_exception == UnsupportedFileTypeError:
         assert result.exit_code != 0
         assert isinstance(result.exception, UnsupportedFileTypeError)
+    elif expected_exception == UnsupportedFileNameError:
+        assert result.exit_code != 0
+        assert isinstance(result.exception, UnsupportedFileNameError)
 
 
 def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):

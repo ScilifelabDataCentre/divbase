@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
-from divbase_cli.cli_exceptions import UnsupportedFileTypeError
+from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.s3_files import (
     download_files_command,
@@ -27,7 +27,7 @@ from divbase_cli.services.s3_files import (
     upload_files_command,
 )
 from divbase_cli.utils import format_file_size, print_rich_table_as_tsv
-from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES
+from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
@@ -310,7 +310,7 @@ def upload_files(
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
 
-    _check_for_unsupported_file_types(all_files)
+    _check_for_unsupported_files(all_files)
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
@@ -445,16 +445,28 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     return list(all_files)
 
 
-def _check_for_unsupported_file_types(all_files: set[Path]) -> None:
+def _check_for_unsupported_files(all_files: set[Path]) -> None:
     """
-    Helper fn to check if any of the files to be uploaded are unsupported by DivBase.
+    Helper fn to check if any of the files to be uploaded are not supported by DivBase.
     Raises error if so.
+
+    This can be to prevent users from:
+    1. Accidentally uploading unsupported files.
+    2. Uploading files that have characters that we reserve for actions like filtering/querying on DivBase.
+    (e.g. the syntax "[file_name]:[version_id]" can be used to download specific file versions).
 
     This is not a security feature, just for UX purposes.
     """
-    unsupported_files = []
+    unsupported_file_types, unsupported_chars = [], []
     for file_path in all_files:
         if not any(file_path.name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
-            unsupported_files.append(file_path)
-    if unsupported_files:
-        raise UnsupportedFileTypeError(unsupported_files=unsupported_files)
+            unsupported_file_types.append(file_path)
+
+        if any(char in file_path.name for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            unsupported_chars.append(file_path)
+
+    if unsupported_file_types:
+        raise UnsupportedFileTypeError(unsupported_files=unsupported_file_types)
+
+    if unsupported_chars:
+        raise UnsupportedFileNameError(unsupported_files=unsupported_chars)
