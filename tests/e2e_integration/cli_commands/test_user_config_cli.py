@@ -119,7 +119,7 @@ def test_show_default_with_no_default_set_command(logged_out_user_with_fresh_con
 
 def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS):
     for project_name in CONSTANTS["PROJECT_CONTENTS"]:
-        command = f"config remove {project_name}"
+        command = f"config rm {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
 
@@ -130,7 +130,7 @@ def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS)
 def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config):
     """Should not raise an error as the project is already not in the config, but should print a message to the user."""
     project_name = "does-not-exist"
-    command = f"config remove {project_name}"
+    command = f"config rm {project_name}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -138,7 +138,7 @@ def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config
 
 
 def test_remove_default_project_command(logged_out_user_with_existing_config, CONSTANTS):
-    command = f"config remove {CONSTANTS['DEFAULT_PROJECT']}"
+    command = f"config rm {CONSTANTS['DEFAULT_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 

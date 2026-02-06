@@ -50,7 +50,7 @@ def add_project_command(
         print(f"To make '{project.name}' your default project you can run: 'divbase config set-default {project.name}'")
 
 
-@config_app.command("remove")
+@config_app.command("rm")
 def remove_project_command(
     name: str = typer.Argument(..., help="Name of the project to remove from your user configuration file."),
 ):
