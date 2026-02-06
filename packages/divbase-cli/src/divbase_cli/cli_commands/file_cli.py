@@ -13,7 +13,7 @@ from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.s3_files import (
@@ -31,11 +31,6 @@ from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPOR
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
-FORMAT_AS_TSV_OPTION = typer.Option(
-    False,
-    "--tsv",
-    help="If set, will print the output in .TSV format for easier programmatic parsing.",
-)
 
 
 @file_app.command("ls")

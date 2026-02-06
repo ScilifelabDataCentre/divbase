@@ -3,7 +3,7 @@ import logging
 import typer
 import yaml
 
-from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult

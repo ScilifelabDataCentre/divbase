@@ -5,9 +5,10 @@ from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
-from rich.console import Console
 from rich.table import Table
 
+from divbase_cli.cli_commands.file_cli import FORMAT_AS_TSV_OPTION
+from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.services.project_versions import (
     add_version_command,
@@ -15,12 +16,7 @@ from divbase_cli.services.project_versions import (
     get_version_details_command,
     list_versions_command,
 )
-
-PROJECT_NAME_OPTION = typer.Option(
-    None,
-    help="Name of the DivBase project, if not provided uses the default in your DivBase config file",
-    show_default=False,
-)
+from divbase_cli.utils import print_rich_table_as_tsv
 
 version_app = typer.Typer(
     no_args_is_help=True,
@@ -58,10 +54,10 @@ def add_version(
 def list_versions(
     project: str | None = PROJECT_NAME_OPTION,
     include_deleted: bool = typer.Option(False, help="Include soft-deleted versions in the listing."),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
     List all entries in the project versioning file.
-    # TODO - add --tsv option for easier parsing
 
     Displays version name, creation timestamp, and description for each project version.
     If you specify --include-deleted, soft-deleted versions will also be shown.
@@ -78,7 +74,6 @@ def list_versions(
         print(f"No versions found for project: {project_config.name}.")
         return
 
-    console = Console()
     table = Table(title=f"Versions for {project_config.name}")
     table.add_column("Version", style="cyan", no_wrap=True)
     table.add_column("Created ", style="magenta")
@@ -96,7 +91,10 @@ def list_versions(
         else:
             table.add_row(name, created_at, desc)
 
-    console.print(table)
+    if not format_output_as_tsv:
+        print(table)
+    else:
+        print_rich_table_as_tsv(table=table)
 
 
 @version_app.command("info")
