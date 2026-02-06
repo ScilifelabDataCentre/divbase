@@ -17,6 +17,7 @@ TODO:
 """
 
 import logging
+import textwrap
 from pathlib import Path
 
 import typer
@@ -103,7 +104,8 @@ def sample_metadata_query(
     if results.warnings:
         print("[yellow]⚠ Warnings:[/yellow]")
         for warning in results.warnings:
-            print(f"  • {warning}")
+            wrapped = textwrap.fill(warning, width=100, initial_indent="  • ", subsequent_indent="    ")
+            print(wrapped)
         print()
 
     if show_sample_results:
