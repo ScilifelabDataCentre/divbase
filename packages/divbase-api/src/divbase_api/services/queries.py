@@ -714,15 +714,31 @@ class SidecarQueryManager:
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
         """
         Method to run a query against the loaded data. The filter_string should be a semicolon-separated list of key:value pairs,
-        where key is a column name and value is a comma-separated list of values to filter by.
+        where key is a column name and value is a comma-separated list of filter values.
         For example: "key1:value1,value2;key2:value3,value4".
+
+        The TSV that is loaded into the pandas DataFrame can have both string and numeric columns.
+        - String columns are matched to filter string values with OR logic: if ANY value in a cell matches ANY filter value, the row matches.
+        - Numeric columns support:
+            - Inequalities: ">25", "<=40" (checks if any cell value satisfies the condition)
+            - Ranges: "20-40" (checks if any cell value is within the range)
+            - Discrete values: "25,30,50" (checks if any cell value matches any filter value)
+            - All are combined with OR logic
+
+        Filter string values in the query vs. cell values in the TSV:
+        - Filter strings are handled per semicolon-separated key-value pair: in "key1:value1,value2;key2:value3,value4"
+          "key1:value1,value2" is handled separately from "key2:value3,value4".
+        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,value2" and each filter string value is handled separately.
+        - Cell values can be semicolon-separated, e.g. "25;30;35" in a TSV cell
+        - Matching of filter string to cell values uses OR logic: if ANY value in a cell matches ANY filter value, the row matches.
+          E.g. "key2:value3,value4" means that TSV cells in the "key2" column that contain "value3" will match, but also cells that contain "value3;value4" or "value4;value3" will match.
 
         Summary of how different input filter values are handled:
         - If the filter_string is empty, all records are returned.
         - If the filter_string is None, an error is raised.
-        - If the filter_string is not empty, the method filters the DataFrame based on the provided filter_string.
-        - If any of the keys in the filter_string are not found in the DataFrame columns, a warning is logged and those conditions are skipped.
-        - If none of the values in the filter_string are found in the DataFrame, a warning is logged and all records are returned.
+        - If the filter_string is not empty, the method filters the dataframe based on the provided filter_string.
+        - If any of the keys in the filter_string are not found in the dataframe columns, a warning is logged and those conditions are skipped.
+        - If none of the filter string values match any cell values in the dataframe, a warning is logged and all records are returned.
         - If the filter_string is invalid, a SidecarInvalidFilterError is raised.
 
         The method returns the SidecarQueryManager instance with the query_result and query_message. The former is the filtered DataFrame results,
@@ -749,13 +765,14 @@ class SidecarQueryManager:
         key_values = self.filter_string.split(";")
         filter_conditions = []
 
+        # 1. Parse the input filter string and build a list of boolean conditions to apply to the dataframe
         for key_value in key_values:
             if not key_value.strip():
                 continue
             try:
-                key, values = key_value.split(":", 1)
+                key, filter_string_values = key_value.split(":", 1)
                 key = key.strip()
-                values = values.strip()
+                filter_string_values = filter_string_values.strip()
 
                 if key not in self.df.columns:
                     warning_msg = f"Column '{key}' not found in the TSV file. Skipping this filter condition."
@@ -767,58 +784,99 @@ class SidecarQueryManager:
 
                 # Handle numeric filtering: inequalities, ranges, and discrete values (all with OR logic)
                 # e.g., "Weight:>25,<30,50" or "Weight:20-40,50,>100"
+                # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "25;30;35"
                 if is_numeric:
-                    values_list = values.split(",")
+                    filter_string_values_list = filter_string_values.split(",")
                     inequality_conditions = []
                     range_conditions = []
                     discrete_values = []
 
-                    for v in values_list:
-                        v = v.strip()
+                    for filter_string_value in filter_string_values_list:
+                        filter_string_value = filter_string_value.strip()
 
                         # Check for common mistakes: =< or => instead of <= or >=
-                        if re.match(r"^=<\d+\.?\d*$", v) or re.match(r"^=>\d+\.?\d*$", v):
+                        if re.match(r"^=<\d+\.?\d*$", filter_string_value) or re.match(
+                            r"^=>\d+\.?\d*$", filter_string_value
+                        ):
                             raise SidecarInvalidFilterError(
-                                f"Invalid operator format '{v[:2]}' in filter '{key}:{values}'. "
+                                f"Invalid operator format '{filter_string_value[:2]}' in filter '{key}:{filter_string_values}'."
                                 f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
                             )
 
                         # Check if it's an inequality (e.g., ">25", "<=40")
-                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", v)
+                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", filter_string_value)
                         if inequality_match:
                             operator = inequality_match.group(1)
-                            value = float(inequality_match.group(2))
+                            threshold = float(inequality_match.group(2))
 
-                            if operator == ">":
-                                inequality_conditions.append(self.df[key] > value)
-                            elif operator == ">=":
-                                inequality_conditions.append(self.df[key] >= value)
-                            elif operator == "<":
-                                inequality_conditions.append(self.df[key] < value)
-                            elif operator == "<=":
-                                inequality_conditions.append(self.df[key] <= value)
-
-                            logger.debug(f"Applied inequality filter on '{key}': {operator} {value}")
+                            condition = self.df[key].apply(
+                                lambda cell_value, op=operator, thresh=threshold: (
+                                    False
+                                    if pd.isna(cell_value)
+                                    else any(
+                                        (
+                                            cell_value_num > thresh
+                                            if op == ">"
+                                            else cell_value_num >= thresh
+                                            if op == ">="
+                                            else cell_value_num < thresh
+                                            if op == "<"
+                                            else cell_value_num <= thresh
+                                        )
+                                        for cell_value_num in (
+                                            float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
+                                            for cell_value_str in str(cell_value).split(";")
+                                            if cell_value_str.strip()
+                                        )
+                                    )
+                                    if not pd.isna(cell_value)
+                                    else False
+                                )
+                                if not pd.isna(cell_value)
+                                else False
+                            )
+                            inequality_conditions.append(condition)
+                            logger.debug(f"Applied inequality filter on '{key}': {operator} {threshold}")
                             continue
 
                         # Check if it's a range (e.g., "20-40")
-                        range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", v)
+                        range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", filter_string_value)
                         if range_match:
                             min_val = float(range_match.group(1))
                             max_val = float(range_match.group(2))
-                            range_condition = (self.df[key] >= min_val) & (self.df[key] <= max_val)
-                            range_conditions.append(range_condition)
+
+                            condition = self.df[key].apply(
+                                lambda cell_value, min_v=min_val, max_v=max_val: (
+                                    False
+                                    if pd.isna(cell_value)
+                                    else any(
+                                        min_v <= cell_value_num <= max_v
+                                        for cell_value_num in (
+                                            float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
+                                            for cell_value_str in str(cell_value).split(";")
+                                            if cell_value_str.strip()
+                                        )
+                                    )
+                                )
+                            )
+                            range_conditions.append(condition)
                             logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
                             continue
 
                         # Otherwise, treat as discrete value
                         try:
-                            discrete_values.append(float(v) if "." in v else int(v))
+                            # Collect all discrete values from the filter string as the "for filter_string_value in filter_string_values_list" loop progresses.
+                            # The lambda function for discrete values is below and will run once for all collected discrete values.
+                            discrete_values.append(
+                                float(filter_string_value) if "." in filter_string_value else int(filter_string_value)
+                            )
                         except ValueError:
-                            logger.warning(f"Cannot convert '{v}' to numeric for column '{key}'. Skipping this value.")
+                            logger.warning(
+                                f"Cannot convert '{filter_string_value}' to numeric for column '{key}'. Skipping this value."
+                            )
 
                     # If multiple conditions (inequality, range, discrete values), combine them with with OR logic
-                    # In short, this builds a boolean filter that Pandas will apply to the dataframe column
+                    # In short, this builds a new boolean filter from the combined bools that Pandas will apply to the dataframe column
                     conditions = []
 
                     if inequality_conditions:
@@ -837,7 +895,20 @@ class SidecarQueryManager:
                         conditions.append(combined_ranges)
 
                     if discrete_values:
-                        discrete_condition = self.df[key].isin(discrete_values)
+                        discrete_condition = self.df[key].apply(
+                            lambda cell_value, target_filter_values=discrete_values: (
+                                False
+                                if pd.isna(cell_value)
+                                else any(
+                                    cell_value_num in target_filter_values
+                                    for cell_value_num in (
+                                        float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
+                                        for cell_value_str in str(cell_value).split(";")
+                                        if cell_value_str.strip()
+                                    )
+                                )
+                            )
+                        )
                         conditions.append(discrete_condition)
 
                     if conditions:
@@ -847,7 +918,7 @@ class SidecarQueryManager:
                             combined = combined | cond
 
                         if not combined.any():
-                            warning_msg = f"No values in column '{key}' match the filter: {values}"
+                            warning_msg = f"No values in column '{key}' match the filter: {filter_string_values}"
                             logger.warning(warning_msg)
                             self.warnings.append(warning_msg)
                         filter_conditions.append(combined)
@@ -858,10 +929,20 @@ class SidecarQueryManager:
                         self.warnings.append(warning_msg)
                 else:
                     # Non-numeric column: handle as discrete string values
-                    values_list = values.split(",")
-                    condition = self.df[key].isin(values_list)
+                    # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "North;West"
+                    filter_string_values_list = filter_string_values.split(",")
+
+                    condition = self.df[key].apply(
+                        lambda cell_value, target_filter_values=filter_string_values_list: (
+                            False
+                            if pd.isna(cell_value)
+                            else any(
+                                cell_value_str in target_filter_values for cell_value_str in str(cell_value).split(";")
+                            )
+                        )
+                    )
                     if not condition.any():
-                        warning_msg = f"None of the values {values_list} were found in column '{key}'"
+                        warning_msg = f"None of the values {filter_string_values_list} were found in column '{key}'"
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
                     filter_conditions.append(condition)
@@ -870,6 +951,7 @@ class SidecarQueryManager:
                     f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2' or 'key:min-max' for numeric ranges"
                 ) from e
 
+        # 2. Apply the final boolean filters on the dataframe
         if filter_conditions:
             combined_condition = pd.Series(True, index=self.df.index)
             for condition in filter_conditions:
