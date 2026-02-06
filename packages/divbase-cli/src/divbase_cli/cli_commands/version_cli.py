@@ -7,8 +7,7 @@ import typer
 from rich import print
 from rich.table import Table
 
-from divbase_cli.cli_commands.file_cli import FORMAT_AS_TSV_OPTION
-from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.services.project_versions import (
     add_version_command,

@@ -1,7 +1,10 @@
 """
 Handles the user's configuration file for the divbase-cli package.
-User configuration is stored in a local file.
-By default the config will be stored at: "~/.config/divbase/config.yaml"
+The user configuration is stored in a local file.
+
+The path to the config file is determined by `cli_settings.CONFIG_PATH` and
+is stored in a platform-specific user configuration directory (for example,
+under the user application data directory on Linux, macOS, or Windows).
 """
 
 import logging
@@ -168,7 +171,7 @@ def create_user_config(config_path: Path) -> None:
         raise FileExistsError(
             f"Config file already exists at {config_path}. Stopping to avoid overwriting existing config."
         )
-    config_path.parent.mkdir(parents=False, exist_ok=True)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
 
     user_config = UserConfig(config_path=config_path, projects=[])
     user_config.dump_config()
