@@ -113,6 +113,7 @@ class ProjectNameNotSpecifiedError(DivBaseCLIError):
             "No project name provided.\n"
             "Please either set a default project in your user configuration file.\n"
             "or pass the flag '--project <project_name>' to this command.\n"
+            "To set a default project, you can run 'divbase-cli config set-default <project_name>'.\n"
         )
         super().__init__(error_message)
 
