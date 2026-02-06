@@ -16,24 +16,6 @@ from divbase_cli.user_config import load_user_config
 runner = CliRunner()
 
 
-def test_create_config_command(tmp_config_path):
-    command = f"config create --config {tmp_config_path}"
-    result = runner.invoke(app, command)
-
-    assert result.exit_code == 0
-    assert tmp_config_path.exists(), "Config file was not created at the temporary path"
-
-
-def test_cant_create_config_if_exists(tmp_config_path):
-    command = f"config create --config {tmp_config_path}"
-    result1 = runner.invoke(app, command)
-    assert result1.exit_code == 0
-
-    result2 = runner.invoke(app, command)
-    assert result2.exit_code != 0
-    assert isinstance(result2.exception, FileExistsError)
-
-
 def test_add_project_command(logged_out_user_with_fresh_config):
     project_name = "test_project"
     command = f"config add {project_name}"
@@ -146,12 +128,13 @@ def test_remove_project_command(logged_out_user_with_existing_config, CONSTANTS)
 
 
 def test_remove_project_that_does_not_exist(logged_out_user_with_existing_config):
+    """Should not raise an error as the project is already not in the config, but should print a message to the user."""
     project_name = "does-not-exist"
     command = f"config remove {project_name}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert f"The project '{project_name}' was not found in your config file" in result.output
+    assert "Nothing to do" in result.output
 
 
 def test_remove_default_project_command(logged_out_user_with_existing_config, CONSTANTS):

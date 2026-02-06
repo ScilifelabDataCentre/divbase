@@ -59,9 +59,7 @@ def remove_project_command(
     removed_project = config.remove_project(name)
 
     if not removed_project:
-        print(
-            f"The project '{name}' was not found in your user config file located at {cli_settings.CONFIG_PATH.resolve()}."
-        )
+        print(f"Nothing to do, the project '{name}' was not found in your user config")
     else:
         print(f"The project '{removed_project}' was removed from your config.")
 
