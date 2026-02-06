@@ -14,7 +14,7 @@ Could be nice to have a detailed list route (so version IDs, sizes, last modifie
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
 from divbase_api.api_config import settings
@@ -36,9 +36,13 @@ from divbase_lib.api_schemas.s3 import (
     DownloadObjectRequest,
     FileChecksumResponse,
     GetPresignedPartUrlsRequest,
+    ListObjectsRequest,
+    ListObjectsResponse,
+    ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
+    RestoreObjectsResponse,
     UploadSinglePartObjectRequest,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE
@@ -68,7 +72,7 @@ def check_too_many_objects_in_request(
 @s3_router.post("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
 async def generate_download_urls(
     project_name: str,
-    objects_to_download: list[DownloadObjectRequest],
+    objects_to_download: Annotated[list[DownloadObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -89,12 +93,21 @@ async def generate_download_urls(
     return response
 
 
-@s3_router.get("/", status_code=status.HTTP_200_OK, response_model=list[str])
-async def list_files(
+# Post request instead of GET as GET doesn't support/encourage body content.
+@s3_router.post("/list", status_code=status.HTTP_200_OK, response_model=ListObjectsResponse)
+async def list_file_details(
     project_name: str,
+    list_request: ListObjectsRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
-    """List all files in the project's bucket"""
+    """
+    List all files in the project's bucket
+
+    You can provide a prefix to only list files that start with that prefix.
+    The response object includes a next_token if there are more files to list.
+    Which you can append to the next request to get the next page of results.
+    1000 files are returned at most per request.
+    """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")
@@ -105,7 +118,36 @@ async def list_files(
         secret_key=settings.s3.secret_key.get_secret_value(),
     )
 
-    return await run_in_threadpool(s3_file_manager.list_files, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        s3_file_manager.list_files_detailed,
+        bucket_name=project.bucket_name,
+        prefix=list_request.prefix,
+        next_token=list_request.next_token,
+    )
+
+
+@s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)
+async def get_object_info(
+    project_name: str,
+    object_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """Get details about all versions of a specific object/file in the project's store."""
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to list files in this project.")
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.endpoint_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    return await run_in_threadpool(
+        s3_file_manager.get_detailed_object_info,
+        bucket_name=project.bucket_name,
+        object_name=object_name,
+    )
 
 
 @s3_router.post(
@@ -113,7 +155,7 @@ async def list_files(
 )
 async def generate_single_part_upload_urls(
     project_name: str,
-    objects: list[UploadSinglePartObjectRequest],
+    objects: Annotated[list[UploadSinglePartObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -243,11 +285,15 @@ async def abort_multipart_upload(
 
 @s3_router.delete("/", status_code=status.HTTP_200_OK, response_model=list[str])
 async def soft_delete_files(
-    objects: list[str],
     project_name: str,
+    objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
-    """Soft delete files in the project's bucket. This adds a deletion marker to the files, but does not actually delete them."""
+    """
+    Soft delete files in the projects store.
+
+    This adds a deletion marker to the files, but does not actually delete them.
+    """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to soft delete files in this project.")
@@ -265,11 +311,42 @@ async def soft_delete_files(
     )
 
 
+@s3_router.post("/restore", status_code=status.HTTP_200_OK, response_model=RestoreObjectsResponse)
+async def restore_soft_deleted_files(
+    project_name: str,
+    objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    Restore soft-deleted files from a project's store by removing the soft delete marker.
+
+    This finds the latest version of each file provided, and if it has a delete marker it removes it,
+    effectively restoring the previous version of the file.
+
+    NOTE: If you want to restore an older version of a file, you need to either:
+        1. download and upload the file again.
+        2. Hard delete the versions after the version you want to restore (making the latest version, the version you want).
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError("You don't have permission to restore files in this project.")
+
+    check_too_many_objects_in_request(numb_objects=len(objects))
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.endpoint_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    return await run_in_threadpool(s3_file_manager.restore_objects, objects=objects, bucket_name=project.bucket_name)
+
+
 # using POST as GET with body is not considered good practice
 @s3_router.post("/checksums", status_code=status.HTTP_200_OK, response_model=list[FileChecksumResponse])
 async def get_files_checksums(
-    object_names: list[str],
     project_name: str,
+    object_names: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """

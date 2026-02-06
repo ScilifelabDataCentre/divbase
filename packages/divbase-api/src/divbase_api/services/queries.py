@@ -16,6 +16,7 @@ import pandas as pd
 import psutil
 
 from divbase_lib.api_schemas.queries import SampleMetadataQueryTaskResult
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -478,7 +479,7 @@ class BcftoolsQueryManager:
         self.temp_files.append(annotated_unsorted_output_file)
         self.temp_files.append(divbase_header_for_vcf)
 
-        output_file = f"result_of_job_{identifier}.vcf.gz"
+        output_file = f"{QUERY_RESULTS_FILE_PREFIX}{identifier}.vcf.gz"
         logger.info("Trying to determine if sample names overlap between temp files...")
 
         sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)

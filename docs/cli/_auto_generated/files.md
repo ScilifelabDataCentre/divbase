@@ -16,35 +16,74 @@ $ divbase-cli files [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `list`: list all files in the project&#x27;s DivBase...
+* `ls`: list all currently available files in the...
+* `info`: Get detailed information about a specific...
 * `download`: Download files from the project&#x27;s store on...
+* `stream`: Stream a file&#x27;s content to standard output.
 * `upload`: Upload files to your project&#x27;s store on...
-* `remove`: Remove files from the project&#x27;s store on...
+* `rm`: Soft delete files from the project&#x27;s store...
+* `restore`: Restore soft deleted files from the...
 
-## `divbase-cli files list`
+## `divbase-cli files ls`
 
-list all files in the project&#x27;s DivBase store.
+list all currently available files in the project&#x27;s DivBase store.
 
-To see files at a user specified project version (controlled by the &#x27;divbase-cli version&#x27; subcommand),
-you can instead use the &#x27;divbase-cli version info [VERSION_NAME]&#x27; command.
+You can optionally filter the listed files by providing a prefix.
+By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
+To see information about the versions of each file, use the &#x27;divbase-cli files info [FILE_NAME]&#x27; command instead
 
 **Usage**:
 
 ```console
-$ divbase-cli files list [OPTIONS]
+$ divbase-cli files ls [OPTIONS]
 ```
 
 **Options**:
 
+* `--tsv`: If set, will print the output in .TSV format for easier programmatic parsing.
+* `-p, --prefix TEXT`: Optional prefix to filter the listed files by name (only list files starting with this prefix).
+* `-r, --include-results-files`: If set, will also show DivBase query results files which are hidden by default.
+* `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
+* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
+* `--help`: Show this message and exit.
+
+## `divbase-cli files info`
+
+Get detailed information about a specific file in the project&#x27;s DivBase store.
+
+This includes all versions of the file and whether the file is currently marked as soft deleted.
+
+**Usage**:
+
+```console
+$ divbase-cli files info [OPTIONS] FILE_NAME
+```
+
+**Arguments**:
+
+* `FILE_NAME`: Name of the file to get information about.  [required]
+
+**Options**:
+
+* `--tsv`: If set, will print the output in .TSV format for easier programmatic parsing.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files download`
 
-Download files from the project&#x27;s store on DivBase. This can be done by either:
+Download files from the project&#x27;s store on DivBase.
+
+This can be done by either:
     1. providing a list of files paths directly in the command line
-    2. providing a directory to download the files to.
+    2. providing a text file with a list of files to download (new file on each line).
+
+To download the latest version of a file, just provide its name. &quot;file1&quot; &quot;file2&quot; etc.
+To download a specific/older version of a file, use the format: &quot;file_name:version_id&quot;
+You can get a file&#x27;s version id using the &#x27;divbase-cli file info [FILE_NAME]&#x27; command.
+You can mix and match latest and specific versions in the same command.
+E.g. to download the latest version of file1 and version &quot;3xcdsdsdiw829x&quot;
+of file2: &#x27;divbase-cli files download file1 file2:3xcdsdsdiw829x&#x27;
 
 **Usage**:
 
@@ -69,12 +108,42 @@ You can also specify &quot;.&quot; to download to the current directory.
 * `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
+## `divbase-cli files stream`
+
+Stream a file&#x27;s content to standard output.
+
+This allows your to pipe the output to other tools like &#x27;less&#x27;, &#x27;head&#x27;, &#x27;zcat&#x27; and &#x27;bcftools&#x27;.
+
+Examples:
+- View a file: divbase-cli files stream my_file.tsv | less
+- View a gzipped file: divbase-cli files stream my_file.vcf.gz | zcat | less
+- Run a bcftools command: divbase-cli files stream my_file.vcf.gz | bcftools view -h -  # The &quot;-&quot; tells bcftools to read from standard input
+
+**Usage**:
+
+```console
+$ divbase-cli files stream [OPTIONS] FILE_NAME
+```
+
+**Arguments**:
+
+* `FILE_NAME`: Name of the file you want to stream.  [required]
+
+**Options**:
+
+* `--version-id TEXT`: Specify this if you want to look at an older/specific version of the file. If not provided, the latest version of the file is used. To get a file&#x27;s version ids, use the &#x27;divbase-cli file info [FILE_NAME]&#x27; command.
+* `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
+* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
+* `--help`: Show this message and exit.
+
 ## `divbase-cli files upload`
 
-Upload files to your project&#x27;s store on DivBase by either:
-    1. providing a list of files paths directly in the command line
-    2. providing a directory to upload
-    3. providing a text file with or a file list.
+Upload files to your project&#x27;s store on DivBase:
+
+To provide files to upload you can either:
+    1. provide a list of files paths directly in the command line
+    2. provide a directory to upload
+    3. provide a text file with or a file list.
 
 **Usage**:
 
@@ -84,7 +153,7 @@ $ divbase-cli files upload [OPTIONS] [FILES]...
 
 **Arguments**:
 
-* `[FILES]...`: Space seperated list of files to upload.
+* `[FILES]...`: Space separated list of files to upload.
 
 **Options**:
 
@@ -95,18 +164,20 @@ $ divbase-cli files upload [OPTIONS] [FILES]...
 * `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
-## `divbase-cli files remove`
+## `divbase-cli files rm`
 
-Remove files from the project&#x27;s store on DivBase by either:
-    1. providing a list of files paths directly in the command line
-    2. providing a text file with or a file list.
+Soft delete files from the project&#x27;s store on DivBase
 
-&#x27;dry_run&#x27; mode will not actually delete the files, just print what would be deleted.
+To provide files to delete you can either:
+    1. provide a list of file names directly in the command line
+    2. provide a text file with a list of files to delete.
+
+Note that deleting a non existent file will be treated as a successful deletion.
 
 **Usage**:
 
 ```console
-$ divbase-cli files remove [OPTIONS] [FILES]...
+$ divbase-cli files rm [OPTIONS] [FILES]...
 ```
 
 **Arguments**:
@@ -115,8 +186,35 @@ $ divbase-cli files remove [OPTIONS] [FILES]...
 
 **Options**:
 
-* `--file-list PATH`: Text file with list of files to upload.
+* `--file-list PATH`: Text file with list of files to delete.
 * `--dry-run`: If set, will not actually delete the files, just print what would be deleted.
+* `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
+* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
+* `--help`: Show this message and exit.
+
+## `divbase-cli files restore`
+
+Restore soft deleted files from the project&#x27;s store on DivBase
+
+To provide files to restore you can either:
+    1. provide a list of files directly in the command line.
+    2. provide a text file with a list of files to restore (new file on each line).
+
+NOTE: Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live. This means you can repeatedly run this command on the same file and get the same response.
+
+**Usage**:
+
+```console
+$ divbase-cli files restore [OPTIONS] [FILES]...
+```
+
+**Arguments**:
+
+* `[FILES]...`: Space seperated list of files/objects in the project&#x27;s store on DivBase to restore.
+
+**Options**:
+
+* `--file-list PATH`: Text file with list of files to restore.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.

@@ -1,5 +1,5 @@
 """
-Top-level pytest configuration for the DivBase project.
+pytest configuration for e2e/integration tests for DivBase project.
 It handles spinning up the job system docker stack for the duration of the test session, and the tear-down afterwards.
 
 It also collects fixtures and constants that are needed across multiple test modules.
@@ -80,7 +80,7 @@ def CONSTANTS():
         # Mappings of project names to S3 bucket names
         "PROJECT_TO_BUCKET_MAP": project_name_bucket_map,
         "PROJECT_CONTENTS": project_name_files_map,
-        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.txt", "file2.txt", "file3.txt"],
+        "FILES_TO_UPLOAD_DOWNLOAD": ["file1.tsv", "file2.tsv", "file3.tsv"],
         "ADMIN_CREDENTIALS": API_ADMIN_CREDENTIALS,
         "TEST_USERS": TEST_USERS,
     }

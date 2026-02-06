@@ -87,7 +87,7 @@ def ensure_required_files_in_bucket(project_name: str, vcf_filenames: list) -> N
     generate the mock metadata; upload the files to the bucket so that the worker container can access them from there during the query."""
 
     print("\nChecking if files are already in bucket...")
-    cmd = f"divbase-cli files list --project {project_name}"
+    cmd = f"divbase-cli files ls --project {project_name}"
     env = dict(os.environ)
     env["DIVBASE_ENV"] = "local"
 

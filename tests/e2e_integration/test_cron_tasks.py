@@ -421,7 +421,7 @@ def create_soft_deleted_project_version(db_session_sync):
         project_version = ProjectVersionDB(
             project_id=1,
             name=name,
-            files={"file1.txt": "v1somehash", "file2.txt": "v2somehash"},
+            files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
             is_deleted=True,
             date_deleted=date_deleted,
         )
@@ -477,7 +477,7 @@ def test_cleanup_soft_deleted_project_versions_only_affects_soft_deleted(
     active_version = ProjectVersionDB(
         project_id=1,
         name="v1.0.active",
-        files={"file1.txt": "v1somehash", "file2.txt": "v2somehash"},
+        files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
     )
     db_session_sync.add(active_version)
     db_session_sync.commit()

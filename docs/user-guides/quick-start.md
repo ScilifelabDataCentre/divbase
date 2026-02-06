@@ -84,7 +84,7 @@ divbase-cli files upload --upload-dir /path/to/directory/
 Check your uploaded files:
 
 ```bash
-divbase-cli files list
+divbase-cli files ls
 ```
 
 ## Step 7: Upload sample metadata

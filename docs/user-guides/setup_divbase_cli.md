@@ -49,7 +49,7 @@ divbase-cli auth login [YOUR_EMAIL] # you'll be prompted for your password
 You will now be able to run commands against your DivBase projects. Here are some examples:
 
 ```bash
-divbase-cli files list # runs against the default project
+divbase-cli files ls # runs against the default project
 divbase-cli files download file1.vcf.gz file2.vcf.gz --project my-non-default-project
 divbase-cli files upload file1.vcf.gz file2.vcf.gz --project my-non-default-project
 ```

@@ -7,6 +7,8 @@ using the HTTP range header when downloading (so you only need 1 pre-signed URL 
 Pre-signed upload URLs need to account for single vs multipart uploads hence all the extra schemas below.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
@@ -14,8 +16,58 @@ from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
 MB = 1024 * 1024
 
 
+## list objects models ##
+class ListObjectsRequest(BaseModel):
+    """Request model for listing objects in an S3 bucket."""
+
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
+    next_token: str | None = Field(
+        None, description="Token to continue listing files from the end of a previous request."
+    )
+
+
+class ObjectDetails(BaseModel):
+    """Details about a single object in an S3 bucket."""
+
+    name: str = Field(..., description="The name of the object in the bucket.")
+    size: int = Field(..., description="The size of the object in bytes.")
+    last_modified: datetime = Field(..., description="The date and time the object was last modified.")
+    etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
+
+
+class ListObjectsResponse(BaseModel):
+    """Response model for listing objects in an S3 bucket."""
+
+    objects: list[ObjectDetails] = Field(
+        ..., description="A list of objects in the bucket.", min_length=0, max_length=1000
+    )
+    next_token: str | None = Field(
+        None, description="Token for fetching the next page of results. If None, no more results."
+    )
+
+
+## file info models ##
+class ObjectVersionInfo(BaseModel):
+    """Detailed information about a single version of an S3 object."""
+
+    version_id: str = Field(..., description="The version ID of the object.")
+    last_modified: datetime = Field(..., description="The date and time the object version was last modified.")
+    size: int = Field(..., description="The size of the object in bytes.")
+    etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
+    is_latest: bool = Field(..., description="Indicates if this is the latest version of the object.")
+
+
+class ObjectInfoResponse(BaseModel):
+    """Response model for detailed information about all versions of a single object stored in S3."""
+
+    object_name: str = Field(..., description="The name of the object.")
+    is_currently_deleted: bool = Field(..., description="True if the latest version of the object is a delete marker.")
+    versions: list[ObjectVersionInfo] = Field(..., description="A list of all versions of the object.")
+
+
+## download models ##
 class DownloadObjectRequest(BaseModel):
-    """Request model to upload a single object using a pre-signed URL."""
+    """Request model to download a single object using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be downloaded")
     version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
@@ -127,13 +179,26 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
-class CheckFileExistsRequest(BaseModel):
-    """Request model to check if a file already exists in the bucket (using the checksum)"""
+class RestoreObjectsResponse(BaseModel):
+    """Response model for restoring soft-deleted objects in a bucket."""
 
-    object_name: str
-    md5_checksum: str
+    restored: list[str] = Field(
+        ...,
+        description="List of object names that were successfully restored, this includes objects that were already live",
+    )
+    not_restored: list[str] = Field(
+        ...,
+        description=(
+            "List of object names that could not be processed.\n"
+            "This could be due to several reasons:\n"
+            "1. The object does not exist in the bucket (e.g., a typo in the name).\n"
+            "2. The object was hard-deleted and is unrecoverable.\n"
+            "3. An unexpected server error occurred during the restore attempt."
+        ),
+    )
 
 
+## checksum models ##
 class FileChecksumResponse(BaseModel):
     """Response model for reporting a file's checksum in the bucket."""
 

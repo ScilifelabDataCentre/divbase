@@ -42,13 +42,13 @@ TEST_PROJECTS = {
         "description": "First test project",
         "bucket_name": "divbase-local-1",
         "storage_quota_bytes": 10737418240,
-        "files": ["file1.txt", "file2.txt"],
+        "files": ["file1.tsv", "file2.tsv"],
     },
     "project2": {
         "description": "Second test project",
         "bucket_name": "divbase-local-2",
         "storage_quota_bytes": 10737418240,
-        "files": ["file1.txt"],
+        "files": ["file1.tsv"],
     },
     "query-project": {
         "description": "Third test project",

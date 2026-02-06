@@ -4,6 +4,8 @@ Custom exceptions for the divbase CLI.
 
 from pathlib import Path
 
+from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -149,3 +151,32 @@ class ConfigFileNotFoundError(DivBaseCLIError):
         ),
     ):
         super().__init__(error_message)
+
+
+class UnsupportedFileTypeError(DivBaseCLIError):
+    """Raised when one or more files to be uploaded are not supported by DivBase (based on file extension)."""
+
+    def __init__(self, unsupported_files: list[Path], supported_types: tuple[str, ...] = SUPPORTED_DIVBASE_FILE_TYPES):
+        self.unsupported_files = unsupported_files
+        self.supported_types = supported_types
+        message = (
+            f"The following file(s) have types that are not supported by DivBase and therefore cannot be uploaded: \n"
+            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
+            f"DivBase currently supports the following file types: {', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}\n"
+            "If you want us to support another file type, please let us know."
+        )
+        super().__init__(message)
+
+
+class UnsupportedFileNameError(DivBaseCLIError):
+    """Raised when one or more files to be uploaded have unsupported characters in their filenames."""
+
+    def __init__(self, unsupported_files: list[Path]):
+        self.unsupported_files = unsupported_files
+        message = (
+            f"The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: \n"
+            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
+            f"Filenames cannot contain any of the following characters: {', '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)}\n"
+            "Please rename the files and try again."
+        )
+        super().__init__(message)
