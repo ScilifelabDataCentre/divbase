@@ -266,11 +266,6 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
 
 def create_local_config():
     """Create a local user DivBase config file and add projects to it."""
-    command = shlex.split("divbase-cli config create")
-    result = subprocess.run(command, check=False, env=LOCAL_ENV, stderr=subprocess.PIPE)
-    if result.returncode != 0 and "FileExistsError" not in result.stderr.decode():
-        raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
-
     for project in PROJECTS:
         command = shlex.split(f"divbase-cli config add {project['name']}")
         subprocess.run(command, check=True, env=LOCAL_ENV)

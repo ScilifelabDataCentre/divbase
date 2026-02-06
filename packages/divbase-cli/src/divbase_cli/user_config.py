@@ -1,9 +1,13 @@
 """
 Handles the user's configuration file for the divbase-cli package.
-User configuration is stored in a local file.
-By default the config will be stored at: "~/.config/divbase/config.yaml"
+The user configuration is stored in a local file.
+
+The path to the config file is determined by `cli_settings.CONFIG_PATH` and
+is stored in a platform-specific user configuration directory (for example,
+under the user application data directory on Linux, macOS, or Windows).
 """
 
+import logging
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,7 +15,9 @@ from pathlib import Path
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import ConfigFileNotFoundError, ProjectNotInConfigError
+from divbase_cli.cli_exceptions import ProjectNotInConfigError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,18 +142,21 @@ class UserConfig:
         self.dump_config()
 
 
-def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig:
+def load_user_config() -> UserConfig:
     """Helper function to load the user config file"""
     try:
-        with open(config_path, "r") as file:
+        with open(cli_settings.CONFIG_PATH, "r") as file:
             config_contents = yaml.safe_load(file)
     except FileNotFoundError:
-        raise ConfigFileNotFoundError from None
+        logger.debug(f"No existing config file found at {cli_settings.CONFIG_PATH}, creating a new one.")
+        create_user_config(config_path=cli_settings.CONFIG_PATH)
+        with open(cli_settings.CONFIG_PATH, "r") as file:
+            config_contents = yaml.safe_load(file)
 
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
     return UserConfig(
-        config_path=config_path,
+        config_path=cli_settings.CONFIG_PATH,
         logged_in_url=config_contents.get("logged_in_url"),
         logged_in_email=config_contents.get("logged_in_email"),
         projects=projects,
@@ -159,8 +168,10 @@ def load_user_config(config_path: Path = cli_settings.CONFIG_PATH) -> UserConfig
 def create_user_config(config_path: Path) -> None:
     """Create a user configuration file at the specified path."""
     if config_path.exists():
-        raise FileExistsError(f"Config file already exists at {config_path}.")
-    config_path.parent.mkdir(parents=False, exist_ok=True)
+        raise FileExistsError(
+            f"Config file already exists at {config_path}. Stopping to avoid overwriting existing config."
+        )
+    config_path.parent.mkdir(parents=True, exist_ok=True)
 
     user_config = UserConfig(config_path=config_path, projects=[])
     user_config.dump_config()

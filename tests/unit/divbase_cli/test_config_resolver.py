@@ -19,7 +19,7 @@ def test_ensure_logged_in_success():
     mock_config.logged_in_url = "https://example.com"
 
     with patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config):
-        result = ensure_logged_in(config_path=Path("/mock/path"))
+        result = ensure_logged_in()
         assert result == "https://example.com"
 
 
@@ -32,7 +32,7 @@ def test_ensure_logged_in_when_not_logged_in():
         patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
         pytest.raises(AuthenticationError, match="You are not logged in"),
     ):
-        ensure_logged_in(config_path=Path("/mock/path"))
+        ensure_logged_in()
 
 
 def test_ensure_logged_in_wrong_url():
@@ -43,7 +43,7 @@ def test_ensure_logged_in_wrong_url():
         patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
         pytest.raises(AuthenticationError, match="You are not logged in to the correct DivBase URL"),
     ):
-        ensure_logged_in(config_path=Path("/mock/path"), desired_url="https://wrong-url.com")
+        ensure_logged_in(desired_url="https://wrong-url.com")
 
 
 def test_resolve_project_with_explicit_project_name():
@@ -53,7 +53,9 @@ def test_resolve_project_with_explicit_project_name():
     mock_config.project_info.return_value = mock_project
 
     with patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config):
-        result = resolve_project(project_name="test_project", config_path=Path("/mock/path"))
+        result = resolve_project(
+            project_name="test_project",
+        )
         assert result == mock_project
         mock_config.project_info.assert_called_once_with("test_project")
 
@@ -66,7 +68,9 @@ def test_resolve_project_with_default_project():
     mock_config.project_info.return_value = mock_project
 
     with patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config):
-        result = resolve_project(project_name=None, config_path=Path("/mock/path"))
+        result = resolve_project(
+            project_name=None,
+        )
         assert result == mock_project
         mock_config.project_info.assert_called_once_with("default_project")
 
@@ -80,12 +84,16 @@ def test_resolve_project_no_project_specified():
         patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
         pytest.raises(ProjectNameNotSpecifiedError),
     ):
-        resolve_project(project_name=None, config_path=Path("/mock/path"))
+        resolve_project(
+            project_name=None,
+        )
 
 
 def test_resolve_divbase_api_url_with_explicit_url():
     """Test that resolve_divbase_api_url returns the provided URL if explicitly given."""
-    result = resolve_divbase_api_url(url="https://example.com", config_path=Path("/mock/path"))
+    result = resolve_divbase_api_url(
+        url="https://example.com",
+    )
     assert result == "https://example.com"
 
 
@@ -97,7 +105,9 @@ def test_resolve_divbase_api_url_with_no_url_given():
     mock_config.project_info.return_value = mock_project
 
     with patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config):
-        result = resolve_divbase_api_url(url=None, config_path=Path("/mock/path"))
+        result = resolve_divbase_api_url(
+            url=None,
+        )
         assert result == "https://example.com"
         mock_config.project_info.assert_called_once_with(name="default_project")
 
@@ -111,12 +121,16 @@ def test_resolve_divbase_api_url_no_url_and_no_default_project():
         patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
         pytest.raises(ValueError, match="No default project is set in your user config"),
     ):
-        resolve_divbase_api_url(url=None, config_path=Path("/mock/path"))
+        resolve_divbase_api_url(
+            url=None,
+        )
 
 
 def test_resolve_download_dir_with_explicit_dir():
     """Test that resolve_download_dir returns the provided directory if explicitly given."""
-    result = resolve_download_dir(download_dir="/mock/download", config_path=Path("/mock/path"))
+    result = resolve_download_dir(
+        download_dir="/mock/download",
+    )
     assert result == Path("/mock/download")
 
 
@@ -126,11 +140,15 @@ def test_resolve_download_dir_with_default_dir():
     mock_config.default_download_dir = "/mock/default"
 
     with patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config):
-        result = resolve_download_dir(download_dir=None, config_path=Path("/mock/path"))
+        result = resolve_download_dir(
+            download_dir=None,
+        )
         assert result == Path("/mock/default")
 
 
 def test_resolve_download_dir_with_current_dir():
     """Test that resolve_download_dir defaults to the current working directory if no directory is specified."""
-    result = resolve_download_dir(download_dir=".", config_path=Path("/mock/path"))
+    result = resolve_download_dir(
+        download_dir=".",
+    )
     assert result == Path.cwd()

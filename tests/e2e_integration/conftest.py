@@ -6,7 +6,6 @@ It also collects fixtures and constants that are needed across multiple test mod
 """
 
 import logging
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +20,7 @@ from divbase_api.worker.crud_dimensions import (
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
+from divbase_cli.cli_config import cli_settings
 from tests.e2e_integration.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.e2e_integration.helpers.setup_test_data import (
     API_ADMIN_CREDENTIALS,
@@ -47,14 +47,11 @@ def clean_tmp_config_token_dir():
     Related to this fixture is cli_config.py where the cli_settings instance is created at module load time.
     Using env variables we point to these "testing" paths instead for the config and token paths.
     """
-    test_config_path = Path("tests/fixtures/tmp/config.yaml")
-    test_token_path = Path("tests/fixtures/tmp/.fakesecrets")
-
-    test_config_path.unlink(missing_ok=True)
-    test_token_path.unlink(missing_ok=True)
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
     yield
-    test_config_path.unlink(missing_ok=True)
-    test_token_path.unlink(missing_ok=True)
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session")

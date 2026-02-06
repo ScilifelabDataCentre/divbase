@@ -37,15 +37,7 @@ pipx install divbase-cli
 
 If you do not have `pipx` installed, you can install it by following [the official instructions from pipx](https://pipx.pypa.io/stable/installation/). Refer to the [Installation Guide](installation.md) for more detailed instructions or other ways to install divbase-cli.
 
-## Step 4: Configure the CLI
-
-Set up your user configuration file:
-
-```bash
-divbase-cli config create
-```
-
-This creates a configuration file stored on your local device at: `~/.config/divbase/config.yaml`.
+## Step 4: Add your project(s) to your divbase-cli config
 
 Add your project(s) to the configuration file:
 

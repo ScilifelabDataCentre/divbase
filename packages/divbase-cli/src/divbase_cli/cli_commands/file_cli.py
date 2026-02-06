@@ -13,8 +13,7 @@ from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.s3_files import (
@@ -32,11 +31,6 @@ from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPOR
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
-FORMAT_AS_TSV_OPTION = typer.Option(
-    False,
-    "--tsv",
-    help="If set, will print the output in .TSV format for easier programmatic parsing.",
-)
 
 
 @file_app.command("ls")
@@ -55,7 +49,6 @@ def list_files(
         help="If set, will also show DivBase query results files which are hidden by default.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     list all currently available files in the project's DivBase store.
@@ -64,8 +57,8 @@ def list_files(
     By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
     To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     files = list_files_command(
         divbase_base_url=logged_in_url,
@@ -105,15 +98,14 @@ def file_info(
     file_name: str = typer.Argument(..., help="Name of the file to get information about."),
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Get detailed information about a specific file in the project's DivBase store.
 
     This includes all versions of the file and whether the file is currently marked as soft deleted.
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     file_info = get_file_info_command(
         divbase_base_url=logged_in_url,
@@ -185,7 +177,6 @@ def download_files(
         help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Download files from the project's store on DivBase.
@@ -201,9 +192,9 @@ def download_files(
     E.g. to download the latest version of file1 and version "3xcdsdsdiw829x"
     of file2: 'divbase-cli files download file1 file2:3xcdsdsdiw829x'
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
-    download_dir_path = resolve_download_dir(download_dir=download_dir, config_path=config_file)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    download_dir_path = resolve_download_dir(download_dir=download_dir)
 
     raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
 
@@ -238,7 +229,6 @@ def stream_file(
         "To get a file's version ids, use the 'divbase-cli file info [FILE_NAME]' command.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Stream a file's content to standard output.
@@ -250,8 +240,8 @@ def stream_file(
     - View a gzipped file: divbase-cli files stream my_file.vcf.gz | zcat | less
     - Run a bcftools command: divbase-cli files stream my_file.vcf.gz | bcftools view -h -  # The "-" tells bcftools to read from standard input
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     stream_file_command(
         divbase_base_url=logged_in_url,
@@ -277,7 +267,6 @@ def upload_files(
         ),
     ] = False,
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Upload files to your project's store on DivBase:
@@ -287,8 +276,8 @@ def upload_files(
         2. provide a directory to upload
         3. provide a text file with or a file list.
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     if bool(files) + bool(upload_dir) + bool(file_list) > 1:
         print("Please specify only one of --files, --upload_dir, or --file-list.")
@@ -342,7 +331,6 @@ def remove_files(
         False, "--dry-run", help="If set, will not actually delete the files, just print what would be deleted."
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Soft delete files from the project's store on DivBase
@@ -353,8 +341,8 @@ def remove_files(
 
     Note that deleting a non existent file will be treated as a successful deletion.
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     all_files = _resolve_file_inputs(files=files, file_list=file_list)
 
@@ -385,7 +373,6 @@ def restore_soft_deleted_files(
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to restore."),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Restore soft deleted files from the project's store on DivBase
@@ -396,8 +383,8 @@ def restore_soft_deleted_files(
 
     NOTE: Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live. This means you can repeatedly run this command on the same file and get the same response.
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
-    logged_in_url = ensure_logged_in(config_path=config_file, desired_url=project_config.divbase_url)
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     all_files = _resolve_file_inputs(files=files, file_list=file_list)
 

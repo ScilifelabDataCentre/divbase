@@ -10,19 +10,7 @@ This section covers how to configure divbase-cli to know which projects you're a
 
 ## 1. Create a user config file and add your project(s)
 
-After installing `divbase-cli`, you can create a user config file as follows:
-
-```bash
-divbase-cli config create
-```
-
-To view the contents of your user config file, you can run:
-
-```bash
-divbase-cli config show
-```
-
-To add a project to the config file you can run:
+After installing `divbase-cli`, you can add a new project to your user config file by running:
 
 ```bash
 divbase-cli config add [PROJECT_NAME] # append `--default` to make it the default project
@@ -35,6 +23,12 @@ If you want to change your default project later, you can run the same command w
 
 ```bash
 divbase-cli config set-default [PROJECT_NAME] # This must be a project that is already in your config file
+```
+
+To view the contents of your user config file, you can run:
+
+```bash
+divbase-cli config show
 ```
 
 ## 2. Logging into DivBase server

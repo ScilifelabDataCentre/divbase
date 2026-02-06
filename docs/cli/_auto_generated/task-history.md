@@ -32,7 +32,6 @@ $ divbase-cli task-history user [OPTIONS]
 
 **Options**:
 
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--limit INTEGER`: Maximum number of tasks to display in the terminal. Sorted by recency.  [default: 10]
 * `--project TEXT`: Optional project name to filter the user&#x27;s task history by project.
 * `--help`: Show this message and exit.
@@ -53,7 +52,6 @@ $ divbase-cli task-history id [OPTIONS] TASK_ID
 
 **Options**:
 
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli task-history project`
@@ -72,6 +70,5 @@ $ divbase-cli task-history project [OPTIONS] PROJECT
 
 **Options**:
 
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--limit INTEGER`: Maximum number of tasks to display in the terminal. Sorted by recency.  [default: 10]
 * `--help`: Show this message and exit.

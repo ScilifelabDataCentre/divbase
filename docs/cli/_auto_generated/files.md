@@ -44,7 +44,6 @@ $ divbase-cli files ls [OPTIONS]
 * `-p, --prefix TEXT`: Optional prefix to filter the listed files by name (only list files starting with this prefix).
 * `-r, --include-results-files`: If set, will also show DivBase query results files which are hidden by default.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files info`
@@ -67,7 +66,6 @@ $ divbase-cli files info [OPTIONS] FILE_NAME
 
 * `--tsv`: If set, will print the output in .TSV format for easier programmatic parsing.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files download`
@@ -105,7 +103,6 @@ You can also specify &quot;.&quot; to download to the current directory.
 * `--disable-verify-checksums`: Turn off checksum verification which is on by default. Checksum verification means all downloaded files are verified against their MD5 checksums.It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.
 * `--project-version TEXT`: User defined version of the project&#x27;s at which to download the files. If not provided, downloads the latest version of all selected files.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files stream`
@@ -133,7 +130,6 @@ $ divbase-cli files stream [OPTIONS] FILE_NAME
 
 * `--version-id TEXT`: Specify this if you want to look at an older/specific version of the file. If not provided, the latest version of the file is used. To get a file&#x27;s version ids, use the &#x27;divbase-cli file info [FILE_NAME]&#x27; command.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files upload`
@@ -161,7 +157,6 @@ $ divbase-cli files upload [OPTIONS] [FILES]...
 * `--file-list PATH`: Text file with list of files to upload.
 * `--disable-safe-mode`: Turn off safe mode which is on by default. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you&#x27;re about to upload:(1) Checks if any of the files you&#x27;re about to upload already exist (by comparing name and checksum) and if so stops the upload process.(2) Sends the file&#x27;s checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums).It is recommended to leave safe mode enabled unless you have a specific reason to disable it.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files rm`
@@ -189,7 +184,6 @@ $ divbase-cli files rm [OPTIONS] [FILES]...
 * `--file-list PATH`: Text file with list of files to delete.
 * `--dry-run`: If set, will not actually delete the files, just print what would be deleted.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
 
 ## `divbase-cli files restore`
@@ -216,5 +210,4 @@ $ divbase-cli files restore [OPTIONS] [FILES]...
 
 * `--file-list PATH`: Text file with list of files to restore.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.
