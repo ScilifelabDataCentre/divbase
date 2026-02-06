@@ -79,7 +79,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
 
 
 @stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
-def login_to_divbase(email: str, password: SecretStr, divbase_url: str, config_path: Path) -> None:
+def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
     """
     Log in to the DivBase server and return user tokens.
     """
@@ -113,18 +113,16 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str, config_p
     )
     token_data.dump_tokens()
 
-    config = load_user_config(config_path)
+    config = load_user_config()
     config.set_login_status(url=divbase_url, email=email)
 
 
-def logout_of_divbase(
-    token_path: Path = cli_settings.TOKENS_PATH, config_path: Path = cli_settings.CONFIG_PATH
-) -> None:
+def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     """
     Log out of the DivBase server.
     We send the refresh token to DivBase to be revoked server-side.
     """
-    config = load_user_config(config_path)
+    config = load_user_config()
 
     # the "if" avoids raising an error on a non logged in user trying to logout
     if config.logged_in_url:

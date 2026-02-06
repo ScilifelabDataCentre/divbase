@@ -6,11 +6,9 @@ Submits a query for fetching the Celery task history for the user to the DivBase
 """
 
 import logging
-from pathlib import Path
 
 import typer
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
@@ -28,7 +26,6 @@ task_history_app = typer.Typer(
 
 @task_history_app.command("user")
 def list_task_history_for_user(
-    config_file: Path = CONFIG_FILE_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str | None = typer.Option(
         None, help="Optional project name to filter the user's task history by project."
@@ -40,7 +37,7 @@ def list_task_history_for_user(
 
     # TODO add option to sort ASC/DESC by task timestamp
 
-    config = load_user_config(config_file)
+    config = load_user_config()
     logged_in_url = config.logged_in_url
 
     if not logged_in_url:
@@ -73,13 +70,12 @@ def list_task_history_for_user(
 @task_history_app.command("id")
 def task_history_by_id(
     task_id: int | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
-    config_file: Path = CONFIG_FILE_OPTION,
 ):
     """
     Check status of a specific task submitted by the user by its task ID.
     """
 
-    config = load_user_config(config_file)
+    config = load_user_config()
     logged_in_url = config.logged_in_url
 
     if not logged_in_url:
@@ -104,7 +100,6 @@ def task_history_by_id(
 
 @task_history_app.command("project")
 def list_task_history_for_project(
-    config_file: Path = CONFIG_FILE_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str = typer.Argument(..., help="Project name to check the task history for."),
 ):
@@ -115,7 +110,7 @@ def list_task_history_for_project(
     # TODO add option to sort ASC/DESC by task timestamp
     # TODO use default project from config if not --project specified
 
-    config = load_user_config(config_file)
+    config = load_user_config()
     logged_in_url = config.logged_in_url
 
     if not logged_in_url:

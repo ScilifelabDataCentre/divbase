@@ -1,10 +1,8 @@
 import logging
-from pathlib import Path
 
 import typer
 import yaml
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
@@ -22,11 +20,10 @@ dimensions_app = typer.Typer(
 @dimensions_app.command("update")
 def update_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """Calculate and add the dimensions of a VCF file to the dimensions index file in the project."""
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     response = make_authenticated_request(
         method="PUT",
@@ -53,14 +50,13 @@ def show_dimensions_index(
         )
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Show the dimensions index file for a project.
     When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
     """
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     response = make_authenticated_request(
         method="GET",

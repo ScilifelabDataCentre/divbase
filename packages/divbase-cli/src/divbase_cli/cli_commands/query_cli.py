@@ -17,12 +17,10 @@ TODO:
 """
 
 import logging
-from pathlib import Path
 
 import typer
 from rich import print
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.config_resolver import resolve_project
@@ -75,7 +73,6 @@ def sample_metadata_query(
     ),
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
@@ -86,7 +83,7 @@ def sample_metadata_query(
     TODO: handle when the name of the sample column is something other than Sample_ID
     """
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
 
@@ -116,7 +113,6 @@ def pipe_query(
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project on success.
@@ -129,7 +125,7 @@ def pipe_query(
     TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
     """
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
 
