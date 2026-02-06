@@ -14,25 +14,46 @@ divbase-cli dimensions create-metadata-template
 
 Note! there can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag.
 
+### Sidecar TSV format requirements
+
+**Mandatory content:**
+
+1. The first row must be a header row and the first column must be named `Sample_ID`.
+2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
+3. The `Sample_ID` column can only contain one sample name per row. This is different from the user-defined columns that can take arrays of values for each cell in a column.
+4. Every column need to be tab separated for all rows.
+
+**User-defined columns:**
+
+After the `Sample_ID` column has been populated, users can add any columns and values to the TSV.
+
+1. It is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
+2. The user-defined columns can be either numeric or string type. Try to avoid mixing string and numeric values in the same column is possible. If a mix of string and numerical data is used in the same column, the system will treat them all as strings, which might lead to unexpected filtering results when running queries. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values is numerical or string.
+3. Use English decimal notation (.) and not comma (,) when entering decimals. This ensures that the data is correctly loaded by `Pandas`.
+4. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data.
+
+**Example:**
+
+This example illustrates how a sidecar sample metadata TSV can look like. The mandatory requirement are fulfilled (heading, `Sample_ID` column, tab-separated file). The user-defined column contains examples of a numerical column (`Population`) and a string column (`Area`). In some cells, semicolons (`;`) are used to assign multiple values to the same sample and column.
+
+```text
+#Sample_ID Population Area
+S1 1 North
+S2 2;4 East
+S3 3 West;South
+S4 4 West
+S5 5 North
+S6 6 East
+S7 1;3;5 South
+S8 2 West
+```
+
 TODOs:
 
 - [TO BE IMPLEMENTED] consider changing the mandatory column name from `Sample_ID` to `Sample`
 - [TO BE IMPLEMENTED] what happens if a TSV does not contain all the samples in the DivBase project? There should probably be a warning, but not an error?
 - [TO BE IMPLEMENTED] what happens if a sample name is misspelled in the TSV? a warning? can this be checked against the dimensions show?
-
 - [TO BE IMPLEMENTED] what happens if a sample is duplicated in the file. what happens if the sample name is duplicated but not the values (diverging duplicate)?
-
-1 mandatory column: sample name.
-
-any other columns are optional and user defined
-
-it is possible to have more than one sidecar sample metadata file in each DivBase project.
-
-example
-
-```
-TODO add example here
-```
 
 ## Query Syntax for sidecar metadata
 
@@ -58,6 +79,8 @@ Weight:<2,4 → values less than 2 OR equal to 4
 Weight:1-2,4 → values in range 1-2 OR equal to 4
 Weight:>5,1-2,4 → values greater than 5 OR in range 1-2 OR equal to 4
 Weight:>10,<2,5-7 → values >10 OR <2 OR in range 5-7
+
+note that semicolon is allowed in in cells in the TSV, but have another meaning in the query syntax!
 
 TODO write pytests that ensure that these numerical filters work
 

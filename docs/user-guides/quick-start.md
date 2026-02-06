@@ -128,7 +128,7 @@ DivBase can checkout data based the VCF files themselves, but can also take an o
 divbase-cli dimensions create-metadata-template
 ```
 
-Details on how to write this file are given in [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md). In short, the first row starts with `#` and contains the headers for different metadata columns. The first column (`Sample_ID`) is mandatory and can be created by the system as just described; if created manually just make. The rest of the columns are free for the user to define.
+Details on how to write this file are given in [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md). In short, the first row starts with `#` and contains the headers for different metadata columns. The first column (`Sample_ID`) is mandatory and can be created by the system as just described; if created manually just make sure that each sample name is spelled exactly as in the VCF files. The rest of the columns are free for the user to define.
 
 Example of a sidecar metadata TSV file with the mandatory `Sample_ID` column and two user defined columns.
 
