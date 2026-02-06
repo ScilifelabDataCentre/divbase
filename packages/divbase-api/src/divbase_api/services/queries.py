@@ -711,6 +711,58 @@ class SidecarQueryManager:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
+    def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
+        """
+        Helper method to detect if a column contains semicolon-separated numeric values.
+        Pandas correctly infers type from single-value columns. But for columns with semicolon-separated values
+        (e.g.: "1;2;3"), it infers them as strings (object dtype). This is an issue since numeric operations
+        (inequalities, ranges) cannot be performed on string values.
+
+        This helper method checks ALL non-null values in the column to determine if they can be parsed as numeric
+        after splitting by semicolon. Note that it only detects if a column value is semicolon-separated numeric, it does not
+        convert the column to numeric type. It also validates that the colum value is not of mixed string-numerical type, which
+        is invalid input for the query system. The actual parsing and handling of the semicolon-separated numeric values is
+        done in the lamda functions in the run_query() method.
+
+        Returns True if the column contains ONLY numeric values (with or without semicolons).
+        Returns False if the column contains ONLY non-numeric values (regular string column), or if the column is empty.
+        Raises SidecarInvalidFilterError if mixed types detected (e.g., "1;2" and "abc;def" in same column).
+        """
+        if key not in self.df.columns:
+            return False
+
+        non_null_values = self.df[key].dropna()
+        if len(non_null_values) == 0:
+            return False
+
+        has_numeric_type = False
+        has_non_numeric_type = False
+
+        for row_index, cell_value in enumerate(non_null_values):
+            cell_str = str(cell_value).strip()
+            if not cell_str:
+                continue
+
+            parts = cell_str.split(";")
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    float(part)
+                    has_numeric_type = True
+                except ValueError:
+                    has_non_numeric_type = True
+
+                if has_numeric_type and has_non_numeric_type:
+                    raise SidecarInvalidFilterError(
+                        f"Column '{key}' contains mixed types. Value '{cell_str}' at row {row_index} "
+                        f"has both numeric and non-numeric parts. All values in a column must be consistently "
+                        f"numeric or string for filtering to work correctly."
+                    )
+
+        return has_numeric_type and not has_non_numeric_type
+
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
         """
         Method to run a query against the loaded data. The filter_string should be a semicolon-separated list of key:value pairs,
@@ -781,11 +833,13 @@ class SidecarQueryManager:
                     continue
 
                 is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
+                is_semicolon_numeric = self._is_semicolon_separated_numeric_column(key) if not is_numeric else False
 
                 # Handle numeric filtering: inequalities, ranges, and discrete values (all with OR logic)
                 # e.g., "Weight:>25,<30,50" or "Weight:20-40,50,>100"
                 # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "25;30;35"
-                if is_numeric:
+                # Also handles columns that pandas infers as strings but contain numeric values with semicolons (e.g., "1;2;3")
+                if is_numeric or is_semicolon_numeric:
                     filter_string_values_list = filter_string_values.split(",")
                     inequality_conditions = []
                     range_conditions = []
@@ -811,29 +865,32 @@ class SidecarQueryManager:
 
                             condition = self.df[key].apply(
                                 lambda cell_value, op=operator, thresh=threshold: (
-                                    False
-                                    if pd.isna(cell_value)
-                                    else any(
-                                        (
-                                            cell_value_num > thresh
-                                            if op == ">"
-                                            else cell_value_num >= thresh
-                                            if op == ">="
-                                            else cell_value_num < thresh
-                                            if op == "<"
-                                            else cell_value_num <= thresh
+                                    (
+                                        False
+                                        if pd.isna(cell_value)
+                                        else any(
+                                            (
+                                                cell_value_num > thresh
+                                                if op == ">"
+                                                else cell_value_num >= thresh
+                                                if op == ">="
+                                                else cell_value_num < thresh
+                                                if op == "<"
+                                                else cell_value_num <= thresh
+                                            )
+                                            for cell_value_num in (
+                                                # convert to numeric type after splitting by semicolon
+                                                float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
+                                                for cell_value_str in str(cell_value).split(";")
+                                                if cell_value_str.strip()
+                                            )
                                         )
-                                        for cell_value_num in (
-                                            float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
-                                            for cell_value_str in str(cell_value).split(";")
-                                            if cell_value_str.strip()
-                                        )
+                                        if not pd.isna(cell_value)
+                                        else False
                                     )
                                     if not pd.isna(cell_value)
                                     else False
                                 )
-                                if not pd.isna(cell_value)
-                                else False
                             )
                             inequality_conditions.append(condition)
                             logger.debug(f"Applied inequality filter on '{key}': {operator} {threshold}")
@@ -852,6 +909,7 @@ class SidecarQueryManager:
                                     else any(
                                         min_v <= cell_value_num <= max_v
                                         for cell_value_num in (
+                                            # convert to numeric type after splitting by semicolon
                                             float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
                                             for cell_value_str in str(cell_value).split(";")
                                             if cell_value_str.strip()
@@ -946,6 +1004,9 @@ class SidecarQueryManager:
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
                     filter_conditions.append(condition)
+            except SidecarInvalidFilterError:
+                # Re-raise our custom exceptions without wrapping them
+                raise
             except Exception as e:
                 raise SidecarInvalidFilterError(
                     f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2' or 'key:min-max' for numeric ranges"

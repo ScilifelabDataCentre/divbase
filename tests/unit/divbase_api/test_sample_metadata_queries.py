@@ -11,9 +11,8 @@ from divbase_api.services.queries import SidecarQueryManager
 def sample_tsv_with_numeric_data(tmp_path):
     """
     Create a temporary TSV file with numeric and string columns for testing.
-    Includes semicolon-separated values in some cells.
-    Note: Weight and Age columns have NO semicolons to ensure pandas infers them as numeric.
-    Population column has semicolons but should still be numeric.
+    Includes semicolon-separated values in some cells. Includes both int and float
+    numeric values to test that both are detected as numeric.
     """
     tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea
 S1\t1\t20.0\t5.0\tNorth
@@ -42,9 +41,9 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S8" in sample_ids  # Weight: 55.0
-        assert "S9" in sample_ids  # Weight: 62.0
-        assert "S10" in sample_ids  # Weight: 70.0
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
 
     def test_greater_than_or_equal(self, sample_tsv_with_numeric_data):
         """Test >= operator returns correct samples."""
@@ -53,10 +52,10 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S7" in sample_ids  # Weight: 50.0
-        assert "S8" in sample_ids  # Weight: 55.0
-        assert "S9" in sample_ids  # Weight: 62.0
-        assert "S10" in sample_ids  # Weight: 70.0
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
 
     def test_less_than(self, sample_tsv_with_numeric_data):
         """Test < operator returns correct samples."""
@@ -65,8 +64,8 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 2
-        assert "S1" in sample_ids  # Age: 5
-        assert "S2" in sample_ids  # Age: 10
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
 
     def test_less_than_or_equal(self, sample_tsv_with_numeric_data):
         """Test <= operator returns correct samples."""
@@ -75,9 +74,9 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S1" in sample_ids  # Age: 5
-        assert "S2" in sample_ids  # Age: 10
-        assert "S3" in sample_ids  # Age: 15
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S3" in sample_ids
 
     def test_inequality_on_weight_column(self, sample_tsv_with_numeric_data):
         """Test inequality on Weight column (no semicolons, pure numeric)."""
@@ -86,8 +85,8 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 2
-        assert "S9" in sample_ids  # Weight: 62.0
-        assert "S10" in sample_ids  # Weight: 70.0
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
 
     def test_inequality_on_age_column(self, sample_tsv_with_numeric_data):
         """Test inequality on Age column (no semicolons, pure numeric)."""
@@ -96,9 +95,9 @@ class TestNumericalFilteringInequalities:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S8" in sample_ids  # Age: 40.0
-        assert "S9" in sample_ids  # Age: 45.0
-        assert "S10" in sample_ids  # Age: 52.0
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
 
 
 class TestNumericalFilteringRanges:
@@ -111,10 +110,10 @@ class TestNumericalFilteringRanges:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S3" in sample_ids  # Weight: 30
-        assert "S4" in sample_ids  # Weight: 35
-        assert "S5" in sample_ids  # Weight: 40
-        assert "S6" in sample_ids  # Weight: 45
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
 
     def test_range_boundaries_inclusive(self, sample_tsv_with_numeric_data):
         """Test that range boundaries are inclusive."""
@@ -123,9 +122,9 @@ class TestNumericalFilteringRanges:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S4" in sample_ids  # Age: 20 (lower boundary)
-        assert "S5" in sample_ids  # Age: 25
-        assert "S6" in sample_ids  # Age: 30 (upper boundary)
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
 
     def test_range_on_weight_column(self, sample_tsv_with_numeric_data):
         """Test range filtering on Weight column (no semicolons, pure numeric)."""
@@ -134,10 +133,10 @@ class TestNumericalFilteringRanges:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S5" in sample_ids  # Weight: 40.0
-        assert "S6" in sample_ids  # Weight: 45.0
-        assert "S7" in sample_ids  # Weight: 50.0
-        assert "S8" in sample_ids  # Weight: 55.0
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
 
     def test_narrow_range(self, sample_tsv_with_numeric_data):
         """Test a narrow range returns only matching samples."""
@@ -146,9 +145,9 @@ class TestNumericalFilteringRanges:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S4" in sample_ids  # Age: 20.0
-        assert "S5" in sample_ids  # Age: 25.0
-        assert "S6" in sample_ids  # Age: 30.0
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
 
 
 class TestNumericalFilteringDiscreteValues:
@@ -161,7 +160,7 @@ class TestNumericalFilteringDiscreteValues:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 1
-        assert "S7" in sample_ids  # Weight: 50
+        assert "S7" in sample_ids
 
     def test_multiple_discrete_values(self, sample_tsv_with_numeric_data):
         """Test filtering with multiple discrete values (OR logic)."""
@@ -170,9 +169,9 @@ class TestNumericalFilteringDiscreteValues:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S1" in sample_ids  # Weight: 20
-        assert "S3" in sample_ids  # Weight: 30
-        assert "S7" in sample_ids  # Weight: 50
+        assert "S1" in sample_ids
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
 
     def test_discrete_values_with_semicolon_separated_cells(self, sample_tsv_with_numeric_data):
         """Test discrete value filtering on Population column (string column with semicolons)."""
@@ -181,10 +180,10 @@ class TestNumericalFilteringDiscreteValues:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S1" in sample_ids  # Population: 1
-        assert "S3" in sample_ids  # Population: 3
-        assert "S5" in sample_ids  # Population: 5
-        assert "S7" in sample_ids  # Population: 1;3;5 (string matches "1", "3", and "5")
+        assert "S1" in sample_ids
+        assert "S3" in sample_ids
+        assert "S5" in sample_ids
+        assert "S7" in sample_ids
 
     def test_discrete_values_match_any_semicolon_value(self, sample_tsv_with_numeric_data):
         """Test that discrete filtering matches if ANY semicolon value matches (string matching on Population)."""
@@ -193,8 +192,8 @@ class TestNumericalFilteringDiscreteValues:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 2
-        assert "S2" in sample_ids  # Population: 2;4 (string "4" matches)
-        assert "S4" in sample_ids  # Population: 4
+        assert "S2" in sample_ids
+        assert "S4" in sample_ids
 
     def test_discrete_age_values(self, sample_tsv_with_numeric_data):
         """Test discrete filtering on Age column."""
@@ -203,6 +202,74 @@ class TestNumericalFilteringDiscreteValues:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S2" in sample_ids  # Age: 10
-        assert "S5" in sample_ids  # Age: 25
-        assert "S8" in sample_ids  # Age: 40
+        assert "S2" in sample_ids
+        assert "S5" in sample_ids
+        assert "S8" in sample_ids
+
+
+class TestSemicolonSeparatedNumericFiltering:
+    """Test that inequalities and ranges work on columns with semicolon-separated numeric values."""
+
+    def test_inequality_on_semicolon_separated_column(self, sample_tsv_with_numeric_data):
+        """Test that > operator works on Population column (semicolon-separated numbers)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:>4")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 5
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+
+    def test_inequality_less_than_on_semicolon_separated_column(self, sample_tsv_with_numeric_data):
+        """Test that < operator works on Population column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:<3")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 4
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
+
+    def test_range_on_semicolon_separated_column(self, sample_tsv_with_numeric_data):
+        """Test that range filtering works on Population column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:3-6")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 6
+        assert "S2" in sample_ids
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+
+    def test_combined_inequality_and_discrete_on_semicolon_separated(self, sample_tsv_with_numeric_data):
+        """Test combining inequality and discrete values on Population column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:>6,2")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 4
+        assert "S2" in sample_ids
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+
+    def test_range_with_semicolon_values_at_boundaries(self, sample_tsv_with_numeric_data):
+        """Test that range boundaries work correctly with semicolon-separated values."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:1-3")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 5
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
