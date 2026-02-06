@@ -55,6 +55,7 @@ class SampleMetadataQueryTaskResult(BaseModel):
     unique_sample_ids: list[str]
     unique_filenames: list[str]
     query_message: str
+    warnings: list[str] = []
     status: Optional[str] = None
 
 

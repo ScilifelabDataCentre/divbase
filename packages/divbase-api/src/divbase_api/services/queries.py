@@ -56,6 +56,7 @@ def run_sidecar_metadata_query(
 
     sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
     query_message = sidecar_manager.query_message
+    warnings = sidecar_manager.warnings
     unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
 
     logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
@@ -82,6 +83,7 @@ def run_sidecar_metadata_query(
         unique_sample_ids=list(unique_sample_ids),
         unique_filenames=list(unique_filenames),
         query_message=query_message,
+        warnings=warnings,
     )
 
 
@@ -685,6 +687,7 @@ class SidecarQueryManager:
         self.df = None
         self.query_result = None
         self.query_message: str = ""
+        self.warnings: list[str] = []
         self.load_file()
 
     def load_file(self) -> "SidecarQueryManager":
@@ -699,7 +702,7 @@ class SidecarQueryManager:
             logger.info(f"Loading sidecar metadata file: {self.file}")
             self.df = pd.read_csv(
                 self.file, sep="\t"
-            )  # Pandas has Type Inference and will detect numberic and string columns automatically
+            )  # Pandas has Type Inference and will detect numeric and string columns automatically
             self.df.columns = self.df.columns.str.lstrip("#")
             if "Sample_ID" not in self.df.columns:
                 raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
@@ -755,7 +758,9 @@ class SidecarQueryManager:
                 values = values.strip()
 
                 if key not in self.df.columns:
-                    logger.warning(f"Column '{key}' not found in the TSV file. Skipping this filter condition.")
+                    warning_msg = f"Column '{key}' not found in the TSV file. Skipping this filter condition."
+                    logger.warning(warning_msg)
+                    self.warnings.append(warning_msg)
                     continue
 
                 is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
@@ -842,19 +847,23 @@ class SidecarQueryManager:
                             combined = combined | cond
 
                         if not combined.any():
-                            logger.warning(f"No values in column '{key}' match the filter: {values}")
+                            warning_msg = f"No values in column '{key}' match the filter: {values}"
+                            logger.warning(warning_msg)
+                            self.warnings.append(warning_msg)
                         filter_conditions.append(combined)
                         logger.info("filter_conditions: " + str(filter_conditions))  # debug
                     else:
-                        logger.warning(
-                            f"No valid numeric values, ranges, or inequalities provided for column '{key}'. Filter condition will not match any rows."
-                        )
+                        warning_msg = f"No valid numeric values, ranges, or inequalities provided for column '{key}'. Filter condition will not match any rows."
+                        logger.warning(warning_msg)
+                        self.warnings.append(warning_msg)
                 else:
                     # Non-numeric column: handle as discrete string values
                     values_list = values.split(",")
                     condition = self.df[key].isin(values_list)
                     if not condition.any():
-                        logger.warning(f"None of the values {values_list} were found in column '{key}'")
+                        warning_msg = f"None of the values {values_list} were found in column '{key}'"
+                        logger.warning(warning_msg)
+                        self.warnings.append(warning_msg)
                     filter_conditions.append(condition)
             except Exception as e:
                 raise SidecarInvalidFilterError(
@@ -869,9 +878,11 @@ class SidecarQueryManager:
             self.query_result = self.df[combined_condition].copy()
             self.query_message = self.filter_string
         else:
-            logger.warning("Invalid filter conditions found - returning ALL records. This may be a large result set.")
+            warning_msg = "Invalid filter conditions: none of the filters matched any records. Returning ALL records. This may be a large result set. Please check your filter keys, value spelling, and syntax."
+            logger.warning(warning_msg)
+            self.warnings.append(warning_msg)
             self.query_result = self.df
-            self.query_message = "Invalid filter conditions - returning ALL records"
+            self.query_message = f"Invalid filter conditions ({self.filter_string}) - returning ALL records"
 
         return self
 

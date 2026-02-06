@@ -100,12 +100,23 @@ def sample_metadata_query(
 
     results = SampleMetadataQueryTaskResult(**response.json())
 
+    if results.warnings:
+        print("[yellow]⚠ Warnings:[/yellow]")
+        for warning in results.warnings:
+            print(f"  • {warning}")
+        print()
+
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
         for sample in results.sample_and_filename_subset:
             print(f"Sample ID: '{sample['Sample_ID']}', Filename: '{sample['Filename']}'")
 
-    print(f"The results for the query ([bright_blue]{results.query_message}[/bright_blue]):")
+    invalid_query_prefix = "Invalid filter conditions"
+    if results.query_message and results.query_message.startswith(invalid_query_prefix):
+        color = "red"
+    else:
+        color = "bright_blue"
+    print(f"The results for the query ([{color}]{results.query_message}[/{color}]):")
     print(f"Unique Sample IDs: {results.unique_sample_ids}")
     print(f"Unique filenames: {results.unique_filenames}\n")
 
