@@ -13,7 +13,7 @@ from pathlib import Path
 
 import typer
 
-APP_NAME = "divbase_cli"
+APP_NAME = "divbase-cli"
 APP_DIR = Path(typer.get_app_dir(APP_NAME))
 CONFIG_PATH = APP_DIR / "config.yaml"
 TOKENS_PATH = APP_DIR / ".secrets"

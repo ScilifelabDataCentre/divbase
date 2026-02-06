@@ -3,7 +3,7 @@ Functions that resolve for the CLI commands things like:
     - which project to use
     - which download directory to use
     - which DivBase API URL to use
-Based on provider user input and their config file.
+Based on provided user input and their config file.
 """
 
 from pathlib import Path

@@ -41,7 +41,7 @@ def add_project_command(
         is_default=make_default,
     )
 
-    print(f"Project: '{project.name}' added to your config file located at {cli_settings.CONFIG_PATH.resolve()}.")
+    print(f"Project: '{project.name}' added to your config.")
     print(f"The URL: {project.divbase_url} was set as the DivBase API URL for this project.")
 
     if make_default:

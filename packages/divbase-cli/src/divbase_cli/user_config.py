@@ -4,6 +4,7 @@ User configuration is stored in a local file.
 By default the config will be stored at: "~/.config/divbase/config.yaml"
 """
 
+import logging
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,7 +12,9 @@ from pathlib import Path
 import yaml
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import ConfigFileNotFoundError, ProjectNotInConfigError
+from divbase_cli.cli_exceptions import ProjectNotInConfigError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -142,7 +145,10 @@ def load_user_config() -> UserConfig:
         with open(cli_settings.CONFIG_PATH, "r") as file:
             config_contents = yaml.safe_load(file)
     except FileNotFoundError:
-        raise ConfigFileNotFoundError from None
+        logger.debug(f"No existing config file found at {cli_settings.CONFIG_PATH}, creating a new one.")
+        create_user_config(config_path=cli_settings.CONFIG_PATH)
+        with open(cli_settings.CONFIG_PATH, "r") as file:
+            config_contents = yaml.safe_load(file)
 
     projects = [ProjectConfig(**project) for project in config_contents.get("projects", [])]
 
@@ -159,7 +165,9 @@ def load_user_config() -> UserConfig:
 def create_user_config(config_path: Path) -> None:
     """Create a user configuration file at the specified path."""
     if config_path.exists():
-        raise FileExistsError(f"Config file already exists at {config_path}.")
+        raise FileExistsError(
+            f"Config file already exists at {config_path}. Stopping to avoid overwriting existing config."
+        )
     config_path.parent.mkdir(parents=False, exist_ok=True)
 
     user_config = UserConfig(config_path=config_path, projects=[])
