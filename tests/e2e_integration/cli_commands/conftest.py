@@ -30,7 +30,7 @@ def tmp_config_path(tmp_path):
 
 
 @pytest.fixture
-def logged_out_user_with_fresh_config():
+def logged_out_user_with_no_config():
     """
     Fixture to provide a user with a fresh config file that is not logged in anywhere.
     """
