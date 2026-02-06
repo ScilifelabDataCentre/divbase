@@ -18,7 +18,8 @@ APP_DIR = Path(typer.get_app_dir(APP_NAME))
 CONFIG_PATH = APP_DIR / "config.yaml"
 TOKENS_PATH = APP_DIR / ".secrets"
 DEFAULT_METADATA_TSV_NAME = "sample_metadata.tsv"
-DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"  # TODO - change to production URL when time comes
+# TODO - change to production URL when time comes
+DEFAULT_DIVBASE_API_URL = "https://divbase-dev.scilifelab-2-dev.sys.kth.se/api/"
 
 
 @dataclass
@@ -26,9 +27,8 @@ class DivBaseCLISettings:
     """
     Settings for DivBase CLI.
 
-    NOTE: Do not create an instance of this class yourself,
-    import the 'settings' instance created at this module's load time.
-    TODO - TESTS could override the config and tokens path
+    Your do not need to create an instance of this class yourself,
+    instead, import the 'cli_settings' instance created at this module's load time.
     """
 
     CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", CONFIG_PATH))
@@ -42,6 +42,9 @@ class DivBaseCLISettings:
         valid_levels = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"]
         if self.LOG_LEVEL not in valid_levels:
             raise ValueError(f"Invalid LOG_LEVEL: {self.LOG_LEVEL}. Must be one of {valid_levels}.")
+
+        if self.DIVBASE_API_URL.endswith("/"):
+            self.DIVBASE_API_URL = self.DIVBASE_API_URL[:-1]
 
 
 cli_settings = DivBaseCLISettings()
