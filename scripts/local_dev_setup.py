@@ -267,7 +267,7 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
 def create_local_config():
     """Create a local user DivBase config file and add projects to it."""
     for project in PROJECTS:
-        command = shlex.split(f"divbase-cli config add {project['name']}")
+        command = shlex.split(f"divbase-cli config add {project['name']} --divbase-url {BASE_URL}")
         subprocess.run(command, check=True, env=LOCAL_ENV)
 
     default_project = PROJECTS[0]["name"]
@@ -277,7 +277,7 @@ def create_local_config():
 
 def login_to_divbase():
     """Log in to DivBase using the local environment."""
-    command = shlex.split("divbase-cli auth login admin@divbase.com --password badpassword")
+    command = shlex.split(f"divbase-cli auth login admin@divbase.com --password badpassword --divbase-url {BASE_URL}")
     subprocess.run(command, check=True, env=LOCAL_ENV)
 
 
