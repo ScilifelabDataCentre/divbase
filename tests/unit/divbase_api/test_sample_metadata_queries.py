@@ -16,17 +16,17 @@ def sample_tsv_with_numeric_data(tmp_path):
     numeric values to test that both are detected as numeric.
     """
     # Keep indentation like this to ensure that leading spaces in column 1 does not cause issues.
-    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber
-S1\t1\t20.0\t5.0\tNorth\t100
-S2\t2;4\t25.0\t10\tEast\t200
-S3\t3\t30.0\t15\tWest;South\t300
-S4\t4\t35.0\t20\tWest\t400
-S5\t5\t40.0\t25\tNorth\t500
-S6\t6\t45.0\t30\tEast\t600
-S7\t1;3;5\t50.0\t35\tSouth\t700
-S8\t2\t55.0\t40\tWest\t800
-S9\t7\t62.0\t45\tNorth\t900
-S10\t8\t70.0\t52\tEast\t1000
+    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber\tSingleString
+S1\t1\t20.0\t5.0\tNorth\t100\tString
+S2\t2;4\t25.0\t10\tEast\t200\tStrings
+S3\t3\t30.0\t15\tWest;South;East\t300\tSting
+S4\t4\t35.0\t20\tWest\t400\tStings
+S5\t5\t40.0\t25\tNorth\t500\tThing
+S6\t6\t45.0\t30\tEast\t600\tThings
+S7\t1;3;5\t50.0\t35\tSouth\t700\tStrong
+S8\t2\t55.0\t40\tWest\t800\tStrung
+S9\t7\t62.0\t45\tNorth\t900\tStang
+S10\t8\t70.0\t52\tEast\t1000\tSong
 """
     tsv_file = tmp_path / "test_metadata.tsv"
     tsv_file.write_text(tsv_content)
@@ -340,19 +340,19 @@ class TestSemicolonSeparatedNumericFiltering:
 class TestStringColumnFiltering:
     """Test string column filtering with single and semicolon-separated values."""
 
-    def test_single_string_value_column(self, sample_tsv_with_edge_cases):
+    def test_single_string_value_column(self, sample_tsv_with_numeric_data):
         """Test filtering on a string column with single values (no semicolons)."""
-        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
-        result = manager.run_query(filter_string="SingleString:West")
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="SingleString:String")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 1
         assert "S1" in sample_ids
 
-    def test_single_string_value_column_multiple_filters(self, sample_tsv_with_edge_cases):
+    def test_single_string_value_column_multiple_filters(self, sample_tsv_with_numeric_data):
         """Test filtering on a single-value string column with multiple filter values (OR logic)."""
-        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
-        result = manager.run_query(filter_string="SingleString:West,North")
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="SingleString:String,Strings")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 2
@@ -366,9 +366,9 @@ class TestStringColumnFiltering:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
-        assert "S3" in sample_ids
         assert "S4" in sample_ids
         assert "S8" in sample_ids
+        assert "S3" in sample_ids
 
     def test_semicolon_separated_string_column_any_match(self, sample_tsv_with_numeric_data):
         """Test that filtering matches if ANY semicolon-separated value matches."""
