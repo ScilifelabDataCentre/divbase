@@ -36,19 +36,19 @@ S10\t8\t70.0\t52\tEast\t1000\tSong
 @pytest.fixture
 def sample_tsv_with_edge_cases(tmp_path):
     """
-    Create a temporary TSV file to test the 4 specific edge cases:
+    Create a temporary TSV file to test edge cases:
     1. "string;string;string" - OK (pure strings)
-    2. "string,string;string;string" - OK (strings with commas are allowed)
-    3. "1;3,5" - FAIL (mixed type: numbers with comma are treated as string since comma is not a numeric character)
-    4. "1;two;5" - FAIL (mixed numeric and non-numeric should raise exception)
+    2. "1;two;5" - FAIL (mixed numeric and non-numeric should raise exception)
+    3. String values containing numbers like "1string" - OK (inferred as string)
+    4. Column with commas should raise SidecarInvalidFilterError
 
-    Also includes cases for string values containing numbers.
+    Commas are NOT allowed in divbase TSV format.
     """
-    tsv_content = """#Sample_ID\tPureStrings\tStringsWithCommas\tNumbersWithComma\tMixedTypes\tSingleString\tSingleNumber
-S1\tNorth;South;East\tRegion1,Area1;Region2,Area2;Region3,Area3\t1;3,5\t1;two;5\tWest\t100
-S2\tWest;East;North\tZone1,Subzone1;Zone2,Subzone2\t2;4,6\t2;three;6\tNorth\t200
-S3\tSouth\tCity1,District1\t3\t3\tEast\t300
-S4\t1string\tstring2string\tstring3\tstring4\tString5\t400
+    tsv_content = """#Sample_ID\tPureStrings\tMixedTypes\tSingleString\tSingleNumber\tUnicodeStrings\tWithCommas
+S1\tNorth;South;East\t1;two;5\tWest\t100\tStockholm;Göteborg\tNorth,South
+S2\tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\West,East
+S3\tSouth\t3\tEast\t300\tKöpenhamn;København\tNorth,
+S4\t1string\tstring4\tString5\t400\tHumlebæk\t,South
 """
     tsv_file = tmp_path / "test_metadata_edge_cases.tsv"
     tsv_file.write_text(tsv_content)
@@ -381,6 +381,13 @@ class TestStringColumnFiltering:
 class TestEdgeCases:
     """Edge case tests for SidecarQueryManager filtering."""
 
+    def test_column_with_commas_raises(self, sample_tsv_with_edge_cases):
+        """Test that a column containing commas raises SidecarInvalidFilterError."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        with pytest.raises(SidecarInvalidFilterError) as excinfo:
+            manager.run_query(filter_string="WithCommas:foo")
+        assert "contains commas" in str(excinfo.value)
+
     def test_mixed_types_should_fail(self, sample_tsv_with_edge_cases):
         """Test that a column with mixed numeric and non-numeric values raises an error."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
@@ -402,24 +409,19 @@ class TestEdgeCases:
         assert "S1" in sample_ids
 
     def test_string_with_numbers_in_value(self, sample_tsv_with_edge_cases):
-        """Test that values like "1string", "string2string", "string3" are correctly inferred as strings."""
+        """Test that values like '1string' are correctly inferred as strings."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
         result = manager.run_query(filter_string="PureStrings:1string")
         sample_ids = result.get_unique_values("Sample_ID")
         assert "S4" in sample_ids
 
-    def test_string_with_numbers_in_other_columns(self, sample_tsv_with_edge_cases):
-        """Test that values with numbers in other columns do not affect type inference of a string column."""
+    def test_unicode_string_filtering(self, sample_tsv_with_edge_cases):
+        """Test that any query on UnicodeStrings raises SidecarInvalidFilterError if any cell contains a comma."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
-        result = manager.run_query(filter_string="StringsWithCommas:string2string")
-        sample_ids = result.get_unique_values("Sample_ID")
-        assert "S4" in sample_ids
-        result2 = manager.run_query(filter_string="NumbersWithComma:string3")
-        sample_ids2 = result2.get_unique_values("Sample_ID")
-        assert "S4" in sample_ids2
-        result3 = manager.run_query(filter_string="MixedTypes:string4")
-        sample_ids3 = result3.get_unique_values("Sample_ID")
-        assert "S4" in sample_ids3
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="UnicodeStrings:Göteborg")
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="UnicodeStrings:Malmö")
 
     def test_multi_column_single_string_and_single_number(self, sample_tsv_with_edge_cases):
         """Test that filtering on two valid single-value columns (SingleString and SingleNumber) will pass."""
@@ -457,10 +459,8 @@ class TestEdgeCases:
         assert len(sample_ids) == 1
         assert "S4" in sample_ids
 
-    def test_multi_column_single_string_and_strings_with_commas(self, sample_tsv_with_edge_cases):
-        """Test that filtering on SingleString and StringsWithCommas (both string columns) will pass."""
+    def test_multi_column_with_unicode(self, sample_tsv_with_edge_cases):
+        """Test that multi-column filtering works with unicode strings, but raises error if commas are present."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
-        result = manager.run_query(filter_string="SingleString:String5;StringsWithCommas:string2string")
-        sample_ids = result.get_unique_values("Sample_ID")
-        assert len(sample_ids) == 1
-        assert "S4" in sample_ids
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="UnicodeStrings:København;SingleNumber:300")

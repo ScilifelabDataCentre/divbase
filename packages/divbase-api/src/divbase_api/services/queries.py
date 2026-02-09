@@ -711,6 +711,19 @@ class SidecarQueryManager:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
+    def _validate_no_commas_in_column(self, key: str) -> None:
+        """
+        Helper method to validate that column values in the imported TSV does not contain commas.
+        Raises SidecarInvalidFilterError if any comma is found in the column values.
+        """
+        for row_index, cell_value in enumerate(self.df[key].dropna()):
+            cell_str = str(cell_value).strip()
+            if cell_str and "," in cell_str:
+                raise SidecarInvalidFilterError(
+                    f"Column '{key}' contains commas in value '{cell_str}' at row {row_index}. "
+                    f"Commas are not allowed in DivBase metadata files. Use semicolons (;) to separate multiple values."
+                )
+
     def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
         """
         Helper method to detect if a column contains semicolon-separated numeric values.
@@ -726,7 +739,7 @@ class SidecarQueryManager:
 
         Returns True if the column contains ONLY numeric values (with or without semicolons).
         Returns False if the column contains ONLY non-numeric values (regular string column), or if the column is empty.
-        Raises SidecarInvalidFilterError if mixed types detected (e.g., "1;2" and "abc;def" in same column).
+        Raises SidecarInvalidFilterError if mixed types detected (e.g., "1;2" and "abc;def" in same column) or if commas are found.
         """
         if key not in self.df.columns:
             return False
@@ -734,6 +747,8 @@ class SidecarQueryManager:
         non_null_values = self.df[key].dropna()
         if len(non_null_values) == 0:
             return False
+
+        self._validate_no_commas_in_column(key)
 
         has_numeric_type = False
         has_non_numeric_type = False
@@ -989,6 +1004,8 @@ class SidecarQueryManager:
                     # Non-numeric column: handle as discrete string values
                     # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "North;West"
                     filter_string_values_list = filter_string_values.split(",")
+
+                    self._validate_no_commas_in_column(key)
 
                     condition = self.df[key].apply(
                         lambda cell_value, target_filter_values=filter_string_values_list: (
