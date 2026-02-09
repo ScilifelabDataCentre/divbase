@@ -1,4 +1,8 @@
-""" """
+"""
+Core API routes for divbase, including health checks and announcements.
+
+Note that unlike every other API route these routes are not behind authentication...
+"""
 
 import logging
 

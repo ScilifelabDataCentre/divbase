@@ -2,7 +2,7 @@
 Schemas for announcements.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnnouncementResponse(BaseModel):
@@ -15,5 +15,4 @@ class AnnouncementResponse(BaseModel):
         description="The announcement level, which can control styling of announcement. Possible values are: info, success, warning, danger.",
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

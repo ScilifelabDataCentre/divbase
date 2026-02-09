@@ -3,7 +3,7 @@ Crud operations on the accouncements table,
 which stores announcements that can be displayed to users on the frontend and the cli.
 
 Starlette admin will manage the creation/editing/deletion of announcements,
-so this module only covers retrieving active announcements to be displayed.
+so this module only covers retrieving active announcements to be displayed on frontend or by CLI.
 """
 
 from datetime import datetime, timezone
@@ -24,7 +24,7 @@ async def get_active_announcements(db: AsyncSession, target: AnnouncementTarget)
     stmt = (
         select(AnnouncementDB)
         .where((AnnouncementDB.target == target) | (AnnouncementDB.target == AnnouncementTarget.BOTH))
-        .where((AnnouncementDB.auto_expire_at == None) | (AnnouncementDB.auto_expire_at > datetime.now(timezone.utc)))  # noqa: E711
+        .where((AnnouncementDB.auto_expire_at.is_(None)) | (AnnouncementDB.auto_expire_at > datetime.now(timezone.utc)))
     )
     result = await db.execute(stmt)
     announcements = result.scalars().all()
