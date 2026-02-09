@@ -2,6 +2,7 @@
 CLI subcommand for managing user auth with DivBase server.
 """
 
+import logging
 from datetime import datetime
 
 import typer
@@ -9,7 +10,8 @@ from pydantic import SecretStr
 from typing_extensions import Annotated
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import AuthenticationError
+from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.services.annoucements import get_and_display_announcements
 from divbase_cli.user_auth import (
     check_existing_session,
     login_to_divbase,
@@ -17,6 +19,8 @@ from divbase_cli.user_auth import (
     make_authenticated_request,
 )
 from divbase_cli.user_config import load_user_config
+
+logger = logging.getLogger(__name__)
 
 auth_app = typer.Typer(
     no_args_is_help=True, help="Login/logout of DivBase server. To register, visit https://divbase.scilifelab.se/."
@@ -53,6 +57,13 @@ def login(
                 return
 
     login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url)
+
+    try:
+        get_and_display_announcements(divbase_base_url=divbase_url)
+    except (DivBaseAPIError, DivBaseAPIConnectionError):
+        # lets not fail the login process if annoucements are not working.
+        logger.error("Failed to get")
+
     print(f"Logged in successfully as: {email}")
 
 
