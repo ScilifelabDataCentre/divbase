@@ -162,7 +162,7 @@ services:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/core/health"]
       interval: 5s
       timeout: 5s
       retries: 5
