@@ -15,17 +15,18 @@ def sample_tsv_with_numeric_data(tmp_path):
     Includes semicolon-separated values in some cells. Includes both int and float
     numeric values to test that both are detected as numeric.
     """
-    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea
-S1\t1\t20.0\t5.0\tNorth
-S2\t2;4\t25.0\t10\tEast
-S3\t3\t30.0\t15\tWest;South
-S4\t4\t35.0\t20\tWest
-S5\t5\t40.0\t25\tNorth
-S6\t6\t45.0\t30\tEast
-S7\t1;3;5\t50.0\t35\tSouth
-S8\t2\t55.0\t40\tWest
-S9\t7\t62.0\t45\tNorth
-S10\t8\t70.0\t52\tEast
+    # Keep indentation like this to ensure that leading spaces in column 1 does not cause issues.
+    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber
+S1\t1\t20.0\t5.0\tNorth\t100
+S2\t2;4\t25.0\t10\tEast\t200
+S3\t3\t30.0\t15\tWest;South\t300
+S4\t4\t35.0\t20\tWest\t400
+S5\t5\t40.0\t25\tNorth\t500
+S6\t6\t45.0\t30\tEast\t600
+S7\t1;3;5\t50.0\t35\tSouth\t700
+S8\t2\t55.0\t40\tWest\t800
+S9\t7\t62.0\t45\tNorth\t900
+S10\t8\t70.0\t52\tEast\t1000
 """
     tsv_file = tmp_path / "test_metadata.tsv"
     tsv_file.write_text(tsv_content)
@@ -117,6 +118,18 @@ class TestNumericalFilteringInequalities:
         assert "S9" in sample_ids
         assert "S10" in sample_ids
 
+    def test_inequality_on_single_numeric_value_column(self, sample_tsv_with_numeric_data):
+        """Test inequality on single-value numeric column (that does not have semicolon separated values)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="SingleNumber:>600")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 4
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+
 
 class TestNumericalFilteringRanges:
     """Test range filtering on numerical columns."""
@@ -166,6 +179,19 @@ class TestNumericalFilteringRanges:
         assert "S4" in sample_ids
         assert "S5" in sample_ids
         assert "S6" in sample_ids
+
+    def test_range_on_single_numeric_value_column(self, sample_tsv_with_numeric_data):
+        """Test range filtering on single-value numeric column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="SingleNumber:350-850")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 5
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
 
 
 class TestNumericalFilteringDiscreteValues:
@@ -223,6 +249,16 @@ class TestNumericalFilteringDiscreteValues:
         assert "S2" in sample_ids
         assert "S5" in sample_ids
         assert "S8" in sample_ids
+
+    def test_discrete_on_single_numeric_value_column_(self, sample_tsv_with_numeric_data):
+        """Test discrete value filtering on single-value numeric column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="SingleNumber:100,600")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 2
+        assert "S1" in sample_ids
+        assert "S6" in sample_ids
 
 
 class TestSemicolonSeparatedNumericFiltering:
