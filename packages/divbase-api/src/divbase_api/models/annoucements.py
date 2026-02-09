@@ -45,7 +45,8 @@ class AnnouncementDB(BaseDBModel):
     heading: Mapped[str] = mapped_column(String(200), index=True)
     message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     target: Mapped[AnnouncementTarget] = mapped_column(Enum(AnnouncementTarget), index=True)
+    level: Mapped[AnnouncementLevel] = mapped_column(Enum(AnnouncementLevel), index=True)
     auto_expire_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
-        return f"<AnnouncementDB id={self.id}, heading={self.heading}, target={self.target}>"
+        return f"<AnnouncementDB id={self.id}, heading={self.heading}, target={self.target}, level={self.level}>"

@@ -65,6 +65,12 @@ op.execute("DROP TYPE IF EXISTS projectroles")
 
 See the bottom of the first migration script (2025-12-04_initial_migration.py) for an example of this.
 
+You could also run the automatic migration tests now to help verify your migrations scripts are correct.
+
+```bash
+pytest -s tests/migrations
+```
+
 #### 4. Test out the migration
 
 - In local development, migrations are applied automatically when the stack starts up using the `db-migrator` init-container.

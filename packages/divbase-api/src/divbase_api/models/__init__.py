@@ -4,6 +4,7 @@ Import all models here to ensure proper initialization order.
 They are imported in dependency order to avoid circular import issues.
 """
 
+from divbase_api.models.annoucements import AnnouncementDB, AnnouncementTarget
 from divbase_api.models.base import Base, BaseDBModel
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
@@ -26,4 +27,6 @@ __all__ = [
     "TokenRevokeReason",
     "RevokedTokenDB",
     "ProjectVersionDB",
+    "AnnouncementDB",
+    "AnnouncementTarget",
 ]
