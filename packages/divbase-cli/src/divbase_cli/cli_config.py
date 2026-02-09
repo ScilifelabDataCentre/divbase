@@ -19,7 +19,7 @@ CONFIG_PATH = APP_DIR / "config.yaml"
 TOKENS_PATH = APP_DIR / ".secrets"
 DEFAULT_METADATA_TSV_NAME = "sample_metadata.tsv"
 # TODO - change to production URL when time comes
-DEFAULT_DIVBASE_API_URL = "https://divbase-dev.scilifelab-2-dev.sys.kth.se/api/"
+DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
 
 
 @dataclass
