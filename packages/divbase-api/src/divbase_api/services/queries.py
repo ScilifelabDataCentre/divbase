@@ -756,7 +756,7 @@ class SidecarQueryManager:
 
                 if has_numeric_type and has_non_numeric_type:
                     raise SidecarInvalidFilterError(
-                        f"Column '{key}' contains mixed types. Value '{cell_str}' at row {row_index} "
+                        f"Column '{key}' in the metadata file contains mixed types. Value '{cell_str}' at row {row_index} "
                         f"has both numeric and non-numeric parts. All values in a column must be consistently "
                         f"numeric or string for filtering to work correctly."
                     )

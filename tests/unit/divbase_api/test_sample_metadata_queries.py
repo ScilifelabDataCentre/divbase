@@ -295,5 +295,7 @@ class TestSemicolonSeparatedNumericFiltering:
     def test_raise_exception_on_mixed_type_column_value(self, sample_tsv_with_unsupported_mixed_type_data):
         """Test that a column with mixed numeric and non-numeric values raises an error."""
         manager = SidecarQueryManager(file=sample_tsv_with_unsupported_mixed_type_data)
-        with pytest.raises(SidecarInvalidFilterError, match="Column 'Population' contains mixed types"):
+        with pytest.raises(
+            SidecarInvalidFilterError, match="Column 'Population' in the metadata file contains mixed types"
+        ):
             manager.run_query(filter_string="Population:>2")
