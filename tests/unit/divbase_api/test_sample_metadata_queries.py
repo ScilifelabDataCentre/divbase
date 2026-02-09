@@ -34,18 +34,23 @@ S10\t8\t70.0\t52\tEast\t1000\tSong
 
 
 @pytest.fixture
-def sample_tsv_with_unsupported_mixed_type_data(tmp_path):
+def sample_tsv_with_edge_cases(tmp_path):
     """
-    Create a temporary TSV file with a column that containes
-    mixed numeric and non-numeric values to test that this correctly raises an error.
-    """
-    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea
-S1\t1\t20.0\t5.0\tNorth
-S2\t2;four;5\t25.0\t10\tEast
-S3\t3\t30.0\t15\tWest;South
+    Create a temporary TSV file to test the 4 specific edge cases:
+    1. "string;string;string" - OK (pure strings)
+    2. "string,string;string;string" - OK (strings with commas are allowed)
+    3. "1;3,5" - FAIL (mixed type: numbers with comma are treated as string since comma is not a numeric character)
+    4. "1;two;5" - FAIL (mixed numeric and non-numeric should raise exception)
 
+    Also includes cases for string values containing numbers.
+    """
+    tsv_content = """#Sample_ID\tPureStrings\tStringsWithCommas\tNumbersWithComma\tMixedTypes\tSingleString\tSingleNumber
+S1\tNorth;South;East\tRegion1,Area1;Region2,Area2;Region3,Area3\t1;3,5\t1;two;5\tWest\t100
+S2\tWest;East;North\tZone1,Subzone1;Zone2,Subzone2\t2;4,6\t2;three;6\tNorth\t200
+S3\tSouth\tCity1,District1\t3\t3\tEast\t300
+S4\t1string\tstring2string\tstring3\tstring4\tString5\t400
 """
-    tsv_file = tmp_path / "test_metadata_unsupported_values.tsv"
+    tsv_file = tmp_path / "test_metadata_edge_cases.tsv"
     tsv_file.write_text(tsv_content)
     return tsv_file
 
@@ -328,14 +333,6 @@ class TestSemicolonSeparatedNumericFiltering:
         assert "S7" in sample_ids
         assert "S8" in sample_ids
 
-    def test_raise_exception_on_mixed_type_column_value(self, sample_tsv_with_unsupported_mixed_type_data):
-        """Test that a column with mixed numeric and non-numeric values raises an error."""
-        manager = SidecarQueryManager(file=sample_tsv_with_unsupported_mixed_type_data)
-        with pytest.raises(
-            SidecarInvalidFilterError, match="Column 'Population' in the metadata file contains mixed types"
-        ):
-            manager.run_query(filter_string="Population:>2")
-
 
 class TestStringColumnFiltering:
     """Test string column filtering with single and semicolon-separated values."""
@@ -379,3 +376,91 @@ class TestStringColumnFiltering:
         assert len(sample_ids) == 2
         assert "S3" in sample_ids
         assert "S7" in sample_ids
+
+
+class TestEdgeCases:
+    """Edge case tests for SidecarQueryManager filtering."""
+
+    def test_mixed_types_should_fail(self, sample_tsv_with_edge_cases):
+        """Test that a column with mixed numeric and non-numeric values raises an error."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="MixedTypes:1")
+
+    def test_strings_with_commas(self, sample_tsv_with_edge_cases):
+        """Test that a column with strings containing commas is correctly handled."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="StringsWithCommas:Region1")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
+
+    def test_numbers_with_comma(self, sample_tsv_with_edge_cases):
+        """Test that a column with numeric values containing commas is treated as string type (since comma is not a numeric character)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="NumbersWithComma:1")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
+
+    def test_string_with_numbers_in_value(self, sample_tsv_with_edge_cases):
+        """Test that values like "1string", "string2string", "string3" are correctly inferred as strings."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="PureStrings:1string")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S4" in sample_ids
+
+    def test_string_with_numbers_in_other_columns(self, sample_tsv_with_edge_cases):
+        """Test that values with numbers in other columns do not affect type inference of a string column."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="StringsWithCommas:string2string")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S4" in sample_ids
+        result2 = manager.run_query(filter_string="NumbersWithComma:string3")
+        sample_ids2 = result2.get_unique_values("Sample_ID")
+        assert "S4" in sample_ids2
+        result3 = manager.run_query(filter_string="MixedTypes:string4")
+        sample_ids3 = result3.get_unique_values("Sample_ID")
+        assert "S4" in sample_ids3
+
+    def test_multi_column_single_string_and_single_number(self, sample_tsv_with_edge_cases):
+        """Test that filtering on two valid single-value columns (SingleString and SingleNumber) will pass."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleString:String5;SingleNumber:400")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S4" in sample_ids
+
+    def test_multi_column_single_string_and_mixed_types_should_fail(self, sample_tsv_with_edge_cases):
+        """Test that filtering on SingleString (valid) and MixedTypes (invalid) will fail due to mixed types."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="SingleString:String5;MixedTypes:string4")
+
+    def test_multi_column_single_number_and_mixed_types_should_fail(self, sample_tsv_with_edge_cases):
+        """Test that filtering on SingleNumber (valid) and MixedTypes (invalid) will fail due to mixed types."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        with pytest.raises(SidecarInvalidFilterError):
+            manager.run_query(filter_string="SingleNumber:400;MixedTypes:string4")
+
+    def test_multi_column_single_string_and_pure_strings(self, sample_tsv_with_edge_cases):
+        """Test that filtering on SingleString and PureStrings (both valid string columns) will pass."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleString:String5;PureStrings:1string")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S4" in sample_ids
+
+    def test_multi_column_single_number_and_numbers_with_comma(self, sample_tsv_with_edge_cases):
+        """Test that filtering on SingleNumber (numeric) and NumbersWithComma (treated as string due to comma) will pass."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleNumber:400;NumbersWithComma:string3")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S4" in sample_ids
+
+    def test_multi_column_single_string_and_strings_with_commas(self, sample_tsv_with_edge_cases):
+        """Test that filtering on SingleString and StringsWithCommas (both string columns) will pass."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleString:String5;StringsWithCommas:string2string")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S4" in sample_ids
