@@ -5,6 +5,7 @@ Unit tests for SidecarQueryManager filtering
 import pytest
 
 from divbase_api.services.queries import SidecarQueryManager
+from divbase_lib.exceptions import SidecarInvalidFilterError
 
 
 @pytest.fixture
@@ -27,6 +28,23 @@ S9\t7\t62.0\t45\tNorth
 S10\t8\t70.0\t52\tEast
 """
     tsv_file = tmp_path / "test_metadata.tsv"
+    tsv_file.write_text(tsv_content)
+    return tsv_file
+
+
+@pytest.fixture
+def sample_tsv_with_unsupported_mixed_type_data(tmp_path):
+    """
+    Create a temporary TSV file with a column that containes
+    mixed numeric and non-numeric values to test that this correctly raises an error.
+    """
+    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea
+S1\t1\t20.0\t5.0\tNorth
+S2\t2;four;5\t25.0\t10\tEast
+S3\t3\t30.0\t15\tWest;South
+
+"""
+    tsv_file = tmp_path / "test_metadata_unsupported_values.tsv"
     tsv_file.write_text(tsv_content)
     return tsv_file
 
@@ -273,3 +291,9 @@ class TestSemicolonSeparatedNumericFiltering:
         assert "S3" in sample_ids
         assert "S7" in sample_ids
         assert "S8" in sample_ids
+
+    def test_raise_exception_on_mixed_type_column_value(self, sample_tsv_with_unsupported_mixed_type_data):
+        """Test that a column with mixed numeric and non-numeric values raises an error."""
+        manager = SidecarQueryManager(file=sample_tsv_with_unsupported_mixed_type_data)
+        with pytest.raises(SidecarInvalidFilterError, match="Column 'Population' contains mixed types"):
+            manager.run_query(filter_string="Population:>2")
