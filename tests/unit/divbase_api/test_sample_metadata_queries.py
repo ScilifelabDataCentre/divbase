@@ -299,3 +299,47 @@ class TestSemicolonSeparatedNumericFiltering:
             SidecarInvalidFilterError, match="Column 'Population' in the metadata file contains mixed types"
         ):
             manager.run_query(filter_string="Population:>2")
+
+
+class TestStringColumnFiltering:
+    """Test string column filtering with single and semicolon-separated values."""
+
+    def test_single_string_value_column(self, sample_tsv_with_edge_cases):
+        """Test filtering on a string column with single values (no semicolons)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleString:West")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S1" in sample_ids
+
+    def test_single_string_value_column_multiple_filters(self, sample_tsv_with_edge_cases):
+        """Test filtering on a single-value string column with multiple filter values (OR logic)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="SingleString:West,North")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 2
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+
+    def test_semicolon_separated_string_column(self, sample_tsv_with_numeric_data):
+        """Test filtering on string column with semicolon-separated values (Area column)."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Area:West")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 3
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S8" in sample_ids
+
+    def test_semicolon_separated_string_column_any_match(self, sample_tsv_with_numeric_data):
+        """Test that filtering matches if ANY semicolon-separated value matches."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Area:South")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 2
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
