@@ -39,11 +39,11 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.annoucements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
-from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
-from divbase_api.models.revoked_tokens import RevokedTokenDB
+from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
-from divbase_api.security import get_password_hash
+from divbase_api.security import TokenType, get_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ class ProjectMembershipView(ModelView):
         IntegerField("id", label="ID", disabled=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
-        StringField("role", label="Role", required=True),
+        EnumField("role", label="Role", required=True, enum=ProjectRoles),
         DateTimeField("created_at", label="Created At", disabled=True),
         DateTimeField("updated_at", label="Updated At", disabled=True),
     ]
@@ -379,9 +379,9 @@ class RevokedTokenView(ModelView):
     fields = [
         IntegerField("id", label="ID", disabled=True),
         StringField("token_jti", label="Token JTI", required=True),
-        StringField("token_type", label="Token Type", required=True),
+        EnumField("token_type", label="Token Type", required=True, enum=TokenType),
         DateTimeField("revoked_at", label="Revoked At", disabled=True),
-        StringField("revoked_reason", label="Revoked Reason", required=True),
+        EnumField("revoked_reason", label="Revoke Reason", required=True, enum=TokenRevokeReason),
         IntegerField("user_id", label="User ID", required=False),
         HasOne("user", identity="user", label="User"),
         DateTimeField("created_at", label="Created At", disabled=True),
