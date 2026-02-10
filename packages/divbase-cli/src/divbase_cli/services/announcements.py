@@ -32,13 +32,15 @@ def get_and_display_announcements(divbase_base_url: str) -> None:
 
     if len(announcements) == 1:
         print("[bold]An Announcement from DivBase Server:[/bold]")
-        color = COLOR_MAPPING[announcements[0].level]
+        color = COLOR_MAPPING.get(announcements[0].level)
         print(f"[bold {color}]{announcements[0].heading}[/bold {color}]")
-        print(f"{announcements[0].message}\n")
+        if announcements[0].message:
+            print(f"{announcements[0].message}\n")
         return
 
     print("[bold]Announcements from DivBase Server:[/bold]")
     for idx, ann in enumerate(announcements, start=1):
-        color = COLOR_MAPPING[ann.level]
+        color = COLOR_MAPPING.get(ann.level)
         print(f"[bold {color}]{idx}) {ann.heading}[/bold {color}]")
-        print(f"{ann.message}\n")
+        if ann.message:
+            print(f"{ann.message}\n")
