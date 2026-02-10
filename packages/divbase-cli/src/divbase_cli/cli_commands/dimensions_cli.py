@@ -162,6 +162,12 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
 
 @dimensions_app.command("create-metadata-template")
 def create_metadata_template_with_project_samples_names(
+    output_filename: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Name of the output TSV file to create. Defaults to sample_metadata_<project_name>.tsv. If a file with the same name already exists in the current directory, you will be prompted to confirm if you want to overwrite it.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
@@ -173,6 +179,9 @@ def create_metadata_template_with_project_samples_names(
     # so that the client does not need to parse all data.
 
     project_config = resolve_project(project_name=project)
+
+    if output_filename is None:
+        output_filename = f"sample_metadata_{project_config.name}.tsv"
 
     response = make_authenticated_request(
         method="GET",
@@ -199,8 +208,14 @@ def create_metadata_template_with_project_samples_names(
         print("No samples found for this project. No file written.")
         return
 
-    output_filename = "divbase_metadata_template.tsv"
     output_path = Path.cwd() / output_filename
+
+    # Check if file exists and prompt user for confirmation
+    if output_path.exists():
+        overwrite = typer.confirm(f"File '{output_path}' already exists. Do you want to overwrite it?")
+        if not overwrite:
+            print("File not written. Exiting.")
+            return
 
     with open(output_path, mode="w", newline="") as tsvfile:
         writer = csv.writer(tsvfile, delimiter="\t")
