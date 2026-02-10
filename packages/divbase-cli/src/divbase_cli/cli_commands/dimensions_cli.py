@@ -1,6 +1,6 @@
 import csv
 import logging
-import os
+from pathlib import Path
 
 import typer
 import yaml
@@ -200,7 +200,7 @@ def create_metadata_template_with_project_samples_names(
         return
 
     output_filename = "divbase_metadata_template.tsv"
-    output_path = os.path.join(os.getcwd(), output_filename)
+    output_path = Path.cwd() / output_filename
 
     with open(output_path, mode="w", newline="") as tsvfile:
         writer = csv.writer(tsvfile, delimiter="\t")
