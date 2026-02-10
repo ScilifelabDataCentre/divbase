@@ -27,25 +27,31 @@ Note! there can be multiple TSVs in the same project and it is possible to call 
 
 After the `Sample_ID` column has been populated, users can add any columns and values to the TSV.
 
-1. It is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
-2. The user-defined columns can be either numeric or string type. Try to avoid mixing string and numeric values in the same column is possible. If a mix of string and numerical data is used in the same column, the system will treat them all as strings, which might lead to unexpected filtering results when running queries. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values is numerical or string.
-3. Use English decimal notation (.) and not comma (,) when entering decimals. This ensures that the data is correctly loaded by `Pandas`.
-4. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data.
+!!! Warning
+    It is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters. This includes matching upper and lower case letters.
+
+To ensure that user-defined metadata can be used in DivBase, we ask you follow the following constraints and considerations:
+
+1. The user-defined columns can be either numeric or string type. Mixing string and numeric values in the same column is not allowed; if a mix is detected, DivBase will raise an error and reject the file. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
+2. Commas are not supported for the TSV and the DivBase system will send an error message if it detects any TSV cells with commas in them. Commas can have different meanings in different notation systems and to avoid confusion and to keep it simple, DivBase will simply not handle commas. Note that commas are used in the [Query syntax](#query-syntax-for-sidecar-metadata) for a different purpose. For decimals, use English decimal notation (.) and not comma (,). DivBase allows one single delimiter for enumerations in the TSV files and that is the semicolon (;) as will be described in the bullet.
+3. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. "2;4;21" or "North; North-West"). Note that this might make the process of writing queries on the more complex than if just a single value is use for each cell.
+4. As outlined above, the only characters with special meaning or restrictions in the TSV are `#`, `,`, `;`, and `\t` (tab). Other special characters should be supported, but please be aware that Your Milage May Vary. Some common cases that have been tested and are supported include hyphens (`-`), e.g.`North-West`),   diacritic unicodecharacters like `å`,`ä`,`ö`.
+5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: " Sample 1 " will be processed as "Sample 1".
 
 #### Example
 
 This example illustrates how a sidecar sample metadata TSV can look like. The mandatory requirement are fulfilled (heading, `Sample_ID` column, tab-separated file). The user-defined column contains examples of a numerical column (`Population`) and a string column (`Area`). In some cells, semicolons (`;`) are used to assign multiple values to the same sample and column.
 
 ```text
-#Sample_ID Population Area
-S1 1 North
-S2 2;4 East
-S3 3 West;South
-S4 4 West
-S5 5 North
-S6 6 East
-S7 1;3;5 South
-S8 2 West
+#Sample_ID Population Area Weight
+S1 1 North 12.1
+S2 2;4 East 18.8
+S3 3 West;South 15.0
+S4 4 West 20.2
+S5 5 North 16.1
+S6 6 East 25.2
+S7 1;3;5 South 22.6
+S8 2 West 19.5
 ```
 
 TODOs:
@@ -57,14 +63,20 @@ TODOs:
 
 ## Query Syntax for sidecar metadata
 
+- TODO: explain warnings
+- TODO: explain when empty results or all results are returned
+
 ### Overview: querys are applied as filters on columns in the TSV
 
 Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user want to query on needs entered as a string (i.e. enclosed in quotes, `""`).
 
 The TSV query syntax is `"Key1:Value1,Value2;Key2:Value3,Value4"`, where `Key1:`...`Key2:` are the column header names in the TSV, and `Value1`...`Value4` are the values. Multiple filter values for a key are separated by commas, and multiple keys are separated by semicolons. There can be any number keys and values to filter on, but it is up to the user to write queries that return useful results.
+It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `"Key:!Value"`. When mixing inclusive and exclusive filters (e.g. `"Key1:Value1,Value2; Key2:!Value3"`), only the rows that match the positive filters and do not match any of the excluded values will be returned. This can be used to write complex queries.
 
 !!! note
     Please note that semicolon (`;`) is used for different purposes in the TSV (multi-value cells) and in the query syntax (perform queries on multiple columns)!
+
+    Also note that commas are allowed in the query syntax, but are not allowed in the cells in the TSV.
 
 Filtering is inclusive by default. This applies both for the filter values and the cell values:
 
@@ -100,22 +112,30 @@ divbase-cli query tsv "Area:North,South,East"
 
 will return all samples where **at least one** of the semicolon-separated values in the Area column matches any of the filter values (`North`, `South`, or `East`).
 
-Comma-separated: "Area:North,South,East"
-OR logic: if ANY cell value matches ANY filter value, the row matches
-Example: "key2:value3,value4" matches cells containing value3, value4, value3;value4, or value4;value3
+The `!`(NOT) operator can be used to exclude specific cell values from a column. When a `!` is used on its own, such as in the command:
+
+```bash
+divbase-cli query tsv "Area:!North"
+```
+
+it will return all rows that do not contain `North` in the `Area`. Multi-column values that contain `North`, such as a row with e.g. `North;South` will also be excluded by this query.
+
+Note that when inclusive and exclusive are combined (e.g. `"Area:East,!South"`), only rows that match both filters (include `East`, exclude `South`) will be returned in the results.
 
 ### Filtering on numerical columns
 
 For numerical columns, it is possible to filter on the following operations:
 
-- Inequalities:
-  - Examples: `"Weight:>25"` or `"Weight:>=20,<=40"` or `"Weight:<100"`.
-  - Note" The inequality operator must be expressed relative to the key, i.e. `"Weight:>25"`. The reverse notation `"Weight:25<"` is not supported.
-  - The syntax only accepts `<=` and `>=` since this is the syntax of Python. The forms =< and => are not accepted and will return an error.
-- Range (inclusive):
-  - Example: `"Weight:20-40"`
-- Discrete values:
-  - Example: `"Weight:25,30,35"`
+- **Inequalities**
+  Examples: `"Weight:>25"` or `"Weight:>=20,<=40"` or `"Weight:<100"`
+  Note: The inequality operator must be expressed relative to the key, i.e. `"Weight:>25"`. The reverse notation `"Weight:25<"` is not supported.
+  The syntax only accepts `<=` and `>=` since this is the syntax of Python. The forms `=<` and `=>` are not accepted and will return an error.
+
+- **Range (inclusive)**
+  Example: `"Weight:20-40"`
+
+- **Discrete values**
+  Example: `"Weight:25,30,35"`
 
 Furthermore, it is possible to combine filters on inequalities, ranges, and discrete values using inclusive OR logic. This means that if any one of the specified conditions is satisfied for a cell, the row will be included in the results. For example:
 
@@ -124,11 +144,25 @@ Furthermore, it is possible to combine filters on inequalities, ranges, and disc
 - `"Weight:>5,1-2,4"` returns rows where the value is greater than 5 **or** in the range 1–2 **or** equal to 4
 - `"Weight:>10,<2,5-7"` returns rows where the value is greater than 10 **or** less than 2 **or** in the range 5–7
 
-## Trying out a query
+The `!` (NOT) operator can really come to good use for numerical filters:
+
+- `"Weight:!25"` returns rows where the value is not 25.
+- `"Weight:>5,!10-15"`  returns rows where the value is greater than 5, but not in the range 10–15.
+- `"Weight:!1-2,4"`  returns rows where the value is not in the range 1–2, or is 4.
+
+## Examples of complex queries
+
+Assuming that the sidecar metadata TSV file looks like in the [Example](#example) above, a query like will:
 
 ```bash
-divbase-cli query tsv "Area:Northern Portugal"
+divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
 ```
+
+- include rows where the `Area` column contains either `North` or `West` (also applied to semicolon-separated multi-value cells), **but excludes** any row where `South` is present in the `Area` column—even if `North` or `West` is also present.
+
+- include rows where the `Weight` column is greater than 10, **or** less than or equal to 20, **or** in the range 18–22 (inclusive), **but excludes** any row where Weight is exactly 15 **or** any value in the range 18–22.
+
+There are three samples (rows) that fulfill this, and this is what the query results will return: `S1`, `S4`, and `S5`.
 
 - [TO BE IMPLEMENTED] what to do if a query references a column that does not exist. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Area does not exist? This should probably give a warning and not just return nothing
 
