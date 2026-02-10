@@ -44,11 +44,11 @@ def sample_tsv_with_edge_cases(tmp_path):
 
     Commas are NOT allowed in divbase TSV format.
     """
-    tsv_content = """#Sample_ID\tPureStrings\tMixedTypes\tSingleString\tSingleNumber\tUnicodeStrings\tWithCommas
-S1\tNorth;South;East\t1;two;5\tWest\t100\tStockholm;Göteborg\tNorth,South
-S2\tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\West,East
-S3\tSouth\t3\tEast\t300\tKöpenhamn;København\tNorth,
-S4\t1string\tstring4\tString5\t400\tHumlebæk\t,South
+    tsv_content = """#Sample_ID\tPureStrings\tMixedTypes\tSingleString\tSingleNumber\tUnicodeStrings\tWithCommas\tStringWithHyphen\tNumericalWithHyphen
+S1\tNorth;South;East\t1;two;5\tWest\t100\tStockholm;Göteborg\tNorth,South\tNorth-East\t1-2
+S2\tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\tWest,East\tSouth-West\t2-3
+S3\tSouth\t3\tEast\t300\tKöpenhamn;København\tNorth,\tNorth-North-West\t3-4
+S4\t1string\tstring4\tString5\t400\tHumlebæk\t,South\tEast-South-East\t4-5
 """
     tsv_file = tmp_path / "test_metadata_edge_cases.tsv"
     tsv_file.write_text(tsv_content)
@@ -416,12 +416,11 @@ class TestEdgeCases:
         assert "S4" in sample_ids
 
     def test_unicode_string_filtering(self, sample_tsv_with_edge_cases):
-        """Test that any query on UnicodeStrings raises SidecarInvalidFilterError if any cell contains a comma."""
+        """Test that filtering for Unicode values like 'Göteborg' and 'Malmö' works and returns correct samples."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
-        with pytest.raises(SidecarInvalidFilterError):
-            manager.run_query(filter_string="UnicodeStrings:Göteborg")
-        with pytest.raises(SidecarInvalidFilterError):
-            manager.run_query(filter_string="UnicodeStrings:Malmö")
+        result = manager.run_query(filter_string="UnicodeStrings:Göteborg")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
 
     def test_multi_column_single_string_and_single_number(self, sample_tsv_with_edge_cases):
         """Test that filtering on two valid single-value columns (SingleString and SingleNumber) will pass."""
@@ -463,4 +462,19 @@ class TestEdgeCases:
         """Test that multi-column filtering works with unicode strings, but raises error if commas are present."""
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
         with pytest.raises(SidecarInvalidFilterError):
-            manager.run_query(filter_string="UnicodeStrings:København;SingleNumber:300")
+            manager.run_query(filter_string="UnicodeStrings:København;WithCommas:North")
+
+    def test_hyphens_allowed_in_string_values(self, sample_tsv_with_edge_cases):
+        """Test that hyphens are allowed in string values and can be filtered correctly."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="StringWithHyphen:South-West")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S2" in sample_ids
+
+    def test_hyphens_in_numerical_column_raises(self, sample_tsv_with_edge_cases):
+        """Test that hyphens are allowed in string columns but not in numerical columns."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        with pytest.raises(SidecarInvalidFilterError) as excinfo:
+            manager.run_query(filter_string="NumericalWithHyphen:2")
+        assert "Column 'NumericalWithHyphen' contains value '1-2' with a hyphen at row 0." in str(excinfo.value)

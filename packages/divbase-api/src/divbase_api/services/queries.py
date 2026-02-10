@@ -965,6 +965,15 @@ class SidecarQueryManager:
                 part = part.strip()
                 if not part:
                     continue
+
+                # Check if the value contains a hyphen and looks like it could be numeric (e.g., "1-2", "3-4")
+                if "-" in part and any(p.isdigit() for p in part):
+                    raise SidecarInvalidFilterError(
+                        f"Column '{key}' contains value '{part}' with a hyphen at row {row_index}. "
+                        f"Hyphens are not allowed in numeric column values (only in string columns). "
+                        f"If this is meant to be a string column, all values should be non-numeric strings."
+                    )
+
                 try:
                     float(part)
                     has_numeric_type = True
