@@ -1,5 +1,5 @@
 """
-Crud operations on the accouncements table,
+Crud operations on the announcements table,
 which stores announcements that can be displayed to users on the frontend and the cli.
 
 Starlette admin will manage the creation/editing/deletion of announcements,
@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.models.annoucements import AnnouncementDB, AnnouncementTarget
-from divbase_lib.api_schemas.annoucements import AnnouncementResponse
+from divbase_api.models.announcements import AnnouncementDB, AnnouncementTarget
+from divbase_lib.api_schemas.announcements import AnnouncementResponse
 
 
 async def get_active_announcements(db: AsyncSession, target: AnnouncementTarget) -> list[AnnouncementResponse]:

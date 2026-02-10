@@ -5,7 +5,7 @@ Get announcements from divbase API and display them to the user.
 from rich import print
 
 from divbase_cli.user_auth import make_unauthenticated_request
-from divbase_lib.api_schemas.annoucements import AnnouncementResponse
+from divbase_lib.api_schemas.announcements import AnnouncementResponse
 
 COLOR_MAPPING = {
     "info": "blue",

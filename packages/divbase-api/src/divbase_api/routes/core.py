@@ -9,10 +9,10 @@ import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.annoucements import get_active_announcements
+from divbase_api.crud.announcements import get_active_announcements
 from divbase_api.db import get_db
-from divbase_api.models.annoucements import AnnouncementTarget
-from divbase_lib.api_schemas.annoucements import AnnouncementResponse
+from divbase_api.models.announcements import AnnouncementTarget
+from divbase_lib.api_schemas.announcements import AnnouncementResponse
 
 logger = logging.getLogger(__name__)
 

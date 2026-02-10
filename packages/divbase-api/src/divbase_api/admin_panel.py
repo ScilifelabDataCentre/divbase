@@ -37,7 +37,7 @@ from starlette_admin.exceptions import FormValidationError
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
-from divbase_api.models.annoucements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
+from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason

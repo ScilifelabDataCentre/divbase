@@ -13,10 +13,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
-from divbase_api.crud.annoucements import get_active_announcements
+from divbase_api.crud.announcements import get_active_announcements
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
-from divbase_api.models.annoucements import AnnouncementTarget
+from divbase_api.models.announcements import AnnouncementTarget
 from divbase_api.models.users import UserDB
 
 fr_core_router = APIRouter()

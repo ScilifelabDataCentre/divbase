@@ -11,7 +11,7 @@ from typing_extensions import Annotated
 
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
-from divbase_cli.services.annoucements import get_and_display_announcements
+from divbase_cli.services.announcements import get_and_display_announcements
 from divbase_cli.user_auth import (
     check_existing_session,
     login_to_divbase,
