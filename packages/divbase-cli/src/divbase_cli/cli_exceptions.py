@@ -108,12 +108,12 @@ class ProjectNameNotSpecifiedError(DivBaseCLIError):
     no default project is set in the user config file.
     """
 
-    def __init__(self, config_path: Path):
-        self.config_path = config_path
+    def __init__(self):
         error_message = (
-            "No project name provided. \n"
-            f"Please either set a default project in your user configuration file at '{config_path.resolve()}'.\n"
-            f"or pass the flag '--project <project_name>' to this command.\n"
+            "No project name provided.\n"
+            "Please either set a default project in your user configuration file.\n"
+            "or pass the flag '--project <project_name>' to this command.\n"
+            "To set a default project, you can run 'divbase-cli config set-default <project_name>'.\n"
         )
         super().__init__(error_message)
 
@@ -134,22 +134,6 @@ class ProjectNotInConfigError(DivBaseCLIError):
             f"Please check the project is included in '{config_path.resolve()}'.\n"
             f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
-        super().__init__(error_message)
-
-
-class ConfigFileNotFoundError(DivBaseCLIError):
-    """Raised when the user's config file cannot be found."""
-
-    def __init__(
-        self,
-        error_message: str = (
-            "You're DivBase configuration file was not found or does not exist.\n"
-            "To create a user configuration file, run 'divbase-cli config create'.\n"
-            "If you already have a user configuration file that but it is not stored in the default location, "
-            "you can pass the '--config <path>' flag to specify the location. \n"
-            "You very probably want to just run 'divbase-cli config create' though."
-        ),
-    ):
         super().__init__(error_message)
 
 

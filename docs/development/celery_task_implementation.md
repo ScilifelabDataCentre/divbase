@@ -258,7 +258,7 @@ The DivBase client uses the [Typer](https://typer.tiangolo.com/) library to buil
 - There needs to be a Typer app (on the form `query_app = typer.Typer()`) to which the CLI command functions needs to be connected. The app needs to be initiated with `app.add_typer(query_app, name="query")` in `./packages/divbase-cli/src/divbase_cli/divbase_cli.py`.
 - The typer app name is used as a decorator for the function, e.g. `@query_app.command("bcftools-pipe")`. The argument of the decorator will become the command for the CLI.
 - Pack the task arguments in the Pydantic request model (see Section 2.2), e.g. `request_data=BcftoolsQueryRequest()` for type validation.
-- The `resolve_project()` helper function is be used to fetch the data from the users local config and is needed for the established pattern to make the request. This helper function need that the CLI function args contain `project: str | None = PROJECT_NAME_OPTION,` and `config_file: Path = CONFIG_FILE_OPTION,`. See an existing CLI file for more details on the constants they are calling.
+- The `resolve_project()` helper function is be used to fetch the data from the users local config and is needed for the established pattern to make the request. This helper function need that the CLI function args contain `project: str | None = PROJECT_NAME_OPTION,`. See an existing CLI file for more details on the constants they are calling.
 - The main function call for all DivBase CLI->API interactions is `make_authenticated_request()`. If the user is logged in to the CLI, it sends the user's JSON Web Token as part of the request, which the API uses to validate the user's identity and project role/permissions.
   - The arguments `method="POST",divbase_base_url=project_config.divbase_url` should always be included as is.
   - `api_route` is the route URL defined in the corresponding endpoint (see Section 2.3).
@@ -281,7 +281,6 @@ def pipe_query(
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project's storage bucket on success.

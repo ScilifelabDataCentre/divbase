@@ -3,13 +3,11 @@ CLI subcommand for managing user auth with DivBase server.
 """
 
 from datetime import datetime
-from pathlib import Path
 
 import typer
 from pydantic import SecretStr
 from typing_extensions import Annotated
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError
 from divbase_cli.user_auth import (
@@ -30,7 +28,6 @@ def login(
     email: str,
     password: Annotated[str, typer.Option(prompt=True, hide_input=True)],
     divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase server URL to connect to."),
-    config_file: Path = CONFIG_FILE_OPTION,
     force: bool = typer.Option(False, "--force", "-f", help="Force login again even if already logged in"),
 ):
     """
@@ -43,7 +40,7 @@ def login(
     secret_password = SecretStr(password)
     del password  # avoid user passwords showing up in error messages etc...
 
-    config = load_user_config(config_file)
+    config = load_user_config()
 
     if not force:
         session_expires_at = check_existing_session(divbase_url=divbase_url, config=config)
@@ -55,7 +52,7 @@ def login(
                 print("Login cancelled.")
                 return
 
-    login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url, config_path=config_file)
+    login_to_divbase(email=email, password=secret_password, divbase_url=divbase_url)
     print(f"Logged in successfully as: {email}")
 
 
@@ -69,13 +66,11 @@ def logout():
 
 
 @auth_app.command("whoami")
-def whoami(
-    config_file: Path = CONFIG_FILE_OPTION,
-):
+def whoami():
     """
     Return information about the currently logged-in user.
     """
-    config = load_user_config(config_file)
+    config = load_user_config()
     logged_in_url = config.logged_in_url
 
     # TODO - move logged in check to the make_authenticated_request function?
