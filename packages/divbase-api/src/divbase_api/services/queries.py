@@ -711,72 +711,18 @@ class SidecarQueryManager:
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
-    def _validate_no_commas_in_column(self, key: str) -> None:
+    def get_unique_values(self, column: str) -> list:
         """
-        Helper method to validate that column values in the imported TSV does not contain commas.
-        Raises SidecarInvalidFilterError if any comma is found in the column values.
+        Method to fetch unique values from a specific column in the query result. Intended to be invoked on a SidecarQueryManager
+        instance after a query has been run with run_query().
         """
-        for row_index, cell_value in enumerate(self.df[key].dropna()):
-            cell_str = str(cell_value).strip()
-            if cell_str and "," in cell_str:
-                raise SidecarInvalidFilterError(
-                    f"Column '{key}' contains commas in value '{cell_str}' at row {row_index}. "
-                    f"Commas are not allowed in DivBase metadata files. Use semicolons (;) to separate multiple values."
-                )
+        if self.query_result is None:
+            raise SidecarColumnNotFoundError("No query result available. Run run_query() first.")
 
-    def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
-        """
-        Helper method to detect if a column contains semicolon-separated numeric values.
-        Pandas correctly infers type from single-value columns. But for columns with semicolon-separated values
-        (e.g.: "1;2;3"), it infers them as strings (object dtype). This is an issue since numeric operations
-        (inequalities, ranges) cannot be performed on string values.
-
-        This helper method checks ALL non-null values in the column to determine if they can be parsed as numeric
-        after splitting by semicolon. Note that it only detects if a column value is semicolon-separated numeric, it does not
-        convert the column to numeric type. It also validates that the colum value is not of mixed string-numerical type, which
-        is invalid input for the query system. The actual parsing and handling of the semicolon-separated numeric values is
-        done in the lamda functions in the run_query() method.
-
-        Returns True if the column contains ONLY numeric values (with or without semicolons).
-        Returns False if the column contains ONLY non-numeric values (regular string column), or if the column is empty.
-        Raises SidecarInvalidFilterError if mixed types detected (e.g., "1;2" and "abc;def" in same column) or if commas are found.
-        """
-        if key not in self.df.columns:
-            return False
-
-        non_null_values = self.df[key].dropna()
-        if len(non_null_values) == 0:
-            return False
-
-        self._validate_no_commas_in_column(key)
-
-        has_numeric_type = False
-        has_non_numeric_type = False
-
-        for row_index, cell_value in enumerate(non_null_values):
-            cell_str = str(cell_value).strip()
-            if not cell_str:
-                continue
-
-            parts = cell_str.split(";")
-            for part in parts:
-                part = part.strip()
-                if not part:
-                    continue
-                try:
-                    float(part)
-                    has_numeric_type = True
-                except ValueError:
-                    has_non_numeric_type = True
-
-                if has_numeric_type and has_non_numeric_type:
-                    raise SidecarInvalidFilterError(
-                        f"Column '{key}' in the metadata file contains mixed types. Value '{cell_str}' at row {row_index} "
-                        f"has both numeric and non-numeric parts. All values in a column must be consistently "
-                        f"numeric or string for filtering to work correctly."
-                    )
-
-        return has_numeric_type and not has_non_numeric_type
+        if column in self.query_result.columns:
+            return self.query_result[column].unique().tolist()
+        else:
+            raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
         """
@@ -877,36 +823,7 @@ class SidecarQueryManager:
                         if inequality_match:
                             operator = inequality_match.group(1)
                             threshold = float(inequality_match.group(2))
-
-                            condition = self.df[key].apply(
-                                lambda cell_value, op=operator, thresh=threshold: (
-                                    (
-                                        False
-                                        if pd.isna(cell_value)
-                                        else any(
-                                            (
-                                                cell_value_num > thresh
-                                                if op == ">"
-                                                else cell_value_num >= thresh
-                                                if op == ">="
-                                                else cell_value_num < thresh
-                                                if op == "<"
-                                                else cell_value_num <= thresh
-                                            )
-                                            for cell_value_num in (
-                                                # convert to numeric type after splitting by semicolon
-                                                float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
-                                                for cell_value_str in str(cell_value).split(";")
-                                                if cell_value_str.strip()
-                                            )
-                                        )
-                                        if not pd.isna(cell_value)
-                                        else False
-                                    )
-                                    if not pd.isna(cell_value)
-                                    else False
-                                )
-                            )
+                            condition = self._create_inequality_condition(key, operator, threshold)
                             inequality_conditions.append(condition)
                             logger.debug(f"Applied inequality filter on '{key}': {operator} {threshold}")
                             continue
@@ -916,30 +833,14 @@ class SidecarQueryManager:
                         if range_match:
                             min_val = float(range_match.group(1))
                             max_val = float(range_match.group(2))
-
-                            condition = self.df[key].apply(
-                                lambda cell_value, min_v=min_val, max_v=max_val: (
-                                    False
-                                    if pd.isna(cell_value)
-                                    else any(
-                                        min_v <= cell_value_num <= max_v
-                                        for cell_value_num in (
-                                            # convert to numeric type after splitting by semicolon
-                                            float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
-                                            for cell_value_str in str(cell_value).split(";")
-                                            if cell_value_str.strip()
-                                        )
-                                    )
-                                )
-                            )
+                            condition = self._create_range_condition(key, min_val, max_val)
                             range_conditions.append(condition)
                             logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
                             continue
 
                         # Otherwise, treat as discrete value
                         try:
-                            # Collect all discrete values from the filter string as the "for filter_string_value in filter_string_values_list" loop progresses.
-                            # The lambda function for discrete values is below and will run once for all collected discrete values.
+                            # Collect all discrete values from the filter string as the loop progresses.
                             discrete_values.append(
                                 float(filter_string_value) if "." in filter_string_value else int(filter_string_value)
                             )
@@ -948,48 +849,21 @@ class SidecarQueryManager:
                                 f"Cannot convert '{filter_string_value}' to numeric for column '{key}'. Skipping this value."
                             )
 
-                    # If multiple conditions (inequality, range, discrete values), combine them with with OR logic
-                    # In short, this builds a new boolean filter from the combined bools that Pandas will apply to the dataframe column
+                    # Combine multiple conditions (inequality, range, discrete values) with OR logic
                     conditions = []
 
                     if inequality_conditions:
-                        # Seperately combine multiple inequalities with OR
-                        combined_inequalities = inequality_conditions[0]
-                        for cond in inequality_conditions[1:]:
-                            # Compare bools pairwise. As long as one of the two are true, set bool filter to true. The bar (|)is pandas syntax for element-wise OR between boolean Series.
-                            combined_inequalities = combined_inequalities | cond
-                        conditions.append(combined_inequalities)
+                        conditions.append(self._combine_conditions_with_or(inequality_conditions))
 
                     if range_conditions:
-                        # Seperately combine multiple ranges with OR
-                        combined_ranges = range_conditions[0]
-                        for cond in range_conditions[1:]:
-                            combined_ranges = combined_ranges | cond
-                        conditions.append(combined_ranges)
+                        conditions.append(self._combine_conditions_with_or(range_conditions))
 
                     if discrete_values:
-                        discrete_condition = self.df[key].apply(
-                            lambda cell_value, target_filter_values=discrete_values: (
-                                False
-                                if pd.isna(cell_value)
-                                else any(
-                                    cell_value_num in target_filter_values
-                                    for cell_value_num in (
-                                        float(cell_value_str) if "." in cell_value_str else int(cell_value_str)
-                                        for cell_value_str in str(cell_value).split(";")
-                                        if cell_value_str.strip()
-                                    )
-                                )
-                            )
-                        )
+                        discrete_condition = self._create_discrete_numeric_condition(key, discrete_values)
                         conditions.append(discrete_condition)
 
                     if conditions:
-                        # Combine inequalities, ranges, and discrete values with OR
-                        combined = conditions[0]
-                        for cond in conditions[1:]:
-                            combined = combined | cond
-
+                        combined = self._combine_conditions_with_or(conditions)
                         if not combined.any():
                             warning_msg = f"No values in column '{key}' match the filter: {filter_string_values}"
                             logger.warning(warning_msg)
@@ -1002,27 +876,18 @@ class SidecarQueryManager:
                         self.warnings.append(warning_msg)
                 else:
                     # Non-numeric column: handle as discrete string values
-                    # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "North;West"
                     filter_string_values_list = filter_string_values.split(",")
-
                     self._validate_no_commas_in_column(key)
 
-                    condition = self.df[key].apply(
-                        lambda cell_value, target_filter_values=filter_string_values_list: (
-                            False
-                            if pd.isna(cell_value)
-                            else any(
-                                cell_value_str in target_filter_values for cell_value_str in str(cell_value).split(";")
-                            )
-                        )
-                    )
+                    condition = self._create_string_condition(key, filter_string_values_list)
                     if not condition.any():
                         warning_msg = f"None of the values {filter_string_values_list} were found in column '{key}'"
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
                     filter_conditions.append(condition)
             except SidecarInvalidFilterError:
-                # Re-raise our custom exceptions without wrapping them
+                # Allow specific validation errors (like "contains commas") to propagate unchanged.
+                # This preserves detailed error messages for user-facing exceptions.
                 raise
             except Exception as e:
                 raise SidecarInvalidFilterError(
@@ -1032,7 +897,9 @@ class SidecarQueryManager:
         # 2. Apply the final boolean filters on the dataframe
         if filter_conditions:
             combined_condition = pd.Series(True, index=self.df.index)
+            # Iteratively combine each condition in filter_conditions to create a final combined condition where each row must satisfy all filter conditions to be included.
             for condition in filter_conditions:
+                # The ampersand (&) is pandas syntax for element-wise AND between boolean Series.
                 combined_condition = combined_condition & condition
 
             self.query_result = self.df[combined_condition].copy()
@@ -1046,15 +913,188 @@ class SidecarQueryManager:
 
         return self
 
-    def get_unique_values(self, column: str) -> list:
+    def _validate_no_commas_in_column(self, key: str) -> None:
         """
-        Method to fetch unique values from a specific column in the query result. Intended to be invoked on a SidecarQueryManager
-        instance after a query has been run with run_query().
+        Helper method to validate that column values in the imported TSV does not contain commas.
+        Raises SidecarInvalidFilterError if any comma is found in the column values.
         """
-        if self.query_result is None:
-            raise SidecarColumnNotFoundError("No query result available. Run run_query() first.")
+        for row_index, cell_value in enumerate(self.df[key].dropna()):
+            cell_str = str(cell_value).strip()
+            if cell_str and "," in cell_str:
+                raise SidecarInvalidFilterError(
+                    f"Column '{key}' contains commas in value '{cell_str}' at row {row_index}. "
+                    f"Commas are not allowed in DivBase metadata files. Use semicolons (;) to separate multiple values."
+                )
 
-        if column in self.query_result.columns:
-            return self.query_result[column].unique().tolist()
-        else:
-            raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
+    def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
+        """
+        Helper method to detect if a column contains semicolon-separated numeric values.
+        Pandas correctly infers type from single-value columns. But for columns with semicolon-separated values
+        (e.g.: "1;2;3"), it infers them as strings (object dtype). This is an issue since numeric operations
+        (inequalities, ranges) cannot be performed on string values.
+
+        This helper method checks ALL non-null values in the column to determine if they can be parsed as numeric
+        after splitting by semicolon. Note that it only detects if a column value is semicolon-separated numeric, it does not
+        convert the column to numeric type. It also validates that the colum value is not of mixed string-numerical type, which
+        is invalid input for the query system. The actual parsing and handling of the semicolon-separated numeric values is
+        done in the lamda functions in the run_query() method.
+
+        Returns True if the column contains ONLY numeric values (with or without semicolons).
+        Returns False if the column contains ONLY non-numeric values (regular string column), or if the column is empty.
+        Raises SidecarInvalidFilterError if mixed types detected (e.g., "1;2" and "abc;def" in same column) or if commas are found.
+        """
+        if key not in self.df.columns:
+            return False
+
+        non_null_values = self.df[key].dropna()
+        if len(non_null_values) == 0:
+            return False
+
+        self._validate_no_commas_in_column(key)
+
+        has_numeric_type = False
+        has_non_numeric_type = False
+
+        for row_index, cell_value in enumerate(non_null_values):
+            cell_str = str(cell_value).strip()
+            if not cell_str:
+                continue
+
+            parts = cell_str.split(";")
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    float(part)
+                    has_numeric_type = True
+                except ValueError:
+                    has_non_numeric_type = True
+
+                if has_numeric_type and has_non_numeric_type:
+                    raise SidecarInvalidFilterError(
+                        f"Column '{key}' in the metadata file contains mixed types. Value '{cell_str}' at row {row_index} "
+                        f"has both numeric and non-numeric parts. All values in a column must be consistently "
+                        f"numeric or string for filtering to work correctly."
+                    )
+
+        return has_numeric_type and not has_non_numeric_type
+
+    def _split_cell_values(self, cell_value: Any) -> list[str]:
+        """
+        Helper method to split cell value by semicolon and return list of non-empty values.
+        If the cell contains a single value without semicolon, it will return a list with that single value.
+        If the cell is empty or NaN, it will return an empty list.
+        """
+        if pd.isna(cell_value):
+            return []
+        return [val.strip() for val in str(cell_value).split(";") if val.strip()]
+
+    def _parse_numeric_value(self, value_str: str) -> float | int:
+        """Helper method to parse a string value to int or float. To be used when other checks have already confirmed that the value can be parsed as numeric."""
+        return float(value_str) if "." in value_str else int(value_str)
+
+    def _create_inequality_condition(self, key: str, operator: str, threshold: float) -> pd.Series:
+        """
+        Helper method to create a condition for inequality filtering on a column.
+        Uses a named nested function instead of a lambda to improve readability to defined the
+        logic that will be applied to the Pandas dataframe.
+        """
+
+        def check_inequality(cell_value):
+            if pd.isna(cell_value):
+                return False
+            cell_values = self._split_cell_values(cell_value)
+            for val_str in cell_values:
+                try:
+                    val_num = self._parse_numeric_value(val_str)
+                    if (
+                        operator == ">"
+                        and val_num > threshold
+                        or operator == ">="
+                        and val_num >= threshold
+                        or operator == "<"
+                        and val_num < threshold
+                        or operator == "<="
+                        and val_num <= threshold
+                    ):
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        return self.df[key].apply(check_inequality)
+
+    def _create_range_condition(self, key: str, min_val: float, max_val: float) -> pd.Series:
+        """
+        Helper method to create a condition for range filtering on a column.
+        Uses a named nested function instead of a lambda to improve readability to define the
+        logic that will be applied to the Pandas dataframe.
+        """
+
+        def check_range(cell_value):
+            if pd.isna(cell_value):
+                return False
+            cell_values = self._split_cell_values(cell_value)
+            for val_str in cell_values:
+                try:
+                    val_num = self._parse_numeric_value(val_str)
+                    if min_val <= val_num <= max_val:
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        return self.df[key].apply(check_range)
+
+    def _create_discrete_numeric_condition(self, key: str, target_values: list[float | int]) -> pd.Series:
+        """
+        Helper method to create a condition for discrete numeric value filtering on a column.
+        Uses a named nested function instead of a lambda to improve readability to define the
+        logic that will be applied to the Pandas dataframe.
+        """
+
+        def check_discrete(cell_value):
+            if pd.isna(cell_value):
+                return False
+            cell_values = self._split_cell_values(cell_value)
+            for val_str in cell_values:
+                try:
+                    val_num = self._parse_numeric_value(val_str)
+                    if val_num in target_values:
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        return self.df[key].apply(check_discrete)
+
+    def _create_string_condition(self, key: str, target_values: list[str]) -> pd.Series:
+        """
+        Helper method to create a condition for string value filtering on a column.
+        Uses a named nested function instead of a lambda to improve readability to define the
+        logic that will be applied to the Pandas dataframe.
+        """
+
+        def check_string(cell_value):
+            if pd.isna(cell_value):
+                return False
+            cell_values = self._split_cell_values(cell_value)
+            return any(val in target_values for val in cell_values)
+
+        return self.df[key].apply(check_string)
+
+    def _combine_conditions_with_or(self, conditions: list[pd.Series]) -> pd.Series:
+        """
+        Helper method to combine multiple Pandas boolean Series with OR logic.
+        Returns a single boolean Series that is True if any of the input conditions is True for each row.
+
+        The resulting Series is used at the end of self.run_query() to filter the DataFrame values.
+        """
+        if not conditions:
+            return pd.Series(False, index=self.df.index)
+        combined = conditions[0]
+        for cond in conditions[1:]:
+            # The bar (|) is pandas syntax for element-wise OR between boolean Series.
+            combined = combined | cond
+        return combined
