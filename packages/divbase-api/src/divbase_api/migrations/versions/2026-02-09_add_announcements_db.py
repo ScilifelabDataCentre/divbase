@@ -1,4 +1,4 @@
-"""add annoucements db
+"""add announcements db
 
 Revision ID: 2ec979fc9dbb
 Revises: 3e168ddc857e

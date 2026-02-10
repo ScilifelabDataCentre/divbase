@@ -61,7 +61,7 @@ def login(
     try:
         get_and_display_announcements(divbase_base_url=divbase_url)
     except (DivBaseAPIError, DivBaseAPIConnectionError):
-        # lets not fail the login process if annoucements are not working.
+        # lets not fail the login process if announcements are not working.
         logger.error("Failed to get announcements after login. Error was: ", exc_info=True)
 
     print(f"Logged in successfully as: {email}")
