@@ -146,7 +146,7 @@ def test_tsv_query_column_not_found(sample_tsv_file, caplog, create_sidecar_mana
 
     assert len(query_result) == 5, "Should return all records when column not found"
     assert "Column 'NonExistentColumn' not found in the TSV file" in caplog.text
-    assert query_message == "Invalid filter conditions - returning ALL records"
+    assert query_message == "Invalid filter conditions (NonExistentColumn:Value) - returning ALL records"
 
 
 @pytest.mark.unit
