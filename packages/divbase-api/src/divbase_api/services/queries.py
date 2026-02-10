@@ -701,9 +701,14 @@ class SidecarQueryManager:
         try:
             logger.info(f"Loading sidecar metadata file: {self.file}")
             self.df = pd.read_csv(
-                self.file, sep="\t"
+                self.file, sep="\t", skipinitialspace=True
             )  # Pandas has Type Inference and will detect numeric and string columns automatically
             self.df.columns = self.df.columns.str.lstrip("#")
+
+            # Strip leading and trailing whitespace from all columns
+            for col in self.df.columns:
+                self.df[col] = self.df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+
             if "Sample_ID" not in self.df.columns:
                 raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
 

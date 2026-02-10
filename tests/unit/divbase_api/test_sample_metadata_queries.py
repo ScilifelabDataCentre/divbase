@@ -43,11 +43,12 @@ def sample_tsv_with_edge_cases(tmp_path):
     4. Column with commas should raise SidecarInvalidFilterError
 
     Commas are NOT allowed in divbase TSV format.
+    Note that S2 and S3 have leading/trailing whitespace in the Sample_ID and the code should handle that by stripping whitespace.
     """
     tsv_content = """#Sample_ID\tPureStrings\tMixedTypes\tSingleString\tSingleNumber\tUnicodeStrings\tWithCommas\tStringWithHyphen\tNumericalWithHyphen
 S1\tNorth;South;East\t1;two;5\tWest\t100\tStockholm;Göteborg\tNorth,South\tNorth-East\t1-2
-S2\tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\tWest,East\tSouth-West\t2-3
-S3\tSouth\t3\tEast\t300\tKöpenhamn;København\tNorth,\tNorth-North-West\t3-4
+S2 \tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\tWest,East\tSouth-West\t2-3
+ S3\tSouth\t3\tEast\t300\tKöpenhamn;København\tNorth,\tNorth-North-West\t3-4
 S4\t1string\tstring4\tString5\t400\tHumlebæk\t,South\tEast-South-East\t4-5
 """
     tsv_file = tmp_path / "test_metadata_edge_cases.tsv"
