@@ -42,7 +42,6 @@ $ divbase-cli auth login [OPTIONS] EMAIL
 
 * `--password TEXT`: [required]
 * `--divbase-url TEXT`: DivBase server URL to connect to.  [default: http://localhost:8000/api]
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `-f, --force`: Force login again even if already logged in
 * `--help`: Show this message and exit.
 
@@ -72,5 +71,4 @@ $ divbase-cli auth whoami [OPTIONS]
 
 **Options**:
 
-* `-c, --config PATH`: Path to your user configuration file. If you didn&#x27;t specify a custom path when you created it, you don&#x27;t need to set this.  [default: /home/roryc/.config/divbase/config.yaml]
 * `--help`: Show this message and exit.

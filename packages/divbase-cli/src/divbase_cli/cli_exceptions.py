@@ -4,6 +4,8 @@ Custom exceptions for the divbase CLI.
 
 from pathlib import Path
 
+from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -106,12 +108,12 @@ class ProjectNameNotSpecifiedError(DivBaseCLIError):
     no default project is set in the user config file.
     """
 
-    def __init__(self, config_path: Path):
-        self.config_path = config_path
+    def __init__(self):
         error_message = (
-            "No project name provided. \n"
-            f"Please either set a default project in your user configuration file at '{config_path.resolve()}'.\n"
-            f"or pass the flag '--project <project_name>' to this command.\n"
+            "No project name provided.\n"
+            "Please either set a default project in your user configuration file.\n"
+            "or pass the flag '--project <project_name>' to this command.\n"
+            "To set a default project, you can run 'divbase-cli config set-default <project_name>'.\n"
         )
         super().__init__(error_message)
 
@@ -135,17 +137,30 @@ class ProjectNotInConfigError(DivBaseCLIError):
         super().__init__(error_message)
 
 
-class ConfigFileNotFoundError(DivBaseCLIError):
-    """Raised when the user's config file cannot be found."""
+class UnsupportedFileTypeError(DivBaseCLIError):
+    """Raised when one or more files to be uploaded are not supported by DivBase (based on file extension)."""
 
-    def __init__(
-        self,
-        error_message: str = (
-            "You're DivBase configuration file was not found or does not exist.\n"
-            "To create a user configuration file, run 'divbase-cli config create'.\n"
-            "If you already have a user configuration file that but it is not stored in the default location, "
-            "you can pass the '--config <path>' flag to specify the location. \n"
-            "You very probably want to just run 'divbase-cli config create' though."
-        ),
-    ):
-        super().__init__(error_message)
+    def __init__(self, unsupported_files: list[Path], supported_types: tuple[str, ...] = SUPPORTED_DIVBASE_FILE_TYPES):
+        self.unsupported_files = unsupported_files
+        self.supported_types = supported_types
+        message = (
+            f"The following file(s) have types that are not supported by DivBase and therefore cannot be uploaded: \n"
+            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
+            f"DivBase currently supports the following file types: {', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}\n"
+            "If you want us to support another file type, please let us know."
+        )
+        super().__init__(message)
+
+
+class UnsupportedFileNameError(DivBaseCLIError):
+    """Raised when one or more files to be uploaded have unsupported characters in their filenames."""
+
+    def __init__(self, unsupported_files: list[Path]):
+        self.unsupported_files = unsupported_files
+        message = (
+            f"The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: \n"
+            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
+            f"Filenames cannot contain any of the following characters: {', '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)}\n"
+            "Please rename the files and try again."
+        )
+        super().__init__(message)

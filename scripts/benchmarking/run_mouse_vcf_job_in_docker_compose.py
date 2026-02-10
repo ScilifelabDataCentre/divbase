@@ -80,13 +80,13 @@ def ensure_required_files_in_bucket(project_name: str, filename: str, mock_metad
     generate the mock metadata; upload the files to the bucket so that the worker container can access them from there during the query."""
 
     print("\nChecking if files are already in bucket...")
-    cmd = f"divbase-cli files list --project {project_name}"
+    cmd = f"divbase-cli files ls --project {project_name}"
     env = dict(os.environ)
     env["DIVBASE_ENV"] = "local"
 
     result = subprocess.run(shlex.split(cmd), env=env, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        print(f"ERROR running 'divbase-cli files list': {result.stderr}")
+        print(f"ERROR running 'divbase-cli files ls': {result.stderr}")
         print(f"stdout: {result.stdout}")
         raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
     output = result.stdout

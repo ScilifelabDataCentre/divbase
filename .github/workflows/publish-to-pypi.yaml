@@ -2,6 +2,7 @@ name: Publish divbase-lib and divbase-cli packages to PyPI
 on:
   release:
     types: [published]
+  workflow_dispatch: # should ideally only be used for e.g. X.X.X.dev releases
 
 jobs:
   build-divbase-lib-and-cli:

@@ -29,7 +29,7 @@ def test_upload_and_download_one_file_singlepart(s3_client: S3FileManager, tmp_p
     Tests uploading and then downloading a single, small file.
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
-    file_to_upload = Path("tests/fixtures/file1.txt")
+    file_to_upload = Path("tests/fixtures/file1.tsv")
     object_name = file_to_upload.name
     download_dir = tmp_path / "downloads"
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -54,9 +54,9 @@ def test_upload_and_download_multiple_files_singlepart(s3_client: S3FileManager,
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
     files_to_upload = {
-        "file1.txt": Path("tests/fixtures/file1.txt"),
-        "file2.txt": Path("tests/fixtures/file2.txt"),
-        "file3.txt": Path("tests/fixtures/file3.txt"),
+        "file1.tsv": Path("tests/fixtures/file1.tsv"),
+        "file2.tsv": Path("tests/fixtures/file2.tsv"),
+        "file3.tsv": Path("tests/fixtures/file3.tsv"),
     }
     download_dir = tmp_path / "downloads"
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -100,8 +100,8 @@ def test_download_s3_file_to_str(s3_client: S3FileManager, CONSTANTS):
     Tests downloading a file's content directly to a string.
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
-    file_to_upload = Path("tests/fixtures/file1.txt")
-    object_name = "download_to_str.txt"
+    file_to_upload = Path("tests/fixtures/file1.tsv")
+    object_name = "download_to_str.tsv"
 
     s3_client.upload_files(to_upload={object_name: file_to_upload}, bucket_name=bucket_name)
 
@@ -114,7 +114,7 @@ def test_download_non_existent_file(s3_client: S3FileManager, tmp_path: Path, CO
     Tests that downloading a non-existent file raises ObjectDoesNotExistError.
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
-    object_name = "this_file_does_not_exist.txt"
+    object_name = "this_file_does_not_exist.tsv"
 
     with pytest.raises(ObjectDoesNotExistError):
         s3_client.download_files(
@@ -130,8 +130,8 @@ def test_list_files(s3_client: S3FileManager, CONSTANTS):
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
     files_to_upload = {
-        "list_test_1.txt": Path("tests/fixtures/file1.txt"),
-        "list_test_2.txt": Path("tests/fixtures/file2.txt"),
+        "list_test_1.tsv": Path("tests/fixtures/file1.tsv"),
+        "list_test_2.tsv": Path("tests/fixtures/file2.tsv"),
     }
 
     s3_client.upload_files(to_upload=files_to_upload, bucket_name=bucket_name)
@@ -147,8 +147,8 @@ def test_soft_delete_objects(s3_client: S3FileManager, CONSTANTS, tmp_path: Path
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
     files_to_upload = {
-        "file_to_delete_1.txt": Path("tests/fixtures/file1.txt"),
-        "file_to_delete_2.txt": Path("tests/fixtures/file2.txt"),
+        "file_to_delete_1.tsv": Path("tests/fixtures/file1.tsv"),
+        "file_to_delete_2.tsv": Path("tests/fixtures/file2.tsv"),
     }
     object_names = list(files_to_upload.keys())
 
@@ -171,9 +171,9 @@ def test_versioning_and_hard_delete(s3_client: S3FileManager, CONSTANTS):
     and then performing a hard delete on a specific version.
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
-    object_name = "versioned_file.txt"
-    file_v1_path = Path("tests/fixtures/file1.txt")
-    file_v2_path = Path("tests/fixtures/file2.txt")
+    object_name = "versioned_file.tsv"
+    file_v1_path = Path("tests/fixtures/file1.tsv")
+    file_v2_path = Path("tests/fixtures/file2.tsv")
 
     s3_client.upload_files(to_upload={object_name: file_v1_path}, bucket_name=bucket_name)
     versions_after_v1 = s3_client.latest_version_of_all_files(bucket_name=bucket_name)

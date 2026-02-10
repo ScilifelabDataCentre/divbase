@@ -1,13 +1,11 @@
 import csv
 import logging
 import os
-from pathlib import Path
 
 import typer
 import yaml
 
-from divbase_cli.cli_commands.user_config_cli import CONFIG_FILE_OPTION
-from divbase_cli.cli_commands.version_cli import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult
@@ -24,11 +22,10 @@ dimensions_app = typer.Typer(
 @dimensions_app.command("update")
 def update_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """Calculate and add the dimensions of a VCF file to the dimensions index file in the project."""
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     response = make_authenticated_request(
         method="PUT",
@@ -62,14 +59,13 @@ def show_dimensions_index(
         )
     ),
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Show the dimensions index file for a project.
     When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
     """
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     response = make_authenticated_request(
         method="GET",
@@ -91,7 +87,7 @@ def show_dimensions_index(
         else:
             print(
                 f"No entry found for filename: {filename}. Please check that the filename is correct and that it is a VCF file (extension: .vcf or .vcf.gz)."
-                "\nHint: use 'divbase-cli files list' to view all files in the project."
+                "\nHint: use 'divbase-cli files ls' to view all files in the project."
             )
         return
 
@@ -167,7 +163,6 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
 @dimensions_app.command("create-metadata-template")
 def create_metadata_template_with_project_samples_names(
     project: str | None = PROJECT_NAME_OPTION,
-    config_file: Path = CONFIG_FILE_OPTION,
 ) -> None:
     """
     Use the samples index in a projects dimensions cache to create a TSV metadata template file
@@ -177,7 +172,7 @@ def create_metadata_template_with_project_samples_names(
     # TODO this duplicates some code with show_dimensions_index() above. A refactoring should probably include creating a separate CRUD function
     # so that the client does not need to parse all data.
 
-    project_config = resolve_project(project_name=project, config_path=config_file)
+    project_config = resolve_project(project_name=project)
 
     response = make_authenticated_request(
         method="GET",

@@ -48,7 +48,7 @@ def make_tokens_expired(access: bool = False, refresh: bool = False):
                 token_file.write(line)
 
 
-def test_login_command(logged_out_user_with_fresh_config):
+def test_login_command(logged_out_user_with_no_config):
     command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
 
     result = runner.invoke(app, command)
@@ -57,7 +57,7 @@ def test_login_command(logged_out_user_with_fresh_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_login_command_with_password_prompted(logged_out_user_with_fresh_config):
+def test_login_command_with_password_prompted(logged_out_user_with_no_config):
     command = f"auth login {USER_EMAIL}"
 
     result = runner.invoke(app, command, input=f"{USER_PASSWORD}\n")
@@ -66,7 +66,7 @@ def test_login_command_with_password_prompted(logged_out_user_with_fresh_config)
     assert USER_EMAIL in result.stdout
 
 
-def test_login_command_fails_with_invalid_credentials(logged_out_user_with_fresh_config):
+def test_login_command_fails_with_invalid_credentials(logged_out_user_with_no_config):
     """Test login command fails with invalid credentials."""
     command = f"auth login {USER_EMAIL} --password wrongpassword"
 
@@ -76,7 +76,7 @@ def test_login_command_fails_with_invalid_credentials(logged_out_user_with_fresh
     assert "Invalid email or password" in str(result.exception)
 
 
-def test_login_command_with_invalid_server_url(logged_out_user_with_fresh_config):
+def test_login_command_with_invalid_server_url(logged_out_user_with_no_config):
     """Test login command fails with an invalid server URL."""
     command = f"auth login {USER_EMAIL} --password {USER_PASSWORD} --divbase-url https://invalid-url"
 
@@ -85,7 +85,7 @@ def test_login_command_with_invalid_server_url(logged_out_user_with_fresh_config
     assert isinstance(result.exception, DivBaseAPIConnectionError)
 
 
-def test_login_command_already_logged_in(logged_out_user_with_fresh_config):
+def test_login_command_already_logged_in(logged_out_user_with_no_config):
     """Test login command when already logged in."""
     log_in_as_user()
 
@@ -107,7 +107,7 @@ def test_login_command_already_logged_in(logged_out_user_with_fresh_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_force_login_option(logged_out_user_with_fresh_config):
+def test_force_login_option(logged_out_user_with_no_config):
     """Should not prompt about logging in again"""
     log_in_as_user()
     command = f"auth login {USER_EMAIL} --password {USER_PASSWORD} --force"
@@ -118,7 +118,7 @@ def test_force_login_option(logged_out_user_with_fresh_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_logout_command(logged_out_user_with_fresh_config):
+def test_logout_command(logged_out_user_with_no_config):
     """Test basic usage of logout and that running multiple times is ok."""
     command = "auth logout"
 
@@ -131,7 +131,7 @@ def test_logout_command(logged_out_user_with_fresh_config):
     assert "Logged out successfully" in result.stdout
 
 
-def test_login_logout_cycle(logged_out_user_with_fresh_config):
+def test_login_logout_cycle(logged_out_user_with_no_config):
     """Test a few repeated login/logout cycles."""
     login_command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
     logout_command = "auth logout"
@@ -147,7 +147,7 @@ def test_login_logout_cycle(logged_out_user_with_fresh_config):
         assert "Logged out successfully" in result.stdout
 
 
-def test_whoami_command(logged_out_user_with_fresh_config):
+def test_whoami_command(logged_out_user_with_no_config):
     """Test basic usage of whoami command."""
     log_in_as_user()
     command = "auth whoami"
@@ -157,7 +157,7 @@ def test_whoami_command(logged_out_user_with_fresh_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_fresh_config):
+def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_no_config):
     """Test basic usage of whoami command."""
     command = "auth whoami"
 
@@ -166,7 +166,7 @@ def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_fresh_config
     assert isinstance(result.exception, AuthenticationError)
 
 
-def test_whoami_command_needing_refresh_token(logged_out_user_with_fresh_config):
+def test_whoami_command_needing_refresh_token(logged_out_user_with_no_config):
     """
     We simulate that the access token has expired by manually setting it to be expired in the users .secrets file
 
@@ -198,7 +198,7 @@ def test_whoami_with_expired_tokens_fails(logged_in_admin_with_existing_config):
     assert LOGIN_AGAIN_MESSAGE in str(result.exception)
 
 
-def test_using_revoked_refresh_token_fails(logged_out_user_with_fresh_config, tmp_path):
+def test_using_revoked_refresh_token_fails(logged_out_user_with_no_config, tmp_path):
     """
     Validate that when the refresh token is revoked, the user cannot use it to get a new access token.
 

@@ -30,21 +30,14 @@ def tmp_config_path(tmp_path):
 
 
 @pytest.fixture
-def logged_out_user_with_fresh_config():
+def logged_out_user_with_no_config():
     """
     Fixture to provide a user with a fresh config file that is not logged in anywhere.
     """
     # ensure no config or tokens file exist before test
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
-
-    # create fresh config file
-    result = runner.invoke(app, "config create")
-    assert result.exit_code == 0
-    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
-
     yield
-
     # clean up after test, delete config and tokens file
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
@@ -60,11 +53,8 @@ def logged_out_user_with_existing_config(CONSTANTS):
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
-    create_command = "config create"
-    result = runner.invoke(app, create_command)
-    assert result.exit_code == 0
-    assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
-
+    # running any cmd that requires the config file will create it
+    # so we can just run the config add cmd directly.
     for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
         add_command = f"config add {project}"
         result = runner.invoke(app, add_command)
@@ -130,11 +120,7 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
-        create_command = "config create"
-        result = runner.invoke(app, create_command)
-        assert result.exit_code == 0
-        assert cli_settings.CONFIG_PATH.exists(), "Config file was not created at the temporary path"
-
+        # running any cmd that requires the config file will create it
         for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
             add_command = f"config add {project}"
             result = runner.invoke(app, add_command)

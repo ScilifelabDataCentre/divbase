@@ -16,6 +16,13 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
+from divbase_lib.api_schemas.s3 import (
+    ListObjectsResponse,
+    ObjectDetails,
+    ObjectInfoResponse,
+    ObjectVersionInfo,
+    RestoreObjectsResponse,
+)
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
@@ -59,6 +66,9 @@ class S3FileManager:
     def list_files(self, bucket_name: str) -> list[str]:
         """
         Return a list of all files in the S3 bucket.
+
+        This will run multiple requests if there are more than 1000 files in the bucket.
+        Used by worker to list all vcf.gz files for processing.
         """
         files = []
         paginator = self.s3_client.get_paginator("list_objects_v2")
@@ -66,6 +76,83 @@ class S3FileManager:
             for obj in page.get("Contents", []):
                 files.append(obj["Key"])
         return files
+
+    def list_files_detailed(
+        self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
+    ) -> ListObjectsResponse:
+        """
+        Return a list of up to 1000 files in the S3 bucket with detailed info about each file.
+        This is used by CLI users via the API.
+
+        Pagination is supported via the next_token parameter, so a client may need to make multiple calls to get all files.
+        """
+        request_args = {
+            "Bucket": bucket_name,
+            "MaxKeys": 1000,
+        }
+        if prefix:
+            request_args["Prefix"] = prefix
+        if next_token:
+            request_args["ContinuationToken"] = next_token
+
+        response = self.s3_client.list_objects_v2(**request_args)
+
+        items = []
+        for obj in response.get("Contents", []):
+            items.append(
+                ObjectDetails(
+                    name=obj["Key"],
+                    size=obj["Size"],
+                    last_modified=obj["LastModified"],
+                    etag=obj["ETag"].strip('"'),
+                )
+            )
+
+        new_next_token: str | None = response.get("NextContinuationToken")
+        return ListObjectsResponse(objects=items, next_token=new_next_token)
+
+    def get_detailed_object_info(self, bucket_name: str, object_name: str) -> ObjectInfoResponse:
+        """
+        Retrieves all versions of a specific object in an S3 bucket, with details about each version in the bucket.
+        Included in the response object is whether the object is currently deleted (i.e., has a deletion marker as the latest version).
+
+        This is the level of detail a user needs to know about (i.e., then don't need to know about older deletion markers).
+        """
+        object_exists = False
+        is_currently_deleted = False
+
+        response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=object_name)
+
+        all_versions = []
+        for version in response.get("Versions", []):
+            if version["Key"] == object_name:
+                object_exists = True
+                all_versions.append(
+                    ObjectVersionInfo(
+                        version_id=version["VersionId"],
+                        is_latest=version["IsLatest"],
+                        last_modified=version["LastModified"],
+                        size=version["Size"],
+                        etag=version["ETag"].strip('"'),
+                    )
+                )
+
+        if not object_exists:
+            raise ObjectDoesNotExistError(key=object_name, bucket_name=bucket_name)
+
+        for delete_marker in response.get("DeleteMarkers", []):
+            if delete_marker["Key"] == object_name and delete_marker["IsLatest"]:
+                is_currently_deleted = True
+                break
+
+        # Sort the results object by last_modified date
+        all_versions.sort(key=lambda v: v.last_modified, reverse=True)
+
+        return ObjectInfoResponse(
+            object_name=object_name,
+            is_currently_deleted=is_currently_deleted,
+            versions=all_versions,
+        )
 
     def download_files(self, objects: dict[str, str | None], download_dir: Path, bucket_name: str) -> list[Path]:
         """
@@ -128,6 +215,60 @@ class S3FileManager:
         )
         deleted_object_names = [object_dict["Key"] for object_dict in response["Deleted"]]
         return deleted_object_names
+
+    def restore_objects(self, objects: list[str], bucket_name: str) -> RestoreObjectsResponse:
+        """
+        Attempts to restore a list of soft-deleted objects by removing their delete markers.
+
+        This method categorizes the outcome for each object into one of two states:
+        - 'restored':
+            The object had a delete marker which was successfully removed. OR
+            The object was already live (no delete marker present as latest version).
+        - 'not_restored':
+            The object does not exist in the bucket (no versions or markers) OR
+            we failed to remove the delete marker due to an unexpected s3 error.
+        """
+        restored_objects, not_restored = [], []
+
+        markers_to_delete = []
+        for obj_key in objects:
+            response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=obj_key)
+
+            # Filters to make sure working with the exact object key, not just objects with the same prefix
+            delete_markers = [marker for marker in response.get("DeleteMarkers", []) if marker["Key"] == obj_key]
+            versions = [version for version in response.get("Versions", []) if version["Key"] == obj_key]
+
+            is_deleted = delete_markers and delete_markers[0]["IsLatest"]
+            is_not_deleted = versions and versions[0]["IsLatest"]
+
+            if is_deleted:
+                version_id = delete_markers[0]["VersionId"]
+                markers_to_delete.append({"Key": obj_key, "VersionId": version_id})
+            elif is_not_deleted:
+                restored_objects.append(obj_key)
+            else:
+                # object not found, could be typo or was already hard deleted.
+                not_restored.append(obj_key)
+
+        if not markers_to_delete:
+            return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
+
+        delete_response = self.s3_client.delete_objects(
+            Bucket=bucket_name,
+            Delete={"Objects": markers_to_delete},
+        )
+        for deleted_obj in delete_response.get("Deleted", []):
+            restored_objects.append(deleted_obj["Key"])
+
+        if delete_response.get("Errors"):
+            for error in delete_response["Errors"]:
+                logger.error(
+                    f"Failed to remove delete marker for '{error['Key']}' (version: {error['VersionId']}): "
+                    f"{error['Code']} - {error['Message']}"
+                )
+                not_restored.append(error["Key"])
+
+        return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
 
     def hard_delete_specific_object_versions(self, versioned_objects: dict[str, str], bucket_name: str) -> None:
         """

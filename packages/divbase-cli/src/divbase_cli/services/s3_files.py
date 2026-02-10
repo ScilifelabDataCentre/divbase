@@ -2,7 +2,11 @@
 Service layer for DivBase CLI S3 file operations.
 """
 
+import sys
 from pathlib import Path
+
+import httpx
+import typer
 
 from divbase_cli.cli_exceptions import (
     FileDoesNotExistInSpecifiedVersionError,
@@ -21,10 +25,19 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ListObjectsRequest,
+    ListObjectsResponse,
+    ObjectDetails,
+    ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
+    RestoreObjectsResponse,
 )
-from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    QUERY_RESULTS_FILE_PREFIX,
+    S3_MULTIPART_UPLOAD_THRESHOLD,
+)
 from divbase_lib.s3_checksums import (
     MD5CheckSumFormat,
     calculate_composite_md5_s3_etag,
@@ -33,15 +46,66 @@ from divbase_lib.s3_checksums import (
 )
 
 
-def list_files_command(divbase_base_url: str, project_name: str) -> list[str]:
-    """List all files in a project."""
+def list_files_command(
+    divbase_base_url: str,
+    project_name: str,
+    prefix_filter: str | None = None,
+    include_results_files: bool = False,
+) -> list[ObjectDetails]:
+    """
+    List all files in a project optionally filtered by a prefix.
+    We page through results if there are more than can be returned in a single API call.
+
+    NOTE: The current implementation is not very efficient as we page through all results before returning any.
+    Keeping simple for now as we don't expect projects to have huge numbers of files.
+    But could be revisted later if performance becomes an issue.
+    """
+    api_route = f"v1/s3/list?project_name={project_name}"
+    initial_request = ListObjectsRequest(
+        prefix=prefix_filter,
+        next_token=None,
+    )
+
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=api_route,
+        json=initial_request.model_dump(),
+    )
+    response_data = ListObjectsResponse(**response.json())
+    all_matches = response_data.objects
+
+    # page through any remaining results
+    while response_data.next_token:
+        next_request = ListObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=api_route,
+            json=next_request.model_dump(),
+        )
+        next_page_data = ListObjectsResponse(**response.json())
+
+        all_matches.extend(next_page_data.objects)
+        response_data.next_token = next_page_data.next_token
+
+    # To enable us to both search by prefix and optionally hide/include query results files,
+    # we hide DivBase query results/job files now instead of via S3.
+    # so the prefix param can be used for the optional filter the user wants.
+    if not include_results_files:
+        all_matches = [obj for obj in all_matches if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
+
+    return all_matches
+
+
+def get_file_info_command(divbase_base_url: str, project_name: str, object_name: str) -> ObjectInfoResponse:
+    """Get detailed information about a specific file/object in a project."""
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/?project_name={project_name}",
+        api_route=f"v1/s3/info?project_name={project_name}&object_name={object_name}",
     )
-
-    return response.json()
+    return ObjectInfoResponse(**response.json())
 
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
@@ -58,10 +122,24 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
     return response.json()
 
 
+def restore_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> RestoreObjectsResponse:
+    """
+    Restore soft_deleted objects in the project's bucket.
+    Returns an object containing a list of the restored objects, and those that were not restored.
+    """
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/restore?project_name={project_name}",
+        json=all_files,
+    )
+    return RestoreObjectsResponse(**response.json())
+
+
 def download_files_command(
     divbase_base_url: str,
     project_name: str,
-    all_files: list[str],
+    raw_files_input: list[str],
     download_dir: Path,
     verify_checksums: bool,
     project_version: str | None = None,
@@ -74,23 +152,44 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
+    if project_version is not None:
+        offending_files = [file for file in raw_files_input if ":" in file]
+        if offending_files:
+            print(
+                "[red] ERROR: bad Input: If you provide a global project version (using --project-version) "
+                "you cannot also specify specific versions of individual files to download. \n"
+                "offending files in your input: \n"
+                f"{'\n'.join(offending_files)} \n"
+                "Exiting..."
+            )
+            raise typer.Exit(1)
+
     if project_version:
         project_version_details = get_version_details_command(
             project_name=project_name, divbase_base_url=divbase_base_url, version_name=project_version
         )
 
         # check if all files specified exist for download exist at this project version
-        missing_objects = [f for f in all_files if f not in project_version_details.files]
+        missing_objects = [f for f in raw_files_input if f not in project_version_details.files]
         if missing_objects:
             raise FileDoesNotExistInSpecifiedVersionError(
                 project_name=project_name,
                 project_version=project_version,
                 missing_files=missing_objects,
             )
-        to_download = {file: project_version_details.files[file] for file in all_files}
-        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in all_files]
+        # we validated in CLI command that
+        to_download = {file: project_version_details.files[file] for file in raw_files_input}
+        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in raw_files_input]
     else:
-        json_data = [{"name": obj, "version_id": None} for obj in all_files]
+        # parse raw file inputs to see if any specific version ids were provided using format:
+        # file_name:version_id (not possible when using project_version)
+        json_data = []
+        for file_input in raw_files_input:
+            if ":" in file_input:
+                name, version_id = file_input.split(sep=":", maxsplit=1)
+                json_data.append({"name": name, "version_id": version_id})
+            else:
+                json_data.append({"name": file_input, "version_id": None})
 
     successful_downloads, failed_downloads = [], []
     for i in range(0, len(json_data), MAX_S3_API_BATCH_SIZE):
@@ -112,6 +211,30 @@ def download_files_command(
         failed_downloads.extend(batch_download_failed)
 
     return DownloadOutcome(successful=successful_downloads, failed=failed_downloads)
+
+
+def stream_file_command(
+    divbase_base_url: str, project_name: str, file_name: str, version_id: str | None = None
+) -> None:
+    """Stream the contents of a single file in the project's S3 bucket to stdout."""
+    json_data = [{"name": file_name, "version_id": version_id}]
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/download?project_name={project_name}",
+        json=json_data,
+    )
+    pre_signed_url = PreSignedDownloadResponse(**response.json()[0]).pre_signed_url
+
+    try:
+        with httpx.stream("GET", pre_signed_url, timeout=None) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                sys.stdout.buffer.write(chunk)
+    except BrokenPipeError:
+        # This happens when the user pipes to a command that closes early
+        # (e.g., `[divbase-cli stream command] | head -n 10`).
+        pass
 
 
 def upload_files_command(
