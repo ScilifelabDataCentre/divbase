@@ -17,16 +17,16 @@ def sample_tsv_with_numeric_data(tmp_path):
     """
     # Keep indentation like this to ensure that leading spaces in column 1 does not cause issues.
     tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber\tSingleString
-S1\t1\t20.0\t5.0\tNorth\t100\tString
+S1\t1\t20.2\t5.0\tNorth\t100\tString
 S2\t2;4\t25.0\t10\tEast\t200\tStrings
-S3\t3\t30.0\t15\tWest;South;East\t300\tSting
-S4\t4\t35.0\t20\tWest\t400\tStings
+S3\t3\t30.8\t15\tWest;South;East\t300\tSting
+S4\t4\t35.1\t20\tWest\t400\tStings
 S5\t5\t40.0\t25\tNorth\t500\tThing
-S6\t6\t45.0\t30\tEast\t600\tThings
-S7\t1;3;5\t50.0\t35\tSouth\t700\tStrong
-S8\t2\t55.0\t40\tWest\t800\tStrung
-S9\t7\t62.0\t45\tNorth\t900\tStang
-S10\t8\t70.0\t52\tEast\t1000\tSong
+S6\t6\t45.4\t30\tEast\t600\tThings
+S7\t1;3;5\t50.9\t35\tSouth\t700\tStrong
+S8\t2\t55.2\t40\tWest\t800\tStrung
+S9\t7\t62.6\t45\tNorth\t900\tStang
+S10\t8\t70.7\t52\tEast\t1000\tSong
 """
     tsv_file = tmp_path / "test_metadata.tsv"
     tsv_file.write_text(tsv_content)
@@ -65,7 +65,9 @@ class TestNumericalFilteringInequalities:
         result = manager.run_query(filter_string="Weight:>50")
 
         sample_ids = result.get_unique_values("Sample_ID")
-        assert len(sample_ids) == 3
+        # Weight > 50: S7 (50.9), S8 (55.2), S9 (62.6), S10 (70.7)
+        assert len(sample_ids) == 4
+        assert "S7" in sample_ids
         assert "S8" in sample_ids
         assert "S9" in sample_ids
         assert "S10" in sample_ids
@@ -176,11 +178,10 @@ class TestNumericalFilteringRanges:
         result = manager.run_query(filter_string="Weight:30-45")
 
         sample_ids = result.get_unique_values("Sample_ID")
-        assert len(sample_ids) == 4
+        assert len(sample_ids) == 3
         assert "S3" in sample_ids
         assert "S4" in sample_ids
         assert "S5" in sample_ids
-        assert "S6" in sample_ids
 
     def test_range_boundaries_inclusive(self, sample_tsv_with_numeric_data):
         """Test that range boundaries are inclusive."""
@@ -253,7 +254,7 @@ class TestNumericalFilteringDiscreteValues:
     def test_single_discrete_value(self, sample_tsv_with_numeric_data):
         """Test filtering with a single discrete value."""
         manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
-        result = manager.run_query(filter_string="Weight:50")
+        result = manager.run_query(filter_string="Weight:50.9")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 1
@@ -262,7 +263,7 @@ class TestNumericalFilteringDiscreteValues:
     def test_multiple_discrete_values(self, sample_tsv_with_numeric_data):
         """Test filtering with multiple discrete values (OR logic)."""
         manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
-        result = manager.run_query(filter_string="Weight:20,30,50")
+        result = manager.run_query(filter_string="Weight:20.2,30.8,50.9")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 3
@@ -327,9 +328,9 @@ class TestNumericalFilteringDiscreteValues:
         assert "S8" not in sample_ids
 
     def test_not_operator_multiple_negations(self, sample_tsv_with_numeric_data):
-        """Test NOT operator (!) with multiple negations: Weight:>30,!50,!55 should exclude 50 and 55."""
+        """Test NOT operator (!) with multiple negations: Weight:>30,!50.9,!55.2 should exclude 50.9 and 55.2."""
         manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
-        result = manager.run_query(filter_string="Weight:>30,!50,!55")
+        result = manager.run_query(filter_string="Weight:>30,!50.9,!55.2")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert "S4" in sample_ids
@@ -338,6 +339,7 @@ class TestNumericalFilteringDiscreteValues:
         assert "S9" in sample_ids
         assert "S10" in sample_ids
         assert "S7" not in sample_ids
+        assert "S8" not in sample_ids
         assert "S8" not in sample_ids
 
 
