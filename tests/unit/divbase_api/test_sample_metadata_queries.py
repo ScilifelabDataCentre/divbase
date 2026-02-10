@@ -135,6 +135,36 @@ class TestNumericalFilteringInequalities:
         assert "S9" in sample_ids
         assert "S10" in sample_ids
 
+    def test_not_operator_with_inequality(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with inequality: Population:<4,!2 should return 1 and 3 but not 2."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:<4,!2")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 3
+        assert "S1" in sample_ids
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
+        assert "S2" not in sample_ids
+        assert "S8" not in sample_ids
+
+    def test_not_operator_standalone(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) standalone: Population:!2 should return all except 2."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:!2")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+        assert "S2" not in sample_ids
+        assert "S8" not in sample_ids
+
 
 class TestNumericalFilteringRanges:
     """Test range filtering on numerical columns."""
@@ -197,6 +227,23 @@ class TestNumericalFilteringRanges:
         assert "S6" in sample_ids
         assert "S7" in sample_ids
         assert "S8" in sample_ids
+
+    def test_not_operator_with_range(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with range: Age:!20-30 should exclude values in range 20-30."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Age:!20-30")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+        assert "S4" not in sample_ids
+        assert "S5" not in sample_ids
+        assert "S6" not in sample_ids
 
 
 class TestNumericalFilteringDiscreteValues:
@@ -264,6 +311,33 @@ class TestNumericalFilteringDiscreteValues:
         assert len(sample_ids) == 2
         assert "S1" in sample_ids
         assert "S6" in sample_ids
+
+    def test_not_operator_with_discrete_values(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with discrete values: Population:1,3,!2 should return 1 and 3 but not 2."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:1,3,!2")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 3
+        assert "S1" in sample_ids
+        assert "S3" in sample_ids
+        assert "S7" in sample_ids
+        assert "S2" not in sample_ids
+        assert "S8" not in sample_ids
+
+    def test_not_operator_multiple_negations(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with multiple negations: Weight:>30,!50,!55 should exclude 50 and 55."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Weight:>30,!50,!55")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S4" in sample_ids
+        assert "S5" in sample_ids
+        assert "S6" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+        assert "S7" not in sample_ids
+        assert "S8" not in sample_ids
 
 
 class TestSemicolonSeparatedNumericFiltering:
@@ -333,6 +407,20 @@ class TestSemicolonSeparatedNumericFiltering:
         assert "S7" in sample_ids
         assert "S8" in sample_ids
 
+    def test_not_operator_with_semicolon_separated(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with semicolon-separated values: Population:>3,!5 should exclude 5."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Population:>3,!5")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S2" in sample_ids
+        assert "S4" in sample_ids
+        assert "S6" in sample_ids
+        assert "S9" in sample_ids
+        assert "S10" in sample_ids
+        assert "S5" not in sample_ids
+        assert "S7" not in sample_ids
+
 
 class TestStringColumnFiltering:
     """Test string column filtering with single and semicolon-separated values."""
@@ -376,6 +464,38 @@ class TestStringColumnFiltering:
         assert len(sample_ids) == 2
         assert "S3" in sample_ids
         assert "S7" in sample_ids
+
+    def test_not_operator_with_string_values(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) with string values: Area:!North should exclude North."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Area:!North")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 7
+        assert "S2" in sample_ids
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S6" in sample_ids
+        assert "S7" in sample_ids
+        assert "S8" in sample_ids
+        assert "S10" in sample_ids
+        assert "S1" not in sample_ids
+        assert "S5" not in sample_ids
+        assert "S9" not in sample_ids
+
+    def test_not_operator_with_string_positive_and_negative(self, sample_tsv_with_numeric_data):
+        """Test NOT operator (!) combined with positive values: Area:East,West,!South."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Area:East,West,!South")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S2" in sample_ids
+        assert "S4" in sample_ids
+        assert "S6" in sample_ids
+        assert "S8" in sample_ids
+        assert "S10" in sample_ids
+        assert "S3" not in sample_ids
+        assert "S7" not in sample_ids
 
 
 class TestEdgeCases:
@@ -478,3 +598,24 @@ class TestEdgeCases:
         with pytest.raises(SidecarInvalidFilterError) as excinfo:
             manager.run_query(filter_string="NumericalWithHyphen:2")
         assert "Column 'NumericalWithHyphen' contains value '1-2' with a hyphen at row 0." in str(excinfo.value)
+
+    def test_not_operator_edge_case_with_unicode(self, sample_tsv_with_edge_cases):
+        """Test NOT operator (!) with unicode string values."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="UnicodeStrings:!København")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S4" in sample_ids
+        assert "S3" not in sample_ids
+
+    def test_not_operator_only_negations(self, sample_tsv_with_edge_cases):
+        """Test NOT operator (!) with only negations (no positive values): PureStrings:!North should return all except North."""
+        manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
+        result = manager.run_query(filter_string="PureStrings:!North")
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 2
+        assert "S3" in sample_ids
+        assert "S4" in sample_ids
+        assert "S1" not in sample_ids
+        assert "S2" not in sample_ids

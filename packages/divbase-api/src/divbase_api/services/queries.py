@@ -738,6 +738,12 @@ class SidecarQueryManager:
             - Discrete values: "25,30,50" (checks if any cell value matches any filter value)
             - All are combined with OR logic
 
+        Filtering using the ! (NOT) operator:
+        - "!" must prefix the filter value, e.g. "key:!value" means that rows with "value" in the "key" column should be excluded.
+        - Numeric examples: "Population:!2" (exclude 2), "Age:<30,!25" (less than 30 but not 25), "Weight:!20-40" (exclude range 20-40)
+        - String examples: "Area:!North" (exclude North), "Region:East,West,!South" (East or West but not South)
+        - NOT conditions are applied with AND logic after positive conditions have been applied: rows must NOT match any negated value
+
         Filter string values in the query vs. cell values in the TSV:
         - Filter strings are handled per semicolon-separated key-value pair: in "key1:value1,value2;key2:value3,value4"
           "key1:value1,value2" is handled separately from "key2:value3,value4".
@@ -800,70 +806,57 @@ class SidecarQueryManager:
                 # e.g., "Weight:>25,<30,50" or "Weight:20-40,50,>100"
                 # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "25;30;35"
                 # Also handles columns that pandas infers as strings but contain numeric values with semicolons (e.g., "1;2;3")
+                # Also supports NOT operator with ! prefix: e.g., "Weight:!25" or "Weight:<4,!2"
                 if is_numeric or is_semicolon_numeric:
                     filter_string_values_list = filter_string_values.split(",")
-                    inequality_conditions = []
-                    range_conditions = []
-                    discrete_values = []
 
-                    for filter_string_value in filter_string_values_list:
-                        filter_string_value = filter_string_value.strip()
+                    # Negated values are those that start with "!" in the filter string
+                    positive_values, negated_values = self._separate_positive_and_negated_values(
+                        filter_values=filter_string_values_list
+                    )
 
-                        # Check for common mistakes: =< or => instead of <= or >=
-                        if re.match(r"^=<\d+\.?\d*$", filter_string_value) or re.match(
-                            r"^=>\d+\.?\d*$", filter_string_value
-                        ):
-                            raise SidecarInvalidFilterError(
-                                f"Invalid operator format '{filter_string_value[:2]}' in filter '{key}:{filter_string_values}'."
-                                f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
-                            )
+                    filter_context = {
+                        "key": key,
+                        "filter_string_values": filter_string_values,
+                        "is_negated": False,
+                    }
 
-                        # Check if it's an inequality (e.g., ">25", "<=40")
-                        inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", filter_string_value)
-                        if inequality_match:
-                            operator = inequality_match.group(1)
-                            threshold = float(inequality_match.group(2))
-                            condition = self._create_inequality_condition(key, operator, threshold)
-                            inequality_conditions.append(condition)
-                            logger.debug(f"Applied inequality filter on '{key}': {operator} {threshold}")
-                            continue
+                    inequality_conditions, range_conditions, discrete_values = self._parse_numeric_filter_values(
+                        values_to_process=positive_values,
+                        context=filter_context,
+                    )
 
-                        # Check if it's a range (e.g., "20-40")
-                        range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", filter_string_value)
-                        if range_match:
-                            min_val = float(range_match.group(1))
-                            max_val = float(range_match.group(2))
-                            condition = self._create_range_condition(key, min_val, max_val)
-                            range_conditions.append(condition)
-                            logger.debug(f"Applied range filter on '{key}': {min_val} to {max_val}")
-                            continue
-
-                        # Otherwise, treat as discrete value
-                        try:
-                            # Collect all discrete values from the filter string as the loop progresses.
-                            discrete_values.append(
-                                float(filter_string_value) if "." in filter_string_value else int(filter_string_value)
-                            )
-                        except ValueError:
-                            logger.warning(
-                                f"Cannot convert '{filter_string_value}' to numeric for column '{key}'. Skipping this value."
-                            )
+                    filter_context["is_negated"] = True
+                    negated_inequality_conditions, negated_range_conditions, negated_discrete_values = (
+                        self._parse_numeric_filter_values(
+                            values_to_process=negated_values,
+                            context=filter_context,
+                        )
+                    )
 
                     # Combine multiple conditions (inequality, range, discrete values) with OR logic
-                    conditions = []
+                    conditions = self._build_condition_list(
+                        inequality_conditions=inequality_conditions,
+                        range_conditions=range_conditions,
+                        discrete_values=discrete_values,
+                        key=key,
+                    )
 
-                    if inequality_conditions:
-                        conditions.append(self._combine_conditions_with_or(inequality_conditions))
+                    negated_conditions = self._build_condition_list(
+                        inequality_conditions=negated_inequality_conditions,
+                        range_conditions=negated_range_conditions,
+                        discrete_values=negated_discrete_values,
+                        key=key,
+                    )
 
-                    if range_conditions:
-                        conditions.append(self._combine_conditions_with_or(range_conditions))
+                    if conditions or negated_conditions:
+                        # First combine all positive conditions with OR logic. Can be None if there are no positive conditions, e.g. if the filter string only contains negated conditions like "Weight:!20-40"
+                        base_condition = self._combine_conditions_with_or(conditions=conditions) if conditions else None
+                        # Then apply negated conditions with AND logic: rows must NOT match any negated condition.
+                        combined = self._apply_not_conditions(
+                            base_condition=base_condition, negated_conditions=negated_conditions
+                        )
 
-                    if discrete_values:
-                        discrete_condition = self._create_discrete_numeric_condition(key, discrete_values)
-                        conditions.append(discrete_condition)
-
-                    if conditions:
-                        combined = self._combine_conditions_with_or(conditions)
                         if not combined.any():
                             warning_msg = f"No values in column '{key}' match the filter: {filter_string_values}"
                             logger.warning(warning_msg)
@@ -876,15 +869,36 @@ class SidecarQueryManager:
                         self.warnings.append(warning_msg)
                 else:
                     # Non-numeric column: handle as discrete string values
+                    # Supports NOT operator with ! prefix: e.g., "Area:!North" or "Area:North,!South"
                     filter_string_values_list = filter_string_values.split(",")
                     self._validate_no_commas_in_column(key)
 
-                    condition = self._create_string_condition(key, filter_string_values_list)
-                    if not condition.any():
-                        warning_msg = f"None of the values {filter_string_values_list} were found in column '{key}'"
-                        logger.warning(warning_msg)
-                        self.warnings.append(warning_msg)
-                    filter_conditions.append(condition)
+                    positive_values, negated_values = self._separate_positive_and_negated_values(
+                        filter_values=filter_string_values_list
+                    )
+
+                    # Build condition
+                    if positive_values or negated_values:
+                        base_condition = (
+                            self._create_string_condition(key=key, target_values=positive_values)
+                            if positive_values
+                            else None
+                        )
+                        negated_conditions = (
+                            [self._create_string_condition(key=key, target_values=negated_values)]
+                            if negated_values
+                            else []
+                        )
+
+                        condition = self._apply_not_conditions(
+                            base_condition=base_condition, negated_conditions=negated_conditions
+                        )
+
+                        if not condition.any():
+                            warning_msg = f"None of the values {filter_string_values_list} were found in column '{key}'"
+                            logger.warning(warning_msg)
+                            self.warnings.append(warning_msg)
+                        filter_conditions.append(condition)
             except SidecarInvalidFilterError:
                 # Allow specific validation errors (like "contains commas") to propagate unchanged.
                 # This preserves detailed error messages for user-facing exceptions.
@@ -1106,4 +1120,126 @@ class SidecarQueryManager:
         for cond in conditions[1:]:
             # The bar (|) is pandas syntax for element-wise OR between boolean Series.
             combined = combined | cond
+        return combined
+
+    def _build_condition_list(
+        self,
+        inequality_conditions: list[pd.Series],
+        range_conditions: list[pd.Series],
+        discrete_values: list[float | int],
+        key: str,
+    ) -> list[pd.Series]:
+        """
+        Helper method to build a list of conditions from inequality, range, and discrete value filters.
+        """
+        conditions = []
+
+        if inequality_conditions:
+            conditions.append(self._combine_conditions_with_or(conditions=inequality_conditions))
+
+        if range_conditions:
+            conditions.append(self._combine_conditions_with_or(conditions=range_conditions))
+
+        if discrete_values:
+            discrete_condition = self._create_discrete_numeric_condition(key=key, target_values=discrete_values)
+            conditions.append(discrete_condition)
+
+        return conditions
+
+    def _parse_numeric_filter_values(
+        self, values_to_process: list[str], context: dict[str, str | bool]
+    ) -> tuple[list[pd.Series], list[pd.Series], list[float | int]]:
+        """
+        Helper method to identify if a numeric filter values is an inequality, range, or discrete value and process it accordingly.
+
+        The context dict is intended to keep the kwargs manageable when passing positive and negative values back-to-back:
+            - key: Column name being filtered
+            - filter_string_values: Original filter string (for error messages)
+            - is_negated: Whether these are negated (NOT) conditions
+        """
+        key = context["key"]
+        filter_string_values = context["filter_string_values"]
+        is_negated = context["is_negated"]
+
+        inequality_conditions = []
+        range_conditions = []
+        discrete_values = []
+
+        for filter_string_value in values_to_process:
+            # Check for common mistakes: =< or => instead of <= or >=
+            if re.match(r"^=<\d+\.?\d*$", filter_string_value) or re.match(r"^=>\d+\.?\d*$", filter_string_value):
+                raise SidecarInvalidFilterError(
+                    f"Invalid operator format '{filter_string_value[:2]}' in filter '{key}:{filter_string_values}'."
+                    f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
+                )
+
+            # Check if it's an inequality (e.g., ">25", "<=40")
+            inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", filter_string_value)
+            if inequality_match:
+                operator = inequality_match.group(1)
+                threshold = float(inequality_match.group(2))
+                condition = self._create_inequality_condition(key, operator, threshold)
+                inequality_conditions.append(condition)
+                prefix = "NOT " if is_negated else ""
+                logger.debug(
+                    f"Applied {'negated ' if is_negated else ''}inequality filter on '{key}': {prefix}{operator} {threshold}"
+                )
+                continue
+
+            # Check if it's a range (e.g., "20-40")
+            range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", filter_string_value)
+            if range_match:
+                min_val = float(range_match.group(1))
+                max_val = float(range_match.group(2))
+                condition = self._create_range_condition(key, min_val, max_val)
+                range_conditions.append(condition)
+                prefix = "NOT " if is_negated else ""
+                logger.debug(
+                    f"Applied {'negated ' if is_negated else ''}range filter on '{key}': {prefix}{min_val} to {max_val}"
+                )
+                continue
+
+            # Otherwise, treat as discrete value
+            try:
+                numeric_value = float(filter_string_value) if "." in filter_string_value else int(filter_string_value)
+                discrete_values.append(numeric_value)
+            except ValueError:
+                logger.warning(
+                    f"Cannot convert '{filter_string_value}' to numeric for column '{key}'. Skipping this value."
+                )
+
+        return inequality_conditions, range_conditions, discrete_values
+
+    def _separate_positive_and_negated_values(self, filter_values: list[str]) -> tuple[list[str], list[str]]:
+        """
+        Helper method to separate filter values into positive and negated lists.
+        Values prefixed with '!' are negated (NOT conditions).
+        """
+        positive_values = []
+        negated_values = []
+
+        for value in filter_values:
+            value = value.strip()
+            if value.startswith("!"):
+                negated_values.append(value[1:].strip())
+            else:
+                positive_values.append(value)
+
+        return positive_values, negated_values
+
+    def _apply_not_conditions(self, base_condition: pd.Series | None, negated_conditions: list[pd.Series]) -> pd.Series:
+        """
+        Helper method to apply NOT conditions to a base condition. The base condition contains positive filters combined with OR, or None if there were only negations
+        in the input filter string from the CLI. Returns a combined condition where rows must match base_condition AND NOT match any negated condition
+        """
+        if base_condition is None:
+            # If only negated conditions (no positive conditions), start with all True
+            combined = pd.Series(True, index=self.df.index)
+        else:
+            combined = base_condition
+
+        # Apply negated conditions (must NOT match any negated condition)
+        for negated_condition in negated_conditions:
+            combined = combined & ~negated_condition
+
         return combined
