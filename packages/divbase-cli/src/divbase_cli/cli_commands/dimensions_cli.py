@@ -4,9 +4,11 @@ from pathlib import Path
 
 import typer
 import yaml
+from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
+from divbase_cli.services.sample_metadata_tsv_validator import MetadataTSVValidator
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult
 
@@ -226,3 +228,113 @@ def create_metadata_template_with_project_samples_names(
     print(f"A sample metadata template with these sample names was written to: {output_path}")
 
     # TODO perhaps add a message on how to fill in additional columns and how to upload the metadata file to DivBase?
+
+
+@dimensions_app.command("validate-metadata-file")
+def validate_metadata_template_versus_dimensions_and_formatting_constraints(
+    input_filename: str = typer.Argument(
+        ...,
+        help="Name of the input TSV file to validate.",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+) -> None:
+    """
+    Validate a sidecar metadata TSV file against DivBase formatting requirements and project dimensions.
+
+    Validation is run client-side to keep sensitive metadata local during validation.
+
+    Validation checks:
+    - File is properly tab-delimited
+    - First column is named '#Sample_ID'
+    - No commas in cells
+    - Sample_ID has only one value per row (no semicolons)
+    - No duplicate sample IDs
+    - Invalid characters
+    - Basic type consistency in user-defined columns. But not Pandas type inference,
+      as we want to avoid having the user install Pandas just for validation. So just check that numeric columns have only numeric values (excluding header).
+    - All samples in the TSV exist in the project's dimensions index
+
+    Returns errors for critical issues and warnings for non-critical issues.
+    """
+
+    project_config = resolve_project(project_name=project)
+
+    input_path = Path.cwd() / input_filename
+
+    if not input_path.exists():
+        print(f"Error: File '{input_path}' not found.")
+        raise typer.Exit(code=1)
+
+    print(f"Validating local metadata file: {input_path}")
+    print(f"Project: {project_config.name}\n")
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+    )
+    vcf_dimensions_data = DimensionsShowResult(**response.json())
+    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
+
+    # TODO there is duplication here with other commands in this file. Could be made DRY with a helper function or a separate CRUD function to get dimensions info without needing to parse API response on client side.
+
+    unique_sample_names = set()
+    for entry in dimensions_info.get("indexed_files", []):
+        unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
+
+    validator = MetadataTSVValidator(file_path=input_path, project_samples=unique_sample_names)
+    stats, errors, warnings = validator.validate()
+
+    if stats:
+        print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
+        print(f"  Total columns: {stats.get('total_columns', 0)} ({stats.get('user_defined_columns', 0)} user-defined)")
+
+        samples_in_tsv = stats.get("samples_in_tsv", 0)
+        samples_matching = stats.get("samples_matching_project", 0)
+        total_project = stats.get("total_project_samples", 0)
+
+        print(
+            f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
+        )
+
+        numeric_cols = stats.get("numeric_columns", [])
+        string_cols = stats.get("string_columns", [])
+        mixed_cols = stats.get("mixed_type_columns", [])
+
+        if numeric_cols:
+            print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols)}")
+        if string_cols:
+            print(f"  String columns ({len(string_cols)}): {', '.join(string_cols)}")
+        if mixed_cols:
+            print(
+                f"  [red]Mixed-type columns ({len(mixed_cols)}): {', '.join(mixed_cols)} - NOT ALLOWED, see errors below[/red]"
+            )
+
+        if stats.get("has_multi_values", False):
+            print("  Multi-value cells: Yes (semicolon-separated values detected)")
+        else:
+            print("  Multi-value cells: No")
+
+        print()
+
+    if errors:
+        print("[red bold]ERRORS (must be fixed):[/red bold]")
+        for error in errors:
+            print(f"  - {error}")
+        print()
+
+    if warnings:
+        print("[yellow bold]WARNINGS (should be reviewed):[/yellow bold]")
+        for warning in warnings:
+            print(f"  - {warning}")
+        print()
+
+    if not errors and not warnings:
+        print("[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements.")
+    elif errors:
+        print("[red bold]Validation failed![/red bold] Please fix the errors above before uploading.")
+        raise typer.Exit(code=1)
+    else:
+        print("[yellow bold]Validation passed with warnings![/yellow bold] Review the warnings above.")
+
+    # TODO: Add information about how to upload the validated metadata file to DivBase
