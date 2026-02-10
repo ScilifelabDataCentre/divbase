@@ -22,6 +22,8 @@ from typing_extensions import Self
 class UserBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=100)
     email: EmailStr = Field(..., max_length=50)
+    organisation: str = Field(..., max_length=200)
+    organisation_role: str = Field(..., max_length=100)
 
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 
@@ -39,6 +41,8 @@ class UserUpdate(BaseModel):
     """Schema for a user to update their own profile."""
 
     name: str = Field(..., min_length=3, max_length=100)
+    organisation: str = Field(..., max_length=200)
+    organisation_role: str = Field(..., max_length=100)
 
 
 class UserPasswordUpdate(BaseModel):
@@ -59,13 +63,6 @@ class UserPasswordUpdate(BaseModel):
         if self.password.get_secret_value() != self.confirm_password.get_secret_value():
             raise ValueError("Passwords do not match")
         return self
-
-
-class AdminUserPasswordUpdate(BaseModel):
-    """Schema for an admin to update a user's password."""
-
-    password: SecretStr | None = Field(None, min_length=8, max_length=100)
-    confirm_password: SecretStr | None = Field(None, min_length=8, max_length=100)
 
 
 class UserResponse(UserBase):

@@ -121,3 +121,24 @@ Documentation on how to run migrations in production/deployed environments is co
 ### Starlette admin/admin panel not showing the models
 
 - You need the models in your src to match the postgres schema. So if you have pending changes (that you have or have not created migrations for) they won't display until you've actually done the migration.
+
+### Migrations that include new fields with non-nullable constraints
+
+One way to solve this is to modify the migration scripts upgrade command as follows:
+
+For example, adding the new column "organisation" to the user table, and it cannot be null:
+
+```python
+def upgrade() -> None:
+    # Add the server_default param to the add operation for the new column
+    # "server_default='Not specified'" was added to below command
+    op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default='Not specified'))
+
+    # At the end of the same migration script, remove the server_default from the column - so our models match exactly with the database schema.
+    # New rows will now require the application to provide a value and any existing rows is now populated.
+    op.alter_column('user', 'organisation', server_default=None)
+```
+
+**You don't need to set the server_default in the models.py, just in the migration script.**
+
+Alternatively you could set the server_default in the models.py, but then you should be comfortable with it always having a default value. There are also other ways to solve this problem...
