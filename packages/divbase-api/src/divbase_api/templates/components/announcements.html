@@ -1,6 +1,6 @@
 {% for announcement in announcements %}
 <div class="alert alert-{{ announcement.level }}" role="alert">
-    <h3 class="alert-heading"> 
+    <p><strong> 
         {% if announcement.level == "danger" %}
         <i class="bi bi-exclamation-triangle-fill me-2"></i>
         {% elif announcement.level == "success" %}
@@ -11,7 +11,7 @@
         <i class="bi bi-info-circle-fill me-2"></i>
         {% endif %}
         {{ announcement.heading }}
-    </h3>
+        </strong> 
     <p>{{ announcement.message }}</p>
 </div>
 {% endfor %}
