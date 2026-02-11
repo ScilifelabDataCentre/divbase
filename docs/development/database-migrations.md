@@ -126,7 +126,7 @@ Documentation on how to run migrations in production/deployed environments is co
 
 One way to solve this is to modify the migration scripts upgrade command as follows:
 
-For example, adding the new column "organisation" to the user table, and it cannot be null:
+In this example, we're adding a new column "organisation" to the user table, and it cannot be null (and we already have users...), so we need to provide a default value for existing rows.
 
 ```python
 def upgrade() -> None:
