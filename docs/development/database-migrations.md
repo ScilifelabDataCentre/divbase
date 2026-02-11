@@ -95,6 +95,26 @@ You can also run the `pytest-alembic` tests to further validate the newly create
 pytest tests/migrations
 ```
 
+### Local Dev with Docker Compose: Handling Alembic Migration Errors When Switching Branches
+
+When working in local development, there are cases where you might to temporarily switch to a different git branch that has a different set of Alembic migration files. For instance, you are working on one branch and switch to review another branch with additional migration files that, for some reason, you do not want to merge into your branch yet.
+
+After switching back to your branch, you might find that the Docker Compose stack no longer will be able to start. The reason for this is: if the database's migration history (the `alembic_version` table) in the Docker Compose environment expects a migration revision that is missing in your current branch, the `divbase-db-migrator-1` container will fail to start and log an error like: `FAILED: Can't locate revision identified by '<MISSING_REVISION_ID>'`
+
+If you **are sure** your database schema matches the migrations in your current branch, you can manually update the `alembic_version` table in your local `divbase-postgres-1` container to point to the latest migration in your branch. Find the revision ID for the latest migration file in your branch (`<REVISION_ID_OF_YOUR_BRANCH>`) and run:
+
+```bash
+docker exec -it divbase-postgres-1 psql -U divbase_user -d divbase_db -c "UPDATE alembic_version SET version_num = '<REVISION_ID_OF_YOUR_BRANCH>';"
+```
+
+After this, restart the stack with:
+
+```bash
+docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/divbase_compose.yaml watch
+```
+
+**Warning**: Only do this for local Docker Compose environments and for cases where you know that you can recover/rebuild/afford to lose the data in the local postgres instance. If you are not sure about this, it might actually be safer to merge in the other branch to yours (assuming that you know that both branches will eventually be merged to main after review).
+
 ## Production Deployment
 
 Documentation on how to run migrations in production/deployed environments is covered in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase).
