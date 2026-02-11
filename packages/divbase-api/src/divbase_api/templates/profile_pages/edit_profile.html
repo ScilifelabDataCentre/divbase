@@ -41,6 +41,56 @@
 
                         <div class="row mb-3">
                             <div class="col-12">
+                                <label for="organisation_dropdown" class="form-label">Organisation</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-building"></i>
+                                    </span>
+                                    <select class="form-select" id="organisation_dropdown" name="organisation" required>
+                                        <option value="" disabled selected>Select an organisation...</option>
+                                        <option value="Other" {% if organisation == 'Other' %}selected{% endif %}>Other</option>
+                                        {% for org in swedish_universities %}
+                                            <option value="{{ org }}" {% if organisation == org %}selected{% endif %}>{{ org }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <small class="text-muted">Please select "Other" if your organisation is not listed.</small>
+                            </div>
+                        </div>
+                        {# This is only displayed if the "Other" option is selected in the organisation dropdown #}
+                        <div class="mb-3" id="other_organisation_div" style="display: none;">
+                            <label for="organisation_other" class="form-label">Please add your organisation's name</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-building-add"></i>
+                                </span>
+                                <input type="text"
+                                    class="form-control"
+                                    id="organisation_other"
+                                    name="organisation_other"
+                                    placeholder="Enter your organisation's name"
+                                    value="{{ organisation_other or '' }}">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="organisation_role" class="form-label">Role at Organisation</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-briefcase"></i>
+                                </span>
+                                <input type="text"
+                                    class="form-control"
+                                    id="organisation_role"
+                                    name="organisation_role"
+                                    placeholder="e.g. PhD Student, Researcher"
+                                    value="{{ organisation_role or '' }}"
+                                    required>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-12">
                                 <label class="form-label">Email</label>
                                 <p class="form-control-plaintext">{{ current_user.email }}</p>
                                 <small class="text-muted">Your email address cannot be changed.</small>
@@ -86,4 +136,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+
+
+{% block custom_scripts %}
+<script src="/static/js/organisation_dropdown.js"></script>
 {% endblock %}

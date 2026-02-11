@@ -1,6 +1,7 @@
 /*  
 Toggles display of a text input for a user to specify their organisation if 
 they choose the option "Other" from the dropdown of swedish universities.
+Used in both registration and edit profile pages.
 */
 
 document.addEventListener("DOMContentLoaded", function () {
