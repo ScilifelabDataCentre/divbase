@@ -71,17 +71,18 @@ S4\t5
 
 @pytest.fixture
 def type_errors_tsv(tmp_path):
-    """Create TSV with type errors: mixed types in column and cell, hyphen in numeric.
+    """Create TSV with type errors: mixed types in column and cell, hyphen in numeric, and range notation.
 
     Population: Has both cell-level error (1;three;5) and column-level mixed types (numeric + string)
     Test: Has column-level mixed types (all numeric values + string 'all')
     Code: String column with hyphen in one value
+    Range: Contains range notation (e.g., '1-2') which should be rejected in numeric columns
     """
-    tsv_content = """#Sample_ID\tPopulation\tTest\tCode
-S1\t1\t2\tA100
-S2\tabc\t3\tB200
-S3\t1;three;5\tall\tC300
-S4\t3-5\t4\tD400
+    tsv_content = """#Sample_ID\tPopulation\tTest\tCode\tRange
+S1\t1\t2\tA100\t1-2
+S2\tabc\t3\tB200\t3
+S3\t1;three;5\tall\tC300\t4
+S4\t3-5\t4\tD400\t5
 """
     tsv_file = tmp_path / "type_errors.tsv"
     tsv_file.write_text(tsv_content)
@@ -99,17 +100,23 @@ def no_multi_values_tsv(tmp_path):
 
 @pytest.fixture
 def numeric_multi_values_tsv(tmp_path):
-    """Create a TSV file with multi-value numeric cells to verify they're classified as numeric."""
-    tsv_content = """#Sample_ID\tScores\tValues
-S1\t1;2;3\t10;20
-S2\t4;5\t30;40;50
-S3\t6\t60
-S4\t7;8;9;10\t70
-S5\t11\t80;90
+    """Create a TSV file with multi-value numeric cells and negative numbers to verify they're classified as numeric."""
+    tsv_content = """#Sample_ID\tScores\tValues\tTemperature\tLongitude\tLatitude\tElevation
+S1\t1;2;3\t10;20\t-5.5\t-2.78305556\t51.5\t100
+S2\t4;5\t30;40;50\t-10.2\t-0.12765\t52.2\t-50
+S3\t6\t60\t0\t1.25\t50.8\t-100.5
+S4\t7;8;9;10\t70\t15.5\t-3.5;-2.1\t49.5\t200
+S5\t11\t80;90\t-20\t0\t48.2\t-25
 """
     tsv_file = tmp_path / "numeric_multi_values.tsv"
     tsv_file.write_text(tsv_content)
     return tsv_file
+
+
+@pytest.fixture
+def negative_numeric_columns():
+    """Columns in the numeric_multi_values_tsv fixture that should be classified as numeric (including negative values)."""
+    return ["Temperature", "Longitude", "Latitude", "Elevation"]
 
 
 def test_valid_tsv_passes_all_checks(valid_tsv, project_samples):
@@ -233,7 +240,7 @@ class TestTypeValidation:
 
         assert "Population" in stats["mixed_type_columns"]
         assert "Test" in stats["mixed_type_columns"]
-        assert len(stats["mixed_type_columns"]) == 2
+        assert len(stats["mixed_type_columns"]) == 3
 
     def test_multi_value_numeric_cells_are_numeric(self, numeric_multi_values_tsv, project_samples):
         """Multi-value numeric cells (e.g., '2;4') should be correctly classified as numeric, not string or mixed-type."""
@@ -316,3 +323,35 @@ class TestEdgeCases:
         stats, errors, warnings = MetadataTSVValidator.validate(Path("/nonexistent/file.tsv"), project_samples)
 
         assert any("Failed to read file" in e for e in errors)
+
+
+class TestNegativeNumbers:
+    """Test that negative numbers are properly handled as numeric values."""
+
+    def test_negative_numbers_are_numeric(self, numeric_multi_values_tsv, negative_numeric_columns):
+        """Test that negative numbers are correctly classified as numeric, not flagged as errors due to hyphen check for ranges in numeric cells."""
+        stats, errors, warnings = MetadataTSVValidator.validate(
+            numeric_multi_values_tsv, {"S1", "S2", "S3", "S4", "S5"}
+        )
+
+        for col in negative_numeric_columns:
+            assert not any("hyphen" in e.lower() and col in e for e in errors)
+            assert col in stats["numeric_columns"]
+
+        assert len(stats["mixed_type_columns"]) == 0
+
+    def test_negative_numbers_with_semicolons(self, numeric_multi_values_tsv, negative_numeric_columns):
+        """Test that negative numbers in semicolon-separated cells are handled correctly."""
+        stats, errors, warnings = MetadataTSVValidator.validate(
+            numeric_multi_values_tsv, {"S1", "S2", "S3", "S4", "S5"}
+        )
+
+        assert "Longitude" in negative_numeric_columns
+        assert "Longitude" in stats["numeric_columns"]
+        assert "Longitude" not in stats["mixed_type_columns"]
+        assert not any("Longitude" in e and "mixed" in e.lower() for e in errors)
+
+    def test_range_notation_still_rejected(self, type_errors_tsv):
+        """Test that range notation like '1-2' is still rejected in numeric columns."""
+        stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, {"S1", "S2", "S3", "S4"})
+        assert any("mixed" in e.lower() and "Range" in e for e in errors)

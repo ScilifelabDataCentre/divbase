@@ -13,20 +13,21 @@ def sample_tsv_with_numeric_data(tmp_path):
     """
     Create a temporary TSV file with numeric and string columns for testing.
     Includes semicolon-separated values in some cells. Includes both int and float
-    numeric values to test that both are detected as numeric.
+    numeric values to test that both are detected as numeric. Also includes negative
+    numbers to verify they are properly handled as numeric values.
     """
     # Keep indentation like this to ensure that leading spaces in column 1 does not cause issues.
-    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber\tSingleString
-S1\t1\t20.2\t5.0\tNorth\t100\tString
-S2\t2;4\t25.0\t10\tEast\t200\tStrings
-S3\t3\t30.8\t15\tWest;South;East\t300\tSting
-S4\t4\t35.1\t20\tWest\t400\tStings
-S5\t5\t40.0\t25\tNorth\t500\tThing
-S6\t6\t45.4\t30\tEast\t600\tThings
-S7\t1;3;5\t50.9\t35\tSouth\t700\tStrong
-S8\t2\t55.2\t40\tWest\t800\tStrung
-S9\t7\t62.6\t45\tNorth\t900\tStang
-S10\t8\t70.7\t52\tEast\t1000\tSong
+    tsv_content = """#Sample_ID\tPopulation\tWeight\tAge\tArea\tSingleNumber\tSingleString\tTemperature\tLongitude\tLatitude\tElevation
+S1\t1\t20.2\t5.0\tNorth\t100\tString\t-5.5\t-2.78305556\t51.5\t100
+S2\t2;4\t25.0\t10\tEast\t200\tStrings\t-10.2\t-0.12765\t52.2\t-50
+S3\t3\t30.8\t15\tWest;South;East\t300\tSting\t0\t1.25\t50.8\t-100.5
+S4\t4\t35.1\t20\tWest\t400\tStings\t15.5\t-3.5;-2.1\t49.5\t200
+S5\t5\t40.0\t25\tNorth\t500\tThing\t-20\t0\t48.2\t-25
+S6\t6\t45.4\t30\tEast\t600\tThings\t10\t2.5\t53.1\t150
+S7\t1;3;5\t50.9\t35\tSouth\t700\tStrong\t5\t-1.5\t52.8\t50
+S8\t2\t55.2\t40\tWest\t800\tStrung\t20\t3.0\t51.0\t75
+S9\t7\t62.6\t45\tNorth\t900\tStang\t-15\t-2.0\t54.5\t-10
+S10\t8\t70.7\t52\tEast\t1000\tSong\t25\t1.5\t50.5\t200
 """
     tsv_file = tmp_path / "test_metadata.tsv"
     tsv_file.write_text(tsv_content)
@@ -695,3 +696,54 @@ class TestSampleIDValidation:
         with pytest.raises(SidecarColumnNotFoundError) as excinfo:
             SidecarQueryManager(file=sample_tsv_missing_sample_id_column)
         assert "The 'Sample_ID' column is required in the metadata file." in str(excinfo.value)
+
+
+class TestNegativeNumbers:
+    """Test that negative numbers are properly handled as numeric values."""
+
+    def test_negative_numbers_in_single_value_column(self, sample_tsv_with_numeric_data):
+        """Test that negative numbers in single-value columns are treated as numeric and can be filtered with inequalities."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Temperature:<0")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 4
+        assert "S1" in sample_ids  # -5.5
+        assert "S2" in sample_ids  # -10.2
+        assert "S5" in sample_ids  # -20
+        assert "S9" in sample_ids  # -15
+
+    def test_negative_numbers_discrete_values(self, sample_tsv_with_numeric_data):
+        """Test that negative numbers can be used as discrete filter values."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        result = manager.run_query(filter_string="Temperature:-5.5,-20")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 2
+        assert "S1" in sample_ids
+        assert "S5" in sample_ids
+
+    def test_negative_numbers_greater_than_inequality(self, sample_tsv_with_numeric_data):
+        """Test greater than with negative numbers."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        # Temperature: -5.5, -10.2, 0, 15.5, -20, 10, 5, 20, -15, 25
+        # Less than -5 should match: -5.5, -10.2, -20, -15
+        result = manager.run_query(filter_string="Temperature:<-5")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 4
+        assert "S1" in sample_ids  # -5.5 < -5
+        assert "S2" in sample_ids  # -10.2 < -5
+        assert "S5" in sample_ids  # -20 < -5
+        assert "S9" in sample_ids  # -15 < -5
+
+    def test_negative_numbers_in_semicolon_cells(self, sample_tsv_with_numeric_data):
+        """Test that negative numbers in semicolon-separated cells work correctly."""
+        manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
+        # Longitude values: -2.78305556, -0.12765, 1.25, -3.5;-2.1, 0, 2.5, -1.5, 3.0, -2.0, 1.5
+        # Discrete value -3.5 should only match S4 which has -3.5;-2.1
+        result = manager.run_query(filter_string="Longitude:-3.5")
+
+        sample_ids = result.get_unique_values("Sample_ID")
+        assert len(sample_ids) == 1
+        assert "S4" in sample_ids
