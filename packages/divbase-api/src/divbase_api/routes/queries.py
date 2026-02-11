@@ -29,7 +29,11 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryRequest,
     SampleMetadataQueryTaskResult,
 )
-from divbase_lib.exceptions import SidecarInvalidFilterError
+from divbase_lib.exceptions import (
+    SidecarColumnNotFoundError,
+    SidecarInvalidFilterError,
+    SidecarSampleIDError,
+)
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
@@ -82,8 +86,9 @@ async def sample_metadata_query(
         # TODO - consider if we split this into 2 routes to handle time out issues on CLI side.
         # Route 1, create job and get back job id.
         # Route 2, get job result by id (with status etc), CLI can poll until done.
-    except SidecarInvalidFilterError as e:
-        # Catch invalid filter errors (e.g., mixed types in columns) and return 400
+
+    except (SidecarInvalidFilterError, SidecarColumnNotFoundError, SidecarSampleIDError) as e:
+        # Catch validation errors (mixed types, missing columns, invalid Sample_IDs) and return 400
         error_message = str(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message) from None
     except VCFDimensionsEntryMissingError:

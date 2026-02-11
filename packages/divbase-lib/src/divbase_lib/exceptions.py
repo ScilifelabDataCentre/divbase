@@ -101,6 +101,12 @@ class SidecarColumnNotFoundError(Exception):
     pass
 
 
+class SidecarSampleIDError(Exception):
+    """Raised when a Sample_ID is invalid or duplicated when loading sidecar data."""
+
+    pass
+
+
 class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
 

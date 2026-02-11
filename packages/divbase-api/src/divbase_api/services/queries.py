@@ -26,6 +26,7 @@ from divbase_lib.exceptions import (
     SidecarColumnNotFoundError,
     SidecarInvalidFilterError,
     SidecarNoDataLoadedError,
+    SidecarSampleIDError,
 )
 
 logger = logging.getLogger(__name__)
@@ -713,7 +714,19 @@ class SidecarQueryManager:
             if "Sample_ID" not in self.df.columns:
                 raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
 
+            if self.df["Sample_ID"].isna().any() or (self.df["Sample_ID"] == "").any():
+                raise SidecarSampleIDError(
+                    "Sample_ID column contains empty or missing values. All rows must have a valid Sample_ID."
+                )
+            if self.df["Sample_ID"].duplicated().any():
+                duplicates = self.df[self.df["Sample_ID"].duplicated()]["Sample_ID"].tolist()
+                raise SidecarSampleIDError(f"Duplicate Sample_IDs found: {duplicates}. Each Sample_ID must be unique.")
+
+        except (SidecarSampleIDError, SidecarColumnNotFoundError, SidecarInvalidFilterError):
+            # Let validation errors propagate directly to user with specific error messages
+            raise
         except Exception as e:
+            # Only wrap unexpected errors (file I/O, pandas errors, etc.)
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
 
