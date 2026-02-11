@@ -48,7 +48,7 @@
                                         <i class="bi bi-building"></i>
                                     </span>
                                     <select class="form-select" id="organisation_dropdown" name="organisation" required>
-                                        <option value="" disabled selected>Select an organisation...</option>
+                                        <option value="" disabled {% if not organisation %}selected{% endif %}>Select an organisation...</option>
                                         <option value="Other" {% if organisation == 'Other' %}selected{% endif %}>Other</option>
                                         {% for org in swedish_universities %}
                                             <option value="{{ org }}" {% if organisation == org %}selected{% endif %}>{{ org }}</option>
