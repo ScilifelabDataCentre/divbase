@@ -4,6 +4,7 @@ Test register page functionality using Playwright.
 
 import re
 
+import pytest
 from playwright.sync_api import Page, expect
 
 from .conftest import is_logged_in_as, login_via_login_form, navigate_to, register_new_user
@@ -12,13 +13,46 @@ GENERIC_REGISTRATION_ERROR_MESSAGE = "Registration failed, please try again."
 EMAIL_NOT_VERIFIED_MESSAGE = "Email address not verified"
 
 
-def test_register_new_user_complete_flow(page: Page, mailpit_page: Page):
-    """Test complete user registration flow including email verification step."""
-    test_name = "New Test User"
-    test_email = "newuser@gmail.com"
-    test_password = "badpassword"
+@pytest.mark.parametrize(
+    "test_name,test_email,test_organisation,test_role",
+    [
+        (
+            "New Test User Uppsala",
+            "newuser@uu.se",
+            "Uppsala University",
+            "Postdoctoral Researcher",
+        ),
+        (
+            "New Test User EMBL",
+            "newuser@embl.de",
+            "European Bioinformatics Institute (EMBL-EBI)",
+            "Developer",
+        ),
+    ],
+)
+def test_register_new_user_complete_flow(
+    page: Page,
+    mailpit_page: Page,
+    test_name: str,
+    test_email: str,
+    test_organisation: str,
+    test_role: str,
+):
+    """
+    Test complete user registration flow including email verification step.
 
-    register_new_user(page=page, name=test_name, email=test_email, password=test_password)
+    We test creating a user from a Swedish university (in the organisation dropdown)
+    and a user from an organisation not in the dropdown to ensure both flows work correctly.
+    """
+    test_password = "badpassword"
+    register_new_user(
+        page=page,
+        name=test_name,
+        email=test_email,
+        organisation=test_organisation,
+        role=test_role,
+        password=test_password,
+    )
 
     # validate logging in now does not work
     navigate_to(page, "/login")
@@ -50,7 +84,15 @@ def test_register_new_user_complete_flow(page: Page, mailpit_page: Page):
 def test_register_with_existing_email(page: Page, EXISTING_ACCOUNTS):
     """Test registration with email that already exists, does not tell user that the email already exists."""
     existing_email = EXISTING_ACCOUNTS["ADMIN_USER"]["email"]
-    register_new_user(page=page, name="Test User", email=existing_email, password="newpassword", expect_success=False)
+    register_new_user(
+        page=page,
+        name="Test User",
+        email=existing_email,
+        organisation="Uppsala University",
+        role="Lecturer",
+        password="newpassword",
+        expect_success=False,
+    )
     expect(page.get_by_text(GENERIC_REGISTRATION_ERROR_MESSAGE)).to_be_visible()
 
 

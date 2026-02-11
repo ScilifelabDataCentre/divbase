@@ -52,7 +52,9 @@ def test_login_unverified_email_wrong_password(page: Page):
     name = "Test Unverified User"
     email = "unverified_test@example.com"
     password = "correctpassword123"
-    register_new_user(page=page, name=name, email=email, password=password)
+    organisation = "Uppsala University"
+    role = "Postdoctoral Researcher"
+    register_new_user(page=page, name=name, email=email, organisation=organisation, role=role, password=password)
 
     navigate_to(page, "/login")
     login_via_login_form(page=page, email=email, password="wrongpassword")
@@ -66,7 +68,9 @@ def test_login_unverified_email_correct_password(page: Page):
     name = "Test Unverified User"
     email = "unverified_test2@example.com"
     password = "correctpassword123"
-    register_new_user(page=page, name=name, email=email, password=password)
+    organisation = "Not a known organisation"
+    role = "PhD Student"
+    register_new_user(page=page, name=name, email=email, organisation=organisation, role=role, password=password)
 
     navigate_to(page, "/login")
     login_via_login_form(page=page, email=email, password=password)
