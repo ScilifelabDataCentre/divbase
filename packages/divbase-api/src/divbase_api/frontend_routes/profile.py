@@ -8,11 +8,11 @@ from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.api_constants import SWEDISH_UNIVERSITIES
 from divbase_api.crud.projects import create_user_project_responses, get_user_projects_with_roles
 from divbase_api.crud.users import update_user_profile
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie
-from divbase_api.divbase_constants import SWEDISH_UNIVERSITIES
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserUpdate

@@ -10,6 +10,7 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
+from divbase_api.api_constants import SWEDISH_UNIVERSITIES
 from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
@@ -21,7 +22,6 @@ from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
-from divbase_api.divbase_constants import SWEDISH_UNIVERSITIES
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
