@@ -25,34 +25,34 @@ class MetadataTSVValidator:
         self.warnings: list[str] = []
         self.stats: dict = {}
 
-    def validate(self) -> tuple[dict, list[str], list[str]]:
+    @classmethod
+    def validate(cls, file_path: Path, project_samples: set[str]) -> tuple[dict, list[str], list[str]]:
         """
-        Run all validation checks on the TSV file.
-        Returns a tuple of (stats, errors, warnings) where stats is a dictionary of collected statistics about the TSV file,
+        Validate a TSV file and return results.
+
+        Returns a tuple of (stats, errors, warnings) where stats is a dictionary of collected statistics,
         errors is a list of error messages, and warnings is a list of warning messages.
         """
-        self.errors = []
-        self.warnings = []
-        self.stats = {}
+        validator = cls(file_path, project_samples)
 
         try:
-            with open(self.file_path, "r", newline="", encoding="utf-8") as f:
+            with open(validator.file_path, "r", newline="", encoding="utf-8") as f:
                 reader = csv.reader(f, delimiter="\t")
                 rows = list(reader)
         except Exception as e:
-            self.errors.append(f"Failed to read file: {e}")
-            return self.stats, self.errors, self.warnings
+            validator.errors.append(f"Failed to read file: {e}")
+            return validator.stats, validator.errors, validator.warnings
 
         if not rows:
-            self.errors.append("File is empty")
-            return self.stats, self.errors, self.warnings
+            validator.errors.append("File is empty")
+            return validator.stats, validator.errors, validator.warnings
 
-        self._validate_header(rows[0])
+        validator._validate_header(rows[0])
 
         if len(rows) > 1:
-            self._validate_data_rows(rows)
+            validator._validate_data_rows(rows)
 
-        return self.stats, self.errors, self.warnings
+        return validator.stats, validator.errors, validator.warnings
 
     def _validate_header(self, header: list[str]) -> None:
         """Validate the header row."""

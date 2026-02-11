@@ -282,8 +282,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     for entry in dimensions_info.get("indexed_files", []):
         unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
 
-    validator = MetadataTSVValidator(file_path=input_path, project_samples=unique_sample_names)
-    stats, errors, warnings = validator.validate()
+    stats, errors, warnings = MetadataTSVValidator.validate(file_path=input_path, project_samples=unique_sample_names)
 
     if stats:
         print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
