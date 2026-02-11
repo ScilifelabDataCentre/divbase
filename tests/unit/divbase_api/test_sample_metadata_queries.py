@@ -5,7 +5,7 @@ Unit tests for SidecarQueryManager filtering
 import pytest
 
 from divbase_api.services.queries import SidecarQueryManager
-from divbase_lib.exceptions import SidecarInvalidFilterError
+from divbase_lib.exceptions import SidecarColumnNotFoundError, SidecarInvalidFilterError, SidecarSampleIDError
 
 
 @pytest.fixture
@@ -52,6 +52,56 @@ S2 \tWest;East;North\t2;three;6\tNorth\t200\tMalmö;Uppsala\tWest,East\tSouth-We
 S4\t1string\tstring4\tString5\t400\tHumlebæk\t,South\tEast-South-East\t4-5
 """
     tsv_file = tmp_path / "test_metadata_edge_cases.tsv"
+    tsv_file.write_text(tsv_content)
+    return tsv_file
+
+
+@pytest.fixture
+def sample_tsv_with_invalid_sample_ids(tmp_path):
+    """
+    Create a temporary TSV file to test Sample_ID validation:
+    Has empty and duplicate Sample_IDs that both should raise error during load
+    """
+    tsv_content = """#Sample_ID\tPopulation\tWeight
+S1\t1\t20.2
+\t2\t25.0
+S3\t3\t30.8
+S3\t4\t35.1
+"""
+    tsv_file = tmp_path / "test_metadata_invalid_sample_ids.tsv"
+    tsv_file.write_text(tsv_content)
+    return tsv_file
+
+
+@pytest.fixture
+def sample_tsv_missing_sample_id_column(tmp_path):
+    """
+    Create a temporary TSV file that omits the Sample_ID column.
+    Should trigger SidecarColumnNotFoundError during file load.
+    """
+    tsv_content = """Population\tWeight\tAge\tArea
+1\t20.2\t5.0\tNorth
+2\t25.0\t10\tEast
+3\t30.8\t15\tWest
+"""
+    tsv_file = tmp_path / "test_metadata_missing_sample_id.tsv"
+    tsv_file.write_text(tsv_content)
+    return tsv_file
+
+
+@pytest.fixture
+def sample_tsv_with_duplicate_sample_ids(tmp_path):
+    """
+    Create a temporary TSV file to test duplicate Sample_IDs (should raise error during load).
+    """
+    tsv_content = """#Sample_ID\tPopulation\tWeight
+S1\t1\t20.2
+S2\t2\t25.0
+S3\t3\t30.8
+S3\t4\t35.1
+S4\t5\t40.0
+"""
+    tsv_file = tmp_path / "test_duplicate_sample_ids.tsv"
     tsv_file.write_text(tsv_content)
     return tsv_file
 
@@ -622,3 +672,26 @@ class TestEdgeCases:
         assert "S4" in sample_ids
         assert "S1" not in sample_ids
         assert "S2" not in sample_ids
+
+
+class TestSampleIDValidation:
+    """Test Sample_ID validation during file loading."""
+
+    def test_empty_sample_id_raises_error(self, sample_tsv_with_invalid_sample_ids):
+        """Test that empty Sample_ID values raise SidecarSampleIDError directly during file load."""
+        with pytest.raises(SidecarSampleIDError) as excinfo:
+            SidecarQueryManager(file=sample_tsv_with_invalid_sample_ids)
+        assert "Sample_ID column contains empty or missing values" in str(excinfo.value)
+
+    def test_duplicate_sample_id_raises_error(self, sample_tsv_with_duplicate_sample_ids):
+        """Test that duplicate Sample_ID values raise SidecarSampleIDError directly during file load."""
+        with pytest.raises(SidecarSampleIDError) as excinfo:
+            SidecarQueryManager(file=sample_tsv_with_duplicate_sample_ids)
+        assert "Duplicate Sample_IDs found" in str(excinfo.value)
+        assert "S3" in str(excinfo.value)
+
+    def test_missing_sample_id_column_raises_error(self, sample_tsv_missing_sample_id_column):
+        """Test that missing Sample_ID column raises SidecarColumnNotFoundError during file load."""
+        with pytest.raises(SidecarColumnNotFoundError) as excinfo:
+            SidecarQueryManager(file=sample_tsv_missing_sample_id_column)
+        assert "The 'Sample_ID' column is required in the metadata file." in str(excinfo.value)
