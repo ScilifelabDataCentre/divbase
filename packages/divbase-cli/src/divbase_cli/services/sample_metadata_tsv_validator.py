@@ -161,20 +161,8 @@ class MetadataTSVValidator:
         cell_has_string = False
 
         for value in values:
-            # Check for hyphens in values that might be numeric
-            # The server-side logic rejects hyphens in numeric columns (e.g., "1-2" could be confused with range syntax)
-            if (
-                "-" in value
-                and any(c.isdigit() for c in value)
-                and ("numeric" in column_types[col_idx] or all(t == "numeric" for t in column_types[col_idx] if t))
-            ):
-                self.errors.append(
-                    f"Row {row_num}, Column '{col_name}': Value '{value}' contains a hyphen. "
-                    f"Hyphens are not allowed in numeric column values (only in string columns). "
-                    f"If this is meant to be a string column, all values should be non-numeric strings."
-                )
-
-            # Try to determine if numeric or string. Note! The queries used Pandas for this, so there could potentially be a discrepency here.
+            # Try to determine if numeric or string first
+            # Note! The queries use Pandas for this which is not used here due to different dependencies in the packages. There could potentially be a discrepancy here.
             try:
                 float(value)
                 cell_has_numeric = True
@@ -182,6 +170,19 @@ class MetadataTSVValidator:
             except ValueError:
                 cell_has_string = True
                 column_types[col_idx].add("string")
+
+                # Check for hyphens in non-numeric values that might indicate range notation. Negative numbers should already have been classified as numeric with the float() check.
+                if (
+                    "-" in value
+                    and any(c.isdigit() for c in value)
+                    and ("numeric" in column_types[col_idx] or all(t == "numeric" for t in column_types[col_idx] if t))
+                ):
+                    self.errors.append(
+                        f"Row {row_num}, Column '{col_name}': Value '{value}' contains a hyphen. "
+                        f"This appears to be range notation (e.g., '1-2'), which is not allowed in data values. "
+                        f"If this is meant to be a numeric column, use semicolons to separate values (e.g., '1;2'). "
+                        f"If this is meant to be a string column, all values should be non-numeric strings."
+                    )
 
         # Check for mixed types within the same cell (e.g., "1;abc")
         if cell_has_numeric and cell_has_string:

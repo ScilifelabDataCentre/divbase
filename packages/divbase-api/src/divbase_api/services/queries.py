@@ -999,19 +999,19 @@ class SidecarQueryManager:
                 if not part:
                     continue
 
-                # Check if the value contains a hyphen and looks like it could be numeric (e.g., "1-2", "3-4")
-                if "-" in part and any(p.isdigit() for p in part):
-                    raise SidecarInvalidFilterError(
-                        f"Column '{key}' contains value '{part}' with a hyphen at row {row_index}. "
-                        f"Hyphens are not allowed in numeric column values (only in string columns). "
-                        f"If this is meant to be a string column, all values should be non-numeric strings."
-                    )
-
                 try:
                     float(part)
                     has_numeric_type = True
                 except ValueError:
                     has_non_numeric_type = True
+                    # If not numeric and contains a hyphen with digits, it's likely a range notation like "1-2". Negative numbers should already have been classified as numeric with the float() check.
+                    if "-" in part and any(c.isdigit() for c in part):
+                        raise SidecarInvalidFilterError(
+                            f"Column '{key}' contains value '{part}' with a hyphen at row {row_index}. "
+                            f"This appears to be range notation (e.g., '1-2'), which is not allowed in data values. "
+                            f"If this is meant to be a numeric column, use semicolons to separate values (e.g., '1;2'). "
+                            f"If this is meant to be a string column, all values should be non-numeric strings."
+                        ) from None
 
                 if has_numeric_type and has_non_numeric_type:
                     raise SidecarInvalidFilterError(
@@ -1186,14 +1186,14 @@ class SidecarQueryManager:
 
         for filter_string_value in values_to_process:
             # Check for common mistakes: =< or => instead of <= or >=
-            if re.match(r"^=<\d+\.?\d*$", filter_string_value) or re.match(r"^=>\d+\.?\d*$", filter_string_value):
+            if re.match(r"^=<-?\d+\.?\d*$", filter_string_value) or re.match(r"^=>-?\d+\.?\d*$", filter_string_value):
                 raise SidecarInvalidFilterError(
                     f"Invalid operator format '{filter_string_value[:2]}' in filter '{key}:{filter_string_values}'."
                     f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
                 )
 
-            # Check if it's an inequality (e.g., ">25", "<=40")
-            inequality_match = re.match(r"^(>=|<=|>|<)(\d+\.?\d*)$", filter_string_value)
+            # Check if it's an inequality (e.g., ">25", "<=40", "<-5")
+            inequality_match = re.match(r"^(>=|<=|>|<)(-?\d+\.?\d*)$", filter_string_value)
             if inequality_match:
                 operator = inequality_match.group(1)
                 threshold = float(inequality_match.group(2))
@@ -1205,8 +1205,8 @@ class SidecarQueryManager:
                 )
                 continue
 
-            # Check if it's a range (e.g., "20-40")
-            range_match = re.match(r"^(\d+\.?\d*)-(\d+\.?\d*)$", filter_string_value)
+            # Check if it's a range (e.g., "20-40", "-100--50", "10-20")
+            range_match = re.match(r"^(-?\d+\.?\d*)-(-?\d+\.?\d*)$", filter_string_value)
             if range_match:
                 min_val = float(range_match.group(1))
                 max_val = float(range_match.group(2))
