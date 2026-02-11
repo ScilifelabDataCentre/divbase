@@ -131,8 +131,10 @@ In this example, we're adding a new column "organisation" to the user table, and
 ```python
 def upgrade() -> None:
     # Add the server_default param to the add operation for the new column
-    # "server_default='Not specified'" was added to below command
-    op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default='Not specified'))
+    # "server_default=sa.text("'Not specified'") was added to below command
+    # We use sa.text to ensure the default value is set as a string in the database,
+    # see e.g. here for why: https://github.com/sqlalchemy/alembic/discussions/1433
+    op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default=sa.text("'Not specified'"),))
 
     # At the end of the same migration script, remove the server_default from the column - so our models match exactly with the database schema.
     # New rows will now require the application to provide a value and any existing rows is now populated.

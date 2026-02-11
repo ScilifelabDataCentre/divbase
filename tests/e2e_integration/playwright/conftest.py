@@ -48,7 +48,7 @@ def register_new_user(
     Helper function to register a new user via the register page.
 
     We provide a dropdown of Swedish universities, but also allow users to enter their own if not in the list.
-    This function handles both cases for all tests that need to peform a user registration.
+    This function handles both cases for all tests that need to perform a user registration.
     """
     # This displays only if user selects "Other" in the dropdown
     other_organisation_input = page.get_by_role("textbox", name="Your organisation")
