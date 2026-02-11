@@ -314,6 +314,12 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         else:
             print("  Multi-value cells: No")
 
+        empty_cells = stats.get("empty_cells_per_column", {})
+        if empty_cells:
+            print(
+                f"  User-defined columns with empty cells ({len(empty_cells)}): {', '.join(f'{col} ({count})' for col, count in empty_cells.items())}"
+            )
+
         print()
 
     if errors:

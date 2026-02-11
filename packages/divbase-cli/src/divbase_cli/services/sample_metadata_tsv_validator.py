@@ -81,6 +81,7 @@ class MetadataTSVValidator:
         tsv_samples = set()
 
         column_types: dict[int, set[str]] = {i: set() for i in range(1, num_columns)}
+        empty_cells_per_column: dict[str, int] = {header[i]: 0 for i in range(1, num_columns)}
 
         has_multi_values = False
 
@@ -113,8 +114,11 @@ class MetadataTSVValidator:
             for col_idx, cell in enumerate(row):
                 self._validate_cell(row_num, col_idx, header[col_idx], cell)
 
-                # Track column types for user-defined columns (skip col 0, i.e. Sample_ID)
+                # Track column types and empty-cells for user-defined columns (skip col 0, i.e. Sample_ID)
                 if col_idx > 0:
+                    if not cell.strip():
+                        empty_cells_per_column[header[col_idx]] += 1
+
                     if ";" in cell:
                         has_multi_values = True
                     self._infer_column_type(row_num, col_idx, header[col_idx], cell, column_types)
@@ -123,7 +127,7 @@ class MetadataTSVValidator:
 
         self._validate_sample_names(tsv_samples)
 
-        self._collect_statistics(header, tsv_samples, column_types, has_multi_values)
+        self._collect_statistics(header, tsv_samples, column_types, has_multi_values, empty_cells_per_column)
 
     def _validate_cell(self, row_num: int, col_idx: int, col_name: str, cell: str) -> None:
         """Validate an individual cell."""
@@ -136,6 +140,12 @@ class MetadataTSVValidator:
             self.warnings.append(
                 f"Row {row_num}, Column '{col_name}': Cell has leading or trailing whitespace "
                 "(will be stripped by server)"
+            )
+
+        if col_idx > 0 and not cell.strip():
+            self.warnings.append(
+                f"Row {row_num}, Column '{col_name}': Cell is empty. "
+                "Empty values will be treated as missing by the server and will not match any filter conditions in queries."
             )
 
     def _infer_column_type(
@@ -217,7 +227,12 @@ class MetadataTSVValidator:
             )
 
     def _collect_statistics(
-        self, header: list[str], tsv_samples: set[str], column_types: dict[int, set[str]], has_multi_values: bool
+        self,
+        header: list[str],
+        tsv_samples: set[str],
+        column_types: dict[int, set[str]],
+        has_multi_values: bool,
+        empty_cells_per_column: dict[str, int],
     ) -> None:
         """Collect statistics about the TSV file."""
 
@@ -246,3 +261,8 @@ class MetadataTSVValidator:
         self.stats["string_columns"] = string_cols
         self.stats["mixed_type_columns"] = mixed_cols
         self.stats["has_multi_values"] = has_multi_values
+
+        # Only include columns with empty cells in stats
+        columns_with_empty_cells = {col: count for col, count in empty_cells_per_column.items() if count > 0}
+        if columns_with_empty_cells:
+            self.stats["empty_cells_per_column"] = columns_with_empty_cells
