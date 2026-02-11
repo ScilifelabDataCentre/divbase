@@ -185,13 +185,17 @@ class MetadataTSVValidator:
         Check for mixed types in columns and raise errors.
         Matches server-side logic in queries.py::_is_semicolon_separated_numeric_column
         """
+        mixed_columns = []
         for col_idx, types in column_types.items():
             if len(types) > 1:
                 col_name = header[col_idx]
-                self.errors.append(
-                    f"Column '{col_name}': Contains mixed types (both numeric and string values). "
-                    f"All values in a column must be consistently numeric or string for DivBase sidecar metadata queries to work correctly."
-                )
+                mixed_columns.append(col_name)
+
+        if mixed_columns:
+            self.errors.append(
+                f"The following columns contain mixed types (both numeric and string values): {mixed_columns}. "
+                "All values in a column must be consistently numeric or string for DivBase sidecar metadata queries to work correctly."
+            )
 
     def _validate_sample_names(self, tsv_samples: set[str]) -> None:
         """Validate sample names against project dimensions."""
