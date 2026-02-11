@@ -1,0 +1,17 @@
+{% for announcement in announcements %}
+<div class="alert alert-{{ announcement.level }}" role="alert">
+    <p><strong> 
+        {% if announcement.level == "danger" %}
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        {% elif announcement.level == "success" %}
+        <i class="bi bi-check-circle-fill me-2"></i>
+        {% elif announcement.level == "warning" %}
+        <i class="bi bi-exclamation-circle-fill me-2"></i>
+        {% elif announcement.level == "info" %}
+        <i class="bi bi-info-circle-fill me-2"></i>
+        {% endif %}
+        {{ announcement.heading }}
+    </strong></p>
+    {% if announcement.message %}<p>{{ announcement.message }}</p>{% endif %}
+</div>
+{% endfor %}

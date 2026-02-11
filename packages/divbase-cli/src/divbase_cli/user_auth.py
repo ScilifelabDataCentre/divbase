@@ -212,7 +212,43 @@ def make_authenticated_request(
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
 
     try:
-        response = httpx.request(method, url, **kwargs)
+        response = httpx.request(method=method, url=url, **kwargs)
+    except httpx.HTTPError as e:
+        raise DivBaseAPIConnectionError() from e
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        error_details = response.json().get("detail", "No error details provided")
+        error_type = response.json().get("type", "unknown")
+        raise DivBaseAPIError(
+            error_details=error_details,
+            status_code=response.status_code,
+            error_type=error_type,
+            http_method=method,
+            url=url,
+        ) from None
+
+    return response
+
+
+@stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
+def make_unauthenticated_request(
+    method: str,
+    divbase_base_url: str,
+    api_route: str,
+    token_path: Path = cli_settings.TOKENS_PATH,
+    **kwargs,
+) -> httpx.Response:
+    """
+    Make an unauthenticated request to the DivBase server.
+    Used for those few endpoints that require no authentication, even if the user is logged in.
+    E.g. the announcements endpoint.
+    """
+    url = f"{divbase_base_url}/{api_route.lstrip('/')}"
+
+    try:
+        response = httpx.request(method=method, url=url, **kwargs)
     except httpx.HTTPError as e:
         raise DivBaseAPIConnectionError() from e
 

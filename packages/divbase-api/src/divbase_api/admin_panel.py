@@ -22,6 +22,7 @@ from starlette_admin import (
     BooleanField,
     DateTimeField,
     EmailField,
+    EnumField,
     HasOne,
     IntegerField,
     JSONField,
@@ -36,12 +37,13 @@ from starlette_admin.exceptions import FormValidationError
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
+from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
-from divbase_api.models.projects import ProjectDB, ProjectMembershipDB
-from divbase_api.models.revoked_tokens import RevokedTokenDB
+from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
-from divbase_api.security import get_password_hash
+from divbase_api.security import TokenType, get_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +277,7 @@ class ProjectMembershipView(ModelView):
         IntegerField("id", label="ID", disabled=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
-        StringField("role", label="Role", required=True),
+        EnumField("role", label="Role", required=True, enum=ProjectRoles),
         DateTimeField("created_at", label="Created At", disabled=True),
         DateTimeField("updated_at", label="Updated At", disabled=True),
     ]
@@ -377,9 +379,9 @@ class RevokedTokenView(ModelView):
     fields = [
         IntegerField("id", label="ID", disabled=True),
         StringField("token_jti", label="Token JTI", required=True),
-        StringField("token_type", label="Token Type", required=True),
+        EnumField("token_type", label="Token Type", required=True, enum=TokenType),
         DateTimeField("revoked_at", label="Revoked At", disabled=True),
-        StringField("revoked_reason", label="Revoked Reason", required=True),
+        EnumField("revoked_reason", label="Revoke Reason", required=True, enum=TokenRevokeReason),
         IntegerField("user_id", label="User ID", required=False),
         HasOne("user", identity="user", label="User"),
         DateTimeField("created_at", label="Created At", disabled=True),
@@ -567,6 +569,37 @@ class TaskStartedAtView(ModelView):
         return False
 
 
+class AnnouncementView(ModelView):
+    """
+    Custom admin panel View for the AnnouncementDB model.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("heading", label="Heading", required=True),
+        TextAreaField("message", label="Message", required=False),
+        EnumField("target", label="Target", required=True, enum=AnnouncementTarget),
+        EnumField("level", label="Level", required=True, enum=AnnouncementLevel),
+        DateTimeField(
+            "auto_expire_at",
+            help_text="Optional timestamp when the announcement will auto expire. After this timestamp the announcement will no longer be displayed on the frontend or CLI. Value can be left empty.",
+        ),
+        DateTimeField(
+            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
+        ),
+        DateTimeField(
+            "updated_at",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
+    ]
+
+    exclude_fields_from_list = ["message"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_detail = []
+
+
 class DivBaseAuthProvider(AuthProvider):
     """
     This class enables starlette-admin to make use of DivBase's pre-existing auth system.
@@ -646,6 +679,8 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
     )
-
     admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
+    admin.add_view(
+        AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
+    )
     admin.mount_to(app)
