@@ -4,6 +4,15 @@ TODO
 
 - rationale: what is this and how can it be used
 
+assumes that update dimensions has been run for the latest data
+
+!!! Notes
+    There is a CLI command to help check that a user-defined sample metadata TSV file aligns with the requirements described on this page. This validator tool will be [described in its own section below](#validating-a-sidecar-metadata-tsv-with-divbase-cli), but, in short, it can be run with:
+
+    ```bash
+    divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
+    ```
+
 ## Creating a sidecar TSV for a DivBase project
 
 If the dimensions VCF files in the project have been cached in DivBase, a template metadata file with the sample names pre-filled can be created with:
@@ -23,6 +32,8 @@ Note! there can be multiple TSVs in the same project and it is possible to call 
 3. The `Sample_ID` column can only contain one sample name per row. This is different from the user-defined columns that can take arrays of values for each cell in a column.
 4. Every column need to be tab separated for all rows.
 
+TODO non empty, unique, no duplication, no semicolones in Sample_ID
+
 #### User-defined columns
 
 After the `Sample_ID` column has been populated, users can add any columns and values to the TSV.
@@ -37,6 +48,8 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 3. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. "2;4;21" or "North; North-West"). Note that this might make the process of writing queries on the more complex than if just a single value is use for each cell.
 4. As outlined above, the only characters with special meaning or restrictions in the TSV are `#`, `,`, `;`, and `\t` (tab). Other special characters should be supported, but please be aware that Your Milage May Vary. Some common cases that have been tested and are supported include hyphens (`-`), e.g.`North-West`),   diacritic unicodecharacters like `å`,`ä`,`ö`.
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: " Sample 1 " will be processed as "Sample 1".
+
+TODO - add info on No duplicate column names, no empty column names
 
 #### Example
 
@@ -54,16 +67,43 @@ S7 1;3;5 South 22.6
 S8 2 West 19.5
 ```
 
-TODOs:
+### Validating a sidecar metadata TSV with `divbase-cli`
 
-- [TO BE IMPLEMENTED] consider changing the mandatory column name from `Sample_ID` to `Sample`
-- [TO BE IMPLEMENTED] what happens if a TSV does not contain all the samples in the DivBase project? There should probably be a warning, but not an error?
-- [TO BE IMPLEMENTED] what happens if a sample name is misspelled in the TSV? a warning? can this be checked against the dimensions show?
-- [TO BE IMPLEMENTED] what happens if a sample is duplicated in the file. what happens if the sample name is duplicated but not the values (diverging duplicate)?
+Manually checking that a TSV fulfills the DivBase requirement can be tedious. To help users validate their sidecar TSV files, the following CLI command has been implemented:
+
+```bash
+divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
+```
+
+The validation runs on the users local computer and not as a job on the DivBase server. It is intendend to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#mandatory-content) and [User-defined columns](#user-defined-columns).
+
+The command requires that the project's dimensions index is up-to-date with the VCF files in the project, and that is why is sort under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions index is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
+
+The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneus or even misleading query results, and the validator will help with spotting that.
+
+The following will return errors. These must be fixed if the sidecar TSV should be used in DivBase queries:
+
+- Header formatting: Header row is missing or first column is not #Sample_ID, Duplicate or empty column names
+
+- Tab separation: Row has the wrong number of columns
+
+- `Sample_ID` : Empty Sample_ID,Sample_ID contains a semicolon,Duplicate Sample_ID
+
+- Unsupported characters: no commas in cell values; no hyphens in numerical columns
+
+- Type consistency (numeric and string values): no Mixed types in a column  or in a cell  in a cell (e.g., 1;abc)
+
+- All samples listed in in TSV must exist in the dimensions index
+
+The validator will also raise Warnings. DivBase queries can still be run with these, but the user should review them, and possible address them if so desired:
+
+- Cell value has leading or trailing whitespace (will be stripped by server)
+
+- Samples in the project’s dimensions index not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, espcially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
 
 ## Query Syntax for sidecar metadata
 
-- TODO: explain warnings
+- TODO: explain warnings, these should be the same as the validator, but this needs to be checked
 - TODO: explain when empty results or all results are returned
 
 ### Overview: querys are applied as filters on columns in the TSV
@@ -163,6 +203,13 @@ divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
 - include rows where the `Weight` column is greater than 10, **or** less than or equal to 20, **or** in the range 18–22 (inclusive), **but excludes** any row where Weight is exactly 15 **or** any value in the range 18–22.
 
 There are three samples (rows) that fulfill this, and this is what the query results will return: `S1`, `S4`, and `S5`.
+
+TODOs:
+
+- [TO BE IMPLEMENTED] consider changing the mandatory column name from `Sample_ID` to `Sample`
+- [TO BE IMPLEMENTED] what happens if a TSV does not contain all the samples in the DivBase project? There should probably be a warning, but not an error?
+- [TO BE IMPLEMENTED] what happens if a sample name is misspelled in the TSV? a warning? can this be checked against the dimensions show?
+- [TO BE IMPLEMENTED] what happens if a sample is duplicated in the file. what happens if the sample name is duplicated but not the values (diverging duplicate)?
 
 - [TO BE IMPLEMENTED] what to do if a query references a column that does not exist. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Area does not exist? This should probably give a warning and not just return nothing
 
