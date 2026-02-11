@@ -134,7 +134,13 @@ Example of a sidecar metadata TSV file with the mandatory `Sample_ID` column and
 !!! note
     Please use a text editor than preserves the tabs when the file is saved. Incorrect tabs can lead to issues with running metadata queries in DivBase.
 
-The sample metadata file should then be uploaded the the DivBase project with follows:
+There is a command to help check that the sidecar metadata TSV is correctly formatted for use with DivBase. Running it is optional:
+
+```bash
+divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
+```
+
+When you are happy with the sample metadata file, it should be uploaded the the DivBase project with the following:
 
 ```bash
 divbase-cli files upload path/to/your/sample_metadata.tsv
