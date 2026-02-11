@@ -51,7 +51,7 @@ def register_new_user(
     This function handles both cases for all tests that need to peform a user registration.
     """
     # This displays only if user selects "Other" in the dropdown
-    other_organisation_input = page.get_by_placeholder("Enter your organisation's name")
+    other_organisation_input = page.get_by_role("textbox", name="Your organisation")
     expect(other_organisation_input).to_be_hidden()
 
     navigate_to(page, "/register")

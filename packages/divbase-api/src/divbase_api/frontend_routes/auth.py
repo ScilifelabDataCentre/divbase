@@ -171,21 +171,21 @@ async def post_register(
         return registration_failed_response("Passwords do not match")
 
     if organisation == "Other":
-        if not organisation_other:
+        if not organisation_other or len(organisation_other.strip()) < 3:
             return registration_failed_response("Please specify your organisation")
         else:
             organisation = organisation_other.strip()
 
-    existing_user = await get_user_by_email(db=db, email=email)
+    existing_user = await get_user_by_email(db=db, email=email.strip())
     if existing_user:  # Not recommended to specify why failed, just say failed.
         return registration_failed_response("Registration failed, please try again.")
 
     try:
         user_data = UserCreate(
-            name=name,
-            email=email,
-            organisation=organisation,
-            organisation_role=organisation_role,
+            name=name.strip(),
+            email=email.strip(),
+            organisation=organisation.strip(),
+            organisation_role=organisation_role.strip(),
             password=SecretStr(password),
         )
         user = await create_user(db=db, user_data=user_data, is_admin=False)

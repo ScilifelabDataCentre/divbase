@@ -23,8 +23,11 @@
                                 placeholder="Enter your full name"
                                 value="{{ name or '' }}"
                                 autocomplete="name"
+                                minlength="3"
+                                maxlength="100"
                                 required>
                         </div>
+                        <small class="text-muted">Enter your full name (3-100 characters).</small>
                     </div>
 
                     <div class="mb-3">
@@ -40,11 +43,13 @@
                                 placeholder="Enter your email address"
                                 value="{{ email or '' }}"
                                 autocomplete="email"
+                                maxlength="50"
                                 required>
                         </div>
                         <small class="text-muted">Please use your institutional email address if you have one.</small>
                     </div>
-
+                    
+                    {# NOTE: If you're going to make changes to the code here, you probably also want to update the code in edit_profile page #}
                     <div class="mb-3">
                         <label for="organisation_dropdown" class="form-label">Organisation</label>
                         <div class="input-group">
@@ -63,7 +68,7 @@
                     </div>
                     {# This is only displayed if the "Other" option is selected in the organisation dropdown #}
                     <div class="mb-3" id="other_organisation_div" style="display: none;">
-                        <label for="organisation_other" class="form-label">Please add your organisation's name</label>
+                        <label for="organisation_other" class="form-label">Your organisation</label>
                         <div class="input-group">
                              <span class="input-group-text">
                                 <i class="bi bi-building-add"></i>
@@ -72,9 +77,11 @@
                                 class="form-control"
                                 id="organisation_other"
                                 name="organisation_other"
-                                placeholder="Enter your organisation's name"
-                                value="{{ organisation_other or '' }}">
+                                value="{{ organisation_other or '' }}"
+                                pattern=".{3,200}"
+                                title="Organisation name must be between 3 and 200 characters long.">
                         </div>
+                        <small class="text-muted">Please enter your organisation's name (3-200 characters).</small>
                     </div>
 
                     <div class="mb-3">
@@ -89,8 +96,11 @@
                                 name="organisation_role"
                                 placeholder="e.g. PhD Student, Researcher"
                                 value="{{ organisation_role or '' }}"
+                                minlength="3"
+                                maxlength="100"
                                 required>
                         </div>
+                        <small class="text-muted">Enter your role at your organisation (3-100 characters).</small>
                     </div>
 
                     <div class="mb-3">

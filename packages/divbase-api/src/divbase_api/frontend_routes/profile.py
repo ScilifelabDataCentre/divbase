@@ -88,7 +88,7 @@ async def post_edit_user_profile_endpoint(
     We validate this here too.
     """
     if organisation == "Other":
-        if not organisation_other:
+        if not organisation_other or len(organisation_other.strip()) < 3:
             return templates.TemplateResponse(
                 request=request,
                 name="profile_pages/edit_profile.html",
@@ -106,6 +106,10 @@ async def post_edit_user_profile_endpoint(
         else:
             organisation = organisation_other.strip()
 
-    user_data = UserUpdate(name=name, organisation=organisation, organisation_role=organisation_role)
+    user_data = UserUpdate(
+        name=name.strip(),
+        organisation=organisation.strip(),
+        organisation_role=organisation_role.strip(),
+    )
     _ = await update_user_profile(db=db, user_id=current_user.id, user_data=user_data)
     return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
