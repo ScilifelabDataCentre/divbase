@@ -75,8 +75,8 @@ nav:
     - Working with VCF Files in DivBase: user-guides/vcf-files.md
     - Running Queries: 
       - Overview: user-guides/running-queries.md
-      - "Sidecar Metadata TSV files: creating and querying sample metadata files": user-guides/sidecar-metadata.md
       - VCF Dimensions caching: user-guides/vcf-dimensions.md
+      - "Sidecar Metadata TSV files: creating and querying sample metadata files": user-guides/sidecar-metadata.md
       - DivBase Query Syntax for VCF data: user-guides/query-syntax.md
       - How to create efficient DivBase queries: user-guides/how-to-create-efficient-divbase-queries.md
       - "Tutorial: Running a query on a public dataset": user-guides/tutorial-query-on-public-data.md
