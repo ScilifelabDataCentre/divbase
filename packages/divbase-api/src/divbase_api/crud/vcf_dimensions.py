@@ -1,5 +1,9 @@
 """
 CRUD operations for VCF dimensions.
+
+The functions in this file are intended to be used with API endpoints.
+There are separate VCF dimensions CRUD functions for the Celery workers in
+packages/divbase-api/src/divbase_api/worker/crud_dimensions.py
 """
 
 import logging
@@ -14,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -> dict:
     """
-    FOR USER INTERACTIONS WITH API ONLY
+    FOR USER INTERACTIONS WITH API ONLY, Celery workers have their own dimensions CRUD functions.
+
     Get all VCF metadata entries for a given project ID.
     """
     stmt = select(VCFMetadataDB).where(VCFMetadataDB.project_id == project_id)
@@ -43,7 +48,8 @@ async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -
 
 async def get_skipped_vcfs_by_project_async(db: AsyncSession, project_id: int) -> list[SkippedVCFDB]:
     """
-    FOR USER INTERACTIONS WITH API ONLY
+    FOR USER INTERACTIONS WITH API ONLY, Celery workers have their own dimensions CRUD functions.
+
     Get all skipped VCF entries for a given project.
     """
     stmt = select(SkippedVCFDB).where(SkippedVCFDB.project_id == project_id)
@@ -53,6 +59,8 @@ async def get_skipped_vcfs_by_project_async(db: AsyncSession, project_id: int) -
 
 async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
     """
+    FOR USER INTERACTIONS WITH API ONLY, Celery workers have their own dimensions CRUD functions.
+
     Get unique sample names across all VCF files from a project's dimensions entries.
 
     Samples are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened before finding the unqiue values.
@@ -66,6 +74,8 @@ async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int)
 
 async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
     """
+    FOR USER INTERACTIONS WITH API ONLY, Celery workers have their own dimensions CRUD functions.
+
     Get unique scaffold names across all VCF files for a project.
 
     Like samples, scaffolds are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened with the unnest() PostgreSQL function.

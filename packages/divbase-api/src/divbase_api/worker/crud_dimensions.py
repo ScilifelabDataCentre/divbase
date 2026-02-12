@@ -1,3 +1,10 @@
+"""
+CRUD operations for VCF dimensions for the Celery workers.
+.
+There are separate VCF dimensions CRUD functions for used with API endpoints in
+packages/divbase-api/src/divbase_api/crud/vcf_dimensions.py
+"""
+
 import logging
 
 from sqlalchemy import delete, select
@@ -11,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Get all VCF metadata entries for a given project ID.
     """
     stmt = select(VCFMetadataDB).where(VCFMetadataDB.project_id == project_id)
@@ -42,6 +51,8 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
 
 def get_skipped_vcfs_by_project_worker(db: Session, project_id: int) -> dict[str, str]:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Get all skipped VCF entries for a given project.
     """
     stmt = select(SkippedVCFDB).where(SkippedVCFDB.project_id == project_id)
@@ -57,6 +68,8 @@ def get_skipped_vcfs_by_project_worker(db: Session, project_id: int) -> dict[str
 
 def get_vcf_metadata_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) -> VCFMetadataDB | None:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Get VCF metadata by S3 key AND project ID (unique constraint).
     """
     stmt = select(VCFMetadataDB).where(
@@ -68,6 +81,8 @@ def get_vcf_metadata_by_keys(db: Session, vcf_file_s3_key: str, project_id: int)
 
 def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: dict) -> None:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Upsert (insert or update) a VCF metadata entry in the database.
 
     This function uses PostgreSQL's ON CONFLICT DO UPDATE to ensure that if a VCF metadata entry
@@ -96,6 +111,8 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: dict) -> None:
 
 def delete_vcf_metadata(db: Session, vcf_file_s3_key: str, project_id: int) -> None:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Delete a VCF metadata entry by S3 key and project ID.
 
     Called when a VCF file is removed from the project bucket.
@@ -110,7 +127,11 @@ def delete_vcf_metadata(db: Session, vcf_file_s3_key: str, project_id: int) -> N
 
 
 def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) -> SkippedVCFDB | None:
-    """Get skipped VCF entry by S3 key and project ID."""
+    """
+    FOR CELERY WORKERS, not for user interactions with API.
+
+    Get skipped VCF entry by S3 key and project ID.
+    """
     stmt = select(SkippedVCFDB).where(
         SkippedVCFDB.vcf_file_s3_key == vcf_file_s3_key, SkippedVCFDB.project_id == project_id
     )
@@ -120,6 +141,8 @@ def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) 
 
 def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> SkippedVCFDB:
     """
+    FOR CELERY WORKERS, not for user interactions with API.
+
     Upsert (update or insert) skipped VCF entry. Similar to create_or_update_vcf_metadata but for tracking the skipped VCF files (=old divbase results VCF files).
     """
     stmt = insert(SkippedVCFDB).values(**skipped_vcf_data)
@@ -143,7 +166,11 @@ def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> Skipped
 
 
 def delete_skipped_vcf(db: Session, vcf_file_s3_key: str, project_id: int) -> None:
-    """Delete a skipped VCF entry by S3 key and project ID."""
+    """
+    FOR CELERY WORKERS, not for user interactions with API.
+
+    Delete a skipped VCF entry by S3 key and project ID.
+    """
     # TODO - add test for deleting a non existant entry, does it raise an error?
     stmt = delete(SkippedVCFDB).where(
         SkippedVCFDB.vcf_file_s3_key == vcf_file_s3_key, SkippedVCFDB.project_id == project_id
