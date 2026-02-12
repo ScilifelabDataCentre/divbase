@@ -62,3 +62,21 @@ async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int)
     stmt = select(func.unnest(VCFMetadataDB.samples)).where(VCFMetadataDB.project_id == project_id).distinct()
     result = await db.execute(stmt)
     return sorted([row[0] for row in result])
+
+
+async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
+    """
+    Get unique scaffold names across all VCF files for a project.
+
+    Like samples, scaffolds are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened with the unnest() PostgreSQL function.
+    """
+
+    stmt = select(func.unnest(VCFMetadataDB.scaffolds)).where(VCFMetadataDB.project_id == project_id).distinct()
+    result = await db.execute(stmt)
+    scaffolds = [row[0] for row in result]
+
+    # Sort scaffold names in the same way as the dimensions show CLI does when returning all dimensions data: numeric first, then alphabetic
+    # Numeric sorting of name strings results means that 10 comes after 2 for scaffolds that have numeric names.
+    numeric = sorted([int(s) for s in scaffolds if s.isdigit()])
+    non_numeric = sorted([s for s in scaffolds if not s.isdigit()])
+    return [str(n) for n in numeric] + non_numeric

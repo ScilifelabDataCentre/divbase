@@ -46,3 +46,9 @@ class DimensionsSamplesResult(BaseModel):
     """Result model for showing unique samples across project VCFs."""
 
     unique_samples: list[str]  # Already sorted, by the CRUD function get_unique_samples_by_project_async()
+
+
+class DimensionsScaffoldsResult(BaseModel):
+    """Result model for showing unique scaffolds across project VCFs."""
+
+    unique_scaffolds: list[str]  # Already sorted, by the CRUD function get_unique_scaffolds_by_project_async()
