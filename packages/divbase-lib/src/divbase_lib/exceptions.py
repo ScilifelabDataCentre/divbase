@@ -107,6 +107,12 @@ class SidecarSampleIDError(Exception):
     pass
 
 
+class SidecarMetadataFormatError(Exception):
+    """Raised when the sidecar metadata TSV file has formatting issues (duplicate columns, empty columns, commas in values, etc.)."""
+
+    pass
+
+
 class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
 

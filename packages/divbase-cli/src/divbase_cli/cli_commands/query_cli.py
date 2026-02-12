@@ -17,7 +17,6 @@ TODO:
 """
 
 import logging
-import textwrap
 
 import typer
 from rich import print
@@ -99,10 +98,9 @@ def sample_metadata_query(
     results = SampleMetadataQueryTaskResult(**response.json())
 
     if results.warnings:
-        print("[yellow]⚠ Warnings:[/yellow]")
+        print("[yellow]Warnings:[/yellow]")
         for warning in results.warnings:
-            wrapped = textwrap.fill(warning, width=100, initial_indent="  • ", subsequent_indent="    ")
-            print(wrapped)
+            print(f"  • {warning}")
         print()
 
     if show_sample_results:

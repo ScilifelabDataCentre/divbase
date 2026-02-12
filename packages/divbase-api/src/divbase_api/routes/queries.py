@@ -32,6 +32,7 @@ from divbase_lib.api_schemas.queries import (
 from divbase_lib.exceptions import (
     SidecarColumnNotFoundError,
     SidecarInvalidFilterError,
+    SidecarMetadataFormatError,
     SidecarSampleIDError,
 )
 
@@ -87,7 +88,12 @@ async def sample_metadata_query(
         # Route 1, create job and get back job id.
         # Route 2, get job result by id (with status etc), CLI can poll until done.
 
-    except (SidecarInvalidFilterError, SidecarColumnNotFoundError, SidecarSampleIDError) as e:
+    except (
+        SidecarInvalidFilterError,
+        SidecarColumnNotFoundError,
+        SidecarSampleIDError,
+        SidecarMetadataFormatError,
+    ) as e:
         # Catch validation errors (mixed types, missing columns, invalid Sample_IDs) and return 400
         error_message = str(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message) from None

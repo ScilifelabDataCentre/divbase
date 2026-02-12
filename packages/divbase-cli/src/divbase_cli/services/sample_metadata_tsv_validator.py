@@ -152,8 +152,11 @@ class MetadataTSVValidator:
         self, row_num: int, col_idx: int, col_name: str, cell: str, column_types: dict[int, set[str]]
     ) -> None:
         """
-        Infer the type of values in a column and validate type consistency.
+        Infer the type of values in a column and track type information.
         Matches server-side logic in queries.py::_is_semicolon_separated_numeric_column
+
+        Columns with a mix of numeric-looking and non-numeric values (e.g., "8", "1a", "5a")
+        are treated as string columns. Mixed types are reported as warnings, not errors.
         """
         values = [v.strip() for v in cell.split(";") if v.strip()]
 
@@ -171,30 +174,38 @@ class MetadataTSVValidator:
                 cell_has_string = True
                 column_types[col_idx].add("string")
 
-                # Check for hyphens in non-numeric values that might indicate range notation. Negative numbers should already have been classified as numeric with the float() check.
+                # Check for hyphens in non-numeric values that might indicate range notation.
+                # Negative numbers should already have been classified as numeric with the float() check.
+                # This is a warning to help users who may have used range notation (e.g., "1-2") instead of
+                # semicolons (e.g., "1;2") in their data values.
                 if (
                     "-" in value
                     and any(c.isdigit() for c in value)
                     and ("numeric" in column_types[col_idx] or all(t == "numeric" for t in column_types[col_idx] if t))
                 ):
-                    self.errors.append(
+                    self.warnings.append(
                         f"Row {row_num}, Column '{col_name}': Value '{value}' contains a hyphen. "
                         f"This appears to be range notation (e.g., '1-2'), which is not allowed in data values. "
-                        f"If this is meant to be a numeric column, use semicolons to separate values (e.g., '1;2'). "
-                        f"If this is meant to be a string column, all values should be non-numeric strings."
+                        f"If this is meant to be a numeric multi-value column, use semicolons to separate values (e.g., '1;2'). "
+                        f"This column will be treated as a string column."
                     )
 
-        # Check for mixed types within the same cell (e.g., "1;abc")
+        # Check for mixed types within the same cell (e.g., "1;abc") and warn the user if applicable
         if cell_has_numeric and cell_has_string:
-            self.errors.append(
-                f"Row {row_num}, Column '{col_name}': Cell '{cell}' contains mixed types. "
-                f"All cell values in the same column must be consistently numeric or string."
+            self.warnings.append(
+                f"Row {row_num}, Column '{col_name}': Cell '{cell}' contains mixed types "
+                f"(both numeric and non-numeric values in semicolon-separated cell). "
+                f"This column will be treated as a string column."
             )
 
     def _check_mixed_types(self, header: list[str], column_types: dict[int, set[str]]) -> None:
         """
-        Check for mixed types in columns and raise errors.
+        Check for mixed types in columns and report as informational warnings.
         Matches server-side logic in queries.py::_is_semicolon_separated_numeric_column
+
+        Columns with mixed types are treated as string columns by the DivBase query engine.
+        This happen for values such as e.g., "8", "1a", "5a" that happen to look numeric but
+        are semantically a strings (e.g. names, IDs)..
         """
         mixed_columns = []
         for col_idx, types in column_types.items():
@@ -203,9 +214,11 @@ class MetadataTSVValidator:
                 mixed_columns.append(col_name)
 
         if mixed_columns:
-            self.errors.append(
-                f"The following columns contain mixed types (both numeric and string values): {mixed_columns}. "
-                "All values in a column must be consistently numeric or string for DivBase sidecar metadata queries to work correctly."
+            self.warnings.append(
+                f"The following columns contain mixed types (both numeric-looking and string values): {mixed_columns}. "
+                "A column is only numeric if all values (including each part in semicolon-separated cells) are valid numbers. "
+                "These columns will be treated as string columns by DivBase. Numeric query operations "
+                "(ranges, inequalities) will not be applicable to these columns."
             )
 
     def _validate_sample_names(self, tsv_samples: set[str]) -> None:

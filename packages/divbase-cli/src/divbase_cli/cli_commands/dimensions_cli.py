@@ -295,9 +295,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         if string_cols:
             print(f"  String columns ({len(string_cols)}): {', '.join(string_cols)}")
         if mixed_cols:
-            print(
-                f"  [red]Mixed-type columns ({len(mixed_cols)}): {', '.join(mixed_cols)} - NOT ALLOWED, see errors below[/red]"
-            )
+            print(f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols)}")
 
         if stats.get("has_multi_values", False):
             print("  Multi-value cells: Yes (semicolon-separated values detected)")
