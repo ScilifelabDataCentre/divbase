@@ -158,7 +158,7 @@ def test_tsv_query_value_not_found(sample_tsv_file, caplog, create_sidecar_manag
         query_result = manager.query_result
 
     assert len(query_result) == 0, "Should return empty DataFrame when no values match"
-    assert "None of the values ['NonExistentPop'] were found in column 'Population'" in caplog.text
+    assert "No results for the filter ['NonExistentPop'] were found in column 'Population'" in caplog.text
 
 
 @pytest.mark.unit
