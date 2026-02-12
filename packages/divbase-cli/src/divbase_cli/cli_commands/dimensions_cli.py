@@ -75,7 +75,7 @@ def show_dimensions_index(
             divbase_base_url=project_config.divbase_url,
             api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
         )
-        unique_sample_names_sorted = sorted(DimensionsSamplesResult(**response.json()).unique_samples)
+        unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
         sample_count = len(unique_sample_names_sorted)
         print(
             f"Unique sample names found across all the VCF files in the project (count: {sample_count}):\n{unique_sample_names_sorted}"
@@ -179,9 +179,6 @@ def create_metadata_template_with_project_samples_names(
     that has the sample names as pre-filled as the first column.
     """
 
-    # TODO this duplicates some code with show_dimensions_index() above. A refactoring should probably include creating a separate CRUD function
-    # so that the client does not need to parse all data.
-
     project_config = resolve_project(project_name=project)
 
     if output_filename is None:
@@ -192,9 +189,8 @@ def create_metadata_template_with_project_samples_names(
         divbase_base_url=project_config.divbase_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
-    vcf_dimensions_data = DimensionsSamplesResult(**response.json())
+    unique_sample_names_sorted = DimensionsSamplesResult(**response.json())
 
-    unique_sample_names_sorted = sorted(vcf_dimensions_data.unique_samples)
     sample_count = len(unique_sample_names_sorted)
     print(
         f"There were {sample_count} unique samples found in the dimensions file for the {project_config.name} project."
