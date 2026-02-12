@@ -69,6 +69,19 @@ def show_dimensions_index(
 
     project_config = resolve_project(project_name=project)
 
+    if unique_samples:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
+        )
+        unique_sample_names_sorted = sorted(DimensionsSamplesResult(**response.json()).unique_samples)
+        sample_count = len(unique_sample_names_sorted)
+        print(
+            f"Unique sample names found across all the VCF files in the project (count: {sample_count}):\n{unique_sample_names_sorted}"
+        )
+        return
+
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=project_config.divbase_url,
@@ -112,17 +125,6 @@ def show_dimensions_index(
         )
 
         print(f"Unique scaffold names found across all the VCF files in the project:\n{unique_scaffold_names_sorted}")
-        return
-
-    if unique_samples:
-        # TODO for scalability: implement this as a separate CRUD instead of parsing all data on the client side
-        unique_sample_names = set()
-        for entry in dimensions_info.get("indexed_files", []):
-            unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
-
-        unique_sample_names_sorted = sorted(unique_sample_names)
-
-        print(f"Unique sample names found across all the VCF files in the project:\n{unique_sample_names_sorted}")
         return
 
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
