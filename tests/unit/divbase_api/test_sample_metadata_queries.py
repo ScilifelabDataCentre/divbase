@@ -775,12 +775,12 @@ class TestQueryWarnings:
 
     def test_mixed_type_column_warns_on_inequality_filter(self, sample_tsv_with_mixed_type_column):
         """Filtering with inequality syntax on a mixed-type column should produce a warning
-        that mentions both mixed types and the numeric operations."""
+        that mentions both mixed types and the comparison operators."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Population_code:>5")
 
         assert any(
-            "mixed types" in w.lower() and "numeric operations" in w.lower() and "Population_code" in w
+            "mixed types" in w.lower() and "comparison operators" in w.lower() and "Population_code" in w
             for w in result.warnings
         )
 
@@ -812,7 +812,8 @@ class TestQueryWarnings:
         result = manager.run_query(filter_string="Area:>5")
 
         assert any(
-            "string column" in w.lower() and "Area" in w and "numeric operations" in w.lower() for w in result.warnings
+            "string column" in w.lower() and "Area" in w and "comparison operators" in w.lower()
+            for w in result.warnings
         )
         assert not any("mixed types" in w.lower() and "Area" in w for w in result.warnings)
 
@@ -836,7 +837,7 @@ class TestQueryWarnings:
         assert "S4" in sample_ids
         assert "S5" in sample_ids
         assert not any("string column" in w.lower() for w in result.warnings)
-        assert not any("numeric operations" in w.lower() for w in result.warnings)
+        assert not any("comparison operators" in w.lower() for w in result.warnings)
 
     def test_warning_mentions_semicolon_rule(self, sample_tsv_with_mixed_type_column):
         """Query warnings should explain the semicolon classification rule."""
@@ -844,6 +845,34 @@ class TestQueryWarnings:
         result = manager.run_query(filter_string="Population_code:>5")
 
         assert any("semicolon-separated" in w for w in result.warnings)
+
+    @pytest.mark.parametrize(
+        "column,filter_string,expected_warning,expected_sample_ids",
+        [
+            ("Area", ">North", ["comparison operators", "Area", "only work on numeric"], []),
+            ("Area", "<East", ["comparison operators", "Area"], None),
+            ("Area", ">=North", ["comparison operators", ">=North"], None),
+            ("Population_code", ">8", ["mixed types", "comparison operators"], None),
+        ],
+    )
+    def test_comparison_operator_parametrized(
+        self, sample_tsv_with_mixed_type_column, column, filter_string, expected_warning, expected_sample_ids
+    ):
+        """
+        Parametrized test for comparison operator warnings and result length on string and mixed-type columns.
+        """
+        manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
+        result = manager.run_query(filter_string=f"{column}:{filter_string}")
+
+        for warning_substring in expected_warning:
+            assert any(warning_substring.lower() in w.lower() for w in result.warnings)
+
+        if expected_sample_ids is not None:
+            sample_ids = result.get_unique_values("Sample_ID")
+            assert sample_ids == expected_sample_ids or len(sample_ids) == len(expected_sample_ids)
+        elif column == "Area" and filter_string == ">North":
+            sample_ids = result.get_unique_values("Sample_ID")
+            assert len(sample_ids) == 0
 
 
 class TestSemicolonColumnTypeClassification:
@@ -869,7 +898,7 @@ class TestSemicolonColumnTypeClassification:
         result = manager.run_query(filter_string="Code:>2")
 
         assert any("mixed types" in w.lower() and "Code" in w for w in result.warnings)
-        assert any("numeric operations" in w.lower() for w in result.warnings)
+        assert any("comparison operators" in w.lower() for w in result.warnings)
 
     def test_semicolon_cell_with_non_numeric_part_string_matching_works(
         self, sample_tsv_with_semicolon_mixed_type_column

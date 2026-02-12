@@ -900,16 +900,36 @@ class SidecarQueryManager:
                         key, filter_string_values
                     )
 
+                    comparison_operator_message = (
+                        f"DivBase comparison operators (>, <, >=, <=) only work on numeric columns. "
+                        f"Use exact string matching instead (e.g., '{key}:value1,value2')."
+                    )
                     if is_mixed and problematic_filter_values:
-                        warning_msg = f"Column '{key}' has mixed types (including semicolon-separated values) and is treated as string by DivBase. Your filter {problematic_filter_values} uses numeric operations which won't work. Use exact string matching instead (e.g., '{key}:value1,value2')."
+                        warning_msg = (
+                            f"Column '{key}' has mixed types (both numeric-looking and non-numeric values) "
+                            f"and is treated as a string column. A column is only numeric if all values "
+                            f"(including each part in semicolon-separated cells) are valid numbers. "
+                            f"Your filter contains comparison operators {problematic_filter_values} which are not "
+                            f"supported on string columns. "
+                            f"{comparison_operator_message}"
+                        )
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
                     elif problematic_filter_values:
-                        warning_msg = f"Column '{key}' is a string column. Your filter {problematic_filter_values} uses numeric operations which won't work on strings. Use exact string matching instead (e.g., '{key}:value1,value2')."
+                        warning_msg = (
+                            f"Column '{key}' is a string column but your filter contains comparison operators "
+                            f"{problematic_filter_values} which are not supported on string columns. "
+                            f"{comparison_operator_message}"
+                        )
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
                     elif is_mixed:
-                        warning_msg = f"Column '{key}' has mixed types (including semicolon-separated values) and is treated as string by DivBase. Numeric operations are not available for this column."
+                        warning_msg = (
+                            f"Column '{key}' has mixed types (both numeric-looking and non-numeric values) "
+                            f"and is treated as a string column. A column is only numeric if all values "
+                            f"(including each part in semicolon-separated cells) are valid numbers. "
+                            f"Comparison operators (>, <, >=, <=) are not available for this column."
+                        )
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
 
@@ -1146,12 +1166,17 @@ class SidecarQueryManager:
 
     def _detect_numeric_filter_syntax_on_string_column(self, key: str, filter_string_values: str) -> list[str]:
         """
-        Helper method to detect when a user's filter string contains numeric inequality syntax
-        (like ">25", ">=10", "<30", "<=5") on a column that is treated as string. Returns a list of the
-        problematic filter values for use in a warning message.
+        Helper method to detect when a user's filter string contains inequality operators
+        (e.g. ">25", ">=10", "<North", "<=abc") on a column that is treated as string.
+
+        Detects any use of inequality operators (>, <, >=, <=) as a prefix, regardless of whether the
+        value after the operator is numeric or not. E.g. ">5" and ">North".
+
 
         Doesn't flag range-like filter values like "1-2" since these are common string values
         (e.g., hyphenated IDs or names) and will correctly match via string matching.
+
+        Returns a list of the problematic filter values for use in a warning messages.
         """
         problematic_filter_values = []
         values = filter_string_values.split(",")
@@ -1159,8 +1184,8 @@ class SidecarQueryManager:
             filter_value = filter_value.strip().lstrip("!")  # strip negation prefix for checking
             if not filter_value:
                 continue
-            # Check for inequality operators
-            if re.match(r"^(>=|<=|>|<)-?\d+\.?\d*$", filter_value):
+            # Check for inequality operators:
+            if re.match(r"^(>=|<=|>|<).+$", filter_value):
                 problematic_filter_values.append(filter_value)
         return problematic_filter_values
 
