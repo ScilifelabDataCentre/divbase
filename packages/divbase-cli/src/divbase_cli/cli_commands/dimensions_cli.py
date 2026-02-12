@@ -194,7 +194,7 @@ def create_metadata_template_with_project_samples_names(
         divbase_base_url=project_config.divbase_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
-    unique_sample_names_sorted = DimensionsSamplesResult(**response.json())
+    unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
 
     sample_count = len(unique_sample_names_sorted)
     print(
