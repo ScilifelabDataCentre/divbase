@@ -113,9 +113,13 @@ def sample_metadata_query(
         color = "red"
     else:
         color = "bright_blue"
+
     print(f"The results for the query ([{color}]{results.query_message}[/{color}]):")
-    print(f"Unique Sample IDs: {results.unique_sample_ids}")
-    print(f"Unique filenames: {results.unique_filenames}\n")
+
+    unique_sample_ids = results.unique_sample_ids if results.unique_sample_ids else None
+    unique_filenames = results.unique_filenames if results.unique_filenames else None
+    print(f"Unique Sample IDs: {unique_sample_ids}")
+    print(f"Unique filenames: {unique_filenames}\n")
 
 
 @query_app.command("bcftools-pipe")
