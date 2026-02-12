@@ -10,7 +10,7 @@ from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.services.sample_metadata_tsv_validator import MetadataTSVValidator
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult
+from divbase_lib.api_schemas.vcf_dimensions import DimensionsSamplesResult, DimensionsShowResult
 
 logger = logging.getLogger(__name__)
 
@@ -188,17 +188,11 @@ def create_metadata_template_with_project_samples_names(
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
-    vcf_dimensions_data = DimensionsShowResult(**response.json())
+    vcf_dimensions_data = DimensionsSamplesResult(**response.json())
 
-    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
-
-    unique_sample_names = set()
-    for entry in dimensions_info.get("indexed_files", []):
-        unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
-
-    unique_sample_names_sorted = sorted(unique_sample_names)
+    unique_sample_names_sorted = sorted(vcf_dimensions_data.unique_samples)
     sample_count = len(unique_sample_names_sorted)
     print(
         f"There were {sample_count} unique samples found in the dimensions file for the {project_config.name} project."
@@ -271,16 +265,9 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
-    vcf_dimensions_data = DimensionsShowResult(**response.json())
-    dimensions_info = _format_api_response_for_display_in_terminal(vcf_dimensions_data)
-
-    # TODO there is duplication here with other commands in this file. Could be made DRY with a helper function or a separate CRUD function to get dimensions info without needing to parse API response on client side.
-
-    unique_sample_names = set()
-    for entry in dimensions_info.get("indexed_files", []):
-        unique_sample_names.update(entry.get("dimensions", {}).get("sample_names", []))
+    unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
     stats, errors, warnings = MetadataTSVValidator.validate(file_path=input_path, project_samples=unique_sample_names)
 

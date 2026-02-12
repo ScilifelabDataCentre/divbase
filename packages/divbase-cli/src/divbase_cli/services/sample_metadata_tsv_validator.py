@@ -14,19 +14,19 @@ class MetadataTSVValidator:
 
     FORBIDDEN_CHARS = [","]
 
-    def __init__(self, file_path: Path, project_samples: set[str]):
+    def __init__(self, file_path: Path, project_samples: list[str] | set[str]):
         """
         Initialize the validator. File path is the path to the TSV file to validate,
-        and project_samples is a set of unique sample names from the project's dimensions index.
+        and project_samples is a list or set of unique sample names from the project's dimensions index.
         """
         self.file_path = file_path
-        self.project_samples = project_samples
+        self.project_samples = set(project_samples) if isinstance(project_samples, list) else project_samples
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.stats: dict = {}
 
     @classmethod
-    def validate(cls, file_path: Path, project_samples: set[str]) -> tuple[dict, list[str], list[str]]:
+    def validate(cls, file_path: Path, project_samples: list[str] | set[str]) -> tuple[dict, list[str], list[str]]:
         """
         Validate a TSV file and return results.
 
