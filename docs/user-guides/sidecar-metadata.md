@@ -44,16 +44,15 @@ TODO - give more example of how and when it can be relevant to have multiple tsv
 
 ### Sidecar TSV format requirements
 
-TODO - There is no fixed schema but some mandatory requirements
+TODO - write a section on how there is no fixed schema but some mandatory requirements
 
 #### Mandatory content
 
 1. The first row must be a header row and the first column must be named `Sample_ID`.
-2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
-3. The `Sample_ID` column can only contain one sample name per row. This is different from the user-defined columns that can take arrays of values for each cell in a column.
-4. Every column need to be tab separated for all rows.
+2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. One entry per sample name; duplicates are not allowed. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
+3. The `Sample_ID` column can only contain one sample name per row. This is different from the user-defined columns that can take arrays of values for each cell in a column using semicolons (;) as delimters. `Sample_ID` values can also not be empty.
 
-TODO non empty, unique, no duplication, no semicolones in Sample_ID
+4. Every column need to be tab separated for all rows.
 
 #### User-defined columns
 
@@ -64,7 +63,7 @@ After the `Sample_ID` column has been populated, users can add any columns and v
 
 To ensure that user-defined metadata can be used in DivBase, we ask you follow the following constraints and considerations:
 
-1. The user-defined columns can be either numeric or string type. Mixing string and numeric values in the same column is not allowed; if a mix is detected, DivBase will raise an error and reject the file. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
+1. The user-defined columns can be either numeric or string type. A column is classified as numeric only if all values (including individual parts in semicolon-separated cells) can be parsed as numbers. If any value in a column is non-numeric, the entire column is treated as a string column. This means a column with values like "8", "1a", "5a" will treated as string column even though some values look numeric. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
 2. Commas are not supported for the TSV and the DivBase system will send an error message if it detects any TSV cells with commas in them. Commas can have different meanings in different notation systems and to avoid confusion and to keep it simple, DivBase will simply not handle commas. Note that commas are used in the [Query syntax](#query-syntax-for-sidecar-metadata) for a different purpose. For decimals, use English decimal notation (.) and not comma (,). DivBase allows one single delimiter for enumerations in the TSV files and that is the semicolon (;) as will be described in the bullet.
 3. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. "2;4;21" or "North; North-West"). Note that this might make the process of writing queries on the more complex than if just a single value is use for each cell.
 4. As outlined above, the only characters with special meaning or restrictions in the TSV are `#`, `,`, `;`, and `\t` (tab). Other special characters should be supported, but please be aware that Your Milage May Vary. Some common cases that have been tested and are supported include hyphens (`-`), e.g.`North-West`),   diacritic unicodecharacters like `å`,`ä`,`ö`.
@@ -100,34 +99,35 @@ The validation runs on the users local computer and not as a job on the DivBase 
 
 The command requires that the project's dimensions index is up-to-date with the VCF files in the project, and that is why is sort under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions index is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
 
-The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneus or even misleading query results, and the validator will help with spotting that.
+The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneus or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
 
-The following will return errors. These must be fixed if the sidecar TSV should be used in DivBase queries:
+The following will return **Errors**. These must be fixed if the sidecar TSV should be used in DivBase queries:
 
-- Header formatting: Header row is missing or first column is not #Sample_ID, Duplicate or empty column names
+- Header formatting: Header row is missing or first column is not `#Sample_ID`, duplicate or empty column names
 
-- Tab separation: Row has the wrong number of columns
+- Tab separation: Row has the wrong number of columns (Note that check is only done in the validator! It is currently not part of the checks at the start of a sample metadata query)
 
-- `Sample_ID` : Empty Sample_ID,Sample_ID contains a semicolon,Duplicate Sample_ID
+- `Sample_ID`: Empty Sample_ID, Sample_ID contains a semicolon, duplicate Sample_ID
 
-- Unsupported characters: no commas in cell values; no hyphens in numerical columns
+- Unsupported characters: no commas in cell values
 
-- Type consistency (numeric and string values): no Mixed types in a column  or in a cell  in a cell (e.g., 1;abc)
+- All samples listed in the TSV must exist in the dimensions index
 
-- All samples listed in in TSV must exist in the dimensions index
+!!! Note
+    The formatting errors listed above are also enforced by the DivBase query engine when loading the metadata file for queries (except checking tab separation and that samples match the dimensions file, which are validator-specific checks). This means that even if the validator is not run before upload, the query engine will analyse the file content and report issues as errors. Detected Errors are different from Warnings in that errors will result in queries not even being run.
 
-The validator will also raise Warnings. DivBase queries can still be run with these, but the user should review them, and possible address them if so desired:
+The validator will also raise **Warnings**. DivBase queries can still be run with Warnings, but the user should review them, and possible address them if so desired:
 
 - Cell value has leading or trailing whitespace (will be stripped by server)
 
 - Samples in the project’s dimensions index not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, espcially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
+- Mixed-type columns (e.g. a column with "8", "1a", "5a") and Semicolon-separated cells with mixed types (e.g., "1;abc"). They are allowed but the user should keep in mind that since they will be treated as string columns, numeric query operations (ranges, inequalities) will not work on these columns.
+
+- Hyphens in values that look like range notation (e.g., "1-2") in columns that also contain numeric values. The warning message will ask the user if they intended this to be a multicolumn value which should use semicolons as delimters.
 
 ## Query Syntax for sidecar metadata
 
 This section describes how to query on the sample metadata file itself. The same syntax used here will also be used when running combined sample metadata and VCF data queries; how to do that is covered in [DivBase Query Syntax for VCF data](query-syntax.md).
-
-- TODO: explain warnings, these should be the same as the validator, but this needs to be checked
-- TODO: explain when empty results or all results are returned
 
 ### Overview: querys are applied as filters on columns in the TSV
 
@@ -187,6 +187,14 @@ Note that when inclusive and exclusive are combined (e.g. `"Area:East,!South"`),
 
 ### Filtering on numerical columns
 
+A TSV column is considered as numeric in DivBase only if all cell values — including each individual part within semicolon-separated cells (e.g. `1;3;5`) — can be parsed as a number. For example:
+
+- A column with values `1`, `2;4`, `3`, `1;3;5` is considered numeric since all elements are numbers. All numeric operations below (inequalities, ranges, discrete) are fully supported on this column.
+
+- A column with values `1;1-2`, `3`, `5` is considered a string column since the part `1-2` cannot be parsed as a number. Only exact string matching is supported for this column.
+
+- A column with values `8`, `1a`, `5a`is considered a string column since it has mixed types (`8` is numeric, the others are strings). Only exact string matching is supported for this column.
+
 For numerical columns, it is possible to filter on the following operations:
 
 - **Inequalities**
@@ -213,6 +221,26 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 - `"Weight:>5,!10-15"`  returns rows where the value is greater than 5, but not in the range 10–15.
 - `"Weight:!1-2,4"`  returns rows where the value is not in the range 1–2, or is 4.
 
+### Query Warnings: spotting potential issues with the TSV or the query filter
+
+When running a sample metadata query in DivBase, the system will check the TSV and the query filter for the constraints and considerations described throughout this guide. If errors are encountered, the query will not run and a message with details on what went wrong will be return to the user. Warnings, however, will not stop not stop queries from running, but indicated that the user should carefully review the results.
+
+Reviewing the Warnings to judge if they are relevant or not is key help avoid unintended query results. The following are treated as Warnings by DivBase queries (and by the TSV validator).
+
+- **Comparison operators on string/mixed-type columns**: DivBase comparison operators (`>`, `<`, `>=`, `<=`) only work on numeric columns. If you use them on a string or mixed-type column — whether with a numeric operand (e.g., `Population:>5`) or a string operand (e.g., `Area:>North`) — DivBase will warn that comparison operators are not supported on string columns. Use exact string matching instead (e.g., `Area:North` or `Population:8,1a`).
+
+- **Mixed-type column information**:
+When filtering on a mixed-type column with valid string matching, DivBase will inform you that the column is treated as string and comparison operators are not available. This is mainly to make the user aware of this.
+
+- **Column not found**:
+If the filter references a column that does not exist in the TSV, DivBase will warn and skip that filter condition.
+
+- **No matching values**:
+If none of the filter values match any values in the column, DivBase print a warning. This can indicate a typo in the filter value, or just that the specific filter combination filtered away all samples..
+
+!!! Tip
+    Numeric operations such as inequalities like `>25`, and ranges like `20-40` are fully supported for semicolon-separated numeric columns as long as every semicolon separated part (`part;part`) in every cell in the column is a valid number. For instance: a `Population` column with values `1`, `2;4`, `1;3;5`; in this case a query like `divbase-cli query tsv "Population:>3"` will correctly match cells like `2;4` and `1;3;5`.
+
 ### Examples of complex queries
 
 Assuming that the sidecar metadata TSV file looks like in the [Example](#example) above, a query like will:
@@ -226,9 +254,3 @@ divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
 - include rows where the `Weight` column is greater than 10, **or** less than or equal to 20, **or** in the range 18–22 (inclusive), **but excludes** any row where Weight is exactly 15 **or** any value in the range 18–22.
 
 There are three samples (rows) that fulfill this, and this is what the query results will return: `S1`, `S4`, and `S5`.
-
-TODOs:
-
-- [TO BE IMPLEMENTED] what to do if a query references a column that does not exist. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Area does not exist? This should probably give a warning and not just return nothing
-
-- [TO BE IMPLEMENTED] what to do if a query references a column value. E.g. `divbase-cli query tsv "Area:Northern Portugal"` when Northern Portugal does not exist in the column? This should probably also give a warning and not just return nothing, but nothing is a result here and not a syntax problem...
