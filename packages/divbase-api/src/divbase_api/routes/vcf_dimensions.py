@@ -11,6 +11,7 @@ from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.task_history import create_task_history_entry
 from divbase_api.crud.vcf_dimensions import (
     get_skipped_vcfs_by_project_async,
+    get_unique_samples_by_project_async,
     get_vcf_metadata_by_project_async,
 )
 from divbase_api.db import get_db
@@ -19,7 +20,7 @@ from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissing
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import update_vcf_dimensions_task
-from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult, DimensionUpdateKwargs
+from divbase_lib.api_schemas.vcf_dimensions import DimensionsSamplesResult, DimensionsShowResult, DimensionUpdateKwargs
 
 logger = logging.getLogger(__name__)
 
@@ -102,3 +103,23 @@ async def update_vcf_dimensions_endpoint(
     )
 
     return job_id
+
+
+@vcf_dimensions_router.get(
+    "/projects/{project_name}/samples", status_code=status.HTTP_200_OK, response_model=DimensionsSamplesResult
+)
+async def list_unique_samples_endpoint(
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> DimensionsSamplesResult:
+    """Get all unique sample names across project VCFs."""
+
+    project, current_user, role = project_and_user_and_role
+
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to view VCF dimensions for this project.")
+
+    result = await get_unique_samples_by_project_async(db, project.id)
+
+    return DimensionsSamplesResult(unique_samples=result)

@@ -40,3 +40,9 @@ class DimensionsShowResult(BaseModel):
     vcf_files: list[dict]
     skipped_file_count: int
     skipped_files: list[dict]
+
+
+class DimensionsSamplesResult(BaseModel):
+    """Result model for showing unique samples across project VCFs."""
+
+    unique_samples: list[str]

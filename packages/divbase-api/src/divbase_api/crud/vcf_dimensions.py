@@ -4,7 +4,7 @@ CRUD operations for VCF dimensions.
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB
@@ -49,3 +49,16 @@ async def get_skipped_vcfs_by_project_async(db: AsyncSession, project_id: int) -
     stmt = select(SkippedVCFDB).where(SkippedVCFDB.project_id == project_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
+    """
+    Get unique sample names across all VCF files from a project's dimensions entries.
+
+    Samples are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened before finding the unqiue values.
+    To do all operations on the PostgreSQL side (to avoid having do it here in the fastAPI side), need to first use unnest() to flatten the arrays.
+    """
+
+    stmt = select(func.unnest(VCFMetadataDB.samples)).where(VCFMetadataDB.project_id == project_id).distinct()
+    result = await db.execute(stmt)
+    return sorted([row[0] for row in result])
