@@ -708,10 +708,10 @@ class TestNegativeNumbers:
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S1" in sample_ids  # -5.5
-        assert "S2" in sample_ids  # -10.2
-        assert "S5" in sample_ids  # -20
-        assert "S9" in sample_ids  # -15
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S5" in sample_ids
+        assert "S9" in sample_ids
 
     def test_negative_numbers_discrete_values(self, sample_tsv_with_numeric_data):
         """Test that negative numbers can be used as discrete filter values."""
@@ -726,22 +726,18 @@ class TestNegativeNumbers:
     def test_negative_numbers_greater_than_inequality(self, sample_tsv_with_numeric_data):
         """Test greater than with negative numbers."""
         manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
-        # Temperature: -5.5, -10.2, 0, 15.5, -20, 10, 5, 20, -15, 25
-        # Less than -5 should match: -5.5, -10.2, -20, -15
         result = manager.run_query(filter_string="Temperature:<-5")
 
         sample_ids = result.get_unique_values("Sample_ID")
         assert len(sample_ids) == 4
-        assert "S1" in sample_ids  # -5.5 < -5
-        assert "S2" in sample_ids  # -10.2 < -5
-        assert "S5" in sample_ids  # -20 < -5
-        assert "S9" in sample_ids  # -15 < -5
+        assert "S1" in sample_ids
+        assert "S2" in sample_ids
+        assert "S5" in sample_ids
+        assert "S9" in sample_ids
 
     def test_negative_numbers_in_semicolon_cells(self, sample_tsv_with_numeric_data):
         """Test that negative numbers in semicolon-separated cells work correctly."""
         manager = SidecarQueryManager(file=sample_tsv_with_numeric_data)
-        # Longitude values: -2.78305556, -0.12765, 1.25, -3.5;-2.1, 0, 2.5, -1.5, 3.0, -2.0, 1.5
-        # Discrete value -3.5 should only match S4 which has -3.5;-2.1
         result = manager.run_query(filter_string="Longitude:-3.5")
 
         sample_ids = result.get_unique_values("Sample_ID")
