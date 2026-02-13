@@ -136,7 +136,7 @@ def upgrade() -> None:
     # see e.g. here for why: https://github.com/sqlalchemy/alembic/discussions/1433
     op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default=sa.text("'Not specified'"),))
 
-    # Any rows in the database table that existed before the migration will now be populated with the default value 'Not specified'. 
+    # Any rows in the database table that existed before the migration will now be populated with the default value 'Not specified'.
     # At the end of the same migration script, remove the server_default param from the column (with `server_default=None`) - so our models match exactly with the database schema.
     # New rows will now require the application to provide a value for the organisation column.
     op.alter_column('user', 'organisation', server_default=None)
