@@ -15,7 +15,11 @@ from celery.signals import (
     worker_process_init,
 )
 
-from divbase_api.exceptions import VCFDimensionsEntryMissingError
+from divbase_api.exceptions import (
+    ObjectDoesNotExistError,
+    TSVFileNotFoundInProjectError,
+    VCFDimensionsEntryMissingError,
+)
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
@@ -40,7 +44,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
-from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.exceptions import NoVCFFilesFoundError, TaskUserError
 
 logger = logging.getLogger(__name__)
 
@@ -168,15 +172,21 @@ def sample_metadata_query_task(
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
-    metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-    )
+    try:
+        metadata_path = _download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
+    except ObjectDoesNotExistError:
+        # If ObjectDoesNotExistError, propagage the more specific TSVFileNotFoundInProjectError upwards.
+        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(project_name=project_name)
+        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
 
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,

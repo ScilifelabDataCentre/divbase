@@ -91,12 +91,19 @@ class ProjectVersionNotFoundError(DivBaseAPIException):
 class VCFDimensionsEntryMissingError(DivBaseAPIException):
     """Raised when there are no entries in the VCF dimensions db table."""
 
-    def __init__(self, project_name: str):
-        message = (
-            f"The VCF dimensions index in project '{project_name}' is missing or empty. "
-            "Please ensure that there are VCF files in the project and run:\n"
-            "'divbase-cli dimensions update --project <project_name>'\n"
-        )
+    def __init__(self, project_name: str | None = None):
+        if project_name:
+            message = (
+                f"The VCF dimensions index in project '{project_name}' is missing or empty. "
+                "Please ensure that there are VCF files in the project and run:\n"
+                "'divbase-cli dimensions update --project <project_name>'\n"
+            )
+        else:
+            message = (
+                "The VCF dimensions index is missing or empty. "
+                "Please ensure that there are VCF files in the project and run:\n"
+                "'divbase-cli dimensions update --project <project_name>'\n"
+            )
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
 
 
@@ -127,4 +134,24 @@ class ObjectDoesNotExistError(DivBaseAPIException):
 
     def __init__(self, key: str, bucket_name: str):
         message = f"The file/object '{key}' does not exist in the project '{bucket_name}'. "
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class TSVFileNotFoundInProjectError(DivBaseAPIException):
+    """Raised when a TSV doesn't exist in project storage."""
+
+    def __init__(self, filename: str | None = None, project_name: str | None = None):
+        self.filename = filename
+        self.project_name = project_name
+        if filename and project_name:
+            message = (
+                f"The sample metadata TSV file '{filename}' "
+                f"was not found in your project '{project_name}'.\n"
+                "Please check that you have spelled the file name correctly and that the file has been uploaded to the project."
+            )
+        else:
+            message = (
+                "A sample metadata TSV file was not found.\n"
+                "Please check that you have spelled the file name correctly and that the file has been uploaded to the project."
+            )
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
