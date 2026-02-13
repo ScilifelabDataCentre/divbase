@@ -729,11 +729,14 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     project_id: int,
 ) -> None:
     """
-    Check that all VCF files in the bucket are indexed in the dimensions file and raise and error with filenames if not.
+    Check that all VCF files in the bucket are indexed in the dimensions file and that their version IDs match between bucket and VCF dimensions index.
+
     Skipped VCF files (i.e DivBase-generated result files) are excluded from the check.
     """
 
-    indexed_vcf_files = {entry["vcf_file_s3_key"] for entry in vcf_dimensions_data.get("vcf_files", [])}
+    indexed_vcf_lookup = {
+        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+    }
 
     with SyncSessionLocal() as db:
         skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
@@ -743,13 +746,25 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
         file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")
     }
 
+    indexed_vcf_files = set(indexed_vcf_lookup.keys())
     tracked_vcf_files = indexed_vcf_files | skipped_vcf_files
     unindexed_files = vcf_files_in_bucket - tracked_vcf_files
 
-    if unindexed_files:
-        logger.error(f"Found {len(unindexed_files)} unindexed VCF file(s): {sorted(unindexed_files)}")
+    outdated_files = []
+    for file_name in indexed_vcf_files:
+        if file_name in vcf_files_in_bucket:
+            indexed_version = indexed_vcf_lookup[file_name]
+            bucket_version = latest_versions_of_bucket_files.get(file_name, "null")
+            if indexed_version != bucket_version:
+                outdated_files.append(file_name)
+                logger.error(
+                    f"VCF file '{file_name}' version mismatch: indexed={indexed_version}, bucket={bucket_version}"
+                )
+    unindex_or_outdated_files = sorted(set(unindexed_files) | set(outdated_files))
+
+    if unindex_or_outdated_files:
         raise DimensionsNotUpToDateWithBucketError(
-            f"The following VCF files or file versions in the project are not part of the project's VCF dimensions: '{', '.join(sorted(unindexed_files))}'. "
+            f"The following VCF files or file versions in the project are not part of the project's VCF dimensions: '{', '.join(unindex_or_outdated_files)}'. "
             "\nPlease run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
         )
 
