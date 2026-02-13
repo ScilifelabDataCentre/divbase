@@ -30,6 +30,7 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryTaskResult,
 )
 from divbase_lib.exceptions import (
+    DimensionsNotUpToDateWithBucketError,
     SidecarColumnNotFoundError,
     SidecarInvalidFilterError,
     SidecarMetadataFormatError,
@@ -95,6 +96,7 @@ async def sample_metadata_query(
         SidecarSampleIDError,
         SidecarMetadataFormatError,
         TaskUserError,
+        DimensionsNotUpToDateWithBucketError,
     ) as e:
         # These are simple exceptions (that inherit from base Exception) that are able to pass through Celery's JSON serialization/deserialization without becoming UnpicklableExceptionWrapper.
         # TaskUserError is a wrapper exception that allow to nest more complex exceptions that would normally trigger UnpicklableExceptionWrapper, and still be able to pass through the serialization/deserialization.
