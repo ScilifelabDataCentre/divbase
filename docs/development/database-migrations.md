@@ -121,3 +121,27 @@ Documentation on how to run migrations in production/deployed environments is co
 ### Starlette admin/admin panel not showing the models
 
 - You need the models in your src to match the postgres schema. So if you have pending changes (that you have or have not created migrations for) they won't display until you've actually done the migration.
+
+### Migrations that include new fields with non-nullable constraints
+
+One way to solve this is to modify the migration scripts upgrade command as follows:
+
+In this example, we're adding a new column "organisation" to the user table, and it cannot be null (and we already have users...), so we need to provide a default value for existing rows.
+
+```python
+def upgrade() -> None:
+    # Add the server_default param to the add operation for the new column
+    # "server_default=sa.text("'Not specified'") was added to below command
+    # We use sa.text to ensure the default value is set as a string in the database,
+    # see e.g. here for why: https://github.com/sqlalchemy/alembic/discussions/1433
+    op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default=sa.text("'Not specified'"),))
+
+    # Any rows in the database table that existed before the migration will now be populated with the default value 'Not specified'.
+    # At the end of the same migration script, remove the server_default param from the column (with `server_default=None`) - so our models match exactly with the database schema.
+    # New rows will now require the application to provide a value for the organisation column.
+    op.alter_column('user', 'organisation', server_default=None)
+```
+
+**You don't need to set the server_default in the models.py, just in the migration script.**
+
+Alternatively you could set the server_default in the models.py, but then you should be comfortable with it always having a default value. There are also other ways to solve this problem...

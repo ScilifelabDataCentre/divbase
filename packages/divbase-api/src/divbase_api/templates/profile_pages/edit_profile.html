@@ -39,6 +39,62 @@
                             </div>
                         </div>
 
+                        {# NOTE: If you're going to make changes to the code here, you probably also want to update the code in registration form component. #}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <label for="organisation_dropdown" class="form-label">Organisation</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-building"></i>
+                                    </span>
+                                    <select class="form-select" id="organisation_dropdown" name="organisation" required>
+                                        <option value="" disabled {% if not organisation %}selected{% endif %}>Select an organisation...</option>
+                                        <option value="Other" {% if organisation == 'Other' %}selected{% endif %}>Other</option>
+                                        {% for org in swedish_universities %}
+                                            <option value="{{ org }}" {% if organisation == org %}selected{% endif %}>{{ org }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <small class="text-muted">Please select "Other" if your organisation is not listed.</small>
+                            </div>
+                        </div>
+                        {# This is only displayed if the "Other" option is selected in the organisation dropdown #}
+                        <div class="mb-3" id="other_organisation_div" style="display: none;">
+                            <label for="organisation_other" class="form-label">Your organisation</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-building-add"></i>
+                                </span>
+                                <input type="text"
+                                    class="form-control"
+                                    id="organisation_other"
+                                    name="organisation_other"
+                                    value="{{ organisation_other or '' }}"
+                                    pattern=".{3,200}"
+                                    title="Organisation name must be between 3 and 200 characters long.">
+                            </div>
+                            <small class="text-muted">Please enter your organisation's name (3-200 characters).</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="organisation_role" class="form-label">Role at Organisation</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-briefcase"></i>
+                                </span>
+                                <input type="text"
+                                    class="form-control"
+                                    id="organisation_role"
+                                    name="organisation_role"
+                                    placeholder="e.g. PhD Student, Researcher"
+                                    value="{{ organisation_role or '' }}"
+                                    minlength="3"
+                                    maxlength="100"
+                                    required>
+                            </div>
+                            <small class="text-muted">Enter your role at your organisation (3-100 characters).</small>
+                        </div>
+
                         <div class="row mb-3">
                             <div class="col-12">
                                 <label class="form-label">Email</label>
@@ -86,4 +142,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+
+
+{% block custom_scripts %}
+<script src="/static/js/organisation_dropdown.js"></script>
 {% endblock %}

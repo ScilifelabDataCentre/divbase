@@ -127,7 +127,6 @@ async def update_user_password(db: AsyncSession, user_id: int, password_data: Us
 
 def delete_auth_cookies(response: Response) -> Response:
     """Helper to delete auth cookies from a response (e.g. on logout)."""
-    # TODO - when token blacklisting is implemented, blacklist the tokens here too. (make async at that point too...)
     response.delete_cookie(TokenType.ACCESS.value)
     response.delete_cookie(TokenType.REFRESH.value)
     return response

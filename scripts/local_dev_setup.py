@@ -46,10 +46,34 @@ BASE_URL = "http://localhost:8000/api"
 ADMIN_CREDENTIALS = {"username": "admin@divbase.com", "password": "badpassword"}
 
 USERS_TO_CREATE = [
-    {"name": "Alice", "email": "alice@example.com", "password": "badpassword"},
-    {"name": "Bob", "email": "bob@example.com", "password": "badpassword"},
-    {"name": "Charlie", "email": "charlie@example.com", "password": "badpassword"},
-    {"name": "Diana", "email": "diana@example.com", "password": "badpassword"},
+    {
+        "name": "Alice",
+        "email": "alice@example.com",
+        "organisation": "Uppsala University",
+        "organisation_role": "Researcher",
+        "password": "badpassword",
+    },
+    {
+        "name": "Bob",
+        "email": "bob@example.com",
+        "organisation": "Mälardalen University",
+        "organisation_role": "Postdoc",
+        "password": "badpassword",
+    },
+    {
+        "name": "Charlie",
+        "email": "charlie@example.com",
+        "organisation": "Lund University",
+        "organisation_role": "PhD Student",
+        "password": "badpassword",
+    },
+    {
+        "name": "Diana",
+        "email": "diana@example.com",
+        "organisation": "European Bioinformatics Institute",
+        "organisation_role": "Researcher",
+        "password": "badpassword",
+    },
 ]
 
 PROJECTS = [
@@ -210,7 +234,13 @@ def create_users(token: str) -> dict[str, int]:
             "POST",
             f"{BASE_URL}/v1/admin/users/",
             token,
-            json={"name": user_data["name"], "email": user_data["email"], "password": user_data["password"]},
+            json={
+                "name": user_data["name"],
+                "email": user_data["email"],
+                "organisation": user_data["organisation"],
+                "organisation_role": user_data["organisation_role"],
+                "password": user_data["password"],
+            },
             params={"email_verified": True},
         )
 

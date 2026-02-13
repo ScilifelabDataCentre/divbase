@@ -10,6 +10,7 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
+from divbase_api.api_constants import SWEDISH_UNIVERSITIES
 from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
@@ -128,7 +129,11 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
     """Render the registration page."""
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    return templates.TemplateResponse(request=request, name="auth_pages/register.html", context={"current_user": None})
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/register.html",
+        context={"current_user": None, "swedish_universities": SWEDISH_UNIVERSITIES},
+    )
 
 
 @fr_auth_router.post("/register", response_class=HTMLResponse)
@@ -137,6 +142,9 @@ async def post_register(
     background_tasks: BackgroundTasks,
     name: str = Form(...),
     email: str = Form(...),
+    organisation: str = Form(...),
+    organisation_other: str | None = Form(None),
+    organisation_role: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -148,18 +156,38 @@ async def post_register(
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/register.html",
-            context={"error": error_message, "name": name, "email": email},
+            context={
+                "error": error_message,
+                "name": name,
+                "email": email,
+                "organisation": organisation,
+                "organisation_other": organisation_other,
+                "organisation_role": organisation_role,
+                "swedish_universities": SWEDISH_UNIVERSITIES,
+            },
         )
 
     if password != confirm_password:
         return registration_failed_response("Passwords do not match")
 
-    existing_user = await get_user_by_email(db=db, email=email)
+    if organisation == "Other":
+        if not organisation_other or len(organisation_other.strip()) < 3:
+            return registration_failed_response("Please specify your organisation")
+        else:
+            organisation = organisation_other.strip()
+
+    existing_user = await get_user_by_email(db=db, email=email.strip())
     if existing_user:  # Not recommended to specify why failed, just say failed.
         return registration_failed_response("Registration failed, please try again.")
 
     try:
-        user_data = UserCreate(name=name, email=email, password=SecretStr(password))
+        user_data = UserCreate(
+            name=name.strip(),
+            email=email.strip(),
+            organisation=organisation.strip(),
+            organisation_role=organisation_role.strip(),
+            password=SecretStr(password),
+        )
         user = await create_user(db=db, user_data=user_data, is_admin=False)
     except Exception as e:
         logger.error(f"Error creating user: {e}")

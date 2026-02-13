@@ -20,20 +20,50 @@ FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 API_ADMIN_CREDENTIALS = {"email": "admin@divbase.com", "password": "badpassword"}
 
+
 TEST_USERS = {
-    "read user": {"email": "read@divbase.se", "password": "badpassword"},
-    "edit user": {"email": "edit@divbase.se", "password": "badpassword"},
-    "manage user": {"email": "manage@divbase.se", "password": "badpassword"},
-    "edit user query-project only": {"email": "edit_query_project_only@divbase.se", "password": "badpassword"},
-    "manage user query-project only": {"email": "manage_query_project_only@divbase.se", "password": "badpassword"},
+    "read user": {
+        "email": "read@divbase.se",
+        "password": "badpassword",
+        "organisation": "Uppsala University",
+        "organisation_role": "Postdoctoral Researcher",
+    },
+    "edit user": {
+        "email": "edit@divbase.se",
+        "password": "badpassword",
+        "organisation": "Lund University",
+        "organisation_role": "PhD Student",
+    },
+    "manage user": {
+        "email": "manage@divbase.se",
+        "password": "badpassword",
+        "organisation": "KTH Royal Institute of Technology",
+        "organisation_role": "Associate Professor",
+    },
+    "edit user query-project only": {
+        "email": "edit_query_project_only@divbase.se",
+        "password": "badpassword",
+        "organisation": "Chalmers University of Technology",
+        "organisation_role": "Research Engineer",
+    },
+    "manage user query-project only": {
+        "email": "manage_query_project_only@divbase.se",
+        "password": "badpassword",
+        "organisation": "Göteborgs University",
+        "organisation_role": "Professor",
+    },  # Some tests change this users password
     "forgot_password user": {
         "email": "mr_password_resetter@divbase.se",
         "password": "badpassword",
+        "organisation": "Umeå University",
+        "organisation_role": "Lecturer",
     },  # Some tests change this users password
     "password_reset user": {
         "email": "password_reset_user@divbase.se",
         "password": "badpassword",
-    },  # Some tests change this users password
+        "organisation": "European Bioinformatics Institute",
+        "organisation_role": "Research Assistant",
+    },
 }
 
 
@@ -189,7 +219,13 @@ def create_users(token: str) -> dict[str, int]:
             "POST",
             f"{BASE_URL}/v1/admin/users/",
             token,
-            json={"name": name, "email": creds["email"], "password": creds["password"]},
+            json={
+                "name": name,
+                "email": creds["email"],
+                "organisation": creds["organisation"],
+                "organisation_role": creds["organisation_role"],
+                "password": creds["password"],
+            },
             params={"email_verified": True},
         )
 
