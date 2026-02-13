@@ -774,7 +774,7 @@ class TestQueryWarnings:
     filter on mixed-type or string columns with numeric syntax."""
 
     def test_mixed_type_column_warns_on_inequality_filter(self, sample_tsv_with_mixed_type_column):
-        """Filtering with inequality syntax on a mixed-type column should produce a warning
+        """Test that filtering with inequality syntax on a mixed-type column should produce a warning
         that mentions both mixed types and the comparison operators."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Population_code:>5")
@@ -785,7 +785,7 @@ class TestQueryWarnings:
         )
 
     def test_mixed_type_column_range_syntax_does_string_match(self, sample_tsv_with_mixed_type_column):
-        """Range-like patterns (e.g., '1-5') on a mixed-type column are treated as literal string
+        """Test that range-like patterns (e.g., '1-5') on a mixed-type column are treated as literal string
         matches, not numeric ranges. A general mixed-type warning is expected, but not a
         'numeric operations won't work' warning since hyphenated values are common in strings."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
@@ -795,7 +795,7 @@ class TestQueryWarnings:
         assert not any("will not work" in w for w in result.warnings)
 
     def test_mixed_type_column_no_warning_on_string_filter(self, sample_tsv_with_mixed_type_column):
-        """Filtering with plain string values on a mixed-type column should produce a
+        """Test that filtering with plain string values on a mixed-type column should produce a
         general mixed-type info warning but not a numeric-syntax warning."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Population_code:8,1a")
@@ -807,7 +807,7 @@ class TestQueryWarnings:
         assert not any("will not work" in w for w in result.warnings)
 
     def test_pure_string_column_warns_on_numeric_inequality_filter(self, sample_tsv_with_mixed_type_column):
-        """Filtering with numeric inequality syntax (>5) on a pure string column (Area) should result in a warning."""
+        """Test that filtering with numeric inequality syntax (>5) on a pure string column (Area) should result in a warning."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Area:>5")
 
@@ -818,7 +818,7 @@ class TestQueryWarnings:
         assert not any("mixed types" in w.lower() and "Area" in w for w in result.warnings)
 
     def test_pure_string_column_no_warning_on_normal_filter(self, sample_tsv_with_mixed_type_column):
-        """Filtering with plain string values on a pure string column should produce no warnings."""
+        """Test that filtering with plain string values on a pure string column should produce no warnings."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Area:North,East")
 
@@ -828,7 +828,7 @@ class TestQueryWarnings:
         assert len(result.warnings) == 0
 
     def test_numeric_column_no_false_warning(self, sample_tsv_with_mixed_type_column):
-        """Filtering with numeric syntax on a numeric column should NOT produce a warning."""
+        """Test that filtering with numeric syntax on a numeric column should NOT produce a warning."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Weight:>15")
 
@@ -840,7 +840,7 @@ class TestQueryWarnings:
         assert not any("comparison operators" in w.lower() for w in result.warnings)
 
     def test_warning_mentions_semicolon_rule(self, sample_tsv_with_mixed_type_column):
-        """Query warnings should explain the semicolon classification rule."""
+        """Test that query warnings explain the semicolon classification rule."""
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string="Population_code:>5")
 
@@ -859,7 +859,7 @@ class TestQueryWarnings:
         self, sample_tsv_with_mixed_type_column, column, filter_string, expected_warning, expected_sample_ids
     ):
         """
-        Parametrized test for comparison operator warnings and result length on string and mixed-type columns.
+        Test for comparison operator warnings and result length on string and mixed-type columns.
         """
         manager = SidecarQueryManager(file=sample_tsv_with_mixed_type_column)
         result = manager.run_query(filter_string=f"{column}:{filter_string}")
@@ -883,7 +883,7 @@ class TestSemicolonColumnTypeClassification:
     def test_semicolon_cell_with_non_numeric_part_makes_column_string(
         self, sample_tsv_with_semicolon_mixed_type_column
     ):
-        """A column with a cell '1;1-2' should be treated as string because '1-2' is not a number."""
+        """Test that a column with a cell '1;1-2' should be treated as string because '1-2' is not a number."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
 
         assert not pd.api.types.is_numeric_dtype(manager.df["Code"])
@@ -893,7 +893,7 @@ class TestSemicolonColumnTypeClassification:
     def test_semicolon_cell_with_non_numeric_part_warns_on_inequality(
         self, sample_tsv_with_semicolon_mixed_type_column
     ):
-        """Inequality filter on a column broken by '1;1-2' should produce a warning."""
+        """Test that inequality filter on a column broken by '1;1-2' should produce a warning."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
         result = manager.run_query(filter_string="Code:>2")
 
@@ -903,7 +903,7 @@ class TestSemicolonColumnTypeClassification:
     def test_semicolon_cell_with_non_numeric_part_string_matching_works(
         self, sample_tsv_with_semicolon_mixed_type_column
     ):
-        """String matching should still work on the mixed column. Filtering for '1-2' should matches cell value '1;1-2'."""
+        """Test that string matching should still work on the mixed column. Filtering for '1-2' should matches cell value '1;1-2'."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
         result = manager.run_query(filter_string="Code:1-2")
 
@@ -914,7 +914,7 @@ class TestSemicolonColumnTypeClassification:
     def test_semicolon_cell_with_non_numeric_part_single_numeric_match(
         self, sample_tsv_with_semicolon_mixed_type_column
     ):
-        """String matching for '3' on the mixed column should return S2 (exact string match)."""
+        """Test that string matching for '3' on the mixed column should return S2 (exact string match)."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
         result = manager.run_query(filter_string="Code:3")
 
@@ -923,7 +923,7 @@ class TestSemicolonColumnTypeClassification:
         assert len(sample_ids) == 1
 
     def test_purely_numeric_semicolon_column_supports_numeric_ops(self, sample_tsv_with_semicolon_mixed_type_column):
-        """A column with only numeric semicolon values (e.g., '10;20;30') should support numeric operations."""
+        """Test that a column with only numeric semicolon values (e.g., '10;20;30') should support numeric operations."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
 
         assert manager._is_semicolon_separated_numeric_column("PureNumericSemicolon")
@@ -937,7 +937,7 @@ class TestSemicolonColumnTypeClassification:
         assert not any("string column" in w.lower() for w in result.warnings)
 
     def test_purely_numeric_semicolon_column_range_filter(self, sample_tsv_with_semicolon_mixed_type_column):
-        """A purely numeric semicolon column should support range operations."""
+        """Test that a purely numeric semicolon column should support range operations."""
         manager = SidecarQueryManager(file=sample_tsv_with_semicolon_mixed_type_column)
         result = manager.run_query(filter_string="PureNumericSemicolon:25-45")
 
@@ -957,7 +957,7 @@ class TestLoadFileValidation:
     query engine catches the same formatting issues with clear error messages."""
 
     def test_commas_in_data_raises_at_tsv_load(self, tmp_path):
-        """Commas in any cell value should raise SidecarMetadataFormatError during load_file()."""
+        """Test that commas in any cell value raises SidecarMetadataFormatError during load_file()."""
         tsv_content = "#Sample_ID\tArea\tWeight\nS1\tNorth,South\t12.5\nS2\tEast\t18.0\n"
         tsv_file = tmp_path / "commas.tsv"
         tsv_file.write_text(tsv_content)
@@ -967,7 +967,7 @@ class TestLoadFileValidation:
         assert "commas" in str(excinfo.value).lower()
 
     def test_commas_in_non_queried_column_raises_at_tsv_load(self, tmp_path):
-        """Commas should be caught in all columns when the tsv is loaded, not just the column being queried."""
+        """Test that commas are caught in all columns when the tsv is loaded, not just the column being queried."""
         tsv_content = "#Sample_ID\tArea\tBadCol\nS1\tNorth\thas,comma\nS2\tEast\tclean\n"
         tsv_file = tmp_path / "commas_other_col.tsv"
         tsv_file.write_text(tsv_content)
@@ -977,7 +977,7 @@ class TestLoadFileValidation:
         assert "commas" in str(excinfo.value).lower()
 
     def test_duplicate_column_names_raises(self, tmp_path):
-        """Duplicate column names should raise SidecarMetadataFormatError during load_file().
+        """Test that duplicate column names raise SidecarMetadataFormatError during load_file().
         Without this check, pandas might silently rename them (e.g., 'Area', 'Area.1')."""
         tsv_content = "#Sample_ID\tArea\tArea\nS1\tNorth\tSouth\nS2\tEast\tWest\n"
         tsv_file = tmp_path / "duplicate_cols.tsv"
@@ -988,7 +988,7 @@ class TestLoadFileValidation:
         assert "duplicate" in str(excinfo.value).lower()
 
     def test_empty_column_name_raises(self, tmp_path):
-        """Empty column names should raise SidecarMetadataFormatError during load_file()."""
+        """Test that empty column names raise SidecarMetadataFormatError during load_file()."""
         tsv_content = "#Sample_ID\t\tWeight\nS1\tNorth\t12.5\nS2\tEast\t18.0\n"
         tsv_file = tmp_path / "empty_col.tsv"
         tsv_file.write_text(tsv_content)
@@ -998,7 +998,7 @@ class TestLoadFileValidation:
         assert "empty" in str(excinfo.value).lower()
 
     def test_semicolon_in_sample_id_raises(self, tmp_path):
-        """Semicolons in Sample_ID values should raise SidecarSampleIDError during load_file().
+        """Test that semicolons in Sample_ID values raise SidecarSampleIDError during load_file().
         Sample_ID must contain exactly one value per row."""
         tsv_content = "#Sample_ID\tArea\nS1;S2\tNorth\nS3\tEast\n"
         tsv_file = tmp_path / "semicolon_sample_id.tsv"
@@ -1009,24 +1009,24 @@ class TestLoadFileValidation:
         assert "semicolon" in str(excinfo.value).lower()
 
     def test_missing_sample_id_column_raises(self, sample_tsv_missing_sample_id_column):
-        """Missing Sample_ID column should raise SidecarColumnNotFoundError."""
+        """Test that missing Sample_ID column raise SidecarColumnNotFoundError."""
         with pytest.raises(SidecarColumnNotFoundError):
             SidecarQueryManager(file=sample_tsv_missing_sample_id_column)
 
     def test_empty_sample_id_raises(self, sample_tsv_with_invalid_sample_ids):
-        """Empty Sample_ID values should raise SidecarSampleIDError."""
+        """Test that empty Sample_ID values raise SidecarSampleIDError."""
         with pytest.raises(SidecarSampleIDError):
             SidecarQueryManager(file=sample_tsv_with_invalid_sample_ids)
 
     def test_duplicate_sample_id_raises(self, sample_tsv_with_duplicate_sample_ids):
-        """Duplicate Sample_ID values should raise SidecarSampleIDError."""
+        """Test that duplicate Sample_ID values raise SidecarSampleIDError."""
         with pytest.raises(SidecarSampleIDError) as excinfo:
             SidecarQueryManager(file=sample_tsv_with_duplicate_sample_ids)
         assert "duplicate" in str(excinfo.value).lower()
 
     def test_valid_file_loads_successfully(self, sample_tsv_with_edge_cases):
         """
-        A TSV that follows DivBase requirements should load without errors.
+        Test that a TSV that follows DivBase requirements loads without errors.
         Use the edge case fixture to assert that these are fine as long as they all
         follow the DivBase requirements.
         """

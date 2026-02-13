@@ -139,19 +139,19 @@ class TestHeaderValidation:
     """Test validation of header row."""
 
     def test_wrong_first_column_name(self, header_errors_tsv, project_samples):
-        """First column must be '#Sample_ID'."""
+        """Test that first column is '#Sample_ID'."""
         stats, errors, warnings = MetadataTSVValidator.validate(header_errors_tsv, project_samples)
 
         assert any("First column must be named '#Sample_ID'" in e for e in errors)
 
     def test_duplicate_column_names(self, header_errors_tsv, project_samples):
-        """Duplicate column names should be detected."""
+        """Test that duplicate column names are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(header_errors_tsv, project_samples)
 
         assert any("Duplicate column names" in e and "Area" in e for e in errors)
 
     def test_empty_column_name(self, header_errors_tsv, project_samples):
-        """Empty column names should be detected."""
+        """Test that empty column names are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(header_errors_tsv, project_samples)
 
         assert any("Empty column name" in e for e in errors)
@@ -161,19 +161,19 @@ class TestSampleIDValidation:
     """Test validation of Sample_ID column."""
 
     def test_empty_sample_id(self, sample_errors_tsv, project_samples):
-        """Empty Sample_ID should be detected."""
+        """Test that empty Sample_ID are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(sample_errors_tsv, project_samples)
 
         assert any("Sample_ID is empty" in e for e in errors)
 
     def test_semicolon_in_sample_id(self, sample_errors_tsv, project_samples):
-        """Sample_ID containing semicolon should be detected."""
+        """Test that Sample_ID containing semicolon are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(sample_errors_tsv, project_samples)
 
         assert any("contains semicolon" in e and "S3;S4" in e for e in errors)
 
     def test_duplicate_sample_id(self, sample_errors_tsv, project_samples):
-        """Duplicate Sample_IDs should be detected."""
+        """Test that duplicate Sample_IDs are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(sample_errors_tsv, project_samples)
 
         assert any("Duplicate Sample_ID" in e and "S1" in e for e in errors)
@@ -183,19 +183,19 @@ class TestFormattingValidation:
     """Test validation of TSV formatting."""
 
     def test_wrong_column_count(self, format_errors_tsv, project_samples):
-        """Rows with wrong number of columns should be detected."""
+        """Test that rows with wrong number of columns are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(format_errors_tsv, project_samples)
 
         assert any("Expected 3 tab-separated columns" in e and "found 2" in e for e in errors)
 
     def test_comma_in_cell(self, format_errors_tsv, project_samples):
-        """Commas in cells should be detected."""
+        """Test that commas in cells are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(format_errors_tsv, project_samples)
 
         assert any("forbidden character ','" in e for e in errors)
 
     def test_whitespace_warning(self, format_errors_tsv, project_samples):
-        """Leading/trailing whitespace should generate warnings."""
+        """Test that leading/trailing whitespace generate warnings."""
         stats, errors, warnings = MetadataTSVValidator.validate(format_errors_tsv, project_samples)
 
         assert any("leading or trailing whitespace" in w for w in warnings)
@@ -209,28 +209,28 @@ class TestTypeValidation:
     """
 
     def test_mixed_types_in_column_is_warning(self, type_errors_tsv, project_samples):
-        """Columns with mixed numeric and string types should produce a warning (not error) and be classified as mixed_type."""
+        """Test that columns with mixed numeric and string types produce a warning (not error) and be classified as mixed_type."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
 
         assert any("mixed" in w.lower() and "Population" in w for w in warnings)
         assert not any("mixed types" in e.lower() and "Population" in e for e in errors)
 
     def test_mixed_types_in_cell_is_warning(self, type_errors_tsv, project_samples):
-        """Cells with mixed types (e.g., '1;three;5') should produce a warning (not error)."""
+        """Test that cells with mixed types (e.g., '1;three;5') produce a warning (not error)."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
 
         assert any("1;three;5" in w and "mixed types" in w.lower() for w in warnings)
         assert not any("1;three;5" in e and "mixed types" in e.lower() for e in errors)
 
     def test_hyphen_in_numeric_looking_column_is_warning(self, type_errors_tsv, project_samples):
-        """Hyphens in values that look like range notation should produce a warning (not error)."""
+        """Test that hyphens in values that look like range notation produce a warning (not error)."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
 
         assert any("hyphen" in w.lower() and "3-5" in w for w in warnings)
         assert not any("hyphen" in e.lower() and "3-5" in e for e in errors)
 
     def test_cell_and_column_level_mixed_types_are_warnings(self, type_errors_tsv, project_samples):
-        """When a column has both cell-level and column-level mixed types, both should produce warnings (not errors)."""
+        """Test that when a column has both cell-level and column-level mixed types, both produce warnings (not errors)."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
 
         assert any("1;three;5" in w and "mixed types" in w.lower() for w in warnings)
@@ -240,7 +240,7 @@ class TestTypeValidation:
 
     def test_stats_show_mixed_type_columns(self, type_errors_tsv, project_samples):
         """
-        Stats should show columns as mixed-type for informational purposes.
+        Test that stats show columns as mixed-type information to user.
         The type_errors_tsv fixture used here has columns with mixed types.
         """
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
@@ -250,7 +250,7 @@ class TestTypeValidation:
         assert len(stats["mixed_type_columns"]) == 3
 
     def test_multi_value_numeric_cells_are_numeric(self, numeric_multi_values_tsv, project_samples):
-        """Multi-value numeric cells (e.g., '2;4') should be correctly classified as numeric, not string or mixed-type."""
+        """Test that multi-value numeric cells (e.g., '2;4') are correctly classified as numeric, not string or mixed-type."""
         stats, errors, warnings = MetadataTSVValidator.validate(numeric_multi_values_tsv, project_samples)
 
         assert "Scores" in stats["numeric_columns"]
@@ -266,7 +266,7 @@ class TestDimensionMatching:
     """Test validation against project dimensions."""
 
     def test_samples_not_in_project(self, valid_tsv):
-        """Samples in TSV but not in project should be errors."""
+        """Test that samples in TSV but not in project raise error."""
         project_samples = {"S1", "S2"}
         stats, errors, warnings = MetadataTSVValidator.validate(valid_tsv, project_samples)
 
@@ -276,7 +276,7 @@ class TestDimensionMatching:
         )
 
     def test_samples_not_in_tsv(self, valid_tsv):
-        """Samples in project but not in TSV should be warnings."""
+        """Test that samples in project but not in TSV produce warnings."""
         project_samples = {"S1", "S2", "S3", "S10", "S20"}
         stats, errors, warnings = MetadataTSVValidator.validate(valid_tsv, project_samples)
 
@@ -294,7 +294,7 @@ class TestStatistics:
     """Test statistics collection."""
 
     def test_statistics_collection(self, valid_tsv, project_samples):
-        """Verify statistics are correctly collected."""
+        """Test that statistics are correctly collected."""
         stats, errors, warnings = MetadataTSVValidator.validate(valid_tsv, project_samples)
 
         assert stats["total_columns"] == 4
@@ -308,7 +308,7 @@ class TestStatistics:
         assert stats["has_multi_values"] is True
 
     def test_no_multi_values_detected(self, no_multi_values_tsv):
-        """Test detection when no semicolon-separated values present."""
+        """Test multi-value detection when no semicolon-separated values are present."""
         stats, errors, warnings = MetadataTSVValidator.validate(no_multi_values_tsv, {"S1", "S2"})
         assert stats["has_multi_values"] is False
 
@@ -317,7 +317,7 @@ class TestEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_empty_file(self, project_samples, tmp_path):
-        """Empty file should be detected."""
+        """Test that empty files are detected."""
         empty_file = tmp_path / "empty.tsv"
         empty_file.write_text("")
 
@@ -326,7 +326,7 @@ class TestEdgeCases:
         assert any("File is empty" in e for e in errors)
 
     def test_nonexistent_file(self, project_samples):
-        """Nonexistent file should be handled gracefully."""
+        """Test that nonexistent files are handled gracefully."""
         stats, errors, warnings = MetadataTSVValidator.validate(Path("/nonexistent/file.tsv"), project_samples)
 
         assert any("Failed to read file" in e for e in errors)
@@ -380,7 +380,7 @@ class TestSemicolonColumnTypeClassification:
         return tsv_file
 
     def test_semicolon_cell_with_non_numeric_part_is_mixed(self, semicolon_mixed_tsv):
-        """A column with cell '1;1-2' should be classified as mixed-type because '1-2' is not a number."""
+        """Test that a column with cell '1;1-2' is classified as mixed-type because '1-2' is not a number."""
         stats, errors, warnings = MetadataTSVValidator.validate(semicolon_mixed_tsv, {"S1", "S2", "S3"})
 
         assert "Code" in stats["mixed_type_columns"]
@@ -388,25 +388,25 @@ class TestSemicolonColumnTypeClassification:
         assert "Code" not in stats["string_columns"]
 
     def test_semicolon_cell_mixed_produces_cell_level_warning(self, semicolon_mixed_tsv):
-        """A cell '1;1-2' should produce a cell-level mixed-type warning."""
+        """Test that a cell '1;1-2' produces a cell-level mixed-type warning."""
         stats, errors, warnings = MetadataTSVValidator.validate(semicolon_mixed_tsv, {"S1", "S2", "S3"})
 
         assert any("1;1-2" in w and "mixed types" in w.lower() for w in warnings)
 
     def test_semicolon_cell_mixed_produces_column_level_warning(self, semicolon_mixed_tsv):
-        """The column-level mixed-type warning should mention the semicolon classification rule."""
+        """Test that the column-level mixed-type warning mentions the semicolon classification rule."""
         stats, errors, warnings = MetadataTSVValidator.validate(semicolon_mixed_tsv, {"S1", "S2", "S3"})
 
         assert any("semicolon-separated" in w and "Code" in w for w in warnings)
 
     def test_semicolon_cell_mixed_is_not_error(self, semicolon_mixed_tsv):
-        """Mixed types from semicolon cells should NOT produce errors."""
+        """Test that mixed types from semicolon cells doesn't produce errors."""
         stats, errors, warnings = MetadataTSVValidator.validate(semicolon_mixed_tsv, {"S1", "S2", "S3"})
 
         assert not any("mixed" in e.lower() for e in errors)
 
     def test_purely_numeric_semicolon_column_stays_numeric(self, semicolon_mixed_tsv):
-        """A column with only numeric values in semicolons (e.g., '10;20;30') should be numeric."""
+        """Test that a column with only numeric values in semicolons (e.g., '10;20;30') should be numeric."""
         stats, errors, warnings = MetadataTSVValidator.validate(semicolon_mixed_tsv, {"S1", "S2", "S3"})
 
         assert "PureNumSemicolon" in stats["numeric_columns"]
