@@ -193,6 +193,7 @@ def sample_metadata_query_task(
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
         vcf_dimensions_data=vcf_dimensions_data,
         latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        project_id=project_id,
     )
 
     metadata_result = run_sidecar_metadata_query(
@@ -258,6 +259,7 @@ def bcftools_pipe_task(
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
         vcf_dimensions_data=vcf_dimensions_data,
         latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        project_id=project_id,
     )
 
     metadata_path = _download_sample_metadata(
@@ -724,18 +726,25 @@ def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tup
 def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     vcf_dimensions_data: dict,
     latest_versions_of_bucket_files: dict[str, str],
+    project_id: int,
 ) -> None:
     """
     Check that all VCF files in the bucket are indexed in the dimensions file and raise and error with filenames if not.
+    Skipped VCF files (i.e DivBase-generated result files) are excluded from the check.
     """
 
     indexed_vcf_files = {entry["vcf_file_s3_key"] for entry in vcf_dimensions_data.get("vcf_files", [])}
+
+    with SyncSessionLocal() as db:
+        skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
+    skipped_vcf_files = set(skipped_vcfs.keys())
 
     vcf_files_in_bucket = {
         file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")
     }
 
-    unindexed_files = vcf_files_in_bucket - indexed_vcf_files
+    tracked_vcf_files = indexed_vcf_files | skipped_vcf_files
+    unindexed_files = vcf_files_in_bucket - tracked_vcf_files
 
     if unindexed_files:
         logger.error(f"Found {len(unindexed_files)} unindexed VCF file(s): {sorted(unindexed_files)}")
