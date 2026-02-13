@@ -33,6 +33,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -244,12 +245,19 @@ def test_bcftools_pipe_query_errors(
     assert expected_error in full_error, f"Expected '{expected_error}' in error message, but got: {full_error}"
 
 
-def test_get_task_status_by_task_id(CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync):
+def test_get_task_status_by_task_id(
+    CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync, run_update_dimensions, project_map
+):
     """
     Get the status of a task by its ID, as in the task ID int that is returned to the users, not the Celery UUID task ID.
     Uses the PostgreSQL Celery results backend to get task info.
     """
     project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -347,10 +355,10 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "user_id": 1,
             "job_id": 1,
         }
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
             bcftools_pipe_task(**params)
         assert (
-            "The VCF dimensions file is not up to date with the VCF files in the project. Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+            "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
             in str(excinfo.value)
         )
 
