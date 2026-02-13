@@ -293,11 +293,18 @@ def test_get_task_status_by_task_id(
             assert result in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
 
 
+@pytest.mark.parametrize(
+    "test_scenario,vcf_filename,job_id,cleanup_file",
+    [
+        ("version_outdated", "HOM_20ind_17SNPs.1.vcf.gz", 1, False),
+        ("unindexed", "HOM_20ind_17SNPs_first_10_samples.vcf.gz", 2, True),
+    ],
+)
 @patch(
     "divbase_api.worker.tasks.create_s3_file_manager",
     side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
 )
-def test_query_exits_when_vcf_file_version_is_outdated(
+def test_query_exits_when_dimensions_are_outdated(
     mock_create_s3_manager,
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
@@ -305,10 +312,16 @@ def test_query_exits_when_vcf_file_version_is_outdated(
     run_update_dimensions,
     project_map,
     db_session_sync,
+    test_scenario,
+    vcf_filename,
+    job_id,
+    cleanup_file,
 ):
     """
-    Test that updates the dimensions file, uploads a new version of a VCF file, then runs a query that should fail
-    because the dimensions file expects an older version of the VCF file.
+    Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions index is not up-to-date. Test for these cases:
+    1. version_outdated: uploads a new version of an existing VCF file after dimensions update
+    2. unindexed: uploads a new VCF file that is not present in the dimensions index
+
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
@@ -322,28 +335,21 @@ def test_query_exits_when_vcf_file_version_is_outdated(
         return f"{fixture_dir}/{filename}"
 
     def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
-        """
-        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
-        """
         return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
 
     def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
-        """
-        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
-        """
         pass
 
     with (
         patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
         patch("divbase_api.worker.tasks._download_vcf_files", new=patched_download_vcf_files),
     ):
-        test_file = (fixtures_dir / "HOM_20ind_17SNPs.1.vcf.gz").resolve()
-
-        command = f"files upload {test_file}  --project {project_name} --disable-safe-mode"
+        test_file_path = (fixtures_dir / vcf_filename).resolve()
+        command = f"files upload {test_file_path}  --project {project_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0
-        assert f"{str(test_file)}" in result.stdout
+        assert vcf_filename in result.stdout
 
         params = {
             "tsv_filter": "Area:West of Ireland;Sex:F",
@@ -353,7 +359,7 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "project_id": project_id,
             "project_name": project_name,
             "user_id": 1,
-            "job_id": 1,
+            "job_id": job_id,
         }
         with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
             bcftools_pipe_task(**params)
@@ -361,6 +367,11 @@ def test_query_exits_when_vcf_file_version_is_outdated(
             "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
             in str(excinfo.value)
         )
+
+        # Clean up the uploaded file if needed (for unindexed test to not affect other tests)
+        if cleanup_file:
+            command = f"files rm {vcf_filename}  --project {project_name}"
+            runner.invoke(app, command)
 
 
 class TestSidecarQueryTaskErrorsPropagation:
