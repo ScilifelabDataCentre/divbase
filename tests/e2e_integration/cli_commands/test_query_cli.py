@@ -489,9 +489,19 @@ class TestSidecarQueryTaskErrorsPropagation:
         cli_result = runner.invoke(app, command)
 
         output = cli_result.stdout + (str(cli_result.exception) if cli_result.exception else "")
-        assert "Column 'NonExistentColumn' not found in the TSV file. Skipping this filter condition." in output
-        assert "Invalid filter conditions: none of the filters matched any records. Returning ALL records." in output
-        assert "This may be a large result set. Please check your filter keys, value spelling, and syntax." in output
+        # Normalize whitespace to handle line wrapping
+        normalized_output = " ".join(output.split())
+        assert (
+            "Column 'NonExistentColumn' not found in the TSV file. Skipping this filter condition." in normalized_output
+        )
+        assert (
+            "Invalid filter conditions: none of the filters matched any records. Returning ALL records."
+            in normalized_output
+        )
+        assert (
+            "This may be a large result set. Please check your filter keys, value spelling, and syntax."
+            in normalized_output
+        )
 
     def test_error_in_terminal_when_duplicate_sample_IDs_in_tsv(
         self,
