@@ -9,6 +9,22 @@ document.addEventListener("DOMContentLoaded", function () {
   const otherOrganisationDiv = document.getElementById("other_organisation_div");
   const otherOrganisationInput = document.getElementById("organisation_other");
 
+  const form = document.getElementById("registerForm") || document.getElementById("editProfileForm");
+  if (!form) {
+    return;
+  }
+
+  function validateOtherOrganisation() {
+    const otherOrganisation = otherOrganisationInput.value.trim();
+    if (
+      organisationDropdown.value === "Other" &&
+      (!otherOrganisation || otherOrganisation.length < 3)
+    ) {
+      otherOrganisationInput.setCustomValidity("Please specify your organisation (at least 3 characters).");
+    } else {
+      otherOrganisationInput.setCustomValidity("");
+    }
+  }
 
   organisationDropdown.addEventListener("change", function () {
     if (this.value === "Other") {
@@ -17,9 +33,23 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       otherOrganisationDiv.style.display = "none";
       otherOrganisationInput.required = false;
-      otherOrganisationInput.value = ""; // Clears the value if hidden
+      otherOrganisationInput.value = "";
+      otherOrganisationInput.setCustomValidity("");
     }
   });
+
+  otherOrganisationInput.addEventListener("input", validateOtherOrganisation);
+
+  // Validation for "Other" organisation input on form submission will prevent form submission
+  form.addEventListener("submit", function (event) {
+    validateOtherOrganisation();
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      event.preventDefault();
+    }
+  });
+
   // Run on page load to ensure form is in correct state if form submission fails 
   // and page/form is re-rendered with previous values.
   // e.g. password don't match etc... 
