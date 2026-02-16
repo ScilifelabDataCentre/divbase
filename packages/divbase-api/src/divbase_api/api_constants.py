@@ -2,7 +2,7 @@
 DivBase API constants.
 """
 
-# List of Swedish universities for the dropdown in the registration form.
+# List of Swedish universities for the dropdown in the registration/update profile form.
 SWEDISH_UNIVERSITIES = [
     "Blekinge Institute of Technology",
     "Chalmers University of Technology",
@@ -34,4 +34,19 @@ SWEDISH_UNIVERSITIES = [
     "University of Skövde",
     "Uppsala University",
     "Örebro University",
+]
+
+# List of known job roles for the dropdown in the registration/update profile form.
+KNOWN_JOB_ROLES = [
+    "Bachelor's Student",
+    "Bioinformatician",
+    "Infrastructure Support Staff",
+    "Master's Student",
+    "PhD Candidate",
+    "Postdoctoral Researcher",
+    "Principal Investigator",
+    "Research Associate",
+    "Researcher",
+    "Scientist",
+    "Technician",
 ]

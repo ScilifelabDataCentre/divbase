@@ -85,20 +85,35 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="organisation_role" class="form-label">Role at Organisation</label>
+                        <label for="role_dropdown" class="form-label">Role at Organisation</label>
                         <div class="input-group">
                             <span class="input-group-text">
                                 <i class="bi bi-briefcase"></i>
                             </span>
+                            <select class="form-select" id="role_dropdown" name="role" required>
+                                <option value=""  disabled {% if not role %}selected{% endif %}>Select a role...</option>
+                                <option value="Other" {% if role == 'Other' %}selected{% endif %}>Other</option>
+                                {% for job_role in known_job_roles %}
+                                    <option value="{{ job_role }}" {% if role == job_role %}selected{% endif %}>{{ job_role }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <small class="text-muted">Please select "Other" if your role is not listed.</small>
+                    </div>
+                    {# This is only displayed if the "Other" option is selected in the role dropdown #}
+                    <div class="mb-3" id="role_other_div" style="display: none;">
+                        <label for="role_other" class="form-label">Your Role</label>
+                        <div class="input-group">
+                             <span class="input-group-text">
+                                <i class="bi bi-building-add"></i>
+                            </span>
                             <input type="text"
                                 class="form-control"
-                                id="organisation_role"
-                                name="organisation_role"
-                                placeholder="e.g. PhD Student, Researcher"
-                                value="{{ organisation_role or '' }}"
-                                minlength="3"
-                                maxlength="100"
-                                required>
+                                id="role_other"
+                                name="role_other"
+                                value="{{ role_other or '' }}"
+                                pattern=".{3,100}"
+                                title="Role must be between 3 and 100 characters long.">
                         </div>
                         <small class="text-muted">Enter your role at your organisation (3-100 characters).</small>
                     </div>

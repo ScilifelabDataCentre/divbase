@@ -10,7 +10,7 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
-from divbase_api.api_constants import SWEDISH_UNIVERSITIES
+from divbase_api.api_constants import KNOWN_JOB_ROLES, SWEDISH_UNIVERSITIES
 from divbase_api.crud.auth import (
     authenticate_user,
     check_user_email_verified,
@@ -19,7 +19,7 @@ from divbase_api.crud.auth import (
     update_user_password,
 )
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_password_reset_token, token_is_revoked
-from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise
+from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise, resolve_dropdown_form_input
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.exceptions import AuthenticationError
@@ -132,7 +132,11 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register.html",
-        context={"current_user": None, "swedish_universities": SWEDISH_UNIVERSITIES},
+        context={
+            "current_user": None,
+            "swedish_universities": SWEDISH_UNIVERSITIES,
+            "known_job_roles": KNOWN_JOB_ROLES,
+        },
     )
 
 
@@ -144,7 +148,8 @@ async def post_register(
     email: str = Form(...),
     organisation: str = Form(...),
     organisation_other: str | None = Form(None),
-    organisation_role: str = Form(...),
+    role: str = Form(...),
+    role_other: str | None = Form(None),
     password: str = Form(...),
     confirm_password: str = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -162,16 +167,20 @@ async def post_register(
                 "email": email,
                 "organisation": organisation,
                 "organisation_other": organisation_other,
-                "organisation_role": organisation_role,
+                "role": role,
+                "role_other": role_other,
                 "swedish_universities": SWEDISH_UNIVERSITIES,
+                "known_job_roles": KNOWN_JOB_ROLES,
             },
         )
 
-    if organisation == "Other":
-        if not organisation_other or len(organisation_other.strip()) < 3:
-            return registration_failed_response("Please specify your organisation")
-        else:
-            organisation = organisation_other.strip()
+    resolved_organisation = resolve_dropdown_form_input(dropdown_value=organisation, other_value=organisation_other)
+    if not resolved_organisation:
+        return registration_failed_response("Please specify your organisation, it must be at least 3 characters long.")
+
+    resolved_role = resolve_dropdown_form_input(dropdown_value=role, other_value=role_other)
+    if not resolved_role:
+        return registration_failed_response("Please specify your role, it must be at least 3 characters long.")
 
     existing_user = await get_user_by_email(db=db, email=email.strip())
     if existing_user:  # Not recommended to specify why failed, just say failed.
@@ -182,8 +191,8 @@ async def post_register(
         user_data = UserCreate(
             name=name.strip(),
             email=email.strip(),
-            organisation=organisation.strip(),
-            organisation_role=organisation_role.strip(),
+            organisation=resolved_organisation.strip(),
+            organisation_role=resolved_role.strip(),
             confirm_password=SecretStr(confirm_password),
             password=SecretStr(password),
         )
