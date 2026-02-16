@@ -83,13 +83,21 @@ async def global_exception_handler(request: Request, exc: Exception):
     Handle unexpected exceptions globally. - in the ideal world this is never be triggered
     """
     logger.error(f"Unexpected Error occurred for: {request.method} {request.url.path}: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "An unexpected error occurred. Please try again later.",
-            "type": "server_error",
-        },
-    )
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "detail": "An unexpected error occurred. Please try again later.",
+                "type": "server_error",
+            },
+        )
+    else:
+        return await render_error_page(
+            request,
+            "An unexpected error occurred. Please try again later.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 async def authentication_error_handler(request: Request, exc: AuthenticationError):
