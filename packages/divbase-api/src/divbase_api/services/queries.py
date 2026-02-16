@@ -736,8 +736,6 @@ class SidecarQueryManager:
                     "Sample_ID must contain only one value per row (semicolons are not allowed)."
                 )
 
-            self._validate_no_commas_in_data()
-
         except (
             SidecarSampleIDError,
             SidecarColumnNotFoundError,
@@ -783,20 +781,6 @@ class SidecarQueryManager:
             raise SidecarMetadataFormatError(
                 f"Duplicate column names found: {duplicate_columns}. Each column name must be unique in the metadata file."
             )
-
-    def _validate_no_commas_in_data(self) -> None:
-        """
-        Validate that no cells in the entire DataFrame contain commas.
-        Matches the client-side validator's comma check.
-        """
-        for col in self.df.columns:
-            for row_index, cell_value in enumerate(self.df[col].dropna()):
-                cell_str = str(cell_value).strip()
-                if cell_str and "," in cell_str:
-                    raise SidecarMetadataFormatError(
-                        f"Column '{col}' contains commas in value '{cell_str}' at row {row_index + 1}. "
-                        f"Commas are not allowed in DivBase metadata files. Use semicolons (;) to separate multiple values."
-                    )
 
     def get_unique_values(self, column: str) -> list:
         """
@@ -894,42 +878,40 @@ class SidecarQueryManager:
                 # 1. Warn if the column has mixed types (some values look numeric) and that the column will be treat as string type.
                 # 2. Warn if the filter uses numeric syntax on this string column. Do not raise error.
                 if not is_numeric and not is_semicolon_numeric:
-                    is_mixed = self._is_mixed_type_column(key)
+                    is_mixed, example_values, total_count = self._is_mixed_type_column(key)
 
                     problematic_filter_values = self._detect_numeric_filter_syntax_on_string_column(
                         key, filter_string_values
                     )
 
-                    comparison_operator_message = (
-                        f"DivBase comparison operators (>, <, >=, <=) only work on numeric columns. "
-                        f"Use exact string matching instead (e.g., '{key}:value1,value2')."
-                    )
-                    if is_mixed and problematic_filter_values:
-                        warning_msg = (
-                            f"Column '{key}' has mixed types (both numeric-looking and non-numeric values) "
-                            f"and is treated as a string column. A column is only numeric if all values "
-                            f"(including each part in semicolon-separated cells) are valid numbers. "
-                            f"Your filter contains comparison operators {problematic_filter_values} which are not "
-                            f"supported on string columns. "
-                            f"{comparison_operator_message}"
-                        )
-                        logger.warning(warning_msg)
-                        self.warnings.append(warning_msg)
-                    elif problematic_filter_values:
-                        warning_msg = (
-                            f"Column '{key}' is a string column but your filter contains comparison operators "
-                            f"{problematic_filter_values} which are not supported on string columns. "
-                            f"{comparison_operator_message}"
-                        )
-                        logger.warning(warning_msg)
-                        self.warnings.append(warning_msg)
-                    elif is_mixed:
-                        warning_msg = (
-                            f"Column '{key}' has mixed types (both numeric-looking and non-numeric values) "
-                            f"and is treated as a string column. A column is only numeric if all values "
-                            f"(including each part in semicolon-separated cells) are valid numbers. "
-                            f"Comparison operators (>, <, >=, <=) are not available for this column."
-                        )
+                    # Build warning message for string columns with possible issues. Multiple warnings are presented with indended hyphen
+                    if is_mixed or problematic_filter_values:
+                        warning_lines = [f"Column '{key}':"]
+                        if is_mixed:
+                            warning_lines.append(
+                                "      - Contains mixed types (e.g., numeric-looking values mixed with non-numeric values, or special characters like commas (,) or hyphens (-), or Range notation such as '1-2')."
+                            )
+                            if total_count > 0:
+                                examples_str = ", ".join(f"'{v}'" for v in example_values)
+                                warning_lines.append(
+                                    f"        Found {total_count} cell(s) with problematic values. Showing up to three of those values as an example: {examples_str}"
+                                )
+
+                            warning_lines.append("        This column will be treated as a string column.")
+                            warning_lines.append(
+                                "        To store multiple numeric values, use semicolon-separated values (;) instead."
+                            )
+                        if problematic_filter_values:
+                            warning_lines.append(
+                                f"      - Your filter contains comparison operators {problematic_filter_values}, which are not supported on string columns."
+                            )
+                            warning_lines.append(
+                                "        DivBase comparison operators (>, <, >=, <=) only work on numeric columns."
+                            )
+                            warning_lines.append(
+                                f"        Use exact string matching instead (e.g., '{key}:value1,value2')."
+                            )
+                        warning_msg = "\n".join(warning_lines)
                         logger.warning(warning_msg)
                         self.warnings.append(warning_msg)
 
@@ -1002,7 +984,6 @@ class SidecarQueryManager:
                     # Non-numeric column: handle as discrete string values
                     # Supports NOT operator with ! prefix: e.g., "Area:!North" or "Area:North,!South"
                     filter_string_values_list = filter_string_values.split(",")
-                    self._validate_no_commas_in_column(key)
 
                     positive_values, negated_values = self._separate_positive_and_negated_values(
                         filter_values=filter_string_values_list
@@ -1060,19 +1041,6 @@ class SidecarQueryManager:
 
         return self
 
-    def _validate_no_commas_in_column(self, key: str) -> None:
-        """
-        Helper method to validate that column values in the imported TSV does not contain commas.
-        Raises SidecarInvalidFilterError if any comma is found in the column values.
-        """
-        for row_index, cell_value in enumerate(self.df[key].dropna()):
-            cell_str = str(cell_value).strip()
-            if cell_str and "," in cell_str:
-                raise SidecarInvalidFilterError(
-                    f"Column '{key}' contains commas in value '{cell_str}' at row {row_index}. "
-                    f"Commas are not allowed in DivBase metadata files. Use semicolons (;) to separate multiple values."
-                )
-
     def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
         """
         Helper method to detect if a column contains semicolon-separated numeric values.
@@ -1099,8 +1067,6 @@ class SidecarQueryManager:
         if len(non_null_values) == 0:
             return False
 
-        self._validate_no_commas_in_column(key)
-
         for cell_value in non_null_values:
             cell_str = str(cell_value).strip()
             if not cell_str:
@@ -1121,48 +1087,62 @@ class SidecarQueryManager:
 
         return True
 
-    def _is_mixed_type_column(self, key: str) -> bool:
+    def _is_mixed_type_column(self, key: str) -> tuple[bool, list[str], int]:
         """
-        Helper method to detect if a non-numeric column contains a mix of numeric-looking
-        and non-numeric values (e.g., Population_code with "8", "1a", "5a").
+        Helper method to detect if a non-numeric column has mixed types.
+
+        A column is considered mixed-type if it contains:
+        1. Both numeric-looking and non-numeric values (e.g., "8", "1a", "5a")
+        2. Special characters that suggest non-numeric use (commas, hyphens in non-negative-number contexts)
 
         This is called only for columns where pandas infers object dtype AND
-        _is_semicolon_separated_numeric_column returned False. It determines whether
-        the column has SOME numeric-looking values (mixed) vs. being purely string.
+        _is_semicolon_separated_numeric_column returned False.
 
-        This is used to provide a targeted warning to the user at query time:
-        the validator warns about mixed types at validation time, but users may
-        skip validation or the column may be intentionally mixed.
+        Returns a tuple of (is_mixed, example_values, total_count) where:
+        - is_mixed: True if the column should be treated as mixed-type (and thus string)
+        - example_values: A list of up to 3 example cell values that demonstrate the mixed types Limited to 3 for brevity. The CLI divbase-cli dimensions validate-metadata-file can be used to show all of them.
+        - total_count: Total number of cells with mixed types or special characters
         """
         if key not in self.df.columns:
-            return False
+            return False, [], 0
 
         non_null_values = self.df[key].dropna()
         if len(non_null_values) == 0:
-            return False
+            return False, [], 0
 
         has_numeric = False
         has_non_numeric = False
+        example_values = []
+        total_problematic_count = 0
 
         for cell_value in non_null_values:
             cell_str = str(cell_value).strip()
             if not cell_str:
                 continue
+
+            cell_has_numeric = False
+            cell_has_non_numeric = False
+
             parts = cell_str.split(";")
             for part in parts:
                 part = part.strip()
                 if not part:
                     continue
+
                 try:
                     float(part)
+                    cell_has_numeric = True
                     has_numeric = True
                 except ValueError:
+                    cell_has_non_numeric = True
                     has_non_numeric = True
 
-                if has_numeric and has_non_numeric:
-                    return True
+            if (cell_has_numeric and cell_has_non_numeric) or ("," in cell_str or "-" in cell_str):
+                total_problematic_count += 1
+                if cell_str not in example_values and len(example_values) < 3:
+                    example_values.append(cell_str)
 
-        return False
+        return (has_numeric and has_non_numeric), example_values, total_problematic_count
 
     def _detect_numeric_filter_syntax_on_string_column(self, key: str, filter_string_values: str) -> list[str]:
         """

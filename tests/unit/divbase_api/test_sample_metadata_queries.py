@@ -956,25 +956,27 @@ class TestLoadFileValidation:
     This ensures that even if a user skips the CLI validator, the server-side
     query engine catches the same formatting issues with clear error messages."""
 
-    def test_commas_in_data_raises_at_tsv_load(self, tmp_path):
-        """Test that commas in any cell value raises SidecarMetadataFormatError during load_file()."""
-        tsv_content = "#Sample_ID\tArea\tWeight\nS1\tNorth,South\t12.5\nS2\tEast\t18.0\n"
+    def test_commas_in_mixed_numeric_column_detected_during_query(self, tmp_path):
+        """Test that commas in a column with mixed numeric and non-numeric values trigger mixed-type warning."""
+        tsv_content = "#Sample_ID\tPopulation\tWeight\nS1\t1,2\t12.5\nS2\t5\t18.0\n"
         tsv_file = tmp_path / "commas.tsv"
         tsv_file.write_text(tsv_content)
 
-        with pytest.raises(SidecarMetadataFormatError) as excinfo:
-            SidecarQueryManager(file=tsv_file)
-        assert "commas" in str(excinfo.value).lower()
+        manager = SidecarQueryManager(file=tsv_file)
+        assert len(manager.warnings) == 0
+        result = manager.run_query("Population:1,2")
+        assert any("mixed types" in w.lower() for w in result.warnings)
 
-    def test_commas_in_non_queried_column_raises_at_tsv_load(self, tmp_path):
-        """Test that commas are caught in all columns when the tsv is loaded, not just the column being queried."""
-        tsv_content = "#Sample_ID\tArea\tBadCol\nS1\tNorth\thas,comma\nS2\tEast\tclean\n"
-        tsv_file = tmp_path / "commas_other_col.tsv"
+    def test_commas_in_pure_string_column_no_warning(self, tmp_path):
+        """Test that commas in a pure string column don't trigger mixed-type warnings."""
+        tsv_content = "#Sample_ID\tCode\nS1\t1,2\nS2\t3,4\nS3\t5,6\n"
+        tsv_file = tmp_path / "commas.tsv"
         tsv_file.write_text(tsv_content)
 
-        with pytest.raises(SidecarMetadataFormatError) as excinfo:
-            SidecarQueryManager(file=tsv_file)
-        assert "commas" in str(excinfo.value).lower()
+        manager = SidecarQueryManager(file=tsv_file)
+        result = manager.run_query("Code:1,2")
+
+        assert not any("mixed types" in w.lower() for w in result.warnings)
 
     def test_duplicate_column_names_raises(self, tmp_path):
         """Test that duplicate column names raise SidecarMetadataFormatError during load_file().

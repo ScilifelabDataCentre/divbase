@@ -12,8 +12,6 @@ from pathlib import Path
 class MetadataTSVValidator:
     """Validates sidecar metadata TSV files against DivBase requirements."""
 
-    FORBIDDEN_CHARS = [","]
-
     def __init__(self, file_path: Path, project_samples: list[str] | set[str]):
         """
         Initialize the validator. File path is the path to the TSV file to validate,
@@ -132,10 +130,6 @@ class MetadataTSVValidator:
     def _validate_cell(self, row_num: int, col_idx: int, col_name: str, cell: str) -> None:
         """Validate an individual cell."""
 
-        for char in self.FORBIDDEN_CHARS:
-            if char in cell:
-                self.errors.append(f"Row {row_num}, Column '{col_name}': Cell contains forbidden character '{char}'")
-
         if cell != cell.strip():
             self.warnings.append(
                 f"Row {row_num}, Column '{col_name}': Cell has leading or trailing whitespace "
@@ -174,22 +168,6 @@ class MetadataTSVValidator:
                 cell_has_string = True
                 column_types[col_idx].add("string")
 
-                # Check for hyphens in non-numeric values that might indicate range notation.
-                # Negative numbers should already have been classified as numeric with the float() check.
-                # This is a warning to help users who may have used range notation (e.g., "1-2") instead of
-                # semicolons (e.g., "1;2") in their data values.
-                if (
-                    "-" in value
-                    and any(c.isdigit() for c in value)
-                    and ("numeric" in column_types[col_idx] or all(t == "numeric" for t in column_types[col_idx] if t))
-                ):
-                    self.warnings.append(
-                        f"Row {row_num}, Column '{col_name}': Value '{value}' contains a hyphen. "
-                        f"This appears to be range notation (e.g., '1-2'), which is not allowed in data values. "
-                        f"If this is meant to be a numeric multi-value column, use semicolons to separate values (e.g., '1;2'). "
-                        f"This column will be treated as a string column."
-                    )
-
         # Check for mixed types within the same cell (e.g., "1;abc") and warn the user if applicable
         if cell_has_numeric and cell_has_string:
             self.warnings.append(
@@ -215,10 +193,12 @@ class MetadataTSVValidator:
 
         if mixed_columns:
             self.warnings.append(
-                f"The following columns contain mixed types (both numeric-looking and string values): {mixed_columns}. "
+                "Clarification on mixed types columns: "
                 "A column is only numeric if all values (including each part in semicolon-separated cells) are valid numbers. "
-                "These columns will be treated as string columns by DivBase. Numeric query operations "
-                "(ranges, inequalities) will not be applicable to these columns."
+                "Special characters like commas or hyphens in numeric-looking values, or Range notation (e.g., '1-2'), also cause DivBase to treat the column as string. "
+                "Use semicolons (;) to separate multiple numeric values. "
+                "These columns will be treated as string columns by DivBase. "
+                "Numeric query operations (ranges, inequalities) will not be applicable to these columns."
             )
 
     def _validate_sample_names(self, tsv_samples: set[str]) -> None:

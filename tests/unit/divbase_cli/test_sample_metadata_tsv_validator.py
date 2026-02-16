@@ -189,10 +189,13 @@ class TestFormattingValidation:
         assert any("Expected 3 tab-separated columns" in e and "found 2" in e for e in errors)
 
     def test_comma_in_cell(self, format_errors_tsv, project_samples):
-        """Test that commas in cells are detected."""
+        """Test that commas in cells generate warnings (not errors) and cause column to be treated as string."""
         stats, errors, warnings = MetadataTSVValidator.validate(format_errors_tsv, project_samples)
 
-        assert any("forbidden character ','" in e for e in errors)
+        assert any("comma" in w.lower() for w in warnings)
+        assert not any("comma" in e.lower() for e in errors)
+
+        assert "Population" in stats["mixed_type_columns"] or "Population" in stats["string_columns"]
 
     def test_whitespace_warning(self, format_errors_tsv, project_samples):
         """Test that leading/trailing whitespace generate warnings."""
@@ -226,8 +229,8 @@ class TestTypeValidation:
         """Test that hyphens in values that look like range notation produce a warning (not error)."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, project_samples)
 
-        assert any("hyphen" in w.lower() and "3-5" in w for w in warnings)
-        assert not any("hyphen" in e.lower() and "3-5" in e for e in errors)
+        assert any("hyphen" in w.lower() for w in warnings)
+        assert not any("hyphen" in e.lower() for e in errors)
 
     def test_cell_and_column_level_mixed_types_are_warnings(self, type_errors_tsv, project_samples):
         """Test that when a column has both cell-level and column-level mixed types, both produce warnings (not errors)."""

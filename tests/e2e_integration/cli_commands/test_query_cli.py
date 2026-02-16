@@ -566,7 +566,8 @@ class TestSidecarQueryTaskErrorsPropagation:
         tmp_path,
     ):
         """
-        Test that SidecarMetadataFormatError is raised and propagated to terminal when TSV has commas in data.
+        Test that TSV files with commas generate warnings (not errors) and can still be queried.
+        Columns with commas are treated as string columns.
         """
         project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
         bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -578,18 +579,16 @@ class TestSidecarQueryTaskErrorsPropagation:
         )
 
         tsv_file = tmp_path / "test_comma_in_data.tsv"
-        tsv_file.write_text("Sample_ID\tArea\nS1\tNorth,West\nS2\tSouth\n")
+        tsv_file.write_text("Sample_ID\tPopulation\nS1\t1,2\nS2\t3\n")
         command = f"files upload {tsv_file} --project {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
 
-        command = f'query tsv "Area:North" --metadata-tsv-name {tsv_file.name} --project {project_name}'
+        command = f'query tsv "Population:2" --metadata-tsv-name {tsv_file.name} --project {project_name}'
         cli_result = runner.invoke(app, command)
 
-        assert (
-            "Column 'Area' contains commas in value 'North,West' at row 1. Commas are not allowed in DivBase metadata files."
-            in str(cli_result.exception)
-        ), "Expected error message about comma in metadata value"
+        assert cli_result.exit_code == 0, f"Query should succeed with comma warning. Output: {cli_result.output}"
+        assert "comma" in cli_result.output.lower(), "Expected warning message about comma in metadata value"
 
 
 @pytest.mark.integration
