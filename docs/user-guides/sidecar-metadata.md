@@ -38,18 +38,16 @@ If the dimensions VCF files in the project have been cached in DivBase, a templa
 divbase-cli dimensions create-metadata-template
 ```
 
-Note! there can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag.
-
-TODO - give more example of how and when it can be relevant to have multiple tsv files. they can have sample subsets
+Note! there can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag. If not specified, it the default `sample_metadata.tsv` will be assumed. It is up to the user if the want to have multiple TSVs in the same project to organise their metadata in a specific way. It is allowed to have duplicate sample names and metadata across multiple TSV files, since only one TSV can be called per query. It is recommended to a have a master TSV that contains all samples from all the VCFs in the project: querying on TSVs that contain subsets of all sample names is possible, but will sample names not included in the TSV used for the query will be disregarded for the query.
 
 ### Sidecar TSV format requirements
 
-TODO - write a section on how there is no fixed schema but some mandatory requirements
+To be able to accomodate a variety of metadata needs, DivBase does not enforace a strict schema for the sidecar sample metadata TSV file since the file are designed to contain user-defined columns. Instead, there are a few mandatory requirements and some best-practices for defining columns.
 
 #### Mandatory content
 
 1. The first row must be a header row and the first column must be named `Sample_ID`.
-2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. One entry per sample name; duplicates are not allowed. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
+2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. Sample names need to occur uniqely in the TSV: only one row per sample name in the `Sample_ID` column, no duplicates allowed. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
 3. The `Sample_ID` column can only contain one sample name per row. This is different from the user-defined columns that can take arrays of values for each cell in a column using semicolons (;) as delimters. `Sample_ID` values can also not be empty.
 
 4. Every column need to be tab separated for all rows.
@@ -68,8 +66,6 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operators (see details in [Filtering on numerical columns](#filtering-on-numerical-columns)) and will raise warnings. For example, values like "1-2" or "1,2" will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use semicolons (e.g., "1;2"). For decimals, use English decimal notation with a period (e.g., "3.14") and not a comma.
 4. The only characters with special structural meaning in the TSV format are `#` (for header comments), `;` (for multi-value cell separation), and `\t` (tab, for column separation). Other special characters are generally supported in data values, but be aware that Your Mileage May Vary. Some common cases that have been tested and are supported include diacritic unicode characters like `å`, `ä`, `ö`, and hyphens in string contexts (e.g., `North-West`).
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: " Sample 1 " will be processed as "Sample 1".
-
-TODO - add info on No duplicate column names, no empty column names
 
 #### Example
 
