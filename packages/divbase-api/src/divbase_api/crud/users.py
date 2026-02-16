@@ -58,7 +58,7 @@ async def create_user(
             internal_logging_message=f"Attempt made to register new account with existing email: {proposed_email}"
         )
 
-    user_dict = user_data.model_dump(exclude={"password"})
+    user_dict = user_data.model_dump(exclude={"password", "confirm_password"})
     hashed_password = get_password_hash(user_data.password)
 
     user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin, email_verified=email_verified)

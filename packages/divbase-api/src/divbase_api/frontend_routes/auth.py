@@ -167,9 +167,6 @@ async def post_register(
             },
         )
 
-    if password != confirm_password:
-        return registration_failed_response("Passwords do not match")
-
     if organisation == "Other":
         if not organisation_other or len(organisation_other.strip()) < 3:
             return registration_failed_response("Please specify your organisation")
@@ -178,6 +175,7 @@ async def post_register(
 
     existing_user = await get_user_by_email(db=db, email=email.strip())
     if existing_user:  # Not recommended to specify why failed, just say failed.
+        logger.warning(f"Attempt to register new account with already registered email: {email}")
         return registration_failed_response("Registration failed, please try again.")
 
     try:
@@ -186,15 +184,24 @@ async def post_register(
             email=email.strip(),
             organisation=organisation.strip(),
             organisation_role=organisation_role.strip(),
+            confirm_password=SecretStr(confirm_password),
             password=SecretStr(password),
         )
         user = await create_user(db=db, user_data=user_data, is_admin=False)
+    except ValidationError as e:
+        error_msg = " ".join(err["msg"] for err in e.errors())
+        # We warn about this because the frontend should have prevented it.
+        # so if we get validation errors here it could be because:
+        # Some mismatch in backend vs frontend validation logic or
+        # someone bypassing client side validation (could be accidently or intentionally).
+        # Don't think it is a good idea to return the validation error messages to the user as it could leak info.
+        logger.warning(f"User registration failed backend validation for email: {email} - {error_msg}")
+        return registration_failed_response("Registration failed, please try again.")
     except Exception as e:
-        logger.error(f"Error creating user: {e}")
+        logger.error(f"Unexpected error during user registration for email: {email} - {str(e)}")
         return registration_failed_response("Registration failed, please try again.")
 
     background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
-
     logger.info(f"New user registered: {user_data.email=}")
     return templates.TemplateResponse(
         request=request,

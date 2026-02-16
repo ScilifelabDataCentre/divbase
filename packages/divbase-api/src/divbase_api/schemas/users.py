@@ -6,6 +6,7 @@ TODOs:
 """
 
 from datetime import datetime
+from typing import Self
 
 from pydantic import (
     BaseModel,
@@ -16,7 +17,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 
 
 class UserBase(BaseModel):
@@ -33,8 +33,19 @@ class UserBase(BaseModel):
         return v.lower() if v else v
 
 
-class UserCreate(UserBase):
-    password: SecretStr = Field(..., min_length=8, max_length=100)
+class UserPasswordBase(BaseModel):
+    password: SecretStr = Field(..., min_length=10, max_length=100)
+    confirm_password: SecretStr = Field(..., min_length=10, max_length=100)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> Self:
+        if self.password.get_secret_value() != self.confirm_password.get_secret_value():
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class UserCreate(UserBase, UserPasswordBase):
+    """Schema for creating a new user."""
 
 
 class UserUpdate(BaseModel):
@@ -45,24 +56,8 @@ class UserUpdate(BaseModel):
     organisation_role: str = Field(..., min_length=3, max_length=100)
 
 
-class UserPasswordUpdate(BaseModel):
+class UserPasswordUpdate(UserPasswordBase):
     """Schema for a user to update their own password."""
-
-    password: SecretStr
-    confirm_password: SecretStr
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v):
-        if len(v.get_secret_value()) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        return v
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> Self:
-        if self.password.get_secret_value() != self.confirm_password.get_secret_value():
-            raise ValueError("Passwords do not match")
-        return self
 
 
 class UserResponse(UserBase):
