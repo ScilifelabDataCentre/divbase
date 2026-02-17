@@ -760,11 +760,11 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
                 logger.error(
                     f"VCF file '{file_name}' version mismatch: indexed={indexed_version}, bucket={bucket_version}"
                 )
-    unindex_or_outdated_files = sorted(set(unindexed_files) | set(outdated_files))
+    unindexed_or_outdated_files = sorted(set(unindexed_files) | set(outdated_files))
 
-    if unindex_or_outdated_files:
+    if unindexed_or_outdated_files:
         raise DimensionsNotUpToDateWithBucketError(
-            f"The following VCF files or file versions in the project are not part of the project's VCF dimensions: '{', '.join(unindex_or_outdated_files)}'. "
+            f"The following VCF files or file versions in the project are not part of the project's VCF dimensions: '{', '.join(unindexed_or_outdated_files)}'. "
             "\nPlease run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
         )
 
