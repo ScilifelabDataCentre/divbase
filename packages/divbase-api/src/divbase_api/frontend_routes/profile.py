@@ -111,6 +111,7 @@ async def post_edit_user_profile_endpoint(
                 "request": request,
                 "current_user": current_user,
                 "swedish_universities": SWEDISH_UNIVERSITIES,
+                "known_job_roles": KNOWN_JOB_ROLES,
                 "name": name,
                 "organisation": organisation,
                 "organisation_other": organisation_other,

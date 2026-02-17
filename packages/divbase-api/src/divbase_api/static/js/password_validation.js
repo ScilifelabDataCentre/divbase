@@ -4,11 +4,14 @@ Validates the user password for both registration and password reset:
 1. Checks that the password and confirm password fields match.
 2. Checks that the password is not one of the 10,000 most common passwords. 
 3. Min password length specified in HTML inputs 
+
+Will prevent form submission if issues. 
 */
 
 const passwordInput = document.getElementById('password');
 const confirmPasswordInput = document.getElementById('confirm_password');
-const registerForm = document.getElementById('registerForm');
+const form = document.getElementById("registerForm") || document.getElementById("resetPasswordForm");
+
 let commonPasswords = new Set();
 
 function validatePasswords() {
@@ -35,10 +38,10 @@ async function setupPasswordValidation() {
         passwordInput.addEventListener('input', validatePasswords);
         confirmPasswordInput.addEventListener('input', validatePasswords);
 
-        registerForm.addEventListener('submit', (event) => {
+        form.addEventListener('submit', (event) => {
             validatePasswords();
-            if (!registerForm.checkValidity()) {
-                event.preventDefault(); // Stop registration form submission
+            if (!form.checkValidity()) {
+                event.preventDefault(); // Stop form submission
             }
         });
 
