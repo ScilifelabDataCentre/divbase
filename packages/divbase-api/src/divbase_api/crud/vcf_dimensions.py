@@ -78,7 +78,7 @@ async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: in
 
     Get unique scaffold names across all VCF files for a project.
 
-    Like samples, scaffolds are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened with the unnest() PostgreSQL function.
+    Like samples, scaffolds are stored as ARRAY(String) in the VCFMetadataDB model and need to be flattened with the unnest() PostgreSQL function.
     """
 
     stmt = select(func.unnest(VCFMetadataDB.scaffolds)).where(VCFMetadataDB.project_id == project_id).distinct()

@@ -15,7 +15,7 @@ To be able to accomodate metadata needs for any research project that deals with
     divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
     ```
 
-This guide will describe how to [Create a sample metadata TSV](#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)), and [How to run queries on sample metadata TSV files](#query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](query-syntax.md).
+This guide contains sections on how to [Create a sample metadata TSV](#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](query-syntax.md).
 
 !!! Warning
     All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions index is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
@@ -43,7 +43,7 @@ divbase-cli dimensions create-metadata-template
 
 ### Sidecar TSV format requirements
 
-To be able to accomodate a variety of metadata needs, DivBase does not enforce a strict schema for the sidecar sample metadata TSV file since it is designed to contain user-defined columns. Instead, there are a few mandatory requirements and some best-practices for defining columns.
+To be able to accommodate a variety of metadata needs, DivBase does not enforce a strict schema for the sidecar sample metadata TSV file since it is designed to contain user-defined columns. Instead, there are a few mandatory requirements and some best-practices for defining columns.
 
 #### Mandatory content
 
@@ -129,7 +129,7 @@ This section describes how to query on the sample metadata file itself. The same
 
 ### Overview: querys are applied as filters on columns in the TSV
 
-Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user want to query on needs entered as a string (i.e. enclosed in quotes, `""`).
+Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user wants to query on need to be entered as a string (i.e. enclosed in quotes, `""`).
 
 The TSV query syntax is `"Key1:Value1,Value2;Key2:Value3,Value4"`, where `Key1:`...`Key2:` are the column header names in the TSV, and `Value1`...`Value4` are the values. Multiple filter values for a key are separated by commas, and multiple keys are separated by semicolons. There can be any number keys and values to filter on, but it is up to the user to write queries that return useful results.
 It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `"Key:!Value"`. When mixing inclusive and exclusive filters (e.g. `"Key1:Value1,Value2; Key2:!Value3"`), only the rows that match the positive filters and do not match any of the excluded values will be returned. This can be used to write complex queries.
@@ -151,7 +151,7 @@ Filtering is inclusive by default. This applies both for the filter values and t
 - If a cell in the TSV contains multiple values separated by a semicolon as explained in [User-defined columns](#user-defined-columns) (e.g., `North;West`), the row is included if any of those values match the filter. Filters with `"Area:North"`, `"Area:West"`, and `"Area:North,West"` will all return the row with the array value `North;West`.
 
 !!! note
-    To reiterate what was written in the [User-defined columns](#user-defined-columns) section above: it the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
+    To reiterate what was written in the [User-defined columns](#user-defined-columns) section above: it is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
 
 ### Filtering on string columns
 
@@ -216,7 +216,7 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 
 ### Query Warnings: spotting potential issues with the TSV or the query filter
 
-When running a sample metadata query in DivBase, the system will check the TSV and the query filter for the constraints and considerations described throughout this guide. If errors are encountered, the query will not run and a message with details on what went wrong will be return to the user. Warnings, however, will not stop not stop queries from running, but indicated that the user should carefully review the results.
+When running a sample metadata query in DivBase, the system will check the TSV and the query filter for the constraints and considerations described throughout this guide. If errors are encountered, the query will not run and a message with details on what went wrong will be return to the user. Warnings, however, will not stop queries from running, but indicate that the user should carefully review the results.
 
 Reviewing the Warnings to judge if they are relevant or not is essential to avoid unintended query results. The following are treated as Warnings by DivBase queries (and by the TSV validator).
 
