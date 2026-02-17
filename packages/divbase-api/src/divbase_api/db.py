@@ -110,6 +110,7 @@ async def create_first_admin_user() -> None:
             name="First Admin",
             email=admin_email,
             password=admin_password,
+            confirm_password=admin_password,
             organisation="DivBase University",
             organisation_role="Developer",
         )

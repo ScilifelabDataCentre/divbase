@@ -240,6 +240,7 @@ def create_users(token: str) -> dict[str, int]:
                 "organisation": user_data["organisation"],
                 "organisation_role": user_data["organisation_role"],
                 "password": user_data["password"],
+                "confirm_password": user_data["password"],
             },
             params={"email_verified": True},
         )

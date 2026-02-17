@@ -63,6 +63,12 @@ TEST_USERS = {
         "password": "badpassword",
         "organisation": "European Bioinformatics Institute",
         "organisation_role": "Research Assistant",
+    },  # users name, organisation and role can be changed in some tests
+    "profile_edit user": {
+        "email": "profile_edit_user@divbase.se",
+        "password": "badpassword",
+        "organisation": "Stockholm University",
+        "organisation_role": "Researcher",
     },
 }
 
@@ -225,6 +231,7 @@ def create_users(token: str) -> dict[str, int]:
                 "organisation": creds["organisation"],
                 "organisation_role": creds["organisation_role"],
                 "password": creds["password"],
+                "confirm_password": creds["password"],
             },
             params={"email_verified": True},
         )

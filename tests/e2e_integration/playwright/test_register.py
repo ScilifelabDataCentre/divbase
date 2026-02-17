@@ -26,7 +26,7 @@ EMAIL_NOT_VERIFIED_MESSAGE = "Email address not verified"
             "New Test User EMBL",
             "newuser@embl.de",
             "European Bioinformatics Institute (EMBL-EBI)",
-            "Developer",
+            "A job role not in the dropdown",
         ),
     ],
 )
@@ -41,8 +41,8 @@ def test_register_new_user_complete_flow(
     """
     Test complete user registration flow including email verification step.
 
-    We test creating a user from a Swedish university (in the organisation dropdown)
-    and a user from an organisation not in the dropdown to ensure both flows work correctly.
+    We test creating a user whose organisation and role are in the dropdowns AND
+    a user with an organisation and role not in the dropdowns (so they select "Other" and manully fill out there roles).
     """
     test_password = "badpassword"
     register_new_user(
@@ -90,7 +90,7 @@ def test_register_with_existing_email(page: Page, EXISTING_ACCOUNTS):
         email=existing_email,
         organisation="Uppsala University",
         role="Lecturer",
-        password="newpassword",
+        password="badpassword",
         expect_success=False,
     )
     expect(page.get_by_text(GENERIC_REGISTRATION_ERROR_MESSAGE)).to_be_visible()
