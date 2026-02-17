@@ -46,7 +46,7 @@ def example_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
 def sample_tsv_file(tmp_path: Path) -> Path:
     """Create a sample TSV file for testing."""
     data = {
-        "Sample_ID": ["S1", "S2", "S3", "S4", "S5"],
+        "#Sample_ID": ["S1", "S2", "S3", "S4", "S5"],
         "Population": ["Pop1", "Pop1", "Pop2", "Pop2", "Pop3"],
         "Sex": ["M", "F", "M", "F", "M"],
     }
@@ -126,7 +126,7 @@ def copy_fixtures_to_mock_download_from_bucket():
 @pytest.fixture
 def valid_tsv_path():
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp:
-        tmp.write("Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
+        tmp.write("#Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
         tmp_path = Path(tmp.name)
     yield tmp_path
     tmp_path.unlink()

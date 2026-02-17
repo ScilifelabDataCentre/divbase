@@ -29,6 +29,7 @@ from divbase_lib.exceptions import (
     SidecarNoDataLoadedError,
     SidecarSampleIDError,
 )
+from divbase_lib.metadata_validator import SharedMetadataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,18 @@ def run_sidecar_metadata_query(
     """
     Run a query on a sidecar metadata TSV file and map samples to VCF files.
 
-    Takes vcf_dimensions_data fetched by an API call in the task layer
+    Takes vcf_dimensions_data fetched by an API call in the task layer and extracts the unique sample names.
 
     """
+    project_samples = set()
+    if vcf_dimensions_data and vcf_dimensions_data.get("vcf_files"):
+        for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
+            sample_names = vcf_entry.get("samples", [])
+            project_samples.update(sample_names)
 
-    sidecar_manager = SidecarQueryManager(file=file).run_query(filter_string=filter_string)
+    sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
+        filter_string=filter_string
+    )
     query_message = sidecar_manager.query_message
     warnings = sidecar_manager.warnings
     unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
@@ -684,10 +692,12 @@ class SidecarQueryManager:
     TODO - some of the __init__ params are perhaps better as properties?
     """
 
-    def __init__(self, file: Path):
+    def __init__(self, file: Path, project_samples: set[str] | None = None):
         self.file = file
+        self.project_samples = project_samples
         self.filter_string = None
         self.df = None
+        self.metadata_validator = None
         self.query_result = None
         self.query_message: str = ""
         self.warnings: list[str] = []
@@ -698,7 +708,7 @@ class SidecarQueryManager:
         Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names.
 
-        Validates the same errors as the client-side MetadataTSVValidator:
+        Validates the same errors as the client-side MetadataTSVValidator using shared validation logic:
         - Header: first column must be #Sample_ID, no duplicate or empty column names
         - Sample_ID: no empty values, no duplicates, no semicolons
         - Data: no commas in any cell values
@@ -706,41 +716,66 @@ class SidecarQueryManager:
         try:
             logger.info(f"Loading sidecar metadata file: {self.file}")
 
-            # Read the raw header before loading with pandas to catch issues that pandas would silently fix, such as duplicate column names or empty column names.
-            self._read_and_validate_raw_header()
+            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side MetadataTSVValidator.
+            # There are several helper methods for the filtering logic in this class, but they are for the query filters and are not related to the validation of the TSV file contents.
+            self.metadata_validator = SharedMetadataValidator(
+                file_path=self.file,
+                project_samples=self.project_samples,
+                skip_dimensions_check=(self.project_samples is None),
+            )
+            result = self.metadata_validator.load_and_validate()
 
-            self.df = pd.read_csv(
-                self.file, sep="\t", skipinitialspace=True
-            )  # Pandas has Type Inference and will detect numeric and string columns automatically
-            self.df.columns = self.df.columns.str.lstrip("#")
+            if result.errors:
+                error_msg = result.errors[0]
+                # Note! The order of these errors matters.
+                if "Failed to read file" in error_msg:
+                    raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file")
+                elif "First column must be named '#Sample_ID'" in error_msg or (
+                    "Sample_ID" in error_msg and "column is required" in error_msg
+                ):
+                    raise SidecarColumnNotFoundError(
+                        "The 'Sample_ID' column is required in the metadata file."
+                        if "First column must be named '#Sample_ID'" in error_msg
+                        else error_msg
+                    )
+                elif ("Row" in error_msg and "Sample_ID is empty" in error_msg) or (
+                    "Sample_ID" in error_msg
+                    and (
+                        "contains semicolons" in error_msg
+                        or "Duplicate Sample_IDs" in error_msg
+                        or "contains empty or missing values" in error_msg
+                    )
+                ):
+                    raise SidecarSampleIDError(
+                        "Sample_ID column contains empty or missing values. All rows must have a valid Sample_ID."
+                        if "Row" in error_msg and "Sample_ID is empty" in error_msg
+                        else error_msg
+                    )
+                elif (
+                    "not found in the DivBase project's dimensions index" in error_msg
+                    or "Duplicate column names" in error_msg
+                    or "Empty column name" in error_msg
+                    or ("Row" in error_msg and ("Expected" in error_msg or "tab-separated" in error_msg))
+                    or "column" in error_msg.lower()
+                ):
+                    raise SidecarMetadataFormatError(error_msg)
+                else:
+                    raise SidecarMetadataFormatError(error_msg)
 
-            # Strip leading and trailing whitespace from all string columns
-            for col in self.df.columns:
-                self.df[col] = self.df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+            # Capture dimension-related warnings from the validator (e.g., samples in project but not in TSV)
+            # Other validation warnings (mixed types, commas, etc.) are for file quality and shown in CLI validation only
+            if result.warnings:
+                dimension_warnings = [w for w in result.warnings if "dimensions index" in w or "project" in w]
+                self.warnings.extend(dimension_warnings)
 
-            if "Sample_ID" not in self.df.columns:
-                raise SidecarColumnNotFoundError("The 'Sample_ID' column is required in the metadata file.")
-
-            if self.df["Sample_ID"].isna().any() or (self.df["Sample_ID"] == "").any():
-                raise SidecarSampleIDError(
-                    "Sample_ID column contains empty or missing values. All rows must have a valid Sample_ID."
-                )
-            if self.df["Sample_ID"].duplicated().any():
-                duplicates = self.df[self.df["Sample_ID"].duplicated()]["Sample_ID"].tolist()
-                raise SidecarSampleIDError(f"Duplicate Sample_IDs found: {duplicates}. Each Sample_ID must be unique.")
-
-            semicolon_samples = self.df[self.df["Sample_ID"].str.contains(";", na=False)]["Sample_ID"].tolist()
-            if semicolon_samples:
-                raise SidecarSampleIDError(
-                    f"Sample_ID column contains semicolons in values: {semicolon_samples}. "
-                    "Sample_ID must contain only one value per row (semicolons are not allowed)."
-                )
+            self.df = result.df
 
         except (
             SidecarSampleIDError,
             SidecarColumnNotFoundError,
             SidecarInvalidFilterError,
             SidecarMetadataFormatError,
+            SidecarNoDataLoadedError,
         ):
             # Let validation errors propagate directly to user with specific error messages
             raise
@@ -748,39 +783,6 @@ class SidecarQueryManager:
             # Only wrap unexpected errors (file I/O, pandas errors, etc.)
             raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
         return self
-
-    def _read_and_validate_raw_header(self) -> None:
-        """
-        Read the first line of the TSV file and validate column names. This is intended to be run
-        before pandas loads the file, to catch issues that pandas would silently fix. Pandas for instance
-        rename duplicate columns (e.g., "Area", "Area.1") and empty column names.
-        """
-        with open(self.file, "r", encoding="utf-8") as f:
-            first_line = f.readline().rstrip("\n\r")
-
-        raw_columns = first_line.split("\t")
-        cleaned_columns = [col.lstrip("#") for col in raw_columns]
-
-        empty_columns = [i + 1 for i, col in enumerate(cleaned_columns) if not col.strip()]
-        if empty_columns:
-            raise SidecarMetadataFormatError(
-                f"Empty column name(s) found at position(s): {empty_columns}. All columns must have a non-empty name."
-            )
-
-        seen = {}
-        duplicate_columns = []
-        for col in cleaned_columns:
-            col_stripped = col.strip()
-            if col_stripped in seen:
-                if col_stripped not in duplicate_columns:
-                    duplicate_columns.append(col_stripped)
-            else:
-                seen[col_stripped] = True
-
-        if duplicate_columns:
-            raise SidecarMetadataFormatError(
-                f"Duplicate column names found: {duplicate_columns}. Each column name must be unique in the metadata file."
-            )
 
     def get_unique_values(self, column: str) -> list:
         """
@@ -1043,53 +1045,18 @@ class SidecarQueryManager:
 
     def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
         """
-        Helper method to detect if a column contains semicolon-separated numeric values.
-        Pandas correctly infers type from single-value columns. But for columns with semicolon-separated values
-        (e.g.: "1;2;3"), it infers them as strings (object dtype). This is an issue since numeric operations
-        (inequalities, ranges) cannot be performed on string values.
+        Helper method for the filtering logic to detect if a column contains semicolon-separated numeric values.
 
-        This helper method checks ALL non-null values in the column to determine if they can be parsed as numeric
-        after splitting by semicolon. Note that it only detects if a column value is semicolon-separated numeric, it does not
-        convert the column to numeric type. The actual parsing and handling of the semicolon-separated numeric values is
-        done in the helper functions in the run_query() method.
-
-        Returns True if the column contains ONLY numeric values (with or without semicolons).
-        Returns False if the column contains ANY non-numeric values (treated as a regular string column).
-        Returns False if the column is empty.
-
-        This method does not raise errors for mixed types. Columns with a mix of numeric-looking and
-        non-numeric values (e.g., "8", "1a", "5a") are simply treated as string columns.
+        Uses the shared validation logic to ensure consistency with the TSV validator.
         """
         if key not in self.df.columns:
             return False
 
-        non_null_values = self.df[key].dropna()
-        if len(non_null_values) == 0:
-            return False
-
-        for cell_value in non_null_values:
-            cell_str = str(cell_value).strip()
-            if not cell_str:
-                continue
-
-            parts = cell_str.split(";")
-            for part in parts:
-                part = part.strip()
-                if not part:
-                    continue
-
-                try:
-                    float(part)
-                except ValueError:
-                    # Any non-numeric value means this column is not a numeric column.
-                    # It will be treated as a string column instead.
-                    return False
-
-        return True
+        return self.metadata_validator.is_semicolon_separated_numeric_column(self.df[key])
 
     def _is_mixed_type_column(self, key: str) -> tuple[bool, list[str], int]:
         """
-        Helper method to detect if a non-numeric column has mixed types.
+        Helper method for the filtering logic to detect if a non-numeric column has mixed types.
 
         A column is considered mixed-type if it contains:
         1. Both numeric-looking and non-numeric values (e.g., "8", "1a", "5a")
@@ -1146,7 +1113,7 @@ class SidecarQueryManager:
 
     def _detect_numeric_filter_syntax_on_string_column(self, key: str, filter_string_values: str) -> list[str]:
         """
-        Helper method to detect when a user's filter string contains inequality operators
+        Helper method for the filtering logic to detect when a user's filter string contains inequality operators
         (e.g. ">25", ">=10", "<North", "<=abc") on a column that is treated as string.
 
         Detects any use of inequality operators (>, <, >=, <=) as a prefix, regardless of whether the
@@ -1171,7 +1138,7 @@ class SidecarQueryManager:
 
     def _split_cell_values(self, cell_value: Any) -> list[str]:
         """
-        Helper method to split cell value by semicolon and return list of non-empty values.
+        Helper method for the filtering logic to split cell value by semicolon and return list of non-empty values.
         If the cell contains a single value without semicolon, it will return a list with that single value.
         If the cell is empty or NaN, it will return an empty list.
         """
@@ -1180,12 +1147,12 @@ class SidecarQueryManager:
         return [val.strip() for val in str(cell_value).split(";") if val.strip()]
 
     def _parse_numeric_value(self, value_str: str) -> float | int:
-        """Helper method to parse a string value to int or float. To be used when other checks have already confirmed that the value can be parsed as numeric."""
+        """Helper method for the filtering logic to parse a string value to int or float. To be used when other checks have already confirmed that the value can be parsed as numeric."""
         return float(value_str) if "." in value_str else int(value_str)
 
     def _create_inequality_condition(self, key: str, operator: str, threshold: float) -> pd.Series:
         """
-        Helper method to create a condition for inequality filtering on a column.
+        Helper method for the filtering logic to create a condition for inequality filtering on a column.
         Uses a named nested function instead of a lambda to improve readability to defined the
         logic that will be applied to the Pandas dataframe.
         """
@@ -1212,7 +1179,7 @@ class SidecarQueryManager:
 
     def _create_range_condition(self, key: str, min_val: float, max_val: float) -> pd.Series:
         """
-        Helper method to create a condition for range filtering on a column.
+        Helper method for the filtering logic to create a condition for range filtering on a column.
         Uses a named nested function instead of a lambda to improve readability to define the
         logic that will be applied to the Pandas dataframe.
         """
@@ -1234,7 +1201,7 @@ class SidecarQueryManager:
 
     def _create_discrete_numeric_condition(self, key: str, target_values: list[float | int]) -> pd.Series:
         """
-        Helper method to create a condition for discrete numeric value filtering on a column.
+        Helper method for the filtering logic to create a condition for discrete numeric value filtering on a column.
         Uses a named nested function instead of a lambda to improve readability to define the
         logic that will be applied to the Pandas dataframe.
         """
@@ -1256,7 +1223,7 @@ class SidecarQueryManager:
 
     def _create_string_condition(self, key: str, target_values: list[str]) -> pd.Series:
         """
-        Helper method to create a condition for string value filtering on a column.
+        Helper method for the filtering logic to create a condition for string value filtering on a column.
         Uses a named nested function instead of a lambda to improve readability to define the
         logic that will be applied to the Pandas dataframe.
         """
@@ -1271,7 +1238,7 @@ class SidecarQueryManager:
 
     def _combine_conditions_with_or(self, conditions: list[pd.Series]) -> pd.Series:
         """
-        Helper method to combine multiple Pandas boolean Series with OR logic.
+        Helper method for the filtering logic to combine multiple Pandas boolean Series with OR logic.
         Returns a single boolean Series that is True if any of the input conditions is True for each row.
 
         The resulting Series is used at the end of self.run_query() to filter the DataFrame values.
@@ -1292,7 +1259,7 @@ class SidecarQueryManager:
         key: str,
     ) -> list[pd.Series]:
         """
-        Helper method to build a list of conditions from inequality, range, and discrete value filters.
+        Helper method for the filtering logic to build a list of conditions from inequality, range, and discrete value filters.
         """
         conditions = []
 
@@ -1312,7 +1279,7 @@ class SidecarQueryManager:
         self, values_to_process: list[str], context: dict[str, str | bool]
     ) -> tuple[list[pd.Series], list[pd.Series], list[float | int]]:
         """
-        Helper method to identify if a numeric filter values is an inequality, range, or discrete value and process it accordingly.
+        Helper method for the filtering logic to identify if a numeric filter values is an inequality, range, or discrete value and process it accordingly.
 
         The context dict is intended to keep the kwargs manageable when passing positive and negative values back-to-back:
             - key: Column name being filtered
@@ -1374,7 +1341,7 @@ class SidecarQueryManager:
 
     def _separate_positive_and_negated_values(self, filter_values: list[str]) -> tuple[list[str], list[str]]:
         """
-        Helper method to separate filter values into positive and negated lists.
+        Helper method for the filtering logic to separate filter values into positive and negated lists.
         Values prefixed with '!' are negated (NOT conditions).
         """
         positive_values = []
@@ -1391,7 +1358,7 @@ class SidecarQueryManager:
 
     def _apply_not_conditions(self, base_condition: pd.Series | None, negated_conditions: list[pd.Series]) -> pd.Series:
         """
-        Helper method to apply NOT conditions to a base condition. The base condition contains positive filters combined with OR, or None if there were only negations
+        Helper method for the filtering logic to apply NOT conditions to a base condition. The base condition contains positive filters combined with OR, or None if there were only negations
         in the input filter string from the CLI. Returns a combined condition where rows must match base_condition AND NOT match any negated condition
         """
         if base_condition is None:

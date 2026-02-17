@@ -544,7 +544,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         )
 
         tsv_file = tmp_path / "test_duplicate_sample_ids.tsv"
-        tsv_file.write_text("Sample_ID\tArea\nS1\tNorth\nS1\tSouth\nS2\tEast\n")
+        tsv_file.write_text("#Sample_ID\tArea\nS1\tNorth\nS1\tSouth\n8_HOM-E59\tEast\n")
         command = f"files upload {tsv_file} --project {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
@@ -579,7 +579,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         )
 
         tsv_file = tmp_path / "test_comma_in_data.tsv"
-        tsv_file.write_text("Sample_ID\tPopulation\nS1\t1,2\nS2\t3\n")
+        tsv_file.write_text("#Sample_ID\tPopulation\n8_HOM-E57\t1,2\n8_HOM-E59\t3\n")
         command = f"files upload {tsv_file} --project {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0

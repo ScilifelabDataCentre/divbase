@@ -37,7 +37,7 @@ def test_run_query_invalid_filter_raises_custom_exception(create_sidecar_manager
     when an invalid filter format is provided."""
 
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp_valid_tsv:
-        tmp_valid_tsv.write("Sample_ID\tFilename\ncol1\tcol2\nA\t1\nB\t2\n")
+        tmp_valid_tsv.write("#Sample_ID\tFilename\ncol1\tcol2\nA\t1\nB\t2\n")
         tmp_path = Path(tmp_valid_tsv.name)
 
     manager = create_sidecar_manager(tmp_path)
