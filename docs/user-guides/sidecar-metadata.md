@@ -1,6 +1,6 @@
 # Sidecar Metadata TSV files: creating and querying sample metadata files
 
-DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project.
+DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project. The user can then send metadata queries to DivBase to find the samples that fulfil the the query, and which VCF files that the files are found in. Metadata queries can be run on their own (as is described in this guide), but can also be used for VCF queries to automate the checkout data related to specific samples from DivBase (described in the guide for [DivBase Query Syntax for VCF data](query-syntax.md)).
 
 While there are ways for sample metadata to be stored in the VCF itself (see [The Variant Call Format Specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf)), it is not really standardized. Metadata can for instance be specified instance in a global `##SAMPLE` header (once per sample) or in a custom per-variant genotype `FORMAT` field in each variant and sample. The downside of the former is that common tools like `bcftools view` do not filter on the headers; the downside of the latter is that writing the metadata once per variant will result in a lot of repeated data, which in turn leads to elevated file size and processing times as the VCF file scales.
 
@@ -68,6 +68,9 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 4. The only characters with special structural meaning in DivBase sidecar metadata TSV files are `#` (for header comments), `;` (for multi-value cell separation), and `\t` (tab, for column separation). Other special characters are generally supported in data values, but be aware that Your Mileage May Vary. Some common cases that have been tested and are supported include diacritic unicode characters like `å`, `ä`, `ö`, and hyphens in strings (e.g., `North-West`).
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: " Sample 1 " will be processed as "Sample 1".
 
+!!! Note
+    Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions indexing (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
+
 #### Example
 
 This example illustrates how a sidecar sample metadata TSV can look like. The mandatory requirement are fulfilled (heading with `#`, `Sample_ID` column, tab-separated file). The user-defined column contains examples of a numerical column (`Population`) and a string column (`Area`). In some cells, semicolons (`;`) are used to assign multiple values to the same sample and column.
@@ -83,6 +86,8 @@ S6 6 East 25.2
 S7 1;3;5 South 22.6
 S8 2 West 19.5
 ```
+
+For the sake of the demonstration later in this guide, let's assume that this TSV file have been uploaded to a DivBase project among with two VCF files where samples S1-S4 are found in 'file1.vcf.gz' and S5-S6 in 'file2.vcf.gz'. Let's also assume that the `divbase-cli dimensions update` has been run after all files have been uploaded so that the system has up-to-data information on which sample is found in which file.
 
 ### Validating a sidecar metadata TSV with `divbase-cli`
 
@@ -143,7 +148,30 @@ For example, if the user wants to query the TSV on column `Area` for all samples
 divbase-cli query tsv "Area:North"
 ```
 
-Please also see the documentation on [DivBase Query Syntax for VCF data](query-syntax.md) for more details on how that command works.
+If this this command is run on the TSV and VCF files used in the above [example](#example) the query would return the following results.
+
+```bash
+The results for the query (Area:North):
+Unique Sample IDs: ['S1', 'S5']
+Unique filenames: ['file1.vcf.gz', 'file2.vcf.gz']
+```
+
+This tells the user which samples that fullfil the query and which VCF files they need to use if they wanted to work with those two samples. The option ` --show-sample-results ` can be used to show the exact sample-to-VCF file mapping:
+
+```bash
+divbase-cli query tsv "Area:North" --show-sample-results
+```
+
+which, for the same example, would return:
+
+```bash
+Name and file for each sample in query results:
+Sample ID: 'S1', Filename: 'file1.vcf.gz'
+Sample ID: 'S5', Filename: 'file2.vcf.gz'
+The results for the query (Area:North):
+Unique Sample IDs: ['S1', 'S5']
+Unique filenames: ['file1.vcf.gz', 'file2.vcf.gz']
+```
 
 Filtering is inclusive by default. This applies both for the filter values and the cell values:
 
@@ -213,6 +241,12 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 
 !!! Tip
     Numeric operations such as inequalities like `>25`, and ranges like `20-40` are fully supported for semicolon-separated numeric columns as long as every semicolon separated part (`part;part`) in every cell in the column is a valid number. For instance: a `Population` column with values `1`, `2;4`, `1;3;5`; in this case a query like `divbase-cli query tsv "Population:>3"` will correctly match cells like `2;4` and `1;3;5`.
+
+### Filtering on Sample names
+
+The sidecar metadata filtering is designed to
+
+The `Sample_ID` column is a string column by design
 
 ### Query Warnings: spotting potential issues with the TSV or the query filter
 
