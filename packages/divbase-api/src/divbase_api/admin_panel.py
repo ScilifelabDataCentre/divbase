@@ -82,6 +82,8 @@ class UserView(ModelView):
         "id",
         StringField("name", required=True, help_text="Full name of the user."),
         EmailField("email", required=True, help_text="Email address of the user."),
+        StringField("organisation", required=True, help_text="Organisation of the user."),
+        StringField("organisation_role", required=True, help_text="Role of the user within their organisation."),
         StringField("password", required=True, help_text="Password for the user."),
         StringField(
             "hashed_password",
@@ -114,15 +116,32 @@ class UserView(ModelView):
         ),
     ]
 
-    exclude_fields_from_list = ["hashed_password", "password"]
+    exclude_fields_from_list = [
+        "hashed_password",
+        "password",
+        "organisation_role",
+        "date_deleted",
+        "last_password_change",
+        "created_at",
+        "updated_at",
+    ]
     exclude_fields_from_create = [
         "project_memberships",
         "is_deleted",
         "is_active",
         "last_password_change",
         "date_deleted",
-    ]  # hashed_password wont be defined yet but needs to be included.
-    exclude_fields_from_edit = ["project_memberships", "password", "hashed_password", "last_password_change"]
+        "created_at",
+        "updated_at",
+    ]
+    exclude_fields_from_edit = [
+        "project_memberships",
+        "password",
+        "hashed_password",  # hashed_password wont be defined yet but needs to be included here.
+        "last_password_change",
+        "created_at",
+        "updated_at",
+    ]
     exclude_fields_from_detail = ["hashed_password", "password"]
 
     def can_delete(self, request: Request) -> bool:

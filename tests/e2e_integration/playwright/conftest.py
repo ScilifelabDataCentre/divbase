@@ -7,6 +7,8 @@ import re
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page, expect
 
+from divbase_api.api_constants import KNOWN_JOB_ROLES, SWEDISH_UNIVERSITIES
+
 FRONTEND_BASE_URL = "http://localhost:8001"
 MAILPIT_BASE_URL = "http://localhost:8026"
 
@@ -33,13 +35,49 @@ def is_logged_in_as(page: Page, email: str) -> bool:
     return page.get_by_role("button", name=f"User menu for {email}").count() > 0
 
 
-def register_new_user(page: Page, name: str, email: str, password: str, expect_success: bool = True):
-    """Helper function to register a new user via the register page."""
+def register_new_user(
+    page: Page,
+    name: str,
+    email: str,
+    organisation: str,
+    role: str,
+    password: str,
+    expect_success: bool = True,
+):
+    """
+    Helper function to register a new user via the register page.
+
+    We provide a dropdown of Swedish universities, but also allow users to enter their own if not in the list.
+    This function handles both cases for all tests that need to perform a user registration.
+    """
+    # These display only if user selects "Other" in the dropdown
+    other_organisation_input = page.get_by_role("textbox", name="Your organisation")
+    other_role_input = page.get_by_role("textbox", name="Your role")
+    expect(other_organisation_input).to_be_hidden()
+    expect(other_role_input).to_be_hidden()
+
     navigate_to(page, "/register")
     expect(page).to_have_url(f"{FRONTEND_BASE_URL}/register")
 
     page.get_by_role("textbox", name="Full Name").fill(name)
     page.get_by_role("textbox", name="Email Address").fill(email)
+
+    if organisation in SWEDISH_UNIVERSITIES:
+        page.get_by_label("Organisation", exact=True).select_option(organisation)
+        expect(other_organisation_input).to_be_hidden()
+    else:
+        page.get_by_label("Organisation", exact=True).select_option("Other")
+        expect(other_organisation_input).to_be_visible()
+        other_organisation_input.fill(organisation)
+
+    if role in KNOWN_JOB_ROLES:
+        page.get_by_label("Role", exact=True).select_option(role)
+        expect(other_role_input).to_be_hidden()
+    else:
+        page.get_by_label("Role", exact=True).select_option("Other")
+        expect(other_role_input).to_be_visible()
+        other_role_input.fill(role)
+
     page.get_by_role("textbox", name="Password", exact=True).fill(password)
     page.get_by_role("textbox", name="Confirm Password").fill(password)
     page.get_by_role("button", name=" Create Account").click()
@@ -61,6 +99,7 @@ def EXISTING_ACCOUNTS(CONSTANTS):
         "MANAGE_USER": CONSTANTS["TEST_USERS"]["manage user"],
         "FORGOT_PASSWORD_USER": CONSTANTS["TEST_USERS"]["forgot_password user"],
         "PASSWORD_RESET_USER": CONSTANTS["TEST_USERS"]["password_reset user"],
+        "PROFILE_EDIT_USER": CONSTANTS["TEST_USERS"]["profile_edit user"],
     }
 
 
@@ -128,5 +167,13 @@ def logged_in_edit_page(browser: Browser, EXISTING_ACCOUNTS):
 def logged_in_read_page(browser: Browser, EXISTING_ACCOUNTS):
     """Logged in read user at home page."""
     page = _create_logged_in_user_page(browser, EXISTING_ACCOUNTS["READ_USER"])
+    yield page
+    page.close()
+
+
+@pytest.fixture
+def logged_in_edit_profile_user_page(browser: Browser, EXISTING_ACCOUNTS):
+    """Logged in edit profile user at home page."""
+    page = _create_logged_in_user_page(browser, EXISTING_ACCOUNTS["PROFILE_EDIT_USER"])
     yield page
     page.close()

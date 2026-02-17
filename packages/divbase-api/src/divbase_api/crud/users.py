@@ -58,7 +58,7 @@ async def create_user(
             internal_logging_message=f"Attempt made to register new account with existing email: {proposed_email}"
         )
 
-    user_dict = user_data.model_dump(exclude={"password"})
+    user_dict = user_data.model_dump(exclude={"password", "confirm_password"})
     hashed_password = get_password_hash(user_data.password)
 
     user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin, email_verified=email_verified)
@@ -119,3 +119,18 @@ async def update_user_profile(db: AsyncSession, user_data: UserUpdate, user_id: 
     await db.commit()
     await db.refresh(user)
     return user
+
+
+def resolve_dropdown_form_input(dropdown_value: str, other_value: str | None) -> str | None:
+    """
+    Helper to resolve "Other" fields in registration/profile update forms.
+    These fields have a dropdown with predefined options and an "Other" option that reveals a text input.
+    If "Other" selected, we take the value from the text input instead. If the text input is empty or too short, we return None to indicate an error (e.g. in the registration/profile update endpoint), otherwise we return the resolved value. If "Other" is not selected, we just return the original value.
+
+    If non-resolvable, returns None, so calling function can return an error response.
+    """
+    if dropdown_value != "Other":
+        return dropdown_value.strip()
+    if not other_value or len(other_value.strip()) < 3:
+        return None
+    return other_value.strip()
