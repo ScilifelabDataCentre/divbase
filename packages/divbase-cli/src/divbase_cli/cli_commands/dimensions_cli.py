@@ -276,7 +276,9 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
 
     if stats:
         print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
-        print(f"  Total columns: {stats.get('total_columns', 0)} ({stats.get('user_defined_columns', 0)} user-defined)")
+        print(
+            f"  Total columns: {stats.get('total_columns', 0)} ({stats.get('user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
+        )
 
         samples_in_tsv = stats.get("samples_in_tsv", 0)
         samples_matching = stats.get("samples_matching_project", 0)

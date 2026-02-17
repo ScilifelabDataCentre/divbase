@@ -194,11 +194,10 @@ class MetadataTSVValidator:
         if mixed_columns:
             self.warnings.append(
                 "Clarification on mixed types columns: "
+                "Columns are be treated as string by DivBase if it contain a mix of numeric and non-numeric values or numeric-looking values with extra characters (for example commas, hyphens, or range-like patterns such as '1-2'). "
                 "A column is only numeric if all values (including each part in semicolon-separated cells) are valid numbers. "
-                "Special characters like commas or hyphens in numeric-looking values, or Range notation (e.g., '1-2'), also cause DivBase to treat the column as string. "
                 "Use semicolons (;) to separate multiple numeric values. "
-                "These columns will be treated as string columns by DivBase. "
-                "Numeric query operations (ranges, inequalities) will not be applicable to these columns."
+                "Numeric query operations (ranges, inequalities) will not be applicable to string columns."
             )
 
     def _validate_sample_names(self, tsv_samples: set[str]) -> None:
