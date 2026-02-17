@@ -101,6 +101,32 @@ You can also run the `pytest-alembic` tests to further validate the newly create
 pytest tests/migrations
 ```
 
+## Migrations in local development (swapping between branches/downgrading)
+
+- If you pull a branch with new migrations, you will need to restart the stack to apply the new migrations (see above).
+- If you work on a branch with new migrations, and then switch back to main (or another branch without those migrations), you will need to downgrade the database to the previous migration version, and then restart the stack to apply the downgraded schema, here are the steps you can follows:
+
+### Protocol
+
+1. Be in the branch that has the latest migration script (as you need the downgrade function from the latest migration script so trying this from any other branch will not work).
+
+2. Use the db-migrator container to run the downgrade command (so adjust the command/entry point in the docker compose file to something like this:
+
+    ```bash
+    # From: docker/divbase_compose.yaml command: ["alembic", "upgrade", "head"]
+    ["alembic", "downgrade", "<REVISION_ID_TO_DOWNGRADE_TO>"] # or -1 to downgrade one step
+    ```
+
+3. Down everything
+
+4. Undo the change to the db-migrator container in the docker compose file.
+
+5. Swap to the other branch (e.g. main) that does not have the new migration script.
+
+6. docker compose up/watch and it should just work as you will now be at "head" again.
+
+The validation run by the fastapi lifespan event on startup will help tell you if you succeded or not, as it will error if you are not at the head revision for that branch. So if fastapi is working, it's probably working.
+
 ## Production Deployment
 
 Documentation on how to run migrations in production/deployed environments is covered in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase).
