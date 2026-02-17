@@ -57,14 +57,14 @@ USERS_TO_CREATE = [
         "name": "Bob",
         "email": "bob@example.com",
         "organisation": "Mälardalen University",
-        "organisation_role": "Postdoc",
+        "organisation_role": "Postdoctoral Researcher",
         "password": "badpassword",
     },
     {
         "name": "Charlie",
         "email": "charlie@example.com",
         "organisation": "Lund University",
-        "organisation_role": "PhD Student",
+        "organisation_role": "PhD Candidate",
         "password": "badpassword",
     },
     {

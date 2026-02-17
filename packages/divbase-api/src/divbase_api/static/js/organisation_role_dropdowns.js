@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", function () {
     );
   }
 
-  // listners for organisation dropdown
+  // listeners for organisation dropdown
   organisationDropdown.addEventListener("change", function () {
     if (this.value === "Other") {
       otherOrganisationDiv.style.display = "block";
@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", function () {
     validateOtherOrganisationInput();
   });
 
-  // listners for role dropdown
+  // listeners for role dropdown
   roleDropdown.addEventListener("change", function () {
     if (this.value === "Other") {
       otherRoleDiv.style.display = "block";

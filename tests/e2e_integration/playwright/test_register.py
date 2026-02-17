@@ -42,7 +42,7 @@ def test_register_new_user_complete_flow(
     Test complete user registration flow including email verification step.
 
     We test creating a user whose organisation and role are in the dropdowns AND
-    a user with an organisation and role not in the dropdowns (so they select "Other" and manully fill out there roles).
+    a user with an organisation and role not in the dropdowns (so they select "Other" and manually fill out their roles).
     """
     test_password = "badpassword"
     register_new_user(

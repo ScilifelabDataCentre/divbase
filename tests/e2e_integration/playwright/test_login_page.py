@@ -69,7 +69,7 @@ def test_login_unverified_email_correct_password(page: Page):
     email = "unverified_test2@example.com"
     password = "correctpassword123"
     organisation = "Not a known organisation"
-    role = "PhD Student"
+    role = "PhD Candidate"
     register_new_user(page=page, name=name, email=email, organisation=organisation, role=role, password=password)
 
     navigate_to(page, "/login")

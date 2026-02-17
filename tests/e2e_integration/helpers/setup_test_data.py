@@ -32,7 +32,7 @@ TEST_USERS = {
         "email": "edit@divbase.se",
         "password": "badpassword",
         "organisation": "Lund University",
-        "organisation_role": "PhD Student",
+        "organisation_role": "PhD Candidate",
     },
     "manage user": {
         "email": "manage@divbase.se",

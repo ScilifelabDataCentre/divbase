@@ -58,9 +58,9 @@ def _edit_profile(
     [
         ("Updated Profile User", "Uppsala University", "Postdoctoral Researcher"),
         ("Another User", "Other Organisation", "Other Role"),
-        ("Testing User", "Lund University", "PhD Student"),
+        ("Testing User", "Lund University", "PhD Candidate"),
         ("Onenameuser", "Lund University", "Non-dropdown Role"),
-        ("Test Test User", "Other Organisation", "PhD Student"),
+        ("Test Test User", "Other Organisation", "PhD Candidate"),
     ],
 )
 def test_edit_profile(
@@ -97,5 +97,5 @@ def test_edit_profile_cancel_does_not_save_changes(logged_in_edit_profile_user_p
     page.get_by_role("link", name="Cancel").click()
     expect(page).to_have_url(f"{FRONTEND_BASE_URL}/profile/")
 
-    for cancelled_text in ["Cancelled Update", "Cancelled Organisation", "Cancelled Role"]:
+    for cancelled_text in ["Cancelled name", "Cancelled Organisation", "Cancelled Role"]:
         expect(page.get_by_text(cancelled_text)).not_to_be_visible()
