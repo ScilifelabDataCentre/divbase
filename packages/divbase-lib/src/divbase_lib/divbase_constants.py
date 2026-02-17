@@ -42,4 +42,5 @@ UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\")
 # This prefix is used for all *.vcf.gz results files from a query job/task.
 # After the prefix comes the job id which is a rolling integer.
 # E.g. format: result_of_job_<job-id>.vcf.gz , where <job-id> = 1 and is auto-incremented for every new job.
+# NOTE: If you update this, you should also update the S3 lifecycle policies associated with this.
 QUERY_RESULTS_FILE_PREFIX = "result_of_job_"
