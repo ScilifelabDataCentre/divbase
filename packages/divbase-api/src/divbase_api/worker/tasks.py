@@ -177,8 +177,8 @@ def sample_metadata_query_task(
             metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
         )
     except ObjectDoesNotExistError:
-        # If ObjectDoesNotExistError, propagage the more specific TSVFileNotFoundInProjectError upwards.
-        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        # If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards.
+        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
         raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
 
     with SyncSessionLocal() as db:

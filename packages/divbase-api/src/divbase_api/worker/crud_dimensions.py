@@ -1,6 +1,5 @@
 """
-CRUD operations for VCF dimensions for the Celery workers.
-.
+CRUD operations for VCF dimensions for the Celery workers
 There are separate VCF dimensions CRUD functions for used with API endpoints in
 packages/divbase-api/src/divbase_api/crud/vcf_dimensions.py
 """

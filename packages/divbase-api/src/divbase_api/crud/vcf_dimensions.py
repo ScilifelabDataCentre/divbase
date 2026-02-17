@@ -63,8 +63,8 @@ async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int)
 
     Get unique sample names across all VCF files from a project's dimensions entries.
 
-    Samples are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened before finding the unqiue values.
-    To do all operations on the PostgreSQL side (to avoid having do it here in the fastAPI side), need to first use unnest() to flatten the arrays.
+    Samples are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened before finding the unique values.
+    To do all operations on the PostgreSQL side (to avoid having to do it here on the FastAPI side), need to first use unnest() to flatten the arrays.
     """
 
     stmt = select(func.unnest(VCFMetadataDB.samples)).where(VCFMetadataDB.project_id == project_id).distinct()

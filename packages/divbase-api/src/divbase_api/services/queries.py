@@ -975,7 +975,7 @@ class SidecarQueryManager:
                             logger.warning(warning_msg)
                             self.warnings.append(warning_msg)
                         filter_conditions.append(combined)
-                        logger.info("filter_conditions: " + str(filter_conditions))  # debug
+
                     else:
                         warning_msg = f"No valid numeric values, ranges, or inequalities provided for column '{key}'. Filter condition will not match any rows."
                         logger.warning(warning_msg)
@@ -1198,14 +1198,10 @@ class SidecarQueryManager:
                 try:
                     val_num = self._parse_numeric_value(val_str)
                     if (
-                        operator == ">"
-                        and val_num > threshold
-                        or operator == ">="
-                        and val_num >= threshold
-                        or operator == "<"
-                        and val_num < threshold
-                        or operator == "<="
-                        and val_num <= threshold
+                        (operator == ">" and val_num > threshold)
+                        or (operator == ">=" and val_num >= threshold)
+                        or (operator == "<" and val_num < threshold)
+                        or (operator == "<=" and val_num <= threshold)
                     ):
                         return True
                 except ValueError:

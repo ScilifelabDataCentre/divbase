@@ -182,8 +182,8 @@ class MetadataTSVValidator:
         Matches server-side logic in queries.py::_is_semicolon_separated_numeric_column
 
         Columns with mixed types are treated as string columns by the DivBase query engine.
-        This happen for values such as e.g., "8", "1a", "5a" that happen to look numeric but
-        are semantically a strings (e.g. names, IDs)..
+        This happens for values such as "8", "1a", "5a" that happen to look numeric but
+        are semantically strings (e.g. names, IDs).
         """
         mixed_columns = []
         for col_idx, types in column_types.items():
