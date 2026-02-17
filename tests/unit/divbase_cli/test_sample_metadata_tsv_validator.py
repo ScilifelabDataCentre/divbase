@@ -364,7 +364,7 @@ class TestNegativeNumbers:
     def test_range_notation_produces_warning(self, type_errors_tsv):
         """Test that range notation like '1-2' in a mixed-type column produces a warning (column treated as string)."""
         stats, errors, warnings = MetadataTSVValidator.validate(type_errors_tsv, {"S1", "S2", "S3", "S4"})
-        assert any("mixed" in w.lower() and "Range" in w for w in warnings)
+        assert any("clarification on mixed types columns" in w.lower() for w in warnings)
 
 
 class TestSemicolonColumnTypeClassification:
