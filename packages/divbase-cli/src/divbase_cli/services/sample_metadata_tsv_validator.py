@@ -61,8 +61,10 @@ class MetadataTSVValidator:
         if header[0] != "#Sample_ID":
             self.errors.append(f"First column must be named '#Sample_ID', found: '{header[0]}'")
 
-        if len(header) != len(set(header)):
-            duplicates = [col for col in header if header.count(col) > 1]
+        # Check for duplicates after stripping '#' to ensures both "#Sample_ID" and "Sample_ID" are caught as duplicates. Matches server-side logic.
+        cleaned_header = [col.lstrip("#") for col in header]
+        if len(cleaned_header) != len(set(cleaned_header)):
+            duplicates = [col for col in cleaned_header if cleaned_header.count(col) > 1]
             self.errors.append(f"Duplicate column names found: {set(duplicates)}")
 
         for i, col in enumerate(header):

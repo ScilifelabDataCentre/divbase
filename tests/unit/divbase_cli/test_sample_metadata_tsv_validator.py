@@ -150,6 +150,19 @@ class TestHeaderValidation:
 
         assert any("Duplicate column names" in e and "Area" in e for e in errors)
 
+    def test_duplicate_column_names_after_stripping_hash(self, tmp_path, project_samples):
+        """Test that duplicate column names are detected even when one has '#' prefix and one doesn't.
+        This ensures consistency with server-side validation which strips '#' before checking duplicates."""
+        tsv_content = """#Sample_ID\tSample_ID\tPopulation
+S1\tS1_dup\t1
+S2\tS2_dup\t2
+"""
+        tsv_file = tmp_path / "duplicate_sample_id_columns.tsv"
+        tsv_file.write_text(tsv_content)
+        stats, errors, warnings = MetadataTSVValidator.validate(tsv_file, project_samples)
+
+        assert any("Duplicate column names" in e and "Sample_ID" in e for e in errors)
+
     def test_empty_column_name(self, header_errors_tsv, project_samples):
         """Test that empty column names are detected."""
         stats, errors, warnings = MetadataTSVValidator.validate(header_errors_tsv, project_samples)

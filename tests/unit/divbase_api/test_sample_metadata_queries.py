@@ -989,6 +989,18 @@ class TestLoadFileValidation:
             SidecarQueryManager(file=tsv_file)
         assert "duplicate" in str(excinfo.value).lower()
 
+    def test_duplicate_column_names_after_stripping_hash_raises(self, tmp_path):
+        """Test that duplicate column names are caught even when one has '#' and one doesn't.
+        For example, '#Sample_ID' and 'Sample_ID' should be detected as duplicates."""
+        tsv_content = "#Sample_ID\tSample_ID\tPopulation\nS1\tS1_dup\t1\nS2\tS2_dup\t2\n"
+        tsv_file = tmp_path / "duplicate_sample_id_cols.tsv"
+        tsv_file.write_text(tsv_content)
+
+        with pytest.raises(SidecarMetadataFormatError) as excinfo:
+            SidecarQueryManager(file=tsv_file)
+        assert "duplicate" in str(excinfo.value).lower()
+        assert "Sample_ID" in str(excinfo.value)
+
     def test_empty_column_name_raises(self, tmp_path):
         """Test that empty column names raise SidecarMetadataFormatError during load_file()."""
         tsv_content = "#Sample_ID\t\tWeight\nS1\tNorth\t12.5\nS2\tEast\t18.0\n"
