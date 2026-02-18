@@ -762,11 +762,15 @@ class SidecarQueryManager:
                 else:
                     raise SidecarMetadataFormatError(error_msg)
 
-            # Capture dimension-related warnings from the validator (e.g., samples in project but not in TSV)
-            # Other validation warnings (mixed types, commas, etc.) are for file quality and shown in CLI validation only
+            # Capture dimension-related warnings and array notation warnings from the validator.
+            # Array notation warnings are forwarded because they directly affect query behaviour (the column
+            # will be string instead of numeric, so numeric filter syntax will not work as expected).
+            # Other file-quality warnings (mixed types, commas, etc.) are shown in CLI validation only.
             if result.warnings:
                 dimension_warnings = [w for w in result.warnings if "dimensions index" in w or "project" in w]
+                array_notation_warnings = [w for w in result.warnings if "array notation" in w.lower()]
                 self.warnings.extend(dimension_warnings)
+                self.warnings.extend(array_notation_warnings)
 
             self.df = result.df
 

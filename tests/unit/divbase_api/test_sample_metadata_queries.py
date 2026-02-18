@@ -148,6 +148,30 @@ S4\t7\t70;80;90\t20.0
     return tsv_file
 
 
+@pytest.fixture
+def array_notation_tsv(tmp_path):
+    """TSV where one column uses '[1, 2, 3]' array notation instead of semicolons."""
+    content = "#Sample_ID\tPopulation\tArea\n"
+    content += "S1\t[1, 2, 3]\tNorth\n"
+    content += "S2\t4\tEast\n"
+    content += "S3\t5\tSouth\n"
+    tsv_file = tmp_path / "array_notation.tsv"
+    tsv_file.write_text(content)
+    return tsv_file
+
+
+@pytest.fixture
+def array_notation_multiple_cols_tsv(tmp_path):
+    """TSV where multiple columns use '[...]' array notation."""
+    content = "#Sample_ID\tPopulation\tScores\n"
+    content += "S1\t[1, 2]\t[10, 20, 30]\n"
+    content += "S2\t3\t[40]\n"
+    content += "S3\t5\t60\n"
+    tsv_file = tmp_path / "array_notation_multi.tsv"
+    tsv_file.write_text(content)
+    return tsv_file
+
+
 class TestNumericalFilteringInequalities:
     """Test inequality operators on numerical columns."""
 
@@ -1047,3 +1071,29 @@ class TestLoadFileValidation:
         manager = SidecarQueryManager(file=sample_tsv_with_edge_cases)
         assert manager.df is not None
         assert "Sample_ID" in manager.df.columns
+
+
+class TestArrayNotation:
+    """Test that Python/JSON-style array notation '[...]' in cells produces a warning and is treated as string."""
+
+    def test_array_notation_warning_content(self, array_notation_tsv):
+        """Test that array notation loads without error, produces a warning (not an error),
+        the warning mentions semicolons, and exactly one warning is emitted per offending column."""
+        manager = SidecarQueryManager(file=array_notation_tsv)
+
+        assert manager.df is not None
+        assert any("array notation" in w.lower() for w in manager.warnings)
+        assert any("semicolon" in w.lower() and "array notation" in w.lower() for w in manager.warnings)
+        assert len([w for w in manager.warnings if "array notation" in w.lower() and "Population" in w]) == 1
+
+    def test_array_notation_column_is_filterable_as_string(self, array_notation_tsv):
+        """Test that columns with array notation are queryable as plain string values."""
+        manager = SidecarQueryManager(file=array_notation_tsv).run_query(filter_string="Area:North")
+        assert len(manager.query_result) == 1
+        assert manager.query_result.iloc[0]["Sample_ID"] == "S1"
+
+    def test_array_notation_multiple_columns_warns_per_column(self, array_notation_multiple_cols_tsv):
+        """Test that each column with array notation gets its own warning."""
+        manager = SidecarQueryManager(file=array_notation_multiple_cols_tsv)
+        assert len([w for w in manager.warnings if "array notation" in w.lower() and "Population" in w]) == 1
+        assert len([w for w in manager.warnings if "array notation" in w.lower() and "Scores" in w]) == 1

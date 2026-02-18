@@ -103,6 +103,9 @@ class SharedMetadataValidator:
             comma_warnings = self._check_for_commas(df)
             self.result.warnings.extend(comma_warnings)
 
+            array_notation_warnings = self._check_for_array_notation(df)
+            self.result.warnings.extend(array_notation_warnings)
+
             numeric_cols, string_cols, mixed_cols = self._classify_columns(df, mixed_type_columns)
             self.result.numeric_columns = numeric_cols
             self.result.string_columns = string_cols
@@ -365,6 +368,30 @@ class SharedMetadataValidator:
                         "Use semicolons (;) to separate multiple values, not commas."
                     )
                     break  # Only warn once per column
+
+        return warnings
+
+    def _check_for_array_notation(self, df: pd.DataFrame) -> list[str]:
+        """
+        Check for Python/JSON-style array notation (e.g. '[1, 2, 3]') in any cell.
+        Array notation is not supported by DivBase - the column will be treated as a string.
+        """
+        warnings = []
+
+        for col in df.columns:
+            series = df[col]
+            if not pd.api.types.is_string_dtype(series) and not pd.api.types.is_object_dtype(series):
+                continue
+
+            for idx, cell_value in series.items():
+                if isinstance(cell_value, str) and cell_value.startswith("[") and cell_value.endswith("]"):
+                    warnings.append(
+                        f"Row {idx + 2}, Column '{col}': Cell '{cell_value}' uses array notation '[...]'. "
+                        "DivBase does not support Python/JSON array notation. "
+                        "This column will be treated as a string. "
+                        "Use semicolons (;) to separate multiple values instead (e.g., '1;2;3')."
+                    )
+                    break
 
         return warnings
 

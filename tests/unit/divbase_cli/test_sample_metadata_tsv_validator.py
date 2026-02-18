@@ -119,6 +119,30 @@ def negative_numeric_columns():
     return ["Temperature", "Longitude", "Latitude", "Elevation"]
 
 
+@pytest.fixture
+def array_notation_tsv(tmp_path):
+    """TSV where one column uses '[1, 2, 3]' array notation instead of semicolons."""
+    content = "#Sample_ID\tPopulation\tArea\n"
+    content += "S1\t[1, 2, 3]\tNorth\n"
+    content += "S2\t4\tEast\n"
+    content += "S3\t5\tSouth\n"
+    tsv_file = tmp_path / "array_notation.tsv"
+    tsv_file.write_text(content)
+    return tsv_file
+
+
+@pytest.fixture
+def array_notation_multiple_cols_tsv(tmp_path):
+    """TSV where multiple columns use '[...]' array notation."""
+    content = "#Sample_ID\tPopulation\tScores\n"
+    content += "S1\t[1, 2]\t[10, 20, 30]\n"
+    content += "S2\t3\t[40]\n"
+    content += "S3\t5\t60\n"
+    tsv_file = tmp_path / "array_notation_multi.tsv"
+    tsv_file.write_text(content)
+    return tsv_file
+
+
 def test_valid_tsv_passes_all_checks(valid_tsv, project_samples):
     """Valid TSV should pass with no errors or warnings."""
     stats, errors, warnings = MetadataTSVValidator.validate(valid_tsv, project_samples)
@@ -428,3 +452,60 @@ class TestSemicolonColumnTypeClassification:
         assert "PureNumSemicolon" in stats["numeric_columns"]
         assert "PureNumSemicolon" not in stats["mixed_type_columns"]
         assert "PureNumSemicolon" not in stats["string_columns"]
+
+
+class TestArrayNotation:
+    """Test that Python/JSON-style array notation '[...]' in cells produces a warning and is treated as string."""
+
+    def test_array_notation_produces_warning(self, array_notation_tsv):
+        """Test that array notation in a cell sends a warning that tells the user to use semicolons instead."""
+        stats, errors, warnings = MetadataTSVValidator.validate(array_notation_tsv, {"S1", "S2", "S3"})
+
+        assert any("array notation" in w.lower() for w in warnings)
+        assert any("semicolon" in w.lower() and "array notation" in w.lower() for w in warnings)
+
+    def test_array_notation_is_not_an_error(self, array_notation_tsv):
+        """Test that array notation should produce a warning, not an error."""
+        stats, errors, warnings = MetadataTSVValidator.validate(array_notation_tsv, {"S1", "S2", "S3"})
+
+        assert not any("array" in e.lower() for e in errors)
+
+    def test_array_notation_column_not_numeric(self, array_notation_tsv):
+        """Test that a column containing array notation should not be classified as numeric type."""
+        stats, errors, warnings = MetadataTSVValidator.validate(array_notation_tsv, {"S1", "S2", "S3"})
+
+        assert "Population" not in stats["numeric_columns"]
+        assert "Population" in stats["mixed_type_columns"] or "Population" in stats["string_columns"]
+
+    def test_array_notation_warns_once_per_column(self, array_notation_tsv):
+        """Test that only one warning per column should be emitted for array notation."""
+        stats, errors, warnings = MetadataTSVValidator.validate(array_notation_tsv, {"S1", "S2", "S3"})
+
+        array_warnings = [w for w in warnings if "array notation" in w.lower() and "Population" in w]
+        assert len(array_warnings) == 1
+
+    def test_array_notation_multiple_columns_warns_per_column(self, array_notation_multiple_cols_tsv):
+        """Test that each column with array notation should get its own warning."""
+        stats, errors, warnings = MetadataTSVValidator.validate(array_notation_multiple_cols_tsv, {"S1", "S2", "S3"})
+
+        population_warnings = [w for w in warnings if "array notation" in w.lower() and "Population" in w]
+        scores_warnings = [w for w in warnings if "array notation" in w.lower() and "Scores" in w]
+        assert len(population_warnings) == 1
+        assert len(scores_warnings) == 1
+
+    def test_non_array_bracket_strings_do_not_warn(self, tmp_path):
+        """Test that strings that are not array notation (e.g., '[ref]', 'group[1]') does not trigger the warning."""
+        content = "#Sample_ID\tCode\n"
+        content += "S1\t[ref]\n"  # Starts and ends with [ and ]
+        content += (
+            "S2\tgroup[1]\n"  # does not start with [, should not be treated as array notation despite ] at the end
+        )
+        content += "S3\tnormal\n"
+        tsv_file = tmp_path / "bracket_strings.tsv"
+        tsv_file.write_text(content)
+
+        stats, errors, warnings = MetadataTSVValidator.validate(tsv_file, {"S1", "S2", "S3"})
+
+        array_warnings = [w for w in warnings if "array notation" in w.lower()]
+        # Only S1's cell '[ref]' matches the array notation so onlu 1 warning is expected.
+        assert len(array_warnings) == 1
