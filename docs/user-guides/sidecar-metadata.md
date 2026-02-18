@@ -87,7 +87,7 @@ S7 1;3;5 South 22.6
 S8 2 West 19.5
 ```
 
-For the sake of the demonstration later in this guide, let's assume that this TSV file have been uploaded to a DivBase project among with two VCF files where samples S1-S4 are found in 'file1.vcf.gz' and S5-S6 in 'file2.vcf.gz'. Let's also assume that the `divbase-cli dimensions update` has been run after all files have been uploaded so that the system has up-to-data information on which sample is found in which file.
+For the sake of the demonstration later in this guide, let's assume that this TSV file have been uploaded to a DivBase project among with two VCF files where samples S1-S4 are found in `file1.vcf.gz` and S5-S6 in `file2.vcf.gz`. Let's also assume that the `divbase-cli dimensions update` has been run after all files have been uploaded so that the system has up-to-data information on which sample is found in which file.
 
 ### Validating a sidecar metadata TSV with `divbase-cli`
 
