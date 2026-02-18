@@ -63,7 +63,7 @@ After the `Sample_ID` column has been populated, users can add any columns and v
 To ensure that user-defined metadata can be used in DivBase, we ask you follow the following constraints and considerations:
 
 1. The user-defined columns can be **either** numeric **or** string type. A column is classified as numeric only if all values can be parsed as numbers (including individual parts in semicolon-separated cells). If any value in a column is non-numeric, the entire column is treated as a string column. This means a column with values like "8", "1a", "5a" will be treated as string column even though some values look numeric. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
-2. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. "2;4;21" or "North; North-West"). Note that this might make the process of writing queries more complex than if just a single value is used for each cell. **Important:** Semicolons (`;`) are the only supported delimiter for multi-value cells. DivBase uses commas (`,`) in the [Query syntax](#query-syntax-for-sidecar-metadata) for a different purpose (separating filter values in queries).
+2. Semicolon-separated values are supported in TSV cells to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. "2;4;21" or "North; North-West"). Note that this might make the process of writing queries more complex than if just a single value is used for each cell. **Important:** Semicolons (`;`) are the only supported delimiter for multi-value cells; bracket array notation (`[1,2,3]`) is not supported and will treated as a string. DivBase uses commas (`,`) in the [Query syntax](#query-syntax-for-sidecar-metadata) for a different purpose (separating filter values in queries).
 3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operators (see details in [Filtering on numerical columns](#filtering-on-numerical-columns)) and will raise warnings. For example, values like "1-2" or "1,2" will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use semicolons (e.g., "1;2"). For decimals, use English decimal notation with a period (e.g., "3.14") and not a comma.
 4. The only characters with special structural meaning in DivBase sidecar metadata TSV files are `#` (for header comments), `;` (for multi-value cell separation), and `\t` (tab, for column separation). Other special characters are generally supported in data values, but be aware that Your Mileage May Vary. Some common cases that have been tested and are supported include diacritic unicode characters like `å`, `ä`, `ö`, and hyphens in strings (e.g., `North-West`).
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: " Sample 1 " will be processed as "Sample 1".
@@ -103,6 +103,8 @@ The command requires that the project's dimensions index is up-to-date with the 
 
 The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
 
+#### Errors from TSV content validation
+
 The following will return **Errors**. These must be fixed for the sidecar TSV be used with DivBase queries:
 
 - File not found, unreadable, or empty: If the TSV file path is missing, misspelled, or the file cannot be opened, validation will fail. Empty TSV files are also not allowed.
@@ -118,6 +120,8 @@ The following will return **Errors**. These must be fixed for the sidecar TSV be
 !!! Note
     The formatting errors listed above are also enforced by the DivBase query engine when loading the metadata file for queries (except checking tab separation which is a validator-specific check). This means that even if the validator is not run before upload, the query engine will analyse the file content and report issues as errors. Detected Errors are different from Warnings in that errors will result in queries not even being run.
 
+#### Warnings from TSV content validation
+
 The validator will also raise **Warnings**. DivBase queries can still be run with Warnings, but the user should review them, and possible address them if so desired:
 
 - Cell value has leading or trailing whitespace (will be stripped by DivBase when a query is run)
@@ -127,6 +131,8 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 - Mixed-type columns (a column with numeric and string values, e.g. "8", "1a", "5a") and semicolon-separated cells with mixed types (e.g., "1;abc"). They are allowed but the user should keep in mind that since they will be treated as string columns, numeric query operations (ranges, inequalities) will not work on these columns.
 
 - Hyphens in values that look like range notation (e.g., "1-2") in columns that otherwise contain numeric values. The same goes for commas (e.g. "1,2"). The warning message will ask the user if they intended this to be a multicolumn value which should use semicolons as delimiters.
+
+- Bracket array notation, i.e. cell values that are enclosed in brackets `[ ... ]` is not supported by DivBase. Bracked cells will be treated as strings, which can lead to undesired filtering results. Use semicolon (`;`) to delimit multi-value cells instead. Example: use '`1;2;3` instead of `[1,2,3] in the TSV cells.
 
 ## Query Syntax for sidecar metadata
 
@@ -244,9 +250,21 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 
 ### Filtering on Sample names
 
-The sidecar metadata filtering is designed to
+The sidecar metadata filtering is designed to filter on metadata columns and return all samples that fulfil the queries. It is however possible to filter on the `Sample_ID` column directly. This column is a string column by design and thus follows the syntax described in the [Filtering on string columns](#filtering-on-string-columns) section.
 
-The `Sample_ID` column is a string column by design
+For example, with the above [example](#example) metadata and data, this query:
+
+```bash
+divbase-cli query tsv "Sample_ID:S1"
+```
+
+will return:
+
+```bash
+The results for the query (Sample_ID:S1):
+Unique Sample IDs: ['S1']
+Unique filenames: ['file1.vcf.gz']
+```
 
 ### Query Warnings: spotting potential issues with the TSV or the query filter
 
