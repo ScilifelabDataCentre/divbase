@@ -2,10 +2,15 @@
 Helper script to generate mock sample metadata from a VCF file to allow for testing the codebase with VCFs that don't have a metadata sidecar file.
 This script reads a comma-separated list VCF files (either gzipped or uncompressed) and generates a single sample metadata file based on the sample IDs found in each VCF.
 The output file has these columns: sample ID, mock sampling population number, mock sampling area, mock sample sex, and the filename that the sample is found in.
+
+Usage:
+python scripts/generate_mock_sample_metadata.py --vcf {vcf_filename} --output {metadata_filename} --columns {number_of_random_columns_to_add} --add-warning-column
 """
 
 import argparse
 import gzip
+import random
+import string
 from pathlib import Path
 from typing import TextIO
 
@@ -23,6 +28,23 @@ def parse_arguments():
         type=Path,
         default=Path("mock_sample_metadata.tsv"),
         help="Output metadata file (default: mock_sample_metadata.tsv)",
+    )
+    parser.add_argument(
+        "--columns",
+        type=int,
+        default=3,
+        help="Number of additional random columns to generate after the first 3 legacy columns (Population, Area, Sex). Default: 3",
+    )
+    parser.add_argument(
+        "--add-warning-column",
+        action="store_true",
+        help="Add a column that will trigger a warning in the TSV validator (e.g., array notation)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=12345,
+        help="Random seed for reproducibility (default: 12345)",
     )
     return parser.parse_args()
 
@@ -55,47 +77,90 @@ def extract_samples_from_opened_vcf(file: TextIO) -> list[str]:
     return []
 
 
-def generate_mock_sample_metadata(all_samples: dict[tuple], output_file: Path) -> None:
-    """
-    Function that generates mock sample metadata from a VCF file. It also counts and displays the number of samples and variants in the VCF file.
+def generate_random_values(n):
+    vals = []
+    for _ in range(n):
+        t = random.choice(["int", "float", "str"])
+        if t == "int":
+            vals.append(str(random.randint(1, 100)))
+        elif t == "float":
+            vals.append(f"{random.uniform(1, 100):.2f}")
+        else:
+            vals.append(random_string(5))
+    return vals
 
-    The output file contains the mandatory columns Sample_ID and Filename, as well as three mock columns: Population, Area, and Sex.
 
-    To create some variation across the three mock columns, the three mock columns are generated from lists of different lengths.
-    To ensure that the periodicity of the mock area and sex columns are different, the mock sex column dependent on the length of the mock area column.
-    Thus, for each sample:
-    - The mock area will be "North", "East", "South", "West", and will repeat every 4 samples.
-    - The mock population will be a number from 1 to 6, and will repeat every 6 samples.
-    - The mock sex will be "F" or "M", and will repeat "F" for 4 samples, then "M" for 4 samples, and so on.
+def generate_mock_sample_metadata(
+    all_samples: list[str], output_file: Path, num_columns: int, seed: int, add_warning: bool
+) -> None:
     """
+    Generate mock sample metadata with legacy columns (Population, Area, Sex), user-specified number of random columns, and optional warning column.
+
+    The "legacy" columns were used in the first iteration of this script, and are kept for backwards compatibility.
+    """
+    random.seed(seed)
+    legacy_cols = ["Population", "Area", "Sex"]
+    random_col_names = [f"Col{i + 1}" for i in range(num_columns)]
+    if add_warning:
+        col_names = legacy_cols + ["WarningCol"] + random_col_names
+    else:
+        col_names = legacy_cols + random_col_names
 
     mock_area = ["North", "East", "South", "West"]
     mock_population = [1, 2, 3, 4, 5, 6]
     mock_sex = ["F", "M"]
 
     with open(output_file, "w") as writer:
-        writer.write("#Sample_ID\tPopulation\tArea\tSex\tFilename\n")
-        for i, (sample, vcf_filename) in enumerate(all_samples):
+        writer.write("#Sample_ID\t" + "\t".join(col_names) + "\n")
+        for i, sample in enumerate(all_samples):
+            # Legacy columns
             area = mock_area[i % len(mock_area)]
             population = mock_population[i % len(mock_population)]
             sex = mock_sex[(i // len(mock_area)) % len(mock_sex)]
-            writer.write(f"{sample}\t{population}\t{area}\t{sex}\t{vcf_filename}\n")
+            row = [str(population), area, sex]
+            if add_warning:
+                # Always generate a mixed-type value (random order, using the seed)
+                parts = []
+                for _ in range(3):
+                    if random.choice([True, False]):
+                        parts.append(str(random.randint(1, 100)))
+                    else:
+                        parts.append(random_string(random.randint(4, 6)))
+                warning_col_val = ";".join(parts)
+                random_vals = generate_random_values(num_columns)
+                row = row + [warning_col_val] + random_vals
+            else:
+                row += generate_random_values(num_columns)
+            writer.write(f"{sample}\t" + "\t".join(row) + "\n")
         print(f"Wrote mock sidecar metadata file to: {output_file}")
+
+
+def random_string(length=6):
+    return "".join(random.choices(string.ascii_letters, k=length))
 
 
 def main():
     args = parse_arguments()
     vcf_paths = [Path(vcf_file.strip()) for vcf_file in args.vcf.split(",")]
     output_file = Path(args.output)
+    num_columns = args.columns
+    seed = args.seed
+    add_warning = args.add_warning_column
 
     all_samples = []
     for vcf_path in vcf_paths:
         if vcf_path.name.endswith(".vcf") or vcf_path.name.endswith(".vcf.gz"):
             sample_IDs = wrapper_get_sample_IDs_from_vcf_file(vcf_path=vcf_path)
-            all_samples.extend((sample, vcf_path.name) for sample in sample_IDs)
+            all_samples.extend(sample for sample in sample_IDs)
         else:
             print("Invalid file extension. Please provide a .vcf or .vcf.gz file.")
-    generate_mock_sample_metadata(all_samples=all_samples, output_file=output_file)
+    generate_mock_sample_metadata(
+        all_samples=all_samples,
+        output_file=output_file,
+        num_columns=num_columns,
+        seed=seed,
+        add_warning=add_warning,
+    )
 
 
 if __name__ == "__main__":
