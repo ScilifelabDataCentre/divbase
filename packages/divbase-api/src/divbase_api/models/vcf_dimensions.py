@@ -5,7 +5,6 @@ VCF dimensions (= technical metadata) DB Model.
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
@@ -34,14 +33,19 @@ class VCFMetadataDB(BaseDBModel):
     )
     s3_version_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger)
-    samples: Mapped[list[str]] = mapped_column(ARRAY(String), index=True)  # Sample names
-    scaffolds: Mapped[list[str]] = mapped_column(ARRAY(String))  # Scaffold/chromosome names
     variant_count: Mapped[int] = mapped_column(BigInteger)
     sample_count: Mapped[int] = mapped_column(Integer)
 
     __table_args__ = (UniqueConstraint("vcf_file_s3_key", "project_id", name="unique_vcf_per_project"),)
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="vcf_metadata")
+
+    samples: Mapped[list["VCFMetadataSamplesDB"]] = relationship(
+        "VCFMetadataSamplesDB", back_populates="vcf_metadata", cascade="all, delete-orphan"
+    )
+    scaffolds: Mapped[list["VCFMetadataScaffoldsDB"]] = relationship(
+        "VCFMetadataScaffoldsDB", back_populates="vcf_metadata", cascade="all, delete-orphan"
+    )
 
 
 class SkippedVCFDB(BaseDBModel):
@@ -63,3 +67,35 @@ class SkippedVCFDB(BaseDBModel):
     __table_args__ = (UniqueConstraint("vcf_file_s3_key", "project_id", name="unique_skipped_vcf_per_project"),)
 
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="skipped_vcf_files")
+
+
+class VCFMetadataSamplesDB(BaseDBModel):
+    """
+    DB model for on-to-many relationship between VCF file metadata and the sample names in the VCF files.
+    """
+
+    __tablename__ = "vcf_metadata_samples"
+
+    vcf_metadata_id: Mapped[int] = mapped_column(
+        ForeignKey("vcf_metadata.id", ondelete="CASCADE"),
+        index=True,
+    )
+    sample_name: Mapped[str] = mapped_column(String, index=True)
+
+    vcf_metadata: Mapped["VCFMetadataDB"] = relationship("VCFMetadataDB", back_populates="samples")
+
+
+class VCFMetadataScaffoldsDB(BaseDBModel):
+    """
+    DB model for on-to-many relationship between VCF file metadata and the scaffold names in the VCF files.
+    """
+
+    __tablename__ = "vcf_metadata_scaffolds"
+
+    vcf_metadata_id: Mapped[int] = mapped_column(
+        ForeignKey("vcf_metadata.id", ondelete="CASCADE"),
+        index=True,
+    )
+    scaffold_name: Mapped[str] = mapped_column(String, index=True)
+
+    vcf_metadata: Mapped["VCFMetadataDB"] = relationship("VCFMetadataDB", back_populates="scaffolds")
