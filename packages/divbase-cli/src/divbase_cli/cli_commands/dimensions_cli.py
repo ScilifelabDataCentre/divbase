@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import typer
 import yaml
@@ -60,6 +61,23 @@ def show_dimensions_index(
             help="If set, will show all unique sample names found across all the VCF files in the project.",
         )
     ),
+    sample_names_limit: int = typer.Option(
+        20,
+        "--sample-names-limit",
+        min=1,
+        help="Maximum number of sample names to display per list in terminal output.",
+    ),
+    sample_names_output: str | None = typer.Option(
+        None,
+        "--sample-names-output",
+        help="Write full sample names to file instead of truncating in terminal output. "
+        "Mutually exclusive with --sample-names-stdout.",
+    ),
+    sample_names_stdout: bool = typer.Option(
+        False,
+        "--sample-names-stdout",
+        help="Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
@@ -69,6 +87,10 @@ def show_dimensions_index(
 
     project_config = resolve_project(project_name=project)
 
+    # These two options are mutually exclusive. But due to how typer handles options, this error will only be raise if --sample-names-output has an input value (i.e. path). If the path is missing, it will raise an error about the missing path argument instead...
+    if sample_names_output and sample_names_stdout:
+        raise typer.BadParameter("Use only one of --sample-names-output or --sample-names-stdout.")
+
     if unique_samples:
         response = make_authenticated_request(
             method="GET",
@@ -77,6 +99,25 @@ def show_dimensions_index(
         )
         unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
         sample_count = len(unique_sample_names_sorted)
+
+        if sample_names_output:
+            output_path = Path(sample_names_output)
+            output_path.write_text("\n".join(unique_sample_names_sorted) + "\n")
+            print(f"Wrote {sample_count} unique sample names to: {output_path}")
+            return
+
+        if sample_names_stdout:
+            print("\n".join(unique_sample_names_sorted))
+            return
+
+        if sample_count > sample_names_limit:
+            preview = unique_sample_names_sorted[:sample_names_limit]
+            print(
+                f"Unique sample names found across all the VCF files in the project (count: {sample_count}, showing first {sample_names_limit}):\n{preview}\n"
+                f"To view all, use --sample-names-output <FILE> or --sample-names-stdout."
+            )
+            return
+
         print(
             f"Unique sample names found across all the VCF files in the project (count: {sample_count}):\n{unique_sample_names_sorted}"
         )
@@ -111,6 +152,15 @@ def show_dimensions_index(
                 record = entry
                 break
         if record:
+            if sample_names_output or sample_names_stdout:
+                _write_or_print_sample_names(
+                    indexed_files=[record],
+                    sample_names_output=sample_names_output,
+                    sample_names_stdout=sample_names_stdout,
+                )
+                return
+
+            _truncate_sample_names_in_entry(record, sample_names_limit)
             print(yaml.safe_dump(record, sort_keys=False))
         else:
             print(
@@ -118,6 +168,17 @@ def show_dimensions_index(
                 "\nHint: use 'divbase-cli files ls' to view all files in the project."
             )
         return
+
+    if sample_names_output or sample_names_stdout:
+        _write_or_print_sample_names(
+            indexed_files=dimensions_info.get("indexed_files", []),
+            sample_names_output=sample_names_output,
+            sample_names_stdout=sample_names_stdout,
+        )
+        return
+
+    for entry in dimensions_info.get("indexed_files", []):
+        _truncate_sample_names_in_entry(entry, sample_names_limit)
 
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
 
@@ -163,3 +224,43 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
         "indexed_files": dimensions_list,
         "skipped_files": skipped_list,
     }
+
+
+def _truncate_sample_names_in_entry(entry: dict, sample_names_limit: int) -> None:
+    """
+    Truncate sample names output in terminal, while preserving full counts.
+    """
+    dimensions = entry.get("dimensions", {})
+    sample_names = dimensions.get("sample_names", [])
+    if len(sample_names) > sample_names_limit:
+        dimensions["sample_names"] = sample_names[:sample_names_limit]
+        dimensions["sample_names_note"] = (
+            f"Showing first {sample_names_limit} of {len(sample_names)} samples. "
+            "Use --sample-names-output <FILE> or --sample-names-stdout to view all."
+        )
+
+
+def _write_or_print_sample_names(
+    indexed_files: list[dict],
+    sample_names_output: str | None,
+    sample_names_stdout: bool,
+) -> None:
+    """
+    Export full sample names data from divbase-cli dimensions show
+    either to a file or to stdout. If used without --unique-samples, it will also include the filename that each sample occurs in.
+    """
+    lines: list[str] = []
+    for entry in indexed_files:
+        file_name = entry.get("filename", "")
+        sample_names = entry.get("dimensions", {}).get("sample_names", [])
+        for sample_name in sample_names:
+            lines.append(f"{file_name}\t{sample_name}")
+
+    if sample_names_output:
+        output_path = Path(sample_names_output)
+        output_path.write_text("\n".join(lines) + ("\n" if lines else ""))
+        print(f"Wrote {len(lines)} sample-name rows to: {output_path}")
+        return
+
+    if sample_names_stdout:
+        print("\n".join(lines))

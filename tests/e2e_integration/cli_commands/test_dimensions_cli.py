@@ -365,3 +365,117 @@ def test_show_unique_scaffolds_dedicated_endpoint(
     # Verify numeric scaffolds come first, sorted numerically
     numeric_scaffolds = [s for s in scaffold_names if s.isdigit()]
     assert numeric_scaffolds == sorted(numeric_scaffolds, key=int), "Numeric scaffolds should be sorted numerically"
+
+
+def test_show_dimensions_sample_names_output_writes_file(
+    CONSTANTS,
+    run_update_dimensions,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+    tmp_path,
+):
+    """
+    Test that --sample-names-output writes full sample-name rows to file.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    output_path = tmp_path / "sample_names.tsv"
+    command = f"dimensions show --project {project_name} --sample-names-output {output_path}"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    assert output_path.exists(), f"Expected output file {output_path} to exist"
+
+    rows = output_path.read_text().strip().splitlines()
+    assert len(rows) > 0, "Expected at least one sample row in output file"
+    assert all("\t" in row for row in rows), "Expected tab-delimited rows in format: filename<TAB>sample_name"
+    assert any("HOM_20ind_17SNPs" in row for row in rows), "Expected known VCF filename in output rows"
+    assert "Wrote" in cli_result.stdout and "sample-name rows" in cli_result.stdout
+
+
+def test_show_dimensions_sample_names_stdout_streams_rows(
+    CONSTANTS,
+    run_update_dimensions,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test that --sample-names-stdout prints filename/sample rows to stdout.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --sample-names-stdout"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+
+    lines = [line for line in cli_result.stdout.splitlines() if line.strip()]
+    assert len(lines) > 0, "Expected streamed rows in stdout"
+    assert all("\t" in line for line in lines), "Expected tab-delimited rows in format: filename<TAB>sample_name"
+
+
+def test_show_dimensions_truncates_sample_names_in_terminal(
+    CONSTANTS,
+    run_update_dimensions,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test that --sample-names-limit truncates shown sample names and adds a note.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --sample-names-limit 2"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+
+    dimensions_info = yaml.safe_load(cli_result.stdout)
+    indexed_files = dimensions_info.get("indexed_files", [])
+    assert len(indexed_files) > 0, "Expected indexed files in output"
+
+    first_entry_dimensions = indexed_files[0].get("dimensions", {})
+    shown_sample_names = first_entry_dimensions.get("sample_names", [])
+    assert len(shown_sample_names) <= 2, f"Expected sample_names to be truncated to <=2, got {shown_sample_names}"
+    assert "sample_names_note" in first_entry_dimensions, "Expected truncation note in output"
+
+
+def test_show_dimensions_rejects_output_and_stdout_together(
+    CONSTANTS,
+    run_update_dimensions,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+    tmp_path,
+):
+    """
+    Test that using --sample-names-output and --sample-names-stdout together fails.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    output_path = tmp_path / "sample_names.tsv"
+    command = f"dimensions show --project {project_name} --sample-names-output {output_path} --sample-names-stdout"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code != 0, "Expected command to fail when both output modes are provided"
+    combined_output = (
+        (cli_result.stdout or "")
+        + (getattr(cli_result, "stderr", "") or "")
+        + (str(cli_result.exception) if cli_result.exception else "")
+    )
+    assert "Use only one of --sample-names-output or --sample-names-stdout." in combined_output
