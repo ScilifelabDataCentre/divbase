@@ -40,7 +40,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
-from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,13 @@ def sample_metadata_query_task(
     if not vcf_dimensions_data.get("vcf_files"):
         raise VCFDimensionsEntryMissingError(project_name=project_name)
 
+    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
+        vcf_dimensions_data=vcf_dimensions_data,
+        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        project_id=project_id,
+    )
+
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
@@ -237,6 +244,11 @@ def bcftools_pipe_task(
         raise VCFDimensionsEntryMissingError(project_name=project_name)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
+        vcf_dimensions_data=vcf_dimensions_data,
+        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        project_id=project_id,
+    )
 
     metadata_path = _download_sample_metadata(
         metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
@@ -247,12 +259,6 @@ def bcftools_pipe_task(
         filter_string=tsv_filter,
         project_id=project_id,
         vcf_dimensions_data=vcf_dimensions_data,
-    )
-
-    _check_that_file_versions_match_dimensions_index(
-        vcf_dimensions_data=vcf_dimensions_data,
-        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
-        metadata_result=metadata_result,
     )
 
     files_to_download = metadata_result.unique_filenames
@@ -705,26 +711,53 @@ def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tup
     return sample_set_overlap_results
 
 
-def _check_that_file_versions_match_dimensions_index(
+def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     vcf_dimensions_data: dict,
     latest_versions_of_bucket_files: dict[str, str],
-    metadata_result,
+    project_id: int,
 ) -> None:
     """
-    Ensure that the VCF dimensions index is up to date with the latest versions of the VCF files.
+    Check that all VCF files in the bucket are tracked in the dimensions index and
+    that tracked files have matching version IDs.
+
+    Skipped VCF files (DivBase-generated result files) are considered tracked.
     """
-    # Build lookup dict: filename -> s3_version_id
-    vcf_lookup = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data["vcf_files"]}
+    indexed_vcf_lookup = {
+        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+    }
 
-    for file in metadata_result.unique_filenames:
-        file_version_ID = latest_versions_of_bucket_files.get(file, "null")
+    with SyncSessionLocal() as db:
+        skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
+    skipped_vcf_files = set(skipped_vcfs.keys())
 
-        if file not in vcf_lookup or vcf_lookup[file] != file_version_ID:
-            logger.error(f"VCF dimensions are outdated for file: {file}")
-            raise ValueError(
-                "The VCF dimensions file is not up to date with the VCF files in the project. "
-                "Please run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
-            )
+    vcf_files_in_bucket = {
+        file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")
+    }
+
+    indexed_vcf_files = set(indexed_vcf_lookup.keys())
+    tracked_vcf_files = indexed_vcf_files | skipped_vcf_files
+    unindexed_files = vcf_files_in_bucket - tracked_vcf_files
+
+    outdated_files = []
+    for file_name in indexed_vcf_files:
+        if file_name in vcf_files_in_bucket:
+            indexed_version = indexed_vcf_lookup[file_name]
+            bucket_version = latest_versions_of_bucket_files.get(file_name, "null")
+            if indexed_version != bucket_version:
+                outdated_files.append(file_name)
+                logger.error(
+                    f"VCF file '{file_name}' version mismatch: indexed={indexed_version}, bucket={bucket_version}"
+                )
+
+    stale_files = sorted(set(unindexed_files) | set(outdated_files))
+
+    if stale_files:
+        logger.error(f"Found {len(stale_files)} stale/untracked VCF file(s): {stale_files}")
+        raise DimensionsNotUpToDateWithBucketError(
+            "The following VCF files or file versions in the project are not part of the project's VCF dimensions: "
+            f"'{', '.join(stale_files)}'. "
+            "\nPlease run 'divbase-cli dimensions update --project <project_name>' and then submit the query again."
+        )
 
 
 def _record_task_metrics(task_metrics: TaskMetrics) -> None:
