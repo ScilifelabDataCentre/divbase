@@ -477,16 +477,43 @@ def test_show_dimensions_sample_names_stdout_streams_rows(
     project_id = project_map[project_name]
     user_id = 1
 
+    expected_sample_names = [
+        "8_HOM-E57",
+        "8_HOM-E59",
+        "8_HOM-E64",
+        "8_HOM-E74",
+        "8_HOM-E78",
+        "1a_HOM-G34",
+        "5a_HOM-I13",
+        "5a_HOM-I14",
+        "5a_HOM-I20",
+        "5a_HOM-I21",
+        "5a_HOM-I7",
+        "1b_HOM-G55",
+        "1b_HOM-G58",
+        "1b_HOM-G83",
+        "5b_HOM-H17",
+        "5b_HOM-H23",
+        "5b_HOM-H25",
+        "5b_HOM-H7",
+        "7_HOM-J21",
+        "4_HOM-P25",
+    ]
+
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     command = f"dimensions show --project {project_name} --sample-names-stdout"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
 
-    lines = [line for line in cli_result.stdout.splitlines() if line.strip()]
-    sample_rows = [line for line in lines if "\t" in line]
-    assert len(sample_rows) > 0, "Expected streamed sample rows in stdout"
-    assert all("\t" in line for line in sample_rows), "Expected tab-delimited rows in format: filename<TAB>sample_name"
+    output_sample_names = [
+        line.split()[1]
+        for line in cli_result.stdout.splitlines()
+        if len(line.split()) == 2 and line.split()[0].endswith((".vcf", ".vcf.gz"))
+    ]
+    assert output_sample_names, "Expected streamed sample rows in stdout"
+    missing = set(expected_sample_names) - set(output_sample_names)
+    assert not missing, f"Missing sample names in output: {missing}"
 
 
 def test_show_dimensions_truncates_sample_names_in_terminal(
