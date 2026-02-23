@@ -111,11 +111,9 @@ async def update_vcf_dimensions_endpoint(
     return job_id
 
 
-vcf_dimensions_router.get(
+@vcf_dimensions_router.get(
     "/projects/{project_name}/samples", status_code=status.HTTP_200_OK, response_model=DimensionsSamplesResult
 )
-
-
 async def list_unique_samples_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),

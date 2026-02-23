@@ -6,7 +6,11 @@ import yaml
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
 from divbase_cli.user_auth import make_authenticated_request
-from divbase_lib.api_schemas.vcf_dimensions import DimensionsShowResult
+from divbase_lib.api_schemas.vcf_dimensions import (
+    DimensionsSamplesResult,
+    DimensionsScaffoldsResult,
+    DimensionsShowResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,13 @@ def show_dimensions_index(
             help="If set, will show all unique scaffold names found across all the VCF files in the project.",
         )
     ),
+    unique_samples: bool = (
+        typer.Option(
+            False,
+            "--unique-samples",
+            help="If set, will show all unique sample names found across all the VCF files in the project.",
+        )
+    ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
@@ -57,6 +68,32 @@ def show_dimensions_index(
     """
 
     project_config = resolve_project(project_name=project)
+
+    if unique_samples:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
+        )
+        unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
+        sample_count = len(unique_sample_names_sorted)
+        print(
+            f"Unique sample names found across all the VCF files in the project (count: {sample_count}):\n{unique_sample_names_sorted}"
+        )
+        return
+
+    if unique_scaffolds:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}/scaffolds",
+        )
+        unique_scaffold_names_sorted = DimensionsScaffoldsResult(**response.json()).unique_scaffolds
+        scaffold_count = len(unique_scaffold_names_sorted)
+        print(
+            f"Unique scaffold names found across all the VCF files in the project (count: {scaffold_count}):\n{unique_scaffold_names_sorted}"
+        )
+        return
 
     response = make_authenticated_request(
         method="GET",
@@ -82,26 +119,6 @@ def show_dimensions_index(
             )
         return
 
-    if unique_scaffolds:
-        unique_scaffold_names = set()
-        for entry in dimensions_info.get("indexed_files", []):
-            unique_scaffold_names.update(entry.get("dimensions", {}).get("scaffolds", []))
-
-        numeric_scaffold_names = []
-        non_numeric_scaffold_names = []
-        for scaffold in unique_scaffold_names:
-            if scaffold.isdigit():
-                numeric_scaffold_names.append(int(scaffold))
-            else:
-                non_numeric_scaffold_names.append(scaffold)
-
-        unique_scaffold_names_sorted = [str(n) for n in sorted(numeric_scaffold_names)] + sorted(
-            non_numeric_scaffold_names
-        )
-
-        print(f"Unique scaffold names found across all the VCF files in the project:\n{unique_scaffold_names_sorted}")
-        return
-
     print(yaml.safe_dump(dimensions_info, sort_keys=False))
 
 
@@ -109,14 +126,23 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
     """
     Convert the API response to a YAML-like format for display in the user's terminal.
     """
+
+    def sort_scaffolds(scaffolds: list[str]) -> list[str]:
+        numeric = sorted([int(s) for s in scaffolds if s.isdigit()])
+        non_numeric = sorted([s for s in scaffolds if not s.isdigit()])
+        return [str(n) for n in numeric] + non_numeric
+
     dimensions_list = []
     for entry in api_response.vcf_files:
+        scaffolds = entry.get("scaffolds", [])
+        sorted_scaffolds = sort_scaffolds(scaffolds)
         dimensions_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],
             "last_updated": entry.get("updated_at"),
             "dimensions": {
-                "scaffolds": entry.get("scaffolds", []),
+                "scaffold_count": len(sorted_scaffolds),
+                "scaffolds": sorted_scaffolds,
                 "sample_count": entry.get("sample_count", 0),
                 "sample_names": entry.get("samples", []),
                 "variants": entry.get("variant_count", 0),
