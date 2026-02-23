@@ -392,8 +392,13 @@ def update_vcf_dimensions_task(
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-    already_indexed_vcfs = {
-        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
+    indexed_entries = vcf_dimensions_data.get("vcf_files", [])
+    already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
+    incomplete_indexed_vcfs = {
+        entry["vcf_file_s3_key"]
+        for entry in indexed_entries
+        if (entry.get("sample_count", 0) > 0 and not entry.get("samples"))
+        or (entry.get("variant_count", 0) > 0 and not entry.get("scaffolds"))
     }
 
     with SyncSessionLocal() as db:
@@ -401,13 +406,27 @@ def update_vcf_dimensions_task(
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
+    if incomplete_indexed_vcfs:
+        logger.warning(
+            "Found %d VCF dimension entries with missing child rows. Forcing re-index even when version is unchanged: %s",
+            len(incomplete_indexed_vcfs),
+            sorted(incomplete_indexed_vcfs),
+        )
+
     non_indexed_vcfs = [
         file
         for file in vcf_files
-        if not (
-            (file in already_skipped_vcfs and already_skipped_vcfs[file] == latest_versions_of_bucket_files.get(file))
-            or (
-                file in already_indexed_vcfs and already_indexed_vcfs[file] == latest_versions_of_bucket_files.get(file)
+        if (
+            file in incomplete_indexed_vcfs
+            or not (
+                (
+                    file in already_skipped_vcfs
+                    and already_skipped_vcfs[file] == latest_versions_of_bucket_files.get(file)
+                )
+                or (
+                    file in already_indexed_vcfs
+                    and already_indexed_vcfs[file] == latest_versions_of_bucket_files.get(file)
+                )
             )
         )
     ]
