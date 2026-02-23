@@ -27,6 +27,7 @@ from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
+from divbase_api.routes.core import core_router
 from divbase_api.routes.project_versions import project_version_router
 from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
@@ -66,35 +67,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
-
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
+app.include_router(core_router, prefix="/api/v1/core", tags=["core"])
 app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
-
+app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
+app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
+app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
+app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
-app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
-
-app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
-
-app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
 
 static_dir_path = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
-
-
-# TODO - move below routes into routes dir when ready.
-@app.get("/api/health")
-def health():
-    return {"status": "ok"}
 
 
 def main():

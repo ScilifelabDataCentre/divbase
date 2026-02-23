@@ -8,9 +8,10 @@ import logging
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.session import Session
 
-from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB
+from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,11 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
 
     Get all VCF metadata entries for a given project ID.
     """
-    stmt = select(VCFMetadataDB).where(VCFMetadataDB.project_id == project_id)
+    stmt = (
+        select(VCFMetadataDB)
+        .where(VCFMetadataDB.project_id == project_id)
+        .options(selectinload(VCFMetadataDB.samples), selectinload(VCFMetadataDB.scaffolds))
+    )
     db_result = db.execute(stmt)
 
     entries = list(db_result.scalars().all())
@@ -33,8 +38,8 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
             {
                 "vcf_file_s3_key": entry.vcf_file_s3_key,
                 "s3_version_id": entry.s3_version_id,
-                "samples": entry.samples,
-                "scaffolds": entry.scaffolds,
+                "samples": [s.sample_name for s in entry.samples],
+                "scaffolds": [s.scaffold_name for s in entry.scaffolds],
                 "variant_count": entry.variant_count,
                 "sample_count": entry.sample_count,
                 "file_size_bytes": entry.file_size_bytes,
@@ -87,13 +92,16 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: dict) -> None:
     This function uses PostgreSQL's ON CONFLICT DO UPDATE to ensure that if a VCF metadata entry
     with the same (vcf_file_s3_key, project_id) already exists, it will be updated with the new data.
     Otherwise, INSERT a new entry.
+
+    Samples and scaffolds are stored in separate FK tables (VCFMetadataSamplesDB, VCFMetadataScaffoldsDB)
+    and are popped (cut out) from the dict before the upsert to VCFMetadataDB and then added to the FK tables accordingly.
     """
+    samples: list[str] = vcf_metadata_data.pop("samples", [])
+    scaffolds: list[str] = vcf_metadata_data.pop("scaffolds", [])
+
     stmt = insert(VCFMetadataDB).values(**vcf_metadata_data)
 
-    update_dict = {}
-    for entry_index, entry_value in vcf_metadata_data.items():
-        if entry_index not in ["vcf_file_s3_key", "project_id"]:
-            update_dict[entry_index] = entry_value
+    update_dict = {k: v for k, v in vcf_metadata_data.items() if k not in ["vcf_file_s3_key", "project_id"]}
 
     stmt = stmt.on_conflict_do_update(
         index_elements=["vcf_file_s3_key", "project_id"],
@@ -102,6 +110,14 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: dict) -> None:
 
     db.execute(stmt)
     db.commit()
+
+    # Get the upserted/updated entry from the main model (=parent object) and use it to add the samples and scaffolds to the respective FK tables (=child objects)
+    vcf_metadata = get_vcf_metadata_by_keys(db, vcf_metadata_data["vcf_file_s3_key"], vcf_metadata_data["project_id"])
+    # Important! This is a full replacement based on the VCF files in the bucket, not an append. If a samples in a vcf file is added, changed, or removed, the relationship will delete the existing samples entries for that VCF with cascade="all, delete-orphan" and insert the new ones.
+    vcf_metadata.samples = [VCFMetadataSamplesDB(sample_name=name) for name in samples]
+    vcf_metadata.scaffolds = [VCFMetadataScaffoldsDB(scaffold_name=name) for name in scaffolds]
+    db.commit()
+
     logger.info(
         f"VCF metadata created/updated for {vcf_metadata_data['vcf_file_s3_key']} "
         f"in project {vcf_metadata_data['project_id']}"

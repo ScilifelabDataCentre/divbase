@@ -258,6 +258,11 @@ def test_get_task_status_by_task_id(
     user_id = 1
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
 
@@ -321,7 +326,6 @@ def test_query_exits_when_dimensions_are_outdated(
     Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions index is not up-to-date. Test for these cases:
     1. version_outdated: uploads a new version of an existing VCF file after dimensions update
     2. unindexed: uploads a new VCF file that is not present in the dimensions index
-
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
@@ -348,30 +352,31 @@ def test_query_exits_when_dimensions_are_outdated(
         command = f"files upload {test_file_path}  --project {project_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
-        assert result.exit_code == 0
-        assert vcf_filename in result.stdout
+        try:
+            assert result.exit_code == 0
+            assert vcf_filename in result.stdout
 
-        params = {
-            "tsv_filter": "Area:West of Ireland;Sex:F",
-            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
-            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-            "bucket_name": bucket_name,
-            "project_id": project_id,
-            "project_name": project_name,
-            "user_id": 1,
-            "job_id": job_id,
-        }
-        with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
-            bcftools_pipe_task(**params)
-        assert (
-            "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
-            in str(excinfo.value)
-        )
-
-        # Clean up the uploaded file if needed (for unindexed test to not affect other tests)
-        if cleanup_file:
-            command = f"files rm {vcf_filename}  --project {project_name}"
-            runner.invoke(app, command)
+            params = {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": bucket_name,
+                "project_id": project_id,
+                "project_name": project_name,
+                "user_id": 1,
+                "job_id": job_id,
+            }
+            with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
+                bcftools_pipe_task(**params)
+            assert (
+                "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
+                in str(excinfo.value)
+            )
+        finally:
+            # Ensure cleanup always runs for the unindexed scenario to avoid test pollution.
+            if cleanup_file:
+                command = f"files rm {vcf_filename}  --project {project_name}"
+                runner.invoke(app, command)
 
 
 class TestSidecarQueryTaskErrorsPropagation:

@@ -113,12 +113,6 @@ class SidecarMetadataFormatError(Exception):
     pass
 
 
-class DimensionsNotUpToDateWithBucketError(Exception):
-    """Raised when there are VCF files in the bucket that are not in the database VCF dimensions."""
-
-    pass
-
-
 class TaskUserError(Exception):
     """
     Raised in Celery tasks when an error needs to propagate back to the CLI user.
@@ -138,6 +132,12 @@ class TaskUserError(Exception):
 
 class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
+
+    pass
+
+
+class DimensionsNotUpToDateWithBucketError(Exception):
+    """Raised when VCF files in a bucket are missing or outdated in the dimensions index."""
 
     pass
 

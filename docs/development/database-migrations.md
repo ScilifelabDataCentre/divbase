@@ -65,6 +65,12 @@ op.execute("DROP TYPE IF EXISTS projectroles")
 
 See the bottom of the first migration script (2025-12-04_initial_migration.py) for an example of this.
 
+You could also run the automatic migration tests now to help verify your migrations scripts are correct.
+
+```bash
+pytest -s tests/migrations
+```
+
 #### 4. Test out the migration
 
 - In local development, migrations are applied automatically when the stack starts up using the `db-migrator` init-container.
@@ -95,6 +101,32 @@ You can also run the `pytest-alembic` tests to further validate the newly create
 pytest tests/migrations
 ```
 
+## Migrations in local development (swapping between branches/downgrading)
+
+- If you pull a branch with new migrations, you will need to restart the stack to apply the new migrations (see above).
+- If you work on a branch with new migrations, and then switch back to main (or another branch without those migrations), you will need to downgrade the database to the previous migration version, and then restart the stack to apply the downgraded schema, here are the steps you can follows:
+
+### Protocol
+
+1. Be in the branch that has the latest migration script (as you need the downgrade function from the latest migration script so trying this from any other branch will not work).
+
+2. Use the db-migrator container to run the downgrade command (so adjust the command/entry point in the docker compose file to something like this:
+
+    ```bash
+    # From: docker/divbase_compose.yaml command: ["alembic", "upgrade", "head"]
+    ["alembic", "downgrade", "<REVISION_ID_TO_DOWNGRADE_TO>"] # or -1 to downgrade one step
+    ```
+
+3. Down everything
+
+4. Undo the change to the db-migrator container in the docker compose file.
+
+5. Swap to the other branch (e.g. main) that does not have the new migration script.
+
+6. docker compose up/watch and it should just work as you will now be at "head" again.
+
+The validation run by the fastapi lifespan event on startup will help tell you if you succeded or not, as it will error if you are not at the head revision for that branch. So if fastapi is working, it's probably working.
+
 ## Production Deployment
 
 Documentation on how to run migrations in production/deployed environments is covered in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase).
@@ -115,3 +147,27 @@ Documentation on how to run migrations in production/deployed environments is co
 ### Starlette admin/admin panel not showing the models
 
 - You need the models in your src to match the postgres schema. So if you have pending changes (that you have or have not created migrations for) they won't display until you've actually done the migration.
+
+### Migrations that include new fields with non-nullable constraints
+
+One way to solve this is to modify the migration scripts upgrade command as follows:
+
+In this example, we're adding a new column "organisation" to the user table, and it cannot be null (and we already have users...), so we need to provide a default value for existing rows.
+
+```python
+def upgrade() -> None:
+    # Add the server_default param to the add operation for the new column
+    # "server_default=sa.text("'Not specified'") was added to below command
+    # We use sa.text to ensure the default value is set as a string in the database,
+    # see e.g. here for why: https://github.com/sqlalchemy/alembic/discussions/1433
+    op.add_column('user', sa.Column('organisation', sa.String(length=200), nullable=False, server_default=sa.text("'Not specified'"),))
+
+    # Any rows in the database table that existed before the migration will now be populated with the default value 'Not specified'.
+    # At the end of the same migration script, remove the server_default param from the column (with `server_default=None`) - so our models match exactly with the database schema.
+    # New rows will now require the application to provide a value for the organisation column.
+    op.alter_column('user', 'organisation', server_default=None)
+```
+
+**You don't need to set the server_default in the models.py, just in the migration script.**
+
+Alternatively you could set the server_default in the models.py, but then you should be comfortable with it always having a default value. There are also other ways to solve this problem...

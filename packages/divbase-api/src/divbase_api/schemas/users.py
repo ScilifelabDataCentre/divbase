@@ -6,6 +6,7 @@ TODOs:
 """
 
 from datetime import datetime
+from typing import Self
 
 from pydantic import (
     BaseModel,
@@ -16,12 +17,13 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 
 
 class UserBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=100)
     email: EmailStr = Field(..., max_length=50)
+    organisation: str = Field(..., min_length=3, max_length=200)
+    organisation_role: str = Field(..., min_length=3, max_length=100)
 
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 
@@ -31,28 +33,9 @@ class UserBase(BaseModel):
         return v.lower() if v else v
 
 
-class UserCreate(UserBase):
-    password: SecretStr = Field(..., min_length=8, max_length=100)
-
-
-class UserUpdate(BaseModel):
-    """Schema for a user to update their own profile."""
-
-    name: str = Field(..., min_length=3, max_length=100)
-
-
-class UserPasswordUpdate(BaseModel):
-    """Schema for a user to update their own password."""
-
-    password: SecretStr
-    confirm_password: SecretStr
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v):
-        if len(v.get_secret_value()) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        return v
+class UserPasswordBase(BaseModel):
+    password: SecretStr = Field(..., min_length=10, max_length=100)
+    confirm_password: SecretStr = Field(..., min_length=10, max_length=100)
 
     @model_validator(mode="after")
     def check_passwords_match(self) -> Self:
@@ -61,11 +44,20 @@ class UserPasswordUpdate(BaseModel):
         return self
 
 
-class AdminUserPasswordUpdate(BaseModel):
-    """Schema for an admin to update a user's password."""
+class UserCreate(UserBase, UserPasswordBase):
+    """Schema for creating a new user."""
 
-    password: SecretStr | None = Field(None, min_length=8, max_length=100)
-    confirm_password: SecretStr | None = Field(None, min_length=8, max_length=100)
+
+class UserUpdate(BaseModel):
+    """Schema for a user to update their own profile."""
+
+    name: str = Field(..., min_length=3, max_length=100)
+    organisation: str = Field(..., min_length=3, max_length=200)
+    organisation_role: str = Field(..., min_length=3, max_length=100)
+
+
+class UserPasswordUpdate(UserPasswordBase):
+    """Schema for a user to update their own password."""
 
 
 class UserResponse(UserBase):

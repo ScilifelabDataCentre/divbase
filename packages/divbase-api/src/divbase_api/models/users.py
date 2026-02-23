@@ -29,6 +29,9 @@ class UserDB(BaseDBModel):
     email: Mapped[str] = mapped_column(String(50), index=True, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(128))  # supports up to SHA-512
 
+    organisation: Mapped[str] = mapped_column(String(200))
+    organisation_role: Mapped[str] = mapped_column(String(100))
+
     is_admin: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
     is_deleted: Mapped[bool] = mapped_column(default=False)
