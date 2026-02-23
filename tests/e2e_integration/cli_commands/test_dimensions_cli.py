@@ -27,6 +27,29 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
+def _parse_list_from_cli_output(stdout: str) -> list:
+    """
+    Helper function to parse a Python list from CLI output that may span multiple lines.
+    """
+    lines = stdout.splitlines()
+    list_text = ""
+    collecting = False
+
+    for line in lines:
+        if "[" in line and "count:" not in line:
+            collecting = True
+        if collecting:
+            list_text += line
+            if "]" in line:
+                break
+
+    assert list_text, f"List not found in output:\n{stdout}"
+
+    list_start = list_text.find("[")
+    list_end = list_text.rfind("]") + 1
+    return ast.literal_eval(list_text[list_start:list_end])
+
+
 def test_update_vcf_dimensions_task_directly(
     CONSTANTS,
     run_update_dimensions,
@@ -276,3 +299,69 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     assert result_second_run.get("VCF_files_added") is None or result_second_run.get("VCF_files_added") == [], (
         f"Expected no new files indexed, got: {result_second_run.get('VCF_files_added')}"
     )
+
+
+def test_show_unique_samples(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions show --unique-samples' command.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --unique-samples"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+
+    assert "count:" in cli_result.stdout, "Expected count to be displayed in output"
+    assert "Unique sample names found" in cli_result.stdout, "Expected header message"
+    assert "[" in cli_result.stdout and "]" in cli_result.stdout, "Expected list output"
+
+    sample_names = _parse_list_from_cli_output(cli_result.stdout)
+
+    assert isinstance(sample_names, list), f"Expected list, got {type(sample_names)}"
+    assert len(sample_names) > 0, "Expected at least one sample"
+
+    assert sample_names == sorted(sample_names), f"Samples should be sorted: {sample_names}"
+
+
+def test_show_unique_scaffolds_dedicated_endpoint(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions show --unique-scaffolds' command using the dedicated endpoint.
+    This tests both the CRUD function and the CLI integration.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --unique-scaffolds"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    assert "count:" in cli_result.stdout, "Expected count to be displayed in output"
+
+    scaffold_names = _parse_list_from_cli_output(cli_result.stdout)
+
+    expected_scaffolds = ["1", "4", "5", "6", "7", "8", "13", "18", "20", "21", "22", "24"]
+    assert scaffold_names == expected_scaffolds, f"Expected {expected_scaffolds}, got {scaffold_names}"
+
+    # Verify numeric scaffolds come first, sorted numerically
+    numeric_scaffolds = [s for s in scaffold_names if s.isdigit()]
+    assert numeric_scaffolds == sorted(numeric_scaffolds, key=int), "Numeric scaffolds should be sorted numerically"
