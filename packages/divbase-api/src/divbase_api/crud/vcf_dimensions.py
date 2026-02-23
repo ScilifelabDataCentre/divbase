@@ -101,7 +101,7 @@ async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: in
         .order_by(VCFMetadataScaffoldsDB.scaffold_name)
     )
     result = await db.execute(stmt)
-    scaffolds = [row[0] for row in result]
+    scaffolds = list(result.scalars().all())
 
     # Sort scaffold names in the same way as the dimensions show CLI does when returning all dimensions data: numeric first, then alphabetic
     # Numeric sorting of name strings results means that 10 comes after 2 for scaffolds that have numeric names.
