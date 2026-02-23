@@ -70,9 +70,6 @@ async def get_skipped_vcfs_by_project_async(db: AsyncSession, project_id: int) -
 async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
     """
     Get unique sample names across all VCF files from a project's dimensions entries.
-
-    Samples are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened before finding the unqiue values.
-    To do all operations on the PostgreSQL side (to avoid having do it here in the fastAPI side), need to first use unnest() to flatten the arrays.Expand commentComment on lines R58 to R59Resolved
     """
 
     stmt = (
@@ -89,8 +86,6 @@ async def get_unique_samples_by_project_async(db: AsyncSession, project_id: int)
 async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: int) -> list[str]:
     """
     Get unique scaffold names across all VCF files for a project.
-
-    Like samples, scaffolds are stored in as ARRAY(String) in the VCFMetadataDB model and need to be flattened with the unnest() PostgreSQL function.
     """
 
     stmt = (

@@ -71,7 +71,7 @@ class SkippedVCFDB(BaseDBModel):
 
 class VCFMetadataSamplesDB(BaseDBModel):
     """
-    DB model for on-to-many relationship between VCF file metadata and the sample names in the VCF files.
+    DB model for one-to-many relationship between VCF file metadata and the sample names in the VCF files.
     """
 
     __tablename__ = "vcf_metadata_samples"
@@ -87,7 +87,7 @@ class VCFMetadataSamplesDB(BaseDBModel):
 
 class VCFMetadataScaffoldsDB(BaseDBModel):
     """
-    DB model for on-to-many relationship between VCF file metadata and the scaffold names in the VCF files.
+    DB model for one-to-many relationship between VCF file metadata and the scaffold names in the VCF files.
     """
 
     __tablename__ = "vcf_metadata_scaffolds"
