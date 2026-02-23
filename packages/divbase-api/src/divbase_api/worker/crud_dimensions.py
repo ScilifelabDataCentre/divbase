@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.session import Session
 
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
@@ -13,7 +14,11 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
     """
     Get all VCF metadata entries for a given project ID.
     """
-    stmt = select(VCFMetadataDB).where(VCFMetadataDB.project_id == project_id)
+    stmt = (
+        select(VCFMetadataDB)
+        .where(VCFMetadataDB.project_id == project_id)
+        .options(selectinload(VCFMetadataDB.samples), selectinload(VCFMetadataDB.scaffolds))
+    )
     db_result = db.execute(stmt)
 
     entries = list(db_result.scalars().all())
