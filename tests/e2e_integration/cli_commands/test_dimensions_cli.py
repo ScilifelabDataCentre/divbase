@@ -9,8 +9,10 @@ from unittest.mock import patch
 
 import pytest
 import yaml
+from sqlalchemy import delete, select
 from typer.testing import CliRunner
 
+from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
 from divbase_api.worker.tasks import update_vcf_dimensions_task
@@ -299,6 +301,69 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     assert result_second_run.get("VCF_files_added") is None or result_second_run.get("VCF_files_added") == [], (
         f"Expected no new files indexed, got: {result_second_run.get('VCF_files_added')}"
     )
+
+
+def test_update_dimensions_reindexes_when_child_rows_missing(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test that an indexed VCF with missing child rows is detected as incomplete and re-indexed.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    first_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    indexed_files = first_result.get("VCF_files_added", [])
+    assert indexed_files, "Expected at least one indexed VCF file"
+    target_vcf = indexed_files[0]
+
+    target_stmt = select(VCFMetadataDB).where(
+        VCFMetadataDB.project_id == project_id, VCFMetadataDB.vcf_file_s3_key == target_vcf
+    )
+    target_entry = db_session_sync.execute(target_stmt).scalar_one()
+
+    db_session_sync.execute(delete(VCFMetadataSamplesDB).where(VCFMetadataSamplesDB.vcf_metadata_id == target_entry.id))
+    db_session_sync.execute(
+        delete(VCFMetadataScaffoldsDB).where(VCFMetadataScaffoldsDB.vcf_metadata_id == target_entry.id)
+    )
+    db_session_sync.commit()
+
+    dimensions_after_child_row_delete = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    for entry in dimensions_after_child_row_delete["vcf_files"]:
+        if entry["vcf_file_s3_key"] == target_vcf:
+            incomplete_entry = entry
+            break
+    assert incomplete_entry["sample_count"] > 0
+    assert incomplete_entry["samples"] == []
+    assert incomplete_entry["variant_count"] > 0
+    assert incomplete_entry["scaffolds"] == []
+
+    second_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    assert second_result["status"] == "completed"
+    assert target_vcf in (second_result.get("VCF_files_added") or []), (
+        f"Expected incomplete file to be re-indexed, got: {second_result.get('VCF_files_added')}"
+    )
+
+    db_session_sync.expire_all()  # Force refresh of db session to avoid stale cache from the session used by run_update_dimensions()
+    dimensions_after_reindex = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    for entry in dimensions_after_reindex["vcf_files"]:
+        if entry["vcf_file_s3_key"] == target_vcf:
+            repaired_entry = entry
+            break
+
+    assert repaired_entry["sample_count"] > 0
+    assert len(repaired_entry["samples"]) > 0
+    assert repaired_entry["variant_count"] > 0
+    assert len(repaired_entry["scaffolds"]) > 0
 
 
 def test_show_unique_samples(
