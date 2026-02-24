@@ -25,6 +25,7 @@ from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
+from divbase_api.middleware import register_middleware
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
 from divbase_api.routes.core import core_router
@@ -84,6 +85,7 @@ app.include_router(fr_projects_router, prefix="/projects", include_in_schema=Fal
 
 register_exception_handlers(app)
 register_admin_panel(app=app, engine=engine)
+register_middleware(app=app)
 
 static_dir_path = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir_path), name="static")

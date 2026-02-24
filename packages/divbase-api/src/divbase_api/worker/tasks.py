@@ -789,7 +789,7 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     stale_files = sorted(set(unindexed_files) | set(outdated_files))
 
     if stale_files:
-        logger.error(f"Found {len(stale_files)} stale/untracked VCF file(s): {stale_files}")
+        logger.warning(f"Found {len(stale_files)} stale/untracked VCF file(s): {stale_files}")
         raise DimensionsNotUpToDateWithBucketError(
             "The following VCF files or file versions in the project are not part of the project's VCF dimensions: "
             f"'{', '.join(stale_files)}'. "
