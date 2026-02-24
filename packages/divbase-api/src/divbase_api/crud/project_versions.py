@@ -11,6 +11,7 @@ Version entries are created and managed via the API.
 import logging
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -158,7 +159,10 @@ async def update_project_version(
     This is by design to ensure that version entries remain immutable representations of the state of the project.
     """
     if not new_name and not new_description:
-        raise ValueError("No updates specified. Please provide a new name and/or description to update the version.")
+        raise HTTPException(
+            status_code=400,
+            detail="No updates specified. Please provide a new name and/or description to update the version.",
+        )
 
     stmt = select(ProjectVersionDB).where(
         ProjectVersionDB.project_id == project_id,
