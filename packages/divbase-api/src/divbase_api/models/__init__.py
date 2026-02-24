@@ -29,4 +29,6 @@ __all__ = [
     "ProjectVersionDB",
     "AnnouncementDB",
     "AnnouncementTarget",
+    "VCFMetadataSamplesDB",
+    "VCFMetadataScaffoldsDB",
 ]
