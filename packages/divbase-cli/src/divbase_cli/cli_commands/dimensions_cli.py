@@ -360,7 +360,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
             print(f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols)}")
 
         if stats.get("has_multi_values", False):
-            print("  Multi-value cells: Yes (semicolon-separated values detected)")
+            print("  Multi-value cells: Yes (Python list notation detected)")
         else:
             print("  Multi-value cells: No")
 

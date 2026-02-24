@@ -90,9 +90,13 @@ class MetadataTSVValidator:
 
         has_multi_values = False
         for col in df.columns:
-            if df[col].astype(str).str.contains(";", na=False).any():
-                has_multi_values = True
+            for val in df[col].dropna():
+                if isinstance(val, list):
+                    has_multi_values = True
+                    break
+            if has_multi_values:
                 break
+        # If has_multi_values is True: at least one cell in the DataFrame contains a Python list (multi-value cell).
         self.stats["has_multi_values"] = has_multi_values
 
         empty_cells_per_column = {}
