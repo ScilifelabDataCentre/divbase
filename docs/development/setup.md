@@ -80,6 +80,13 @@ This will deploy the API, job system and a MinIO (S3) instance locally. Using `c
 
 Once the backend is up and running you can then run `divbase-cli` commands against it or go to for example <http://localhost:8000/api/v1/docs> to test out some of API commands directly.
 
+!!! Warning "Login will not work on Safari/webkit browsers in local development"
+    Webkit (browser Safari is based on) does not like setting a HTTP-only cookie as "secure" when using HTTP instead of HTTPS. In local dev when you connect to (http://)localhost you have a HTTP connection, so it refuses to set the cookie(s). The cookies being stored are the access + refresh token of the user.
+
+    **Safari works fine for end users connecting to a deployed instance, as that will be via HTTPS.**
+
+    We could add some logic along the lines of: `if in local dev/test env; set cookie to not be secure`, but for now, just easier to say use a diff browser for local dev.
+
 The DivBase frontend is running on <http://localhost:8000>. The frontend is part of the FastAPI app deployment. All API routes are appended with `/api/v1` to avoid collisions. The frontend uses Jinja2 templating.
 
 To help with setup, we provide a local development setup script which will:
