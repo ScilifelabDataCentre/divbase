@@ -134,7 +134,7 @@ def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) 
     return result.scalar_one_or_none()
 
 
-def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> SkippedVCFDB:
+def create_or_update_skipped_vcf(db: Session, skipped_vcf_data: dict) -> None:
     """
     Upsert (update or insert) skipped VCF entry. Similar to create_or_update_vcf_metadata but for tracking the skipped VCF files (=old divbase results VCF files).
     """
