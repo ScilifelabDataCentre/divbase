@@ -107,6 +107,12 @@ class NoVCFFilesFoundError(Exception):
     pass
 
 
+class DimensionsNotUpToDateWithBucketError(Exception):
+    """Raised when VCF files in a bucket are missing or outdated in the dimensions index."""
+
+    pass
+
+
 class ChecksumVerificationError(Exception):
     """Raised when a calculated file's checksum does not match the expected value."""
 

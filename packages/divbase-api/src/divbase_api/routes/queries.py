@@ -29,6 +29,7 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryRequest,
     SampleMetadataQueryTaskResult,
 )
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
@@ -84,6 +85,8 @@ async def sample_metadata_query(
     except VCFDimensionsEntryMissingError:
         # Catch and raise anew to avoid duplications in the error message
         raise VCFDimensionsEntryMissingError(project_name=project.name) from None
+    except DimensionsNotUpToDateWithBucketError as e:
+        raise DimensionsNotUpToDateWithBucketError(str(e)) from None
     except celery.exceptions.TimeoutError:  # type: ignore
         error_message = (
             f"The query is still being processed and has Task ID: {results.id}. \n"
