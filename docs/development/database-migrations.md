@@ -38,7 +38,7 @@ docker compose -f docker/divbase_compose.yaml down && docker compose -f docker/d
 # Enter the running FastAPI container
 docker compose -f docker/divbase_compose.yaml exec -it fastapi sh
 
-# Generate migration (use descriptive names)
+# Generate migration (use descriptive names). The data will be prepended automatically so it does not need to be included in the name
 alembic revision --autogenerate -m "write_your_useful_slug_here"
 
 # Exit container - if needed - see NOTE below
