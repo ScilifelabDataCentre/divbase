@@ -118,6 +118,110 @@ def test_list_versions_for_empty_project(logged_in_edit_user_with_existing_confi
     assert "No versions found" in result.stdout
 
 
+def test_update_version_name(logged_in_edit_user_with_existing_config):
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    new_name = "v1.0.1"
+    result = runner.invoke(app, f"version update {VERSION_1_NAME} --new-name {new_name}")
+
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+    assert new_name in result.stdout
+
+    list_result = runner.invoke(app, "version ls")
+    assert new_name in list_result.stdout
+    assert VERSION_1_NAME not in list_result.stdout
+
+
+def test_update_version_description(logged_in_edit_user_with_existing_config):
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    new_description = "Updated description"
+    result = runner.invoke(app, f'version update {VERSION_1_NAME} --new-description "{new_description}"')
+
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+
+    list_result = runner.invoke(app, "version ls")
+    assert new_description in list_result.stdout
+
+
+def test_update_version_name_and_description(logged_in_edit_user_with_existing_config):
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    new_name = "v1.0.1"
+    new_description = "Updated description"
+    result = runner.invoke(
+        app, f'version update {VERSION_1_NAME} --new-name {new_name} --new-description "{new_description}"'
+    )
+
+    assert result.exit_code == 0
+    assert new_name in result.stdout
+
+    list_result = runner.invoke(app, "version ls")
+    assert new_name in list_result.stdout
+    assert new_description in list_result.stdout
+    assert VERSION_1_NAME not in list_result.stdout
+
+
+def test_update_version_short_flags(logged_in_edit_user_with_existing_config):
+    """Test that short flags -n and -d work correctly"""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    new_name = "v1.0.1"
+    new_description = "Updated via short flags"
+    result = runner.invoke(app, f'version update {VERSION_1_NAME} -n {new_name} -d "{new_description}"')
+
+    assert result.exit_code == 0
+    assert new_name in result.stdout
+
+
+def test_update_version_no_options_provided(logged_in_edit_user_with_existing_config):
+    """Test that running update without any options exits without error as just does no operation."""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    result = runner.invoke(app, f"version update {VERSION_1_NAME}")
+
+    assert result.exit_code == 0
+    assert "--new-name" in result.stdout
+    assert "--new-description" in result.stdout
+
+
+def test_update_version_that_does_not_exist(logged_in_edit_user_with_existing_config):
+    result = runner.invoke(app, "version update does_not_exist --new-name v1.0.1")
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.status_code == 404
+
+
+def test_update_version_name_to_already_existing_name_fails(logged_in_edit_user_with_existing_config):
+    """Test that renaming a version to a name already used by another version fails"""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+    runner.invoke(app, f"version add {VERSION_2_NAME}")
+
+    result = runner.invoke(app, f"version update {VERSION_1_NAME} --new-name {VERSION_2_NAME}")
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "project_version_already_exists_error"
+    assert result.exception.status_code == 400
+
+
+def test_update_version_name_to_same_name(logged_in_edit_user_with_existing_config):
+    """Test that renaming a version to its current name succeeds without error"""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+
+    result = runner.invoke(app, f"version update {VERSION_1_NAME} --new-name {VERSION_1_NAME}")
+
+    assert result.exit_code == 0
+    assert VERSION_1_NAME in result.stdout
+
+    list_result = runner.invoke(app, "version ls")
+    assert VERSION_1_NAME in list_result.stdout
+
+
 def test_delete_version(logged_in_edit_user_with_existing_config):
     command = f"version add {VERSION_1_NAME}"
     result = runner.invoke(app, command)
