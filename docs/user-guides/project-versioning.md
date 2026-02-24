@@ -36,7 +36,7 @@ divbase-cli version add NAME --description "[OPTIONAL DESCRIPTION]"
 To see all existing versions for your project, run:
 
 ```bash
-divbase-cli version list # --project [PROJECT_NAME] to specify a non-default project
+divbase-cli version ls # --project [PROJECT_NAME] to specify a non-default project
 ```
 
 This will display a list of all saved versions, including their names, descriptions, and creation dates.
@@ -56,7 +56,7 @@ This view will also include all the files associated with that version.
 To delete a specific version from your project, run:
 
 ```bash
-divbase-cli version delete NAME
+divbase-cli version rm NAME
 ```
 
 This will delete the version entry from the project. Deleted versions older than 30 days will be permanently deleted. You can ask a DivBase admin to restore a deleted version within that time period.

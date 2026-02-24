@@ -17,9 +17,9 @@ $ divbase-cli version [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `add`: Add a new project version entry which...
-* `list`: List all entries in the project versioning...
+* `ls`: List all entries in the project versioning...
 * `info`: Provide detailed information about a user...
-* `delete`: Delete a version entry in the project...
+* `rm`: Delete a version entry in the project...
 
 ## `divbase-cli version add`
 
@@ -41,7 +41,7 @@ $ divbase-cli version add [OPTIONS] NAME
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `--help`: Show this message and exit.
 
-## `divbase-cli version list`
+## `divbase-cli version ls`
 
 List all entries in the project versioning file.
 
@@ -52,7 +52,7 @@ Soft-deleted versions can be restored by a DivBase admin within 30 days of delet
 **Usage**:
 
 ```console
-$ divbase-cli version list [OPTIONS]
+$ divbase-cli version ls [OPTIONS]
 ```
 
 **Options**:
@@ -81,7 +81,7 @@ $ divbase-cli version info [OPTIONS] VERSION
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `--help`: Show this message and exit.
 
-## `divbase-cli version delete`
+## `divbase-cli version rm`
 
 Delete a version entry in the project versioning table. This does not delete the files themselves.
 Deleted version entries older than 30 days will be permanently deleted.
@@ -90,7 +90,7 @@ You can ask a DivBase admin to restore a deleted version within that time period
 **Usage**:
 
 ```console
-$ divbase-cli version delete [OPTIONS] NAME
+$ divbase-cli version rm [OPTIONS] NAME
 ```
 
 **Arguments**:

@@ -43,7 +43,7 @@ def test_add_version_with_description(logged_in_edit_user_with_existing_config):
 
     assert result.exit_code == 0
 
-    list_cmd = "version list"
+    list_cmd = "version ls"
     list_result = runner.invoke(app, list_cmd)
 
     assert VERSION_1_NAME in list_result.stdout
@@ -56,7 +56,7 @@ def test_add_multiple_versions(logged_in_edit_user_with_existing_config):
         command = f"version add {version}"
         runner.invoke(app, command)
 
-    command = "version list"
+    command = "version ls"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -82,7 +82,7 @@ def test_list_versions(logged_in_edit_user_with_existing_config):
     runner.invoke(app, f"version add {VERSION_1_NAME}")
     runner.invoke(app, f"version add {VERSION_2_NAME}")
 
-    command = "version list"
+    command = "version ls"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -94,14 +94,14 @@ def test_list_versions_with_and_without_include_deleted_flag(logged_in_edit_user
     """Test that deleted versions only show up when include_deleted flag is used"""
     runner.invoke(app, f"version add {VERSION_1_NAME}")
     runner.invoke(app, f"version add {VERSION_2_NAME}")
-    runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    runner.invoke(app, f"version rm {VERSION_1_NAME}")
 
-    result = runner.invoke(app, "version list")
+    result = runner.invoke(app, "version ls")
     assert result.exit_code == 0
     assert VERSION_1_NAME not in result.stdout
     assert VERSION_2_NAME in result.stdout
 
-    result = runner.invoke(app, "version list --include-deleted")
+    result = runner.invoke(app, "version ls --include-deleted")
     assert result.exit_code == 0
     assert VERSION_1_NAME in result.stdout
     assert VERSION_2_NAME in result.stdout
@@ -109,11 +109,11 @@ def test_list_versions_with_and_without_include_deleted_flag(logged_in_edit_user
 
 def test_list_versions_for_empty_project(logged_in_edit_user_with_existing_config):
     """Test that list version works fine if no versions exist"""
-    result = runner.invoke(app, "version list")
+    result = runner.invoke(app, "version ls")
     assert result.exit_code == 0
     assert "No versions found" in result.stdout
 
-    result = runner.invoke(app, "version list --include-deleted")
+    result = runner.invoke(app, "version ls --include-deleted")
     assert result.exit_code == 0
     assert "No versions found" in result.stdout
 
@@ -123,12 +123,12 @@ def test_delete_version(logged_in_edit_user_with_existing_config):
     result = runner.invoke(app, command)
     assert result.exit_code == 0
 
-    command = f"version delete {VERSION_1_NAME}"
+    command = f"version rm {VERSION_1_NAME}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
 
-    list_cmd = "version list"
+    list_cmd = "version ls"
     result = runner.invoke(app, list_cmd)
     assert result.exit_code == 0
     assert VERSION_1_NAME not in result.stdout
@@ -136,7 +136,7 @@ def test_delete_version(logged_in_edit_user_with_existing_config):
 
 def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
     nonexistent_version = "v99.99.99"
-    command = f"version delete {nonexistent_version}"
+    command = f"version rm {nonexistent_version}"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
@@ -151,11 +151,11 @@ def test_delete_already_deleted_version(logged_in_edit_user_with_existing_config
     Should not raise error, but just say it's already been deleted.
     """
     runner.invoke(app, f"version add {VERSION_1_NAME}")
-    result = runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    result = runner.invoke(app, f"version rm {VERSION_1_NAME}")
     assert result.exit_code == 0
     assert f"version: '{VERSION_1_NAME}' was deleted" in result.stdout
 
-    result = runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    result = runner.invoke(app, f"version rm {VERSION_1_NAME}")
     assert result.exit_code == 0
     assert VERSION_1_NAME in result.stdout
     assert "has already been soft-deleted" in result.stdout
@@ -196,7 +196,7 @@ def test_get_version_info_for_deleted_version(logged_in_edit_user_with_existing_
     files_in_project = CONSTANTS["PROJECT_CONTENTS"][default_project]
 
     runner.invoke(app, f"version add {VERSION_1_NAME}")
-    runner.invoke(app, f"version delete {VERSION_1_NAME}")
+    runner.invoke(app, f"version rm {VERSION_1_NAME}")
 
     command = f"version info {VERSION_1_NAME}"
     result = runner.invoke(app, command)

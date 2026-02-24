@@ -49,7 +49,7 @@ def add_version(
     print(f"New version: '{add_version_response.name}' added to the project: '{project_config.name}'")
 
 
-@version_app.command("list")
+@version_app.command("ls")
 def list_versions(
     project: str | None = PROJECT_NAME_OPTION,
     include_deleted: bool = typer.Option(False, help="Include soft-deleted versions in the listing."),
@@ -122,7 +122,7 @@ def get_version_info(
         print(f"- '{object_name}' : '{hash}'")
 
 
-@version_app.command("delete")
+@version_app.command("rm")
 def delete_version(
     name: str = typer.Argument(help="Name of the version (e.g., semantic version).", show_default=False),
     project: str | None = PROJECT_NAME_OPTION,
