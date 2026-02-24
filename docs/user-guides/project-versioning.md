@@ -51,6 +51,33 @@ divbase-cli version info NAME
 
 This view will also include all the files associated with that version.
 
+## Update a version
+
+You can change the name and/or description of an existing project version, via the update subcommand:
+
+```bash
+divbase-cli version update NAME [OPTIONS]
+```
+
+- Replace `NAME` with the current name of the version you want to modify.
+- Use `--new-name` (or `-n`) to rename the version.
+- Use `--new-description` (or `-d`) to update the description.
+
+At least one of `--new-name` or `--new-description` must be provided.
+
+Example:
+
+```bash
+divbase-cli version update "my old name" \
+--new-name "spruce pine study" \
+--new-description "Represents state of data prior to running pangenome analysis for paper X"
+```
+
+!!! Info "Only the name and the description can be modified"
+    The files and timestamp associated with a version entry are immutable and cannot be changed.
+    This is by design to ensure version entries are representations of the project's state at the timepoint they were created at.
+    If you need to capture a new state, create a new version instead with `divbase-cli version add`.
+
 ## Deleting versions
 
 To delete a specific version from your project, run:
