@@ -14,6 +14,7 @@ from divbase_cli.services.project_versions import (
     delete_version_command,
     get_version_details_command,
     list_versions_command,
+    update_version_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
 
@@ -47,6 +48,53 @@ def add_version(
         divbase_base_url=logged_in_url,
     )
     print(f"New version: '{add_version_response.name}' added to the project: '{project_config.name}'")
+
+
+@version_app.command("update")
+def update_version(
+    version_name: str = typer.Argument(help="Name of the existing version you want to modify", show_default=False),
+    new_name: str | None = typer.Option(
+        None, "--new-name", "-n", help="New name for the version. If not specified, the name will remain unchanged."
+    ),
+    new_description: str | None = typer.Option(
+        None,
+        "--new-description",
+        "-d",
+        help="Optional new description of the version. If not specified, the description will remain unchanged.",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Update an existing project version entries name and/or description.
+
+    The files and timestamp associated with a version entry are immutable and cannot be changed.
+    This is by design to ensure version entries are representations of the project's state at the timepoint they were created at.
+    You can create a new version entry to capture the current state of the project instead.
+
+    To see your current version entries run: `divbase-cli version ls`
+    """
+    if not new_name and not new_description:
+        print(
+            "No updates specified. Please provide a new name (--new-name) and/or description (--new-description) to update for this entry."
+        )
+        return
+
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    updated_version = update_version_command(
+        project_name=project_config.name,
+        divbase_base_url=logged_in_url,
+        version_name=version_name,
+        new_name=new_name,
+        new_description=new_description,
+    )
+    if new_name and new_name != version_name:
+        print(f"Version '{version_name}' renamed to '{updated_version.name}' in project: '{project_config.name}'")
+    else:
+        print(f"Version '{updated_version.name}' updated in project: '{project_config.name}'")
+    if new_description:
+        print(f"New description: '{updated_version.description}'")
 
 
 @version_app.command("ls")
@@ -101,7 +149,9 @@ def get_version_info(
     version: str = typer.Argument(help="Specific version to retrieve information for"),
     project: str | None = PROJECT_NAME_OPTION,
 ):
-    """Provide detailed information about a user specified project version, including all files present and their unique hashes."""
+    """
+    Provide detailed information about a user specified project version, including all files present and their unique hashes.
+    """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
@@ -129,6 +179,7 @@ def delete_version(
 ):
     """
     Delete a version entry in the project versioning table. This does not delete the files themselves.
+
     Deleted version entries older than 30 days will be permanently deleted.
     You can ask a DivBase admin to restore a deleted version within that time period.
     """
