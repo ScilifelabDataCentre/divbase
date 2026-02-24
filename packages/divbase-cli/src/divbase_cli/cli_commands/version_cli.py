@@ -65,7 +65,7 @@ def update_version(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Update an existing project version entries name and/or description.
+    Update an existing project version entry's name and/or description.
 
     The files and timestamp associated with a version entry are immutable and cannot be changed.
     This is by design to ensure version entries are representations of the project's state at the timepoint they were created at.
