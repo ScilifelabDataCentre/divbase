@@ -21,6 +21,7 @@ from divbase_api.exceptions import (
     ProjectVersionAlreadyExistsError,
     ProjectVersionCreationError,
     ProjectVersionNotFoundError,
+    ProjectVersionSoftDeletedError,
 )
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
@@ -173,6 +174,10 @@ async def update_project_version(
     if version_entry is None:
         raise ProjectVersionNotFoundError(
             message=f"Version '{version_name}' was not found for this project. Check if you mistyped the version name or are looking at the wrong project."
+        )
+    if version_entry.is_deleted:
+        raise ProjectVersionSoftDeletedError(
+            message=f"Version '{version_name}' has been soft-deleted. You must restore it before you can modify it."
         )
 
     if new_name is not None:

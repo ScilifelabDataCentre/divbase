@@ -222,6 +222,19 @@ def test_update_version_name_to_same_name(logged_in_edit_user_with_existing_conf
     assert VERSION_1_NAME in list_result.stdout
 
 
+def test_update_soft_deleted_version_fails(logged_in_edit_user_with_existing_config):
+    """Test that attempting to update a soft-deleted version raises an error."""
+    runner.invoke(app, f"version add {VERSION_1_NAME}")
+    runner.invoke(app, f"version rm {VERSION_1_NAME}")
+
+    result = runner.invoke(app, f"version update {VERSION_1_NAME} --new-name v1.0.1")
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert result.exception.error_type == "project_version_soft_deleted_error"
+    assert result.exception.status_code == 400
+
+
 def test_delete_version(logged_in_edit_user_with_existing_config):
     command = f"version add {VERSION_1_NAME}"
     result = runner.invoke(app, command)
