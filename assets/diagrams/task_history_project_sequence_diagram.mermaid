@@ -1,0 +1,43 @@
+sequenceDiagram
+    title divbase-cli task-history project
+    participant User
+    participant CLI
+    participant API
+    participant DB as PostgreSQL
+
+    User->>CLI: Run "divbase-cli task-history project PROJECT [OPTIONS]"
+    Note over CLI: PROJECT is required argument<br/>Options: --limit, --config
+
+    CLI->>CLI: Load user config from config file
+    CLI->>CLI: Check if logged in (logged_in_url exists)
+
+    alt Not logged in
+        CLI->>User: Raise AuthenticationError
+    else Logged in
+        CLI->>API: HTTP GET /api/v1/task-history/projects/{project_name}
+
+        API->>DB: Verify user is project member with MANAGE role or higher
+        Note over API: Uses get_project_member dependency
+
+        alt Not a project member or insufficient role
+            API-->>CLI: Raise AuthorizationError
+            CLI->>User: Display error message
+        else Authorized (MANAGE role or admin)
+            API->>DB: Query TaskHistoryDB for project
+            Note over API: Returns all tasks for the project<br/>(not just user's own tasks)
+            DB-->>API: Return task history records
+
+            API->>API: Deserialize task metadata to TaskHistoryResult
+            API-->>CLI: Return list[TaskHistoryResult]
+
+            CLI->>CLI: TaskHistoryDisplayManager processes results
+            Note over CLI: Sort by created_at DESC<br/>Limit to display_limit (default 10)
+            CLI->>User: Display formatted task history table
+        end
+    end
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/task_history_project_sequence_diagram.mermaid \
+%%      -o docs/assets/diagrams/task_history_project_sequence_diagram.svg \
+%%      -t dark \
+%%      --backgroundColor "#22272e"
