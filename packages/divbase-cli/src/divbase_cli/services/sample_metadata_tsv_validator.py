@@ -47,8 +47,8 @@ class MetadataTSVValidator:
         )
         result = shared_validator.load_and_validate()
 
-        validator.errors = result.errors
-        validator.warnings = result.warnings
+        validator.errors = [error_entry.message for error_entry in result.errors]
+        validator.warnings = [warning_entry.message for warning_entry in result.warnings]
 
         if result.df is not None and "Sample_ID" in result.df.columns:
             try:
