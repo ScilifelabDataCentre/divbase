@@ -2,7 +2,7 @@
 Shared validation logic for DivBase sidecar metadata TSV files.
 
 This file contains the single source of truth for the TSV content validation logic used by both
-the CLI validator (MetadataTSVValidator) on the client-side, and the SidecarQueryManager on the server-side.
+the CLI validator (ClientSideMetadataTSVValidator) on the client-side, and the SidecarQueryManager on the server-side.
 
 Note! Logic for the queries themselves (e.g. how filtering is handled) is not shared between the two.
 This file is only for validation of the contents of the TSV file, not for query processing.
@@ -64,7 +64,7 @@ class MetadataValidationResult:
 
 class SharedMetadataValidator:
     """
-    Core validation logic for DivBase sidecar metadata TSV files. Shared between client-side MetadataTSVValidator
+    Core validation logic for DivBase sidecar metadata TSV files. Shared between client-side ClientSideMetadataTSVValidator
     and server-side SidecarQueryManager to ensure consistent validation behavior.
 
     It does not validate metadata query filters. That is handled in the SidecarQueryManager.

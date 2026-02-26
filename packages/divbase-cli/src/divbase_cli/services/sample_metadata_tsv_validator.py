@@ -12,7 +12,7 @@ from pathlib import Path
 from divbase_lib.metadata_validator import SharedMetadataValidator
 
 
-class MetadataTSVValidator:
+class ClientSideClientSideMetadataTSVValidator:
     """
     Client-side wrapper for validating sidecar metadata TSV files against DivBase requirements.
     Calls SharedMetadataValidator to perform the actual validation.

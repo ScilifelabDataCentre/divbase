@@ -8,7 +8,7 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.services.sample_metadata_tsv_validator import MetadataTSVValidator
+from divbase_cli.services.sample_metadata_tsv_validator import ClientSideClientSideMetadataTSVValidator
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
@@ -338,7 +338,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
     dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
-    validator = MetadataTSVValidator(
+    validator = ClientSideClientSideMetadataTSVValidator(
         file_path=input_path,
         project_samples=unique_sample_names,
         dimensions_sample_preview_limit=dimensions_sample_preview_limit,

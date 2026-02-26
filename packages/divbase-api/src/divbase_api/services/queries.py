@@ -713,7 +713,7 @@ class SidecarQueryManager:
 
         Uses the warning and error category Enums from SharedMetadataValidator logic to raise errors or send warnings to the user.
 
-        Validates the same errors as the client-side MetadataTSVValidator using shared validation logic:
+        Validates the same errors as the client-side ClientSideClientSideMetadataTSVValidator using shared validation logic:
         - Header: first column must be #Sample_ID, no duplicate or empty column names
         - Sample_ID: no empty values, no duplicates, no multi-values (Python lists)
         - Data: no commas in any cell values
@@ -721,7 +721,7 @@ class SidecarQueryManager:
         try:
             logger.info(f"Loading sidecar metadata file: {self.file}")
 
-            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side MetadataTSVValidator.
+            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side ClientSideClientSideMetadataTSVValidator.
             # There are several helper methods for the filtering logic in this class, but they are for the query filters and are not related to the validation of the TSV file contents.
             self.metadata_validator = SharedMetadataValidator(
                 file_path=self.file,
