@@ -35,7 +35,6 @@ path = "src/divbase_api/__init__.py"
 
 [tool.uv.sources]
 divbase-lib = { workspace = true }
-divbase-worker = { workspace = true }
 
 [project.scripts]
 divbase-api = "divbase_api.divbase_api:main"
