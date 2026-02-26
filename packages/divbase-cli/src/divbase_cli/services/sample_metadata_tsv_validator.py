@@ -13,21 +13,29 @@ from divbase_lib.metadata_validator import SharedMetadataValidator
 
 
 class MetadataTSVValidator:
-    """Validates sidecar metadata TSV files against DivBase requirements."""
+    """
+    Client-side wrapper for validating sidecar metadata TSV files against DivBase requirements.
+    Calls SharedMetadataValidator to perform the actual validation.
+    """
 
-    def __init__(self, file_path: Path, project_samples: list[str] | set[str]):
+    def __init__(
+        self,
+        file_path: Path,
+        project_samples: list[str] | set[str],
+        dimensions_sample_preview_limit: int | None = 20,
+    ):
         """
         Initialize the validator. File path is the path to the TSV file to validate,
         and project_samples is a list or set of unique sample names from the project's dimensions index.
         """
         self.file_path = file_path
         self.project_samples = set(project_samples) if isinstance(project_samples, list) else project_samples
+        self.dimensions_sample_preview_limit = dimensions_sample_preview_limit
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.stats: dict = {}
 
-    @classmethod
-    def validate(cls, file_path: Path, project_samples: list[str] | set[str]) -> tuple[dict, list[str], list[str]]:
+    def validate(self) -> tuple[dict, list[str], list[str]]:
         """
         Validate a TSV file and return results.
 
@@ -38,22 +46,21 @@ class MetadataTSVValidator:
         Returns a tuple of (stats, errors, warnings) where stats is a dictionary of collected statistics,
         errors is a list of error messages, and warnings is a list of warning messages.
         """
-        validator = cls(file_path, project_samples)
-
         shared_validator = SharedMetadataValidator(
-            file_path=file_path,
-            project_samples=validator.project_samples,
+            file_path=self.file_path,
+            project_samples=self.project_samples,
             skip_dimensions_check=False,
+            dimensions_sample_preview_limit=self.dimensions_sample_preview_limit,
         )
         result = shared_validator.load_and_validate()
 
-        validator.errors = [error_entry.message for error_entry in result.errors]
-        validator.warnings = [warning_entry.message for warning_entry in result.warnings]
+        self.errors = [error_entry.message for error_entry in result.errors]
+        self.warnings = [warning_entry.message for warning_entry in result.warnings]
 
         if result.df is not None and "Sample_ID" in result.df.columns:
             try:
                 tsv_samples = set(result.df["Sample_ID"].tolist())
-                validator._collect_statistics(
+                self._collect_statistics(
                     df=result.df,
                     tsv_samples=tsv_samples,
                     numeric_cols=result.numeric_columns,
@@ -64,7 +71,7 @@ class MetadataTSVValidator:
                 # If Sample_ID access fails (e.g., in the very rare case that duplicate Sample_ID column make it a DataFrame due to dataframe nesting), skip statistics as the validation errors already captured the issue
                 pass
 
-        return validator.stats, validator.errors, validator.warnings
+        return self.stats, self.errors, self.warnings
 
     def _collect_statistics(
         self,

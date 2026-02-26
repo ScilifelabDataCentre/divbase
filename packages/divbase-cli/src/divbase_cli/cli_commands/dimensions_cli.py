@@ -338,11 +338,12 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
     dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
-    stats, errors, warnings = MetadataTSVValidator.validate(
+    validator = MetadataTSVValidator(
         file_path=input_path,
         project_samples=unique_sample_names,
         dimensions_sample_preview_limit=dimensions_sample_preview_limit,
     )
+    stats, errors, warnings = validator.validate()
 
     if stats:
         print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")

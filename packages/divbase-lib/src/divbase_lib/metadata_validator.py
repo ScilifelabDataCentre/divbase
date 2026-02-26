@@ -87,9 +87,9 @@ class SharedMetadataValidator:
     def __init__(
         self,
         file_path: Path,
-        dimensions_sample_preview_limit: int | None,
         project_samples: set[str] | None = None,
         skip_dimensions_check: bool = False,
+        dimensions_sample_preview_limit: int | None = 20,
     ):
         self.file_path = file_path
         self.project_samples = project_samples
