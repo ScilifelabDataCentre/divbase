@@ -4,185 +4,12 @@ Unit tests for the MetadataTSVValidator class.
 Tests the shared validation logic from SharedMetadataValidator as exercised
 through the CLI's MetadataTSVValidator wrapper.
 
-Fixtures in this file use Python list notation for multi-value cells (the
-current format). The shared conftest.py still contains old semicolon-format
-fixtures used by query engine tests that haven't been migrated yet.
+Shared fixtures are defined in tests/unit/conftest.py.
 """
 
 from pathlib import Path
 
-import pytest
-
 from divbase_cli.services.sample_metadata_tsv_validator import MetadataTSVValidator
-
-
-@pytest.fixture
-def project_samples():
-    """Standard set of project samples for testing."""
-    return {"S1", "S2", "S3", "S4", "S5"}
-
-
-@pytest.fixture
-def valid_list_tsv(tmp_path):
-    """Valid TSV using Python list notation for multi-value cells."""
-    content = "#Sample_ID\tPopulation\tArea\tWeight\n"
-    content += "S1\t1\tNorth\t12.5\n"
-    content += "S2\t[2, 4]\tEast\t18.8\n"
-    content += 'S3\t3\t["West", "South"]\t15.0\n'
-    content += "S4\t[3, 5]\tSouth\t20.0\n"
-    content += "S5\t4\tNorth\t22.1\n"
-    p = tmp_path / "valid_list.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def no_multi_values_tsv(tmp_path):
-    """TSV with only scalar values, no list notation."""
-    content = "#Sample_ID\tPopulation\n"
-    content += "S1\t1\n"
-    content += "S2\t2\n"
-    p = tmp_path / "no_multi.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def numeric_list_tsv(tmp_path):
-    """TSV with numeric list cells and negative numbers."""
-    content = "#Sample_ID\tScores\tValues\tTemperature\tLongitude\n"
-    content += "S1\t[1, 2, 3]\t[10, 20]\t-5.5\t-2.78\n"
-    content += "S2\t[4, 5]\t[30, 40, 50]\t-10.2\t-0.13\n"
-    content += "S3\t6\t60\t0\t1.25\n"
-    content += "S4\t[7, 8, 9, 10]\t70\t15.5\t[-3.5, -2.1]\n"
-    content += "S5\t11\t[80, 90]\t-20\t0\n"
-    p = tmp_path / "numeric_list.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def header_errors_tsv(tmp_path):
-    """TSV with header errors: wrong first column, duplicate columns, empty column."""
-    content = "SampleID\tPopulation\tArea\tArea\t\n"
-    content += "S1\t1\tNorth\tEast\tValue\n"
-    p = tmp_path / "header_errors.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def sample_id_errors_tsv(tmp_path):
-    """TSV with Sample_ID errors: empty, list values, duplicates."""
-    content = "#Sample_ID\tPopulation\n"
-    content += "S1\t1\n"
-    content += "\t2\n"
-    content += '["S3", "S4"]\t3\n'
-    content += "S1\t4\n"
-    p = tmp_path / "sample_id_errors.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def format_errors_tsv(tmp_path):
-    """TSV with formatting errors: wrong column count, commas, whitespace."""
-    content = "#Sample_ID\tPopulation\tArea\n"
-    content += "S1\t1\tNorth\n"
-    content += "S2\t2,3\tEast\n"
-    content += "S3 \t 4 \t West \n"
-    content += "S4\t5\n"
-    p = tmp_path / "format_errors.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def invalid_list_syntax_tsv(tmp_path):
-    """TSV with cells that look like lists but have invalid syntax."""
-    content = "#Sample_ID\tScores\tValues\n"
-    content += "S1\t[1, 2, 3]\tgood\n"
-    content += "S2\t[4\tbad_unclosed\n"
-    content += "S3\t[1 2 3]\tbad_no_commas\n"
-    content += "S4\t5\tnormal\n"
-    content += "S5\t[6, 7]\tok\n"
-    p = tmp_path / "invalid_list_syntax.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def mixed_type_list_cell_tsv(tmp_path):
-    """TSV with a list cell containing mixed element types (error)."""
-    content = "#Sample_ID\tPopulation\tArea\n"
-    content += "S1\t1\tNorth\n"
-    content += 'S2\t[1, "two", 3]\tEast\n'
-    content += "S3\t5\tSouth\n"
-    p = tmp_path / "mixed_type_list.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def mixed_type_across_cells_tsv(tmp_path):
-    """TSV with mixed types across cells in a column (some numeric, some string)."""
-    content = "#Sample_ID\tPopulation\tArea\n"
-    content += "S1\t1\tNorth\n"
-    content += "S2\tabc\tEast\n"
-    content += "S3\t3\tSouth\n"
-    content += "S4\t4\tWest\n"
-    content += "S5\tdef\tNorth\n"
-    p = tmp_path / "mixed_across_cells.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def semicolons_in_cells_tsv(tmp_path):
-    """TSV with semicolons in cell values (should produce warnings)."""
-    content = "#Sample_ID\tPopulation\tArea\n"
-    content += "S1\t1\tNorth\n"
-    content += "S2\t2;4\tEast\n"
-    content += "S3\t3\tWest;South\n"
-    p = tmp_path / "semicolons.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def whitespace_variant_lists_tsv(tmp_path):
-    """TSV with different whitespace styles in list notation."""
-    content = "#Sample_ID\tScores\n"
-    content += "S1\t[1, 2, 3]\n"
-    content += "S2\t[4,5,6]\n"
-    content += "S3\t[ 7 , 8 , 9 ]\n"
-    p = tmp_path / "whitespace_lists.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def string_list_tsv(tmp_path):
-    """TSV with string list cells."""
-    content = "#Sample_ID\tAreas\tScore\n"
-    content += 'S1\t["North", "South"]\t10\n'
-    content += 'S2\t["East"]\t20\n'
-    content += "S3\tWest\t30\n"
-    p = tmp_path / "string_list.tsv"
-    p.write_text(content)
-    return p
-
-
-@pytest.fixture
-def empty_list_tsv(tmp_path):
-    """TSV with an empty list cell."""
-    content = "#Sample_ID\tScores\n"
-    content += "S1\t[1, 2]\n"
-    content += "S2\t[]\n"
-    content += "S3\t3\n"
-    p = tmp_path / "empty_list.tsv"
-    p.write_text(content)
-    return p
 
 
 class TestValidTSV:
@@ -448,3 +275,25 @@ class TestEdgeCases:
         stats, errors, warnings = MetadataTSVValidator.validate(p, {"S1", "S2"})
         list_errors = [e for e in errors if "list" in e.lower()]
         assert len(list_errors) == 0
+
+
+class TestQuotedCellValues:
+    """Test quoted cell values that include commas/spaces and embedded quote characters."""
+
+    def test_quoted_cell_with_comma_space_produces_comma_warning(self, tmp_path):
+        content = '#Sample_ID\tArea\nS1\t"North, South"\nS2\tEast\n'
+        p = tmp_path / "quoted_comma_space.tsv"
+        p.write_text(content)
+
+        stats, errors, warnings = MetadataTSVValidator.validate(p, {"S1", "S2"})
+        assert len(errors) == 0
+        assert any("comma" in w.lower() and "North, South" in w for w in warnings)
+
+    def test_quoted_cell_with_embedded_double_quotes_is_allowed(self, tmp_path):
+        content = '#Sample_ID\tComment\nS1\t"He said ""Hi"""\nS2\tPlain\n'
+        p = tmp_path / "embedded_quotes.tsv"
+        p.write_text(content)
+
+        stats, errors, warnings = MetadataTSVValidator.validate(p, {"S1", "S2"})
+        assert len(errors) == 0
+        assert not any("list syntax" in e.lower() for e in errors)

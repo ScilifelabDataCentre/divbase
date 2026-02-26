@@ -34,7 +34,7 @@ ROUNDTRIP_FIXTURES = [
     "array_notation_tsv",
     "array_notation_multiple_cols_tsv",
     "sample_tsv_with_mixed_type_column",
-    "sample_tsv_with_semicolon_mixed_type_column",
+    "sample_tsv_with_list_mixed_type_column",
 ]
 
 
