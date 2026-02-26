@@ -84,10 +84,17 @@ class SharedMetadataValidator:
     protect the query engine from malformed TSV content.
     """
 
-    def __init__(self, file_path: Path, project_samples: set[str] | None = None, skip_dimensions_check: bool = False):
+    def __init__(
+        self,
+        file_path: Path,
+        dimensions_sample_preview_limit: int | None,
+        project_samples: set[str] | None = None,
+        skip_dimensions_check: bool = False,
+    ):
         self.file_path = file_path
         self.project_samples = project_samples
         self.skip_dimensions_check = skip_dimensions_check
+        self.dimensions_sample_preview_limit = dimensions_sample_preview_limit
         self.result = MetadataValidationResult()
 
     def load_and_validate(self) -> MetadataValidationResult:
@@ -355,15 +362,12 @@ class SharedMetadataValidator:
 
         return errors, []
 
-    @staticmethod
-    def parse_cell_value(cell_value) -> Any:
+    def parse_cell_value(self, cell_value) -> Any:
         """
-        Parse a single cell value. If the string representation starts with '[',
-        it must be a valid Python list literal (parsed via ast.literal_eval).
-        Non-list cells are returned as-is (scalar).
+        Parse a single cell value. If the string representation starts with '[', it must be a valid Python list literal (parsed via ast.literal_eval).
+        Non-list cells are returned as-is.
 
-        Raises ValueError if a cell looks like a list (starts with '[') but
-        cannot be parsed by ast.literal_eval.
+        Raises ValueError if a cell looks like a list (starts with '[') but cannot be parsed by ast.literal_eval.
         """
         if pd.isna(cell_value):
             return cell_value
@@ -592,24 +596,60 @@ class SharedMetadataValidator:
 
         missing_from_project = tsv_samples - project_samples
         if missing_from_project:
-            examples = sorted(list(missing_from_project))
+            examples, was_truncated = self._format_sample_name_preview(
+                sample_names=missing_from_project, preview_limit=self.dimensions_sample_preview_limit
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
             errors.append(
                 ValidationMessage(
                     ValidationCategory.DIMENSIONS,
-                    f"The following samples in the TSV were not found in the DivBase project's dimensions index: {examples}. "
-                    "DivBase requires that all samples in the TSV file must be present in the project's dimensions index to be used for queries.",
+                    f"The following samples in the TSV were not found in the DivBase project's dimensions index ({examples}). "
+                    "DivBase requires that all samples in the TSV file must be present in the project's dimensions index to be used for queries."
+                    f"{full_output_hint}",
                 )
             )
 
         missing_from_tsv = project_samples - tsv_samples
         if missing_from_tsv:
-            examples = sorted(list(missing_from_tsv))
+            examples, was_truncated = self._format_sample_name_preview(
+                sample_names=missing_from_tsv, preview_limit=self.dimensions_sample_preview_limit
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
             warnings.append(
                 ValidationMessage(
                     ValidationCategory.DIMENSIONS,
-                    f"The following samples in the DivBase project's dimensions index were not found in the TSV: {examples}. "
-                    "This is allowed for DivBase metadata TSV files, but please be aware that these samples will not be considered when making queries with this metadata file.",
+                    f"The following samples in the DivBase project's dimensions index were not found in the TSV ({examples}). "
+                    "This is allowed for DivBase metadata TSV files, but please be aware that these samples will not be considered when making queries with this metadata file."
+                    f"{full_output_hint}",
                 )
             )
 
         return errors, warnings
+
+    def _format_sample_name_preview(self, sample_names: set[str], preview_limit: int | None = 20) -> tuple[str, bool]:
+        """
+        Build a compact sample-name summary for terminal messages. Truncates list of sample names if it exceeds the preview limit (20 by default).
+
+        Returns only a full list when the list is small, otherwise includes a count and
+        a preview of the first 20 samples (default value) to avoid overwhelming CLI output.
+        """
+        sorted_names = sorted(sample_names)
+        total = len(sorted_names)
+        if preview_limit is None:
+            return f"count: {total}, samples: {sorted_names}", False
+
+        if total <= preview_limit:
+            return f"count: {total}, samples: {sorted_names}", False
+
+        preview = sorted_names[:preview_limit]
+        return f"count: {total}, showing first {preview_limit}: {preview}", True
+
+    def _build_full_sample_output_hint(self) -> str:
+        """
+        When the sample mismatch list is truncated (>20 for default settings), give users a hint on how they can see the full sample-name mismatch list.
+        """
+        return (
+            "To view the full list of mismatched samples, run: "
+            "divbase-cli dimensions validate-metadata-file <TSV_FILE_NAME> --project <PROJECT_NAME> "
+            "--full-sample-mismatch-names."
+        )

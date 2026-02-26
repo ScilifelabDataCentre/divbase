@@ -293,6 +293,11 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         ...,
         help="Name of the input TSV file to validate.",
     ),
+    full_sample_mismatch_names: bool = typer.Option(
+        False,
+        "--full-sample-mismatch-names",
+        help="Show full (untruncated) list of sample names for dimensions mismatch messages. Otherwise, the default limit is to show 20 sample names.",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
@@ -332,7 +337,12 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     )
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
-    stats, errors, warnings = MetadataTSVValidator.validate(file_path=input_path, project_samples=unique_sample_names)
+    dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
+    stats, errors, warnings = MetadataTSVValidator.validate(
+        file_path=input_path,
+        project_samples=unique_sample_names,
+        dimensions_sample_preview_limit=dimensions_sample_preview_limit,
+    )
 
     if stats:
         print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")

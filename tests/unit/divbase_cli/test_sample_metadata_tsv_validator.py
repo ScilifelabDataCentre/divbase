@@ -204,6 +204,13 @@ class TestDimensionMatching:
             for w in warnings
         )
 
+    def test_large_dimension_mismatch_is_summarized(self, valid_list_tsv):
+        # Create samples named S0001, S0002, ..., S0050
+        project_samples = {f"S{i:04d}" for i in range(1, 51)}
+        _, _, warnings = MetadataTSVValidator.validate(valid_list_tsv, project_samples)
+        assert any("count: 50, showing first 20" in w for w in warnings)
+        assert not any("S0050" in w for w in warnings)
+
 
 class TestStatistics:
     """Test statistics collection."""
