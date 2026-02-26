@@ -8,10 +8,11 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "pyyaml>=6.0.3,<7",
-    "boto3>=1.42.27,<2",
-    "pandas>=2.3.3,<3",
-    "pydantic>=2.12.5,<3"
+    "pyyaml==6.0.3",
+    "pandas==2.3.3", # TODO - consider major version bump
+    "pydantic==2.12.5",
+    "httpx==0.28.1",
+    "stamina==25.2.0"
 ]
 dynamic = ["version"]
 

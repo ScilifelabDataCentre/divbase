@@ -22,8 +22,8 @@ dependencies = [
     "python-multipart>=0.0.22", # TODO determine if can remove these deps of deps listings.
     "filelock>=3.20.3",
     "urllib3>=2.6.3",
+    "boto3==1.42.56",
     "divbase-lib", # always uses version in repo, handled by uv
-    "stamina>=25.2.0",
 ]
 
 [build-system]

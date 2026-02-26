@@ -208,30 +208,30 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.42.38"
+version = "1.42.56"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/38/1e5eb348e41d97ca2b6164df28501409c2fe9bd34455c256dd87644b7c0e/boto3-1.42.38.tar.gz", hash = "sha256:af2e5c08972d35fa4b4bc457031794343a6ddb1df5692db43302d5b5feaac23e", size = 112852, upload-time = "2026-01-29T20:39:37.786Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/990222f8c0cd7453c03410bc8b367ccb35ae01d9642ff1f79231cd3f3d8f/boto3-1.42.56.tar.gz", hash = "sha256:8b0779431b349582f4d61b55a2858b943d5295f4b5de62e2d669fdbbcda96bd6", size = 112814, upload-time = "2026-02-24T20:28:51.825Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/98/22e5f4f5ced6cf1aface4b438307a157e9cb7a4bcbd19f4b9dec89b0fe33/boto3-1.42.38-py3-none-any.whl", hash = "sha256:b5a748b3fdddba8aa2988af0e462996ef72dc2760b0eab30329b9d201d4b38f2", size = 140606, upload-time = "2026-01-29T20:39:36.641Z" },
+    { url = "https://files.pythonhosted.org/packages/59/bb/a7fd6f4f38cf0f6cd91c152442cbe5b5f270275a60a5c7147ae5560f2f25/boto3-1.42.56-py3-none-any.whl", hash = "sha256:e09f91170b19e0ecd5e514321d99323be3e91a58dfa73fd58cf73b7b8b179c84", size = 140556, upload-time = "2026-02-24T20:28:49.815Z" },
 ]
 
 [[package]]
 name = "botocore"
-version = "1.42.38"
+version = "1.42.57"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jmespath" },
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/b7/a02a9db7f5267547da79a28e0832059f87b7e8f275423b4384891d53bf3b/botocore-1.42.38.tar.gz", hash = "sha256:eb36d09b5c61b3ede6129f7b54630049f3eeeccf1327a32cf8944563027a4002", size = 14918119, upload-time = "2026-01-29T20:39:28.055Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/9c/f9e289f44985fe5b2e3ffc127a55cf7e87ef88499f5a8001db86d74ecfb1/botocore-1.42.57.tar.gz", hash = "sha256:51f94c602b687a70aa11d8bbea2b741b87b0aef7bddb43e5386247bf4311c479", size = 14940952, upload-time = "2026-02-25T20:31:42.049Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/c1/5db0d5f9a57d5e72dd3b18c7279b0005adaf5ffe5915803ae6216fe86cec/botocore-1.42.38-py3-none-any.whl", hash = "sha256:b67e0c4989a6bdd459cb49274df05003179165567b7789d8d920cdbdc6c2661f", size = 14590772, upload-time = "2026-01-29T20:39:25.165Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/bd/89d0fdb65488d6ee40194268b07316433b41f3aa3f242676ed804c3200f5/botocore-1.42.57-py3-none-any.whl", hash = "sha256:0d26c09955e52ac5090d9cf9e218542df81670077049a606be7c3bd235208e67", size = 14614741, upload-time = "2026-02-25T20:31:39.081Z" },
 ]
 
 [[package]]
@@ -623,6 +623,7 @@ source = { editable = "packages/divbase-api" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "boto3" },
     { name = "celery" },
     { name = "divbase-lib" },
     { name = "emails" },
@@ -637,7 +638,6 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-multipart" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "stamina" },
     { name = "starlette-admin" },
     { name = "urllib3" },
     { name = "uvicorn" },
@@ -647,6 +647,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.0,<2" },
     { name = "asyncpg", specifier = ">=0.30.0,<1" },
+    { name = "boto3", specifier = "==1.42.56" },
     { name = "celery", specifier = ">=5.6.2,<6" },
     { name = "divbase-lib", editable = "packages/divbase-lib" },
     { name = "emails", specifier = ">=0.6,<1" },
@@ -661,7 +662,6 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.10.1,<3" },
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.45,<2.1" },
-    { name = "stamina", specifier = ">=25.2.0" },
     { name = "starlette-admin", specifier = ">=0.16.0,<1" },
     { name = "urllib3", specifier = ">=2.6.3" },
     { name = "uvicorn", specifier = ">=0.40.0,<1" },
@@ -672,35 +672,33 @@ name = "divbase-cli"
 source = { editable = "packages/divbase-cli" }
 dependencies = [
     { name = "divbase-lib" },
-    { name = "httpx" },
-    { name = "stamina" },
     { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "divbase-lib", editable = "packages/divbase-lib" },
-    { name = "httpx", specifier = ">=0.28.1,<1" },
-    { name = "stamina", specifier = ">=25.2.0" },
-    { name = "typer", specifier = ">=0.21.1,<1" },
+    { name = "typer", specifier = "==0.24.1" },
 ]
 
 [[package]]
 name = "divbase-lib"
 source = { editable = "packages/divbase-lib" }
 dependencies = [
-    { name = "boto3" },
+    { name = "httpx" },
     { name = "pandas" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "stamina" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.42.27,<2" },
-    { name = "pandas", specifier = ">=2.3.3,<3" },
-    { name = "pydantic", specifier = ">=2.12.5,<3" },
-    { name = "pyyaml", specifier = ">=6.0.3,<7" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "pandas", specifier = "==2.3.3" },
+    { name = "pydantic", specifier = "==2.12.5" },
+    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "stamina", specifier = "==25.2.0" },
 ]
 
 [[package]]
@@ -2679,17 +2677,17 @@ wheels = [
 
 [[package]]
 name = "typer"
-version = "0.21.1"
+version = "0.24.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "annotated-doc" },
     { name = "click" },
     { name = "rich" },
     { name = "shellingham" },
-    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/bf/8825b5929afd84d0dabd606c67cd57b8388cb3ec385f7ef19c5cc2202069/typer-0.21.1.tar.gz", hash = "sha256:ea835607cd752343b6b2b7ce676893e5a0324082268b48f27aa058bdb7d2145d", size = 110371, upload-time = "2026-01-06T11:21:10.989Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/24/cb09efec5cc954f7f9b930bf8279447d24618bb6758d4f6adf2574c41780/typer-0.24.1.tar.gz", hash = "sha256:e39b4732d65fbdcde189ae76cf7cd48aeae72919dea1fdfc16593be016256b45", size = 118613, upload-time = "2026-02-21T16:54:40.609Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/1d/d9257dd49ff2ca23ea5f132edf1281a0c4f9de8a762b9ae399b670a59235/typer-0.21.1-py3-none-any.whl", hash = "sha256:7985e89081c636b88d172c2ee0cfe33c253160994d47bdfdc302defd7d1f1d01", size = 47381, upload-time = "2026-01-06T11:21:09.824Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/91/48db081e7a63bb37284f9fbcefda7c44c277b18b0e13fbc36ea2335b71e6/typer-0.24.1-py3-none-any.whl", hash = "sha256:112c1f0ce578bfb4cab9ffdabc68f031416ebcc216536611ba21f04e9aa84c9e", size = 56085, upload-time = "2026-02-21T16:54:41.616Z" },
 ]
 
 [[package]]
