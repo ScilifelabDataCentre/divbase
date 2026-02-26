@@ -29,7 +29,7 @@ from divbase_lib.exceptions import (
     SidecarNoDataLoadedError,
     SidecarSampleIDError,
 )
-from divbase_lib.metadata_validator import SharedMetadataValidator
+from divbase_lib.metadata_validator import SharedMetadataValidator, ValidationCategory
 
 logger = logging.getLogger(__name__)
 
@@ -700,6 +700,9 @@ class SidecarQueryManager:
         self.metadata_validator = None
         self.query_result = None
         self.query_message: str = ""
+        self.numeric_columns: list[str] = []
+        self.string_columns: list[str] = []
+        self.mixed_type_columns: list[str] = []
         self.warnings: list[str] = []
         self.load_file()
 
@@ -708,9 +711,11 @@ class SidecarQueryManager:
         Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
         Also removes any leading '#' characters from the column names.
 
+        Uses the warning and error category Enums from SharedMetadataValidator logic to raise errors or send warnings to the user.
+
         Validates the same errors as the client-side MetadataTSVValidator using shared validation logic:
         - Header: first column must be #Sample_ID, no duplicate or empty column names
-        - Sample_ID: no empty values, no duplicates, no semicolons
+        - Sample_ID: no empty values, no duplicates, no multi-values (Python lists)
         - Data: no commas in any cell values
         """
         try:
@@ -726,53 +731,28 @@ class SidecarQueryManager:
             result = self.metadata_validator.load_and_validate()
 
             if result.errors:
-                error_msg = result.errors[0]
-                # Note! The order of these errors matters.
-                if "Failed to read file" in error_msg:
+                # Note! The order of these errors matters. The first error in the list is the one that is raised, so more critical errors should be placed higher in the order than less critical errors.
+                first_encountered_error = result.errors[0]
+                if first_encountered_error.category == ValidationCategory.FILE_READ:
                     raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file")
-                elif "First column must be named '#Sample_ID'" in error_msg or (
-                    "Sample_ID" in error_msg and "column is required" in error_msg
-                ):
-                    raise SidecarColumnNotFoundError(
-                        "The 'Sample_ID' column is required in the metadata file."
-                        if "First column must be named '#Sample_ID'" in error_msg
-                        else error_msg
-                    )
-                elif ("Row" in error_msg and "Sample_ID is empty" in error_msg) or (
-                    "Sample_ID" in error_msg
-                    and (
-                        "contains semicolons" in error_msg
-                        or "Duplicate Sample_IDs" in error_msg
-                        or "contains empty or missing values" in error_msg
-                    )
-                ):
-                    raise SidecarSampleIDError(
-                        "Sample_ID column contains empty or missing values. All rows must have a valid Sample_ID."
-                        if "Row" in error_msg and "Sample_ID is empty" in error_msg
-                        else error_msg
-                    )
-                elif (
-                    "not found in the DivBase project's dimensions index" in error_msg
-                    or "Duplicate column names" in error_msg
-                    or "Empty column name" in error_msg
-                    or ("Row" in error_msg and ("Expected" in error_msg or "tab-separated" in error_msg))
-                    or "column" in error_msg.lower()
-                ):
-                    raise SidecarMetadataFormatError(error_msg)
+                elif first_encountered_error.category == ValidationCategory.SAMPLE_ID_COLUMN:
+                    raise SidecarColumnNotFoundError(first_encountered_error.message)
+                elif first_encountered_error.category == ValidationCategory.SAMPLE_ID_VALUE:
+                    raise SidecarSampleIDError(first_encountered_error.message)
                 else:
-                    raise SidecarMetadataFormatError(error_msg)
+                    raise SidecarMetadataFormatError(first_encountered_error.message)
 
-            # Capture dimension-related warnings and array notation warnings from the validator.
-            # Array notation warnings are forwarded because they directly affect query behaviour (the column
-            # will be string instead of numeric, so numeric filter syntax will not work as expected).
-            # Other file-quality warnings (mixed types, commas, etc.) are shown in CLI validation only.
             if result.warnings:
-                dimension_warnings = [w for w in result.warnings if "dimensions index" in w or "project" in w]
-                array_notation_warnings = [w for w in result.warnings if "array notation" in w.lower()]
-                self.warnings.extend(dimension_warnings)
-                self.warnings.extend(array_notation_warnings)
+                self.warnings.extend(
+                    w.message
+                    for w in result.warnings
+                    if w.category in (ValidationCategory.DIMENSIONS, ValidationCategory.FORMAT)
+                )
 
             self.df = result.df
+            self.numeric_columns = result.numeric_columns
+            self.string_columns = result.string_columns
+            self.mixed_type_columns = result.mixed_type_columns
 
         except (
             SidecarSampleIDError,
@@ -824,8 +804,8 @@ class SidecarQueryManager:
         Filter string values in the query vs. cell values in the TSV:
         - Filter strings are handled per semicolon-separated key-value pair: in "key1:value1,value2;key2:value3,value4"
           "key1:value1,value2" is handled separately from "key2:value3,value4".
-        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,value2" and each filter string value is handled separately.
-        - Cell values can be semicolon-separated, e.g. "25;30;35" in a TSV cell
+        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,va, lue2" and each filter string value is handled separately.
+        - Cells can have multi-values as long as Python list syntax is used in the TSV cell, e.g. [25, 30, 35].
         - Matching of filter string to cell values uses OR logic: if ANY value in a cell matches ANY filter value, the row matches.
           E.g. "key2:value3,value4" means that TSV cells in the "key2" column that contain "value3" will match, but also cells that contain "value3;value4" or "value4;value3" will match.
 
@@ -876,40 +856,28 @@ class SidecarQueryManager:
                     self.warnings.append(warning_msg)
                     continue
 
-                is_numeric = pd.api.types.is_numeric_dtype(self.df[key])
-                is_semicolon_numeric = self._is_semicolon_separated_numeric_column(key) if not is_numeric else False
+                is_numeric = key in self.numeric_columns
 
                 # Check if type consistency and return warnings to users if applicable.
                 # If the column is treated as string, check for potential user mistakes (e.g. using numeric filter syntax on a string column that contains numeric-looking values):
                 # 1. Warn if the column has mixed types (some values look numeric) and that the column will be treat as string type.
                 # 2. Warn if the filter uses numeric syntax on this string column. Do not raise error.
-                if not is_numeric and not is_semicolon_numeric:
-                    is_mixed, example_values, total_count = self._is_mixed_type_column(key)
+                if not is_numeric:
+                    is_mixed = key in self.mixed_type_columns
 
                     problematic_filter_values = self._detect_numeric_filter_syntax_on_string_column(
                         key, filter_string_values
                     )
 
-                    # Build warning message for string columns with possible issues. Multiple warnings are presented with indended hyphen
                     if is_mixed or problematic_filter_values:
                         warning_lines = [f"Column '{key}':"]
                         if is_mixed:
-                            warning_lines.append(
-                                "      - Contains mixed types (e.g., numeric-looking values mixed with non-numeric values, or special characters like commas (,) or hyphens (-), or Range notation such as '1-2')."
-                            )
-                            if total_count > 0:
-                                examples_str = ", ".join(f"'{v}'" for v in example_values)
-                                warning_lines.append(
-                                    f"        Found {total_count} cell(s) with problematic values. Showing up to three of those values as an example: {examples_str}"
-                                )
-
-                            warning_lines.append("        This column will be treated as a string column.")
-                            warning_lines.append(
-                                "        To store multiple numeric values, use semicolon-separated values (;) instead."
-                            )
+                            warning_lines.append("      - Contains mixed types (both numeric and non-numeric values).")
+                            warning_lines.append("        This column is treated as a string column.")
                         if problematic_filter_values:
                             warning_lines.append(
-                                f"      - Your filter contains comparison operators {problematic_filter_values}, which are not supported on string columns."
+                                f"      - Your filter contains comparison operators {problematic_filter_values}, "
+                                "which are not supported on string columns."
                             )
                             warning_lines.append(
                                 "        DivBase comparison operators (>, <, >=, <=) only work on numeric columns."
@@ -926,8 +894,8 @@ class SidecarQueryManager:
                 # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "25;30;35"
                 # Also handles columns that pandas infers as strings but contain numeric values with semicolons (e.g., "1;2;3")
                 # Also supports NOT operator with ! prefix: e.g., "Weight:!25" or "Weight:<4,!2"
-                if is_numeric or is_semicolon_numeric:
-                    filter_string_values_list = filter_string_values.split(",")
+                if is_numeric:
+                    filter_string_values_list = self._split_filter_values(filter_string_values)
 
                     # Negated values are those that start with "!" in the filter string
                     positive_values, negated_values = self._separate_positive_and_negated_values(
@@ -989,7 +957,8 @@ class SidecarQueryManager:
                 else:
                     # Non-numeric column: handle as discrete string values
                     # Supports NOT operator with ! prefix: e.g., "Area:!North" or "Area:North,!South"
-                    filter_string_values_list = filter_string_values.split(",")
+                    # Supports quoted values with commas: e.g., 'Area:"North,South"' matches the literal string
+                    filter_string_values_list = self._split_filter_values(filter_string_values)
 
                     positive_values, negated_values = self._separate_positive_and_negated_values(
                         filter_values=filter_string_values_list
@@ -1047,74 +1016,6 @@ class SidecarQueryManager:
 
         return self
 
-    def _is_semicolon_separated_numeric_column(self, key: str) -> bool:
-        """
-        Helper method for the filtering logic to detect if a column contains semicolon-separated numeric values.
-
-        Uses the shared validation logic to ensure consistency with the TSV validator.
-        """
-        if key not in self.df.columns:
-            return False
-
-        return self.metadata_validator.is_semicolon_separated_numeric_column(self.df[key])
-
-    def _is_mixed_type_column(self, key: str) -> tuple[bool, list[str], int]:
-        """
-        Helper method for the filtering logic to detect if a non-numeric column has mixed types.
-
-        A column is considered mixed-type if it contains:
-        1. Both numeric-looking and non-numeric values (e.g., "8", "1a", "5a")
-        2. Special characters that suggest non-numeric use (commas, hyphens in non-negative-number contexts)
-
-        This is called only for columns where pandas infers object dtype AND
-        _is_semicolon_separated_numeric_column returned False.
-
-        Returns a tuple of (is_mixed, example_values, total_count) where:
-        - is_mixed: True if the column should be treated as mixed-type (and thus string)
-        - example_values: A list of up to 3 example cell values that demonstrate the mixed types Limited to 3 for brevity. The CLI divbase-cli dimensions validate-metadata-file can be used to show all of them.
-        - total_count: Total number of cells with mixed types or special characters
-        """
-        if key not in self.df.columns:
-            return False, [], 0
-
-        non_null_values = self.df[key].dropna()
-        if len(non_null_values) == 0:
-            return False, [], 0
-
-        has_numeric = False
-        has_non_numeric = False
-        example_values = []
-        total_problematic_count = 0
-
-        for cell_value in non_null_values:
-            cell_str = str(cell_value).strip()
-            if not cell_str:
-                continue
-
-            cell_has_numeric = False
-            cell_has_non_numeric = False
-
-            parts = cell_str.split(";")
-            for part in parts:
-                part = part.strip()
-                if not part:
-                    continue
-
-                try:
-                    float(part)
-                    cell_has_numeric = True
-                    has_numeric = True
-                except ValueError:
-                    cell_has_non_numeric = True
-                    has_non_numeric = True
-
-            if (cell_has_numeric and cell_has_non_numeric) or ("," in cell_str or "-" in cell_str):
-                total_problematic_count += 1
-                if cell_str not in example_values and len(example_values) < 3:
-                    example_values.append(cell_str)
-
-        return (has_numeric and has_non_numeric), example_values, total_problematic_count
-
     def _detect_numeric_filter_syntax_on_string_column(self, key: str, filter_string_values: str) -> list[str]:
         """
         Helper method for the filtering logic to detect when a user's filter string contains inequality operators
@@ -1130,7 +1031,7 @@ class SidecarQueryManager:
         Returns a list of the problematic filter values for use in a warning messages.
         """
         problematic_filter_values = []
-        values = filter_string_values.split(",")
+        values = self._split_filter_values(filter_string_values)
         for filter_value in values:
             filter_value = filter_value.strip().lstrip("!")  # strip negation prefix for checking
             if not filter_value:
@@ -1140,15 +1041,55 @@ class SidecarQueryManager:
                 problematic_filter_values.append(filter_value)
         return problematic_filter_values
 
-    def _split_cell_values(self, cell_value: Any) -> list[str]:
+    def _split_filter_values(self, filter_values_str: str) -> list[str]:
         """
-        Helper method for the filtering logic to split cell value by semicolon and return list of non-empty values.
-        If the cell contains a single value without semicolon, it will return a list with that single value.
-        If the cell is empty or NaN, it will return an empty list.
+        Split comma-separated filter-value strings.
+
+        Designed to handle cases with filter values that contain commas or other special characters by allowing users to wrap such values in double quotes.
+        For example, if a TSV cell contains the literal string: `North, South`, the CLI filter must be wrapped in double quotes so the comma is not
+        treated as a value separator:
+
+            divbase-cli query tsv 'Area:"North, South"'
+
+        Additionally, the filter string itself must be wrapped in single quotes to prevent the shell from interpreting the inner double quotes.
+        Only double-quote quoting is supported inside filter values; single quotes inside the filter string are treated as literal characters
+        (i.e. ``"Area:'North, South'"`` is not supported.).
+
+        The ``!`` NOT operator is preserved as part of the string and is handled later by ``_separate_positive_and_negated_values``.
+
+        Examples:
+            "North,South"        -> ["North", "South"]
+            '"North,South",East' -> ["North,South", "East"]
+            '!"North,South"'    -> ["!North,South"]
         """
+        values = []
+        current = []
+        in_quotes = False
+
+        # Iterate through the filter values string character by character to handle double-quoted strings correctly.
+        for char in filter_values_str:
+            if char == '"':
+                in_quotes = not in_quotes
+            elif char == "," and not in_quotes:
+                values.append("".join(current).strip())
+                current = []
+            else:
+                current.append(char)
+
+        values.append("".join(current).strip())
+        return [v for v in values if v]
+
+    def _get_cell_values(self, cell_value: Any) -> list:
+        """Return cell value as a list of values for filtering.
+
+        Checks for list type before pd.isna() because pd.isna() raises
+        ValueError on list/array inputs.
+        """
+        if isinstance(cell_value, list):
+            return cell_value
         if pd.isna(cell_value):
             return []
-        return [val.strip() for val in str(cell_value).split(";") if val.strip()]
+        return [cell_value]
 
     def _parse_numeric_value(self, value_str: str) -> float | int:
         """Helper method for the filtering logic to parse a string value to int or float. To be used when other checks have already confirmed that the value can be parsed as numeric."""
@@ -1162,12 +1103,12 @@ class SidecarQueryManager:
         """
 
         def check_inequality(cell_value):
-            if pd.isna(cell_value):
+            cell_values = self._get_cell_values(cell_value)
+            if not cell_values:
                 return False
-            cell_values = self._split_cell_values(cell_value)
-            for val_str in cell_values:
+            for val in cell_values:
                 try:
-                    val_num = self._parse_numeric_value(val_str)
+                    val_num = float(val)
                     if (
                         (operator == ">" and val_num > threshold)
                         or (operator == ">=" and val_num >= threshold)
@@ -1189,12 +1130,12 @@ class SidecarQueryManager:
         """
 
         def check_range(cell_value):
-            if pd.isna(cell_value):
+            cell_values = self._get_cell_values(cell_value)
+            if not cell_values:
                 return False
-            cell_values = self._split_cell_values(cell_value)
-            for val_str in cell_values:
+            for val in cell_values:
                 try:
-                    val_num = self._parse_numeric_value(val_str)
+                    val_num = float(val)
                     if min_val <= val_num <= max_val:
                         return True
                 except ValueError:
@@ -1211,12 +1152,12 @@ class SidecarQueryManager:
         """
 
         def check_discrete(cell_value):
-            if pd.isna(cell_value):
+            cell_values = self._get_cell_values(cell_value)
+            if not cell_values:
                 return False
-            cell_values = self._split_cell_values(cell_value)
-            for val_str in cell_values:
+            for val in cell_values:
                 try:
-                    val_num = self._parse_numeric_value(val_str)
+                    val_num = float(val)
                     if val_num in target_values:
                         return True
                 except ValueError:
@@ -1233,10 +1174,8 @@ class SidecarQueryManager:
         """
 
         def check_string(cell_value):
-            if pd.isna(cell_value):
-                return False
-            cell_values = self._split_cell_values(cell_value)
-            return any(val in target_values for val in cell_values)
+            cell_values = self._get_cell_values(cell_value)
+            return any(str(val) in target_values for val in cell_values)
 
         return self.df[key].apply(check_string)
 
