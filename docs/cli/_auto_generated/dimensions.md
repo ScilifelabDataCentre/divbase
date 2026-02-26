@@ -52,6 +52,9 @@ $ divbase-cli dimensions show [OPTIONS]
 * `--filename TEXT`: If set, will show only the entry for this VCF filename.
 * `--unique-scaffolds`: If set, will show all unique scaffold names found across all the VCF files in the project.
 * `--unique-samples`: If set, will show all unique sample names found across all the VCF files in the project.
+* `--sample-names-limit INTEGER RANGE`: Maximum number of sample names to display per list in terminal output.  [default: 20; x&gt;=1]
+* `--sample-names-output TEXT`: Write full sample names to file instead of truncating in terminal output. Mutually exclusive with --sample-names-stdout.
+* `--sample-names-stdout`: Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `--help`: Show this message and exit.
 
