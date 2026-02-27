@@ -9,10 +9,12 @@ Calls the shared sidecar metadata TSV validation logic from divbase_lib.metadata
 
 from pathlib import Path
 
+from pandas import DataFrame
+
 from divbase_lib.metadata_validator import SharedMetadataValidator
 
 
-class ClientSideClientSideMetadataTSVValidator:
+class ClientSideMetadataTSVValidator:
     """
     Client-side wrapper for validating sidecar metadata TSV files against DivBase requirements.
     Calls SharedMetadataValidator to perform the actual validation.
@@ -59,7 +61,7 @@ class ClientSideClientSideMetadataTSVValidator:
 
         if result.df is not None and "Sample_ID" in result.df.columns:
             try:
-                tsv_samples = set(result.df["Sample_ID"].tolist())
+                tsv_samples = self._extract_valid_sample_ids(result.df)
                 self._collect_statistics(
                     df=result.df,
                     tsv_samples=tsv_samples,
@@ -115,3 +117,17 @@ class ClientSideClientSideMetadataTSVValidator:
 
         if empty_cells_per_column:
             self.stats["empty_cells_per_column"] = empty_cells_per_column
+
+    def _extract_valid_sample_ids(self, df: DataFrame) -> set[str]:
+        """Extract Sample_ID values for summary statistics without raising pandas type-related exceptions."""
+        if "Sample_ID" not in df.columns:
+            return set()
+
+        sample_ids: set[str] = set()
+        for val in df["Sample_ID"].tolist():
+            if isinstance(val, list):
+                continue
+            if val is None or (isinstance(val, str) and val == ""):
+                continue
+            sample_ids.add(str(val))
+        return sample_ids

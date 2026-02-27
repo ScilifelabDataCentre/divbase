@@ -773,6 +773,7 @@ def test_validate_metadata_file_with_errors(
 ):
     """
     Test the CLI 'dimensions validate-metadata-file' command with an invalid TSV file.
+    Only assert fixture-driven messages. Ignore dimensions mismatch/project state-dependent messages.
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -790,7 +791,18 @@ def test_validate_metadata_file_with_errors(
 
     assert cli_result.exit_code == 1, f"Expected validation to fail but it passed: {cli_result.stdout}"
     assert "VALIDATION SUMMARY" in cli_result.stdout, "Expected validation summary"
-    assert "ERRORS" in cli_result.stdout or "WARNINGS" in cli_result.stdout, "Expected errors or warnings"
+    assert "ERRORS" in cli_result.stdout, "Expected errors section"
+    assert "WARNINGS" in cli_result.stdout, "Expected warnings section"
+
+    assert "Expected 4 tab-separated columns from reading the header, found 2" in cli_result.stdout
+    # Rich/terminal wrapping can split long phrases across lines, so assert key fragments.
+    assert "mixed element types" in cli_result.stdout and "in lists" in cli_result.stdout
+    assert "Found 2 cell(s) with invalid list syntax or not parsed as list" in cli_result.stdout
+    assert "Sample_ID is empty or missing in 2 row(s)" in cli_result.stdout
+    assert "Duplicate Sample_IDs found: 'test_duplicate' appears in 2 row(s)" in cli_result.stdout
+    assert "Sample_ID column contains list values" in cli_result.stdout
+    assert "Found 3 cell(s) with leading or trailing whitespace" in cli_result.stdout
+    assert "This column contains mixed-type cells" in cli_result.stdout
 
 
 def test_validate_metadata_file_nonexistent(

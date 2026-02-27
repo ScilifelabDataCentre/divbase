@@ -8,7 +8,7 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.services.sample_metadata_tsv_validator import ClientSideClientSideMetadataTSVValidator
+from divbase_cli.services.sample_metadata_tsv_validator import ClientSideMetadataTSVValidator
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
@@ -296,7 +296,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     full_sample_mismatch_names: bool = typer.Option(
         False,
         "--full-sample-mismatch-names",
-        help="Show full (untruncated) list of sample names for dimensions mismatch messages. Otherwise, the default limit is to show 20 sample names.",
+        help="Show full (untruncated) validator lists (including sample mismatches and grouped warning row/value previews).",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
@@ -338,7 +338,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
     dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
-    validator = ClientSideClientSideMetadataTSVValidator(
+    validator = ClientSideMetadataTSVValidator(
         file_path=input_path,
         project_samples=unique_sample_names,
         dimensions_sample_preview_limit=dimensions_sample_preview_limit,

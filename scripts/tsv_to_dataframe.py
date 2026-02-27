@@ -32,7 +32,7 @@ def parse_arguments():
 def tsv_to_dataframe(file_path) -> MetadataValidationResult:
     """
     Reads a TSV file and returns a pandas DataFrame. Just runs the loading and validation logic, but does not
-    print the results like the client-side ClientSideClientSideMetadataTSVValidator does.
+    print the results like the client-side ClientSideMetadataTSVValidator does.
 
     Allows for inspection of of the dataframe.
     """

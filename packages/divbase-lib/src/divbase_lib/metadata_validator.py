@@ -10,6 +10,7 @@ This file is only for validation of the contents of the TSV file, not for query 
 
 import ast
 import csv
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -95,6 +96,7 @@ class SharedMetadataValidator:
         self.project_samples = project_samples
         self.skip_dimensions_check = skip_dimensions_check
         self.dimensions_sample_preview_limit = dimensions_sample_preview_limit
+        self._cells_with_hard_errors: set[tuple[int, str]] = set()
         self.result = MetadataValidationResult()
 
     def load_and_validate(self) -> MetadataValidationResult:
@@ -106,36 +108,49 @@ class SharedMetadataValidator:
         downstream validation and querying can work with native Python lists and
         their correctly-inferred element types.
         """
+        # Pre-pandas checks:
         try:
             with open(self.file_path, "r", newline="", encoding="utf-8") as f:
                 reader = csv.reader(f, delimiter="\t")
                 rows = list(reader)
+        except Exception as e:
+            self.result.errors.append(
+                ValidationMessage(ValidationCategory.FILE_READ, f"Failed to read file (TSV read stage): {e}")
+            )
+            return self.result
 
-            if not rows:
-                self.result.errors.append(ValidationMessage(ValidationCategory.FILE_READ, "File is empty"))
-                return self.result
+        if not rows:
+            self.result.errors.append(ValidationMessage(ValidationCategory.FILE_READ, "File is empty"))
+            return self.result
 
-            # Pre-pandas checks:
-            first_line = "\t".join(rows[0])
-            header_errors, header_warnings = self._validate_raw_header(first_line)
-            self.result.errors.extend(header_errors)
-            self.result.warnings.extend(header_warnings)
+        first_line = "\t".join(rows[0])
+        header_errors, header_warnings = self._validate_raw_header(first_line)
+        self.result.errors.extend(header_errors)
+        self.result.warnings.extend(header_warnings)
 
-            if len(rows) > 1:
-                row_errors, row_warnings = self._check_row_formatting(rows)
-                self.result.errors.extend(row_errors)
-                self.result.warnings.extend(row_warnings)
+        if len(rows) > 1:
+            row_errors, row_warnings = self._check_row_formatting(rows)
+            self.result.errors.extend(row_errors)
+            self.result.warnings.extend(row_warnings)
 
-            # Initiate Pandas dataframe from TSV and check for parsing issues:
+        # Initiate Pandas dataframe from TSV and check for parsing issues:
+        try:
             df = pd.read_csv(self.file_path, sep="\t", skipinitialspace=True, on_bad_lines="skip")
             df.columns = df.columns.str.lstrip("#")
             self._strip_whitespace_from_cells(df)
+        except Exception as e:
+            self.result.errors.append(
+                ValidationMessage(ValidationCategory.FILE_READ, f"Failed to read file (pandas parse stage): {e}")
+            )
+            return self.result
 
-            list_syntax_errors = self._parse_list_cells_in_dataframe(df)
+        # Dataframe checks:
+        try:
+            list_syntax_errors, cells_with_hard_errors = self._parse_list_cells_in_dataframe(df)
             self.result.errors.extend(list_syntax_errors)
+            self._cells_with_hard_errors = cells_with_hard_errors
             self.result.df = df
 
-            # Dataframe checks:
             semicolon_warnings = self._check_for_semicolons_in_plain_string_cells(df)
             self.result.warnings.extend(semicolon_warnings)
 
@@ -146,25 +161,20 @@ class SharedMetadataValidator:
             self.result.errors.extend(sample_id_errors)
             self.result.warnings.extend(sample_id_warnings)
 
-            numeric_cols, string_cols, mixed_type_columns, cell_errors, cell_warnings = self._classify_column_type(df)
+            numeric_cols, string_cols, mixed_type_cols, cell_errors, cell_warnings = self._classify_column_type(df)
             self.result.errors.extend(cell_errors)
             self.result.warnings.extend(cell_warnings)
-            self.result.mixed_type_columns = mixed_type_columns
+            self.result.mixed_type_columns = mixed_type_cols
             self.result.numeric_columns = numeric_cols
             self.result.string_columns = string_cols
 
-            mixed_type_warning = self._generate_mixed_type_warning_clarification(mixed_type_columns)
-            if mixed_type_warning:
-                self.result.warnings.append(mixed_type_warning)
-
             if not self.skip_dimensions_check and self.project_samples is not None:
-                tsv_samples = set(df["Sample_ID"].tolist()) if "Sample_ID" in df.columns else set()
+                tsv_samples = self._extract_sample_ids_for_dimensions(df)
                 dim_errors, dim_warnings = self._validate_dimensions_match(tsv_samples, self.project_samples)
                 self.result.errors.extend(dim_errors)
                 self.result.warnings.extend(dim_warnings)
-
         except Exception as e:
-            self.result.errors.append(ValidationMessage(ValidationCategory.FILE_READ, f"Failed to read file: {e}"))
+            self.result.errors.append(ValidationMessage(ValidationCategory.FILE_READ, f"Validation failed: {e}"))
 
         return self.result
 
@@ -173,7 +183,7 @@ class SharedMetadataValidator:
         for col in df.columns:
             df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
 
-    def _parse_list_cells_in_dataframe(self, df: pd.DataFrame) -> list[ValidationMessage]:
+    def _parse_list_cells_in_dataframe(self, df: pd.DataFrame) -> tuple[list[ValidationMessage], set[tuple[int, str]]]:
         """
         Parse all string cells in object columns that look like Python list literals, and collect errors for cells that fail to parse.
 
@@ -185,7 +195,13 @@ class SharedMetadataValidator:
         [3,2], [3, 2], and [ 3 , 2 ] all parse identically to [3, 2].
         """
         errors: list[ValidationMessage] = []
+        cells_with_hard_errors: set[tuple[int, str]] = set()
+        mixed_type_cells_by_column: defaultdict[str, list[tuple[int, Any]]] = defaultdict(
+            list
+        )  # Automatically initializes empty lists for new columns
+        list_syntax_errors_by_column: defaultdict[str, list[tuple[int, Any]]] = defaultdict(list)
 
+        # Detect errors on a cell basis
         for col in df.select_dtypes(include=["object"]).columns:
             for idx, cell_value in df[col].items():
                 if not isinstance(cell_value, str):
@@ -196,26 +212,52 @@ class SharedMetadataValidator:
                 try:
                     parsed = ast.literal_eval(stripped)
                     if isinstance(parsed, list):
+                        # Also reject lists that contain numeric and non-numeric types (e.g. [1, "two"]).
+                        has_numeric = any(isinstance(element, (int, float)) for element in parsed)
+                        has_non_numeric = any(not isinstance(element, (int, float)) for element in parsed)
+                        if has_numeric and has_non_numeric:
+                            mixed_type_cells_by_column[col].append((idx + 2, parsed))
+                            cells_with_hard_errors.add((idx, col))
+                            continue
                         df.at[idx, col] = parsed
                     else:
-                        errors.append(
-                            ValidationMessage(
-                                ValidationCategory.LIST_SYNTAX,
-                                f"Row {idx + 2}, Column '{col}': Cell '{cell_value}' starts with '[' "
-                                f"but parsed as {type(parsed).__name__}, not a list.",
-                            )
-                        )
+                        list_syntax_errors_by_column[col].append((idx + 2, cell_value))
+                        cells_with_hard_errors.add((idx, col))
                 except (ValueError, SyntaxError):
-                    errors.append(
-                        ValidationMessage(
-                            ValidationCategory.LIST_SYNTAX,
-                            f"Row {idx + 2}, Column '{col}': Cell '{cell_value}' has invalid "
-                            "Python list syntax. Multi-value cells must use valid Python list "
-                            'notation, e.g. [1, 2, 3] or ["a", "b"].',
-                        )
-                    )
+                    list_syntax_errors_by_column[col].append((idx + 2, cell_value))
+                    cells_with_hard_errors.add((idx, col))
 
-        return errors
+        # Collect cell value errors by column for brevity
+        for col, mixed_cells in mixed_type_cells_by_column.items():
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=mixed_cells,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+            errors.append(
+                ValidationMessage(
+                    ValidationCategory.MIXED_TYPE,
+                    f"Column '{col}': Found {len(mixed_cells)} cell(s) with mixed element types (both numeric and string values) in lists. "
+                    'All elements in a list must be the same type. Use either all numbers (e.g. [1, 2, 3]) or all strings (e.g. ["a", "b", "c"]). '
+                    f"Affected cells: {preview_text}.{full_output_hint}",
+                )
+            )
+        for col, error_cells in list_syntax_errors_by_column.items():
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=error_cells,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+            errors.append(
+                ValidationMessage(
+                    ValidationCategory.LIST_SYNTAX,
+                    f"Column '{col}': Found {len(error_cells)} cell(s) with invalid list syntax or not parsed as list. "
+                    'Multi-value cells must use valid Python list notation, e.g. [1, 2, 3] or ["a", "b"]. '
+                    f"Affected cells: {preview_text}.{full_output_hint}",
+                )
+            )
+
+        return errors, cells_with_hard_errors
 
     def _validate_raw_header(self, header_line: str) -> tuple[list[ValidationMessage], list[ValidationMessage]]:
         """
@@ -272,11 +314,13 @@ class SharedMetadataValidator:
         """
         errors: list[ValidationMessage] = []
         warnings: list[ValidationMessage] = []
+        whitespace_cells_by_column: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
 
         header = rows[0]
         num_columns = len(header)
 
         for row_num, row in enumerate(rows[1:], start=2):  # Start at row 2 (i.e. skip header)
+            # Report tab separation issues by row
             if len(row) != num_columns:
                 sample_hint = f" (Sample_ID: '{row[0]}')" if row else ""
                 errors.append(
@@ -292,21 +336,21 @@ class SharedMetadataValidator:
             for col_idx, cell in enumerate(row):
                 if cell != cell.strip():
                     col_name = header[col_idx]
-                    warnings.append(
-                        ValidationMessage(
-                            ValidationCategory.FORMAT,
-                            f"Row {row_num}, Column '{col_name}': Cell has leading or trailing whitespace "
-                            "(this is allowed, but note that they will be stripped by DivBase server when the TSV is used for queries)",
-                        )
-                    )
+                    whitespace_cells_by_column[col_name].append((row_num, cell))
 
-                if col_idx == 0 and not cell.strip():
-                    errors.append(
-                        ValidationMessage(
-                            ValidationCategory.SAMPLE_ID_VALUE,
-                            f"Row {row_num}: Sample_ID is empty",
-                        )
-                    )
+        for col_name, whitespace_cells in whitespace_cells_by_column.items():
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=whitespace_cells, preview_limit=self.dimensions_sample_preview_limit
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+            warnings.append(
+                ValidationMessage(
+                    ValidationCategory.FORMAT,
+                    f"Column '{col_name}': Found {len(whitespace_cells)} cell(s) with leading or trailing whitespace "
+                    "(this is allowed, but note that they will be stripped by DivBase server when the TSV is used for queries). "
+                    f"Affected cells: {preview_text}.{full_output_hint}",
+                )
+            )
 
         return errors, warnings
 
@@ -318,6 +362,7 @@ class SharedMetadataValidator:
         Further more, it must have a single value per row. List values (Python list notation like ["S1", "S2"]) are not allowed in Sample_ID.
         """
         errors: list[ValidationMessage] = []
+        empty_sample_id_rows = []
 
         if "Sample_ID" not in df.columns:
             errors.append(
@@ -328,68 +373,86 @@ class SharedMetadataValidator:
             )
             return errors, []
 
-        if df["Sample_ID"].isna().any() or (df["Sample_ID"] == "").any():
+        for idx, val in df["Sample_ID"].items():
+            # Avoid pd.isna(list/array) ambiguity and treat only missing/empty scalar values as missing Sample_ID.
+            if val is None or (isinstance(val, str) and val == "") or (not isinstance(val, list) and pd.isna(val)):
+                empty_sample_id_rows.append(
+                    (idx + 2, "<empty>")
+                )  # If val is used here, it will display pandas 'nan' to the user. <empty> is a clearer message
+        if empty_sample_id_rows:
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=empty_sample_id_rows,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
             errors.append(
                 ValidationMessage(
                     ValidationCategory.SAMPLE_ID_VALUE,
-                    "Sample_ID column contains empty or missing values. All rows must have a valid Sample_ID.",
+                    f"Sample_ID is empty or missing in {len(empty_sample_id_rows)} row(s). "
+                    f"Affected rows: {preview_text}.{full_output_hint} All rows must have a valid Sample_ID.",
                 )
             )
 
-        if df["Sample_ID"].duplicated().any():
-            duplicates = df[df["Sample_ID"].duplicated()]["Sample_ID"].tolist()
+        duplicate_rows_by_value: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
+        for idx, val in df["Sample_ID"].items():
+            if isinstance(val, list):
+                continue
+            if val is None or (isinstance(val, str) and val == "") or (not isinstance(val, list) and pd.isna(val)):
+                continue
+            sample_id_str = str(val)
+            duplicate_rows_by_value[sample_id_str].append((idx + 2, sample_id_str))
+
+        for sample_id, rows in duplicate_rows_by_value.items():
+            if len(rows) <= 1:
+                continue
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=rows,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
             errors.append(
                 ValidationMessage(
                     ValidationCategory.SAMPLE_ID_VALUE,
-                    f"Duplicate Sample_IDs found: {duplicates}. Each Sample_ID must be unique.",
+                    f"Duplicate Sample_IDs found: '{sample_id}' appears in {len(rows)} row(s). "
+                    f"Affected rows: {preview_text}.{full_output_hint} Each Sample_ID must be unique.",
                 )
             )
 
-        list_sample_ids = [
+        list_syntax_in_sample_ids = [
             sid
             for sid in df["Sample_ID"].dropna()
             if isinstance(sid, list)
             or (isinstance(sid, str) and sid.strip().startswith("[") and sid.strip().endswith("]"))
         ]
-        if list_sample_ids:
+        if list_syntax_in_sample_ids:
             errors.append(
                 ValidationMessage(
                     ValidationCategory.SAMPLE_ID_VALUE,
-                    f"Sample_ID column contains list values: {list_sample_ids}. "
+                    f"Sample_ID column contains list values: {list_syntax_in_sample_ids}. "
                     "Sample_ID must contain only one value per row (list notation is not allowed).",
                 )
             )
 
         return errors, []
 
-    def parse_cell_value(self, cell_value) -> Any:
+    def _extract_sample_ids_for_dimensions(self, df: pd.DataFrame) -> set[str]:
         """
-        Parse a single cell value. If the string representation starts with '[', it must be a valid Python list literal (parsed via ast.literal_eval).
-        Non-list cells are returned as-is.
+        Extract sample IDs for dimensions matching in a way that avoid pandas type-related exceptions that can be cryptic to users.
 
-        Raises ValueError if a cell looks like a list (starts with '[') but cannot be parsed by ast.literal_eval.
+        Skips missing values and list-valued Sample_ID cells (e.g. ['test_duplicate', 'test_duplicate2']) which are handled by
+        Sample_ID validation errors elsewhere.
         """
-        if pd.isna(cell_value):
-            return cell_value
+        if "Sample_ID" not in df.columns:
+            return set()
 
-        cell_str = str(cell_value).strip()
-        if cell_str.startswith("["):
-            try:
-                parsed = ast.literal_eval(cell_str)
-            except (ValueError, SyntaxError) as exc:
-                raise ValueError(
-                    f"Invalid Python list syntax: '{cell_str}'. "
-                    "Multi-value cells must use valid Python list notation, "
-                    'e.g. [1, 2, 3] or ["a", "b"].'
-                ) from exc
-            if not isinstance(parsed, list):
-                raise ValueError(
-                    f"Cell '{cell_str}' parsed successfully but is not a list (got {type(parsed).__name__}). "
-                    "Multi-value cells must be Python lists."
-                )
-            return parsed
-
-        return cell_value
+        sample_ids: set[str] = set()
+        for val in df["Sample_ID"].tolist():
+            if isinstance(val, list):
+                continue
+            if val is None or (isinstance(val, str) and val == "") or (not isinstance(val, list) and pd.isna(val)):
+                continue
+            sample_ids.add(str(val))
+        return sample_ids
 
     def _classify_column_type(
         self, df: pd.DataFrame
@@ -406,12 +469,12 @@ class SharedMetadataValidator:
         After scanning all cells in a column, classify the column type:
         - All cells are numeric -> numeric column
         - All cells are string  -> string column
-        - Contains both numeric and string cells -> mixed-type column: treat as string and send per-cell warnings to communicate the ambiguities to the user.
+        - Contains both numeric and string cells -> mixed-type column: treat as string and send a single warning per column summarizing all type issues.
         - All cells are Null -> numeric (to match Pandas default for NaN-only columns)
         """
         numeric_cols: list[str] = []
         string_cols: list[str] = []
-        mixed_type_columns: list[str] = []
+        mixed_type_cols: list[str] = []
         cell_errors: list[ValidationMessage] = []
         cell_warnings: list[ValidationMessage] = []
 
@@ -429,9 +492,14 @@ class SharedMetadataValidator:
             has_numeric = False
             has_string = False
             numeric_cells: list[tuple[int, Any]] = []
-            string_cells: list[tuple[int, Any]] = []
+            string_cells: list[tuple[int, Any]] = []  # true string cells only
+            mixed_type_cells: list[tuple[int, Any]] = []
 
             for idx, cell_value in non_null_values.items():
+                if (idx, col) in self._cells_with_hard_errors:
+                    # Do not classify cells that already have hard validation errors.
+                    continue
+
                 if isinstance(cell_value, list):
                     cell_has_numeric = False
                     cell_has_string = False
@@ -443,18 +511,9 @@ class SharedMetadataValidator:
                             cell_has_string = True
 
                     if cell_has_numeric and cell_has_string:
-                        cell_errors.append(
-                            ValidationMessage(
-                                ValidationCategory.MIXED_TYPE,
-                                f"Row {idx + 2}, Column '{col}': List cell {cell_value} contains "
-                                f"mixed element types (both numeric and string values). "
-                                f"All elements in a list must be the same type. Use "
-                                f"either all numbers (e.g. [1, 2, 3]) or all strings "
-                                f'(e.g. ["a", "b", "c"]).',
-                            )
-                        )
+                        mixed_type_cells.append((idx + 2, cell_value))
                         has_string = True
-                        string_cells.append((idx, cell_value))
+                        # Do NOT add to string_cells; mixed-type lists are reported separately
                     elif cell_has_numeric:
                         has_numeric = True
                         numeric_cells.append((idx, cell_value))
@@ -470,42 +529,58 @@ class SharedMetadataValidator:
                         has_string = True
                         string_cells.append((idx, cell_value))
 
-            if has_numeric and has_string:
-                mixed_type_columns.append(col)
-                minority = string_cells if len(string_cells) <= len(numeric_cells) else numeric_cells
-                minority_type = "non-numeric" if minority is string_cells else "numeric"
-                for idx, val in minority:
-                    cell_warnings.append(
-                        ValidationMessage(
-                            ValidationCategory.TYPE_CLASSIFICATION,
-                            f"Row {idx + 2}, Column '{col}': Cell '{val}' is {minority_type} "
-                            f"in a column that contains both numeric and non-numeric values. "
-                            f"This column will be treated as string type.",
-                        )
+            # Report mixed-type warning per column. There are two cases: cells with different types, and multi-value cells that contain mixed types in the list.
+            if (has_numeric and has_string) or mixed_type_cells:
+                mixed_type_cols.append(col)
+
+                n_numeric = len(numeric_cells)
+                n_string = len(string_cells)
+                n_mixed = len(mixed_type_cells)
+
+                mixed_summary = f", {n_mixed} mixed-type list cells" if n_mixed > 0 else ""
+
+                summary = f"Column '{col}': This column contains mixed-type cells ({n_numeric} numeric, {n_string} string type cells{mixed_summary}), and will be treated as string type. Numeric query operations (ranges, inequalities) are not applicable to string columns."
+                message_parts = [summary]
+                hard_error_cells_in_column = sum(1 for _, error_col in self._cells_with_hard_errors if error_col == col)
+                if hard_error_cells_in_column > 0:
+                    message_parts.append(
+                        f"{hard_error_cells_in_column} cell(s) in this column have hard list-format/type errors and are reported separately under ERRORS."
                     )
+
+                # Only return the cell type that is in minority in the column. If equal, don't print this message
+                if n_numeric > 0 and n_string > 0 and n_numeric != n_string:
+                    minority_cells = string_cells if n_string <= n_numeric else numeric_cells
+                    minority_type = "string" if minority_cells is string_cells else "numeric"
+                    preview_text, was_truncated = self._format_row_value_preview(
+                        values=[(idx + 2, val) for idx, val in minority_cells],
+                        preview_limit=self.dimensions_sample_preview_limit,
+                    )
+                    full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+                    message_parts.append(
+                        f"The {minority_type} cells are in minority and are: {preview_text}.{full_output_hint}"
+                    )
+
+                # Always return cell values with mixed-type list cells
+                if n_mixed > 0:
+                    preview_text, was_truncated = self._format_row_value_preview(
+                        values=mixed_type_cells,
+                        preview_limit=self.dimensions_sample_preview_limit,
+                    )
+                    full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+                    message_parts.append(f"Mixed-type list cells: {preview_text}.{full_output_hint}")
+
+                cell_warnings.append(
+                    ValidationMessage(
+                        ValidationCategory.TYPE_CLASSIFICATION,
+                        " ".join(message_parts),
+                    )
+                )
             elif has_numeric:
                 numeric_cols.append(col)
             else:
                 string_cols.append(col)
 
-        return numeric_cols, string_cols, mixed_type_columns, cell_errors, cell_warnings
-
-    def _generate_mixed_type_warning_clarification(self, mixed_columns: list[str]) -> ValidationMessage | None:
-        """
-        Generate clarification warning about mixed-type columns. This tells users that mixed-type columns are treated as string in Divbase.
-        """
-        if not mixed_columns:
-            return None
-
-        return ValidationMessage(
-            ValidationCategory.TYPE_CLASSIFICATION,
-            "Clarification on mixed types columns: "
-            "Columns are treated as string by DivBase if they contain a mix of numeric and non-numeric values "
-            'or list cells with mixed element types (for example [1, "two"]). '
-            "A column is only numeric if all values (including each element in list cells) are valid numbers. "
-            "Use Python list notation (e.g. [1, 2, 3]) for multi-value cells. "
-            "Numeric query operations (ranges, inequalities) will not be applicable to string columns.",
-        )
+        return numeric_cols, string_cols, mixed_type_cols, cell_errors, cell_warnings
 
     def _check_for_semicolons_in_plain_string_cells(self, df: pd.DataFrame) -> list[ValidationMessage]:
         """
@@ -517,6 +592,7 @@ class SharedMetadataValidator:
         the query parser will split on the semicolon. If the user intended multiple values, they should use Python list notation instead.
         """
         warnings: list[ValidationMessage] = []
+        semicolon_cells_by_column: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
 
         for col in df.columns:
             if col == "Sample_ID":
@@ -529,18 +605,24 @@ class SharedMetadataValidator:
                 if not isinstance(cell_value, str):
                     continue
                 if ";" in cell_value:
-                    warnings.append(
-                        ValidationMessage(
-                            ValidationCategory.FORMAT,
-                            f"Row {idx + 2}, Column '{col}': Cell '{cell_value}' contains a semicolon. "
-                            "If you intended multiple values, use Python list notation instead "
-                            '(e.g. [1, 2] or ["a", "b"]). '
-                            "If the semicolon is intentional, note that DivBase query syntax uses "
-                            "semicolons to separate filter key:value pairs, so this exact cell value "
-                            "cannot be matched via queries.",
-                        )
-                    )
+                    semicolon_cells_by_column[col].append((idx + 2, cell_value))
                     break
+
+        for col, warning_cells in semicolon_cells_by_column.items():
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=warning_cells,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+            warnings.append(
+                ValidationMessage(
+                    ValidationCategory.FORMAT,
+                    f"Column '{col}': Found {len(warning_cells)} cell(s) containing a semicolon. "
+                    "Note that DivBase query syntax uses semicolons to separate filter key:value pairs, "
+                    "so this exact cell value cannot be matched via queries. "
+                    f"Affected cells: {preview_text}.{full_output_hint}",
+                )
+            )
 
         return warnings
 
@@ -556,6 +638,7 @@ class SharedMetadataValidator:
         Commas inside list notation (e.g. ["North", "South"]) are fine since they are parsed as lists.
         """
         warnings: list[ValidationMessage] = []
+        comma_cells_by_column: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
 
         for col in df.columns:
             series = df[col]
@@ -566,19 +649,28 @@ class SharedMetadataValidator:
                 if not isinstance(cell_value, str):
                     continue
                 if "," in cell_value:
-                    warnings.append(
-                        ValidationMessage(
-                            ValidationCategory.FORMAT,
-                            f"Row {idx + 2}, Column '{col}': Cell '{cell_value}' contains a comma. "
-                            "If you intended multiple values, use Python list notation instead "
-                            '(e.g. [1, 2] or ["a", "b"]). '
-                            "If the comma is intentional, note that DivBase query syntax uses "
-                            "commas to separate filter values. To query for this exact string, "
-                            "enclose the value in double quotes in your filter (e.g. "
-                            'Area:"North,South").',
-                        )
-                    )
-                    break
+                    comma_cells_by_column[col].append((idx + 2, cell_value))
+
+        for col, warning_cells in comma_cells_by_column.items():
+            preview_text, was_truncated = self._format_row_value_preview(
+                values=warning_cells,
+                preview_limit=self.dimensions_sample_preview_limit,
+            )
+            full_output_hint = f" {self._build_full_sample_output_hint()}" if was_truncated else ""
+            warnings.append(
+                ValidationMessage(
+                    ValidationCategory.FORMAT,
+                    f"Column '{col}': Found {len(warning_cells)} cell(s) containing a comma. "
+                    "If you intended to describe multiple values, use Python list notation instead "
+                    '(e.g. [1, 2] or ["a", "b"]). '
+                    "If the comma is intentional, note that DivBase query syntax uses "
+                    "commas to separate filter values. To query for this exact string, "
+                    "enclose the value in double quotes in your filter (e.g. "
+                    'Area:"North,South").'
+                    f"Affected cells: {preview_text}.{full_output_hint}",
+                )
+            )
+            break
 
         return warnings
 
@@ -633,7 +725,7 @@ class SharedMetadataValidator:
         Returns only a full list when the list is small, otherwise includes a count and
         a preview of the first 20 samples (default value) to avoid overwhelming CLI output.
         """
-        sorted_names = sorted(sample_names)
+        sorted_names = sorted(sample_names, key=lambda sample_name: str(sample_name))
         total = len(sorted_names)
         if preview_limit is None:
             return f"count: {total}, samples: {sorted_names}", False
@@ -644,12 +736,29 @@ class SharedMetadataValidator:
         preview = sorted_names[:preview_limit]
         return f"count: {total}, showing first {preview_limit}: {preview}", True
 
+    def _format_row_value_preview(
+        self,
+        values: list[tuple[int, Any]],
+        preview_limit: int | None = 20,
+    ) -> tuple[str, bool]:
+        """
+        Collect, and when necessary, truncate, row numbers and cell values for error/warning messages about specific cells.
+        """
+        if preview_limit is None:
+            return ", ".join(f"Row {row_num} ('{value}')" for row_num, value in values), False
+
+        if len(values) <= preview_limit:
+            return ", ".join(f"Row {row_num} ('{value}')" for row_num, value in values), False
+
+        preview = ", ".join(f"Row {row_num} ('{value}')" for row_num, value in values[:preview_limit])
+        return f"{preview}, ... ({len(values) - preview_limit} more)", True
+
     def _build_full_sample_output_hint(self) -> str:
         """
-        When the sample mismatch list is truncated (>20 for default settings), give users a hint on how they can see the full sample-name mismatch list.
+        When a validator list is truncated in the error/warning messages, give users a hint on how they can see full details.
         """
         return (
-            "To view the full list of mismatched samples, run: "
+            "To view full validation lists, run: "
             "divbase-cli dimensions validate-metadata-file <TSV_FILE_NAME> --project <PROJECT_NAME> "
             "--full-sample-mismatch-names."
         )

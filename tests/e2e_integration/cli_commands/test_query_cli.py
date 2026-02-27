@@ -557,8 +557,9 @@ class TestSidecarQueryTaskErrorsPropagation:
         command = f'query tsv "Area:North" --metadata-tsv-name {tsv_file.name} --project {project_name}'
         cli_result = runner.invoke(app, command)
 
-        assert "Duplicate Sample_IDs found: ['S1']. Each Sample_ID must be unique." in str(cli_result.exception), (
-            "Expected error message about duplicate Sample_IDs"
+        error_text = str(cli_result.exception)
+        assert "Duplicate Sample_IDs found" in error_text and "Each Sample_ID must be unique." in error_text, (
+            f"Expected error message about duplicate Sample_IDs, got: {error_text}"
         )
 
     def test_error_in_terminal_for_comma_in_metadata(

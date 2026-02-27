@@ -818,7 +818,7 @@ class TestListColumnTypeClassification:
 
 class TestLoadFileValidation:
     """Test that SidecarQueryManager validates the same errors as the client-side
-    ClientSideClientSideMetadataTSVValidator in load_file()), before any queries are run.
+    ClientSideMetadataTSVValidator in load_file()), before any queries are run.
 
     This ensures that even if a user skips the CLI validator, the server-side
     query engine catches the same formatting issues with clear error messages."""
