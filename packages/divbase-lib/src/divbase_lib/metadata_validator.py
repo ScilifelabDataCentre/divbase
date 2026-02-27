@@ -780,7 +780,7 @@ class SharedMetadataValidator:
         return (
             "To view full validation lists, run: "
             "divbase-cli dimensions validate-metadata-file <TSV_FILE_NAME> --project <PROJECT_NAME> "
-            "--full-sample-mismatch-names."
+            "--untruncated."
         )
 
     def _collect_statistics(self, df: pd.DataFrame) -> ValidationStats:

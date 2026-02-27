@@ -293,9 +293,9 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         ...,
         help="Name of the input TSV file to validate.",
     ),
-    full_sample_mismatch_names: bool = typer.Option(
+    untruncated: bool = typer.Option(
         False,
-        "--full-sample-mismatch-names",
+        "--untruncated",
         help="Show full (untruncated) validator lists (including sample mismatches and grouped warning row/value previews).",
     ),
     project: str | None = PROJECT_NAME_OPTION,
@@ -337,7 +337,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     )
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
-    dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
+    dimensions_sample_preview_limit = None if untruncated else 20
 
     shared_validator = SharedMetadataValidator(
         file_path=input_path,

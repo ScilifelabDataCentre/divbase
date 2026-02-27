@@ -282,7 +282,7 @@ class TestDimensionMatching:
         validator = ClientSideMetadataTSVValidator(valid_list_tsv, project_samples)
         _, _, warnings = validator.validate()
         assert any("count: 50, showing first 20" in w for w in warnings)
-        assert any("--full-sample-mismatch-names" in w for w in warnings)
+        assert any("--untruncated" in w for w in warnings)
         assert not any("S0050" in w for w in warnings)
 
     def test_large_dimension_mismatch_can_show_full_list(self, valid_list_tsv):
@@ -293,7 +293,7 @@ class TestDimensionMatching:
         _, _, warnings = validator.validate()
         assert any("count: 50, samples:" in w and "S0050" in w for w in warnings)
         assert not any("showing first 20" in w for w in warnings)
-        assert not any("--full-sample-mismatch-names" in w for w in warnings)
+        assert not any("--untruncated" in w for w in warnings)
 
 
 class TestStatistics:

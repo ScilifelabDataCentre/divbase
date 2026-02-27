@@ -100,9 +100,9 @@ divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
 !!! Note
     If the validator output contains warnings or errors with long lists of cell values that needs to be addressed or considered, DivBase truncates those lists for readability. To print full lists, add:
 
-    ```bash
-    divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv --full-sample-mismatch-names
-    ```
+```bash
+divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv --untruncated
+```
 
 The validation runs on the user's local computer and not as a job on the DivBase server. It is intended to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#mandatory-content) and [User-defined columns](#user-defined-columns).
 
