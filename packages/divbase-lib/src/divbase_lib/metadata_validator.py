@@ -48,6 +48,22 @@ class ValidationMessage:
 
 
 @dataclass
+class ValidationStats:
+    """A class to store any relevant statistics collected during validation. Used on the CLI side."""
+
+    total_columns: int = 0
+    user_defined_columns: int = 0
+    samples_in_tsv: int = 0
+    samples_matching_project: int = 0
+    total_project_samples: int = 0
+    numeric_column_count: int = 0
+    string_column_count: int = 0
+    mixed_type_column_count: int = 0
+    empty_cells_per_column: dict[str, int] = field(default_factory=dict)
+    has_multi_values: bool = False
+
+
+@dataclass
 class MetadataValidationResult:
     """
     Dataclass to hold the results of the TSV file validation. Used by the callers of SharedMetadataValidator
@@ -56,7 +72,7 @@ class MetadataValidationResult:
 
     errors: list[ValidationMessage] = field(default_factory=list)
     warnings: list[ValidationMessage] = field(default_factory=list)
-    stats: dict[str, Any] = field(default_factory=dict)
+    stats: ValidationStats = field(default_factory=ValidationStats)
     df: pd.DataFrame | None = None
     mixed_type_columns: list[str] = field(default_factory=list)
     numeric_columns: list[str] = field(default_factory=list)
@@ -94,6 +110,7 @@ class SharedMetadataValidator:
     ):
         self.file_path = file_path
         self.project_samples = project_samples
+        self.tsv_samples: set[str] = set()
         self.skip_dimensions_check = skip_dimensions_check
         self.dimensions_sample_preview_limit = dimensions_sample_preview_limit
         self._cells_with_hard_errors: set[tuple[int, str]] = set()
@@ -168,13 +185,16 @@ class SharedMetadataValidator:
             self.result.numeric_columns = numeric_cols
             self.result.string_columns = string_cols
 
+            self.tsv_samples = self._extract_sample_ids_for_dimensions(df)
+
             if not self.skip_dimensions_check and self.project_samples is not None:
-                tsv_samples = self._extract_sample_ids_for_dimensions(df)
-                dim_errors, dim_warnings = self._validate_dimensions_match(tsv_samples, self.project_samples)
+                dim_errors, dim_warnings = self._validate_dimensions_match(self.tsv_samples, self.project_samples)
                 self.result.errors.extend(dim_errors)
                 self.result.warnings.extend(dim_warnings)
         except Exception as e:
             self.result.errors.append(ValidationMessage(ValidationCategory.FILE_READ, f"Validation failed: {e}"))
+
+        self.result.stats = self._collect_statistics(df)
 
         return self.result
 
@@ -762,3 +782,46 @@ class SharedMetadataValidator:
             "divbase-cli dimensions validate-metadata-file <TSV_FILE_NAME> --project <PROJECT_NAME> "
             "--full-sample-mismatch-names."
         )
+
+    def _collect_statistics(self, df: pd.DataFrame) -> ValidationStats:
+        """Collect statistics about the TSV file."""
+
+        stats = ValidationStats()
+        stats.total_columns = len(df.columns)
+        stats.user_defined_columns = len(df.columns) - 1  # Exclude Sample_ID
+
+        project_samples = self.project_samples if self.project_samples is not None else set()
+        matching_samples = self.tsv_samples & project_samples
+        stats.samples_in_tsv = len(self.tsv_samples)
+        stats.samples_matching_project = len(matching_samples)
+        stats.total_project_samples = len(project_samples)
+
+        stats.numeric_column_count = len(self.result.numeric_columns)
+        stats.string_column_count = len(self.result.string_columns)
+        stats.mixed_type_column_count = len(self.result.mixed_type_columns)
+
+        # If has_multi_values is True: at least one cell in the DataFrame contains a Python list (multi-value cell).
+        stats.has_multi_values = False
+        for col in df.columns:
+            for val in df[col].dropna():
+                if isinstance(val, list):
+                    stats.has_multi_values = True
+                    break
+            if stats.has_multi_values:
+                break
+
+        stats.empty_cells_per_column = {}
+        for col in df.columns:
+            if col == "Sample_ID":
+                continue
+            empty_count = 0
+            for val in df[col]:
+                if val is None or (isinstance(val, str) and val == ""):
+                    empty_count += 1
+                    continue
+                if isinstance(val, list):
+                    continue
+                if pd.isna(val):
+                    empty_count += 1
+            if empty_count > 0:
+                stats.empty_cells_per_column[col] = empty_count

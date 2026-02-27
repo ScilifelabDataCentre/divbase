@@ -351,17 +351,17 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
             f"  Total columns: {stats.get('total_columns', 0)} ({stats.get('user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
         )
 
-        samples_in_tsv = stats.get("samples_in_tsv", 0)
-        samples_matching = stats.get("samples_matching_project", 0)
-        total_project = stats.get("total_project_samples", 0)
+        samples_in_tsv = getattr(stats, "samples_in_tsv", 0)
+        samples_matching = getattr(stats, "samples_matching_project", 0)
+        total_project = getattr(stats, "total_project_samples", 0)
 
         print(
             f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
         )
 
-        numeric_cols = stats.get("numeric_columns", [])
-        string_cols = stats.get("string_columns", [])
-        mixed_cols = stats.get("mixed_type_columns", [])
+        numeric_cols = getattr(stats, "numeric_columns", [])
+        string_cols = getattr(stats, "string_columns", [])
+        mixed_cols = getattr(stats, "mixed_type_columns", [])
 
         if numeric_cols:
             print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols)}")
@@ -370,12 +370,12 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         if mixed_cols:
             print(f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols)}")
 
-        if stats.get("has_multi_values", False):
+        if getattr(stats, "has_multi_values", False):
             print("  Multi-value cells: Yes (Python list notation detected)")
         else:
             print("  Multi-value cells: No")
 
-        empty_cells = stats.get("empty_cells_per_column", {})
+        empty_cells = getattr(stats, "empty_cells_per_column", {})
         if empty_cells:
             print(
                 f"  User-defined columns with empty cells ({len(empty_cells)}): {', '.join(f'{col} ({count})' for col, count in empty_cells.items())}"
