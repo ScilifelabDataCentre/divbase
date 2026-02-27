@@ -8,13 +8,13 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
-from divbase_cli.services.sample_metadata_tsv_validator import ClientSideMetadataTSVValidator
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
 )
+from divbase_lib.metadata_validator import SharedMetadataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -338,17 +338,26 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
 
     dimensions_sample_preview_limit = None if full_sample_mismatch_names else 20
-    validator = ClientSideMetadataTSVValidator(
+
+    shared_validator = SharedMetadataValidator(
         file_path=input_path,
-        project_samples=unique_sample_names,
+        project_samples=set(unique_sample_names),
+        skip_dimensions_check=False,
         dimensions_sample_preview_limit=dimensions_sample_preview_limit,
     )
-    stats, errors, warnings = validator.validate()
+    result = shared_validator.load_and_validate()
+
+    errors = [error_entry.message for error_entry in result.errors]
+    warnings = [warning_entry.message for warning_entry in result.warnings]
+    stats = result.stats
+    numeric_cols = result.numeric_columns
+    string_cols = result.string_columns
+    mixed_cols = result.mixed_type_columns
 
     if stats:
         print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
         print(
-            f"  Total columns: {stats.get('total_columns', 0)} ({stats.get('user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
+            f"  Total columns: {getattr(stats, 'total_columns', 0)} ({getattr(stats, 'user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
         )
 
         samples_in_tsv = getattr(stats, "samples_in_tsv", 0)
@@ -358,10 +367,6 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         print(
             f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
         )
-
-        numeric_cols = getattr(stats, "numeric_columns", [])
-        string_cols = getattr(stats, "string_columns", [])
-        mixed_cols = getattr(stats, "mixed_type_columns", [])
 
         if numeric_cols:
             print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols)}")

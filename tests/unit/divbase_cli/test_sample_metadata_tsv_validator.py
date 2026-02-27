@@ -2,14 +2,57 @@
 Unit tests for the ClientSideMetadataTSVValidator class.
 
 Tests the shared validation logic from SharedMetadataValidator as exercised
-through the CLI's ClientSideMetadataTSVValidator wrapper.
+through a lightweight test adapter that mirrors the former CLI wrapper output shape.
 
 Shared fixtures are defined in tests/unit/conftest.py.
 """
 
 from pathlib import Path
 
-from divbase_cli.services.sample_metadata_tsv_validator import ClientSideMetadataTSVValidator
+from divbase_lib.metadata_validator import SharedMetadataValidator
+
+
+class ClientSideMetadataTSVValidator:
+    """
+    Backward-compatible test adapter preserving the old (stats, errors, warnings) return shape
+    expected by these unit tests after the CLI wrapper was removed.
+    """
+
+    def __init__(
+        self,
+        file_path: Path,
+        project_samples: list[str] | set[str],
+        dimensions_sample_preview_limit: int | None = 20,
+    ):
+        self.file_path = file_path
+        self.project_samples = set(project_samples) if isinstance(project_samples, list) else project_samples
+        self.dimensions_sample_preview_limit = dimensions_sample_preview_limit
+
+    def validate(self) -> tuple[dict, list[str], list[str]]:
+        result = SharedMetadataValidator(
+            file_path=self.file_path,
+            project_samples=self.project_samples,
+            skip_dimensions_check=False,
+            dimensions_sample_preview_limit=self.dimensions_sample_preview_limit,
+        ).load_and_validate()
+
+        stats = {
+            "total_columns": result.stats.total_columns,
+            "user_defined_columns": result.stats.user_defined_columns,
+            "samples_in_tsv": result.stats.samples_in_tsv,
+            "samples_matching_project": result.stats.samples_matching_project,
+            "total_project_samples": result.stats.total_project_samples,
+            "numeric_columns": result.numeric_columns,
+            "string_columns": result.string_columns,
+            "mixed_type_columns": result.mixed_type_columns,
+            "has_multi_values": result.stats.has_multi_values,
+        }
+        if result.stats.empty_cells_per_column:
+            stats["empty_cells_per_column"] = result.stats.empty_cells_per_column
+
+        errors = [error_entry.message for error_entry in result.errors]
+        warnings = [warning_entry.message for warning_entry in result.warnings]
+        return stats, errors, warnings
 
 
 class TestValidTSV:
