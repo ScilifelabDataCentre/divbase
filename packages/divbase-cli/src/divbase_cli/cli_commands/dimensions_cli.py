@@ -301,22 +301,10 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Validate a sidecar metadata TSV file against DivBase formatting requirements and project dimensions.
+    Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
 
-    Validation is run client-side to keep sensitive metadata local during validation.
-
-    Validation checks:
-    - File is properly tab-delimited
-    - First column is named '#Sample_ID'
-    - No commas in cells
-    - Sample_ID has only one value per row (no semicolons)
-    - No duplicate sample IDs
-    - Invalid characters
-    - Basic type consistency in user-defined columns. But not Pandas type inference,
-      as we want to avoid having the user install Pandas just for validation. So just check that numeric columns have only numeric values (excluding header).
-    - All samples in the TSV exist in the project's dimensions index
-
-    Returns errors for critical issues and warnings for non-critical issues.
+    Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
+    in the TSV file match the sample names in the dimensions index for the project
     """
 
     project_config = resolve_project(project_name=project)
@@ -399,7 +387,9 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
         print()
 
     if not errors and not warnings:
-        print("[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements.")
+        print(
+            "[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements. The file is ready to be uploaded to your DivBase project with 'divbase-cli files upload'"
+        )
     elif errors:
         print("[red bold]Validation failed![/red bold] Please fix the errors above before uploading.")
         raise typer.Exit(code=1)

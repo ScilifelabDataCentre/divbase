@@ -712,16 +712,11 @@ class SidecarQueryManager:
         Also removes any leading '#' characters from the column names.
 
         Uses the warning and error category Enums from SharedMetadataValidator logic to raise errors or send warnings to the user.
-
-        Validates the same errors as the client-side ClientSideClientSideMetadataTSVValidator using shared validation logic:
-        - Header: first column must be #Sample_ID, no duplicate or empty column names
-        - Sample_ID: no empty values, no duplicates, no multi-values (Python lists)
-        - Data: no commas in any cell values
         """
         try:
             logger.info(f"Loading sidecar metadata file: {self.file}")
 
-            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side ClientSideClientSideMetadataTSVValidator.
+            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side ClientSideMetadataTSVValidator.
             # There are several helper methods for the filtering logic in this class, but they are for the query filters and are not related to the validation of the TSV file contents.
             self.metadata_validator = SharedMetadataValidator(
                 file_path=self.file,
@@ -783,7 +778,7 @@ class SidecarQueryManager:
 
     def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
         """
-        Method to run a query against the loaded data. The filter_string should be a semicolon-separated list of key:value pairs,
+        Method to run a query against the TSV data loaded by self.load_file(). The filter_string should be a semicolon-separated list of key:value pairs,
         where key is a column name and value is a comma-separated list of filter values.
         For example: "key1:value1,value2;key2:value3,value4".
 

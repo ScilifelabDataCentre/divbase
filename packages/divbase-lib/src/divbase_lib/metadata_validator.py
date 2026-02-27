@@ -88,11 +88,10 @@ class SharedMetadataValidator:
 
     This class handles the following validation of the TSV content:
     - Header (duplicates, empty columns, first column name)
-    - Sample_ID (empty, duplicates, no list values)
+    - Sample_ID (empty, duplicates, no lists)
     - Column type (numeric vs string, list-type multi-value cells)
-    - Data format (commas, whitespace, column count)
+    - Data format (commas, semicolons, whitespace, column count)
     - List syntax validation and mixed type detection
-
 
     IMPORTANT! This class never raises errors, it collects them. This is to allow the output of the class to be compatible
     with the CLI validator on the client-side and the query engine (SidecarQueryManager) on the server side. The CLI validator
