@@ -922,6 +922,16 @@ class TestLoadFileValidation:
             SidecarQueryManager(file=tsv_file)
         assert "invalid" in str(excinfo.value).lower()
 
+    def test_mixed_element_types_within_list_raises(self, tmp_path):
+        """Test that a list cell like [1, \"two\", 3] raises a metadata format error at load time."""
+        tsv_content = '#Sample_ID\tPopulation\nS1\t[1, "two", 3]\nS2\t5\n'
+        tsv_file = tmp_path / "mixed_list_types.tsv"
+        tsv_file.write_text(tsv_content)
+
+        with pytest.raises(SidecarMetadataFormatError) as excinfo:
+            SidecarQueryManager(file=tsv_file)
+        assert "mixed element types" in str(excinfo.value).lower()
+
 
 class TestQuotedFilterValues:
     """Test that quoted filter values allow querying for strings containing commas."""

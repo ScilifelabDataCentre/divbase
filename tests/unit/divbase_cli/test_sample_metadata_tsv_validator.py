@@ -147,6 +147,39 @@ class TestFormattingValidation:
         assert any("semicolon" in w.lower() for w in warnings)
         assert not any("semicolon" in e.lower() for e in errors)
 
+    def test_grouped_warning_preview_truncates_by_default_and_hints_untruncated(self, tmp_path):
+        content = "#Sample_ID\tTest\n"
+        for i in range(1, 26):
+            content += f"S{i}\t value_{i} \n"
+        p = tmp_path / "many_whitespace_cells.tsv"
+        p.write_text(content)
+
+        project_samples = {f"S{i}" for i in range(1, 26)}
+        validator = ClientSideMetadataTSVValidator(p, project_samples)
+        _, _, warnings = validator.validate()
+
+        whitespace_warnings = [w for w in warnings if "leading or trailing whitespace" in w]
+        assert len(whitespace_warnings) == 1
+        assert "... (5 more)" in whitespace_warnings[0]
+        assert "--untruncated" in whitespace_warnings[0]
+
+    def test_grouped_warning_preview_untruncated_shows_all(self, tmp_path):
+        content = "#Sample_ID\tTest\n"
+        for i in range(1, 26):
+            content += f"S{i}\t value_{i} \n"
+        p = tmp_path / "many_whitespace_cells_untruncated.tsv"
+        p.write_text(content)
+
+        project_samples = {f"S{i}" for i in range(1, 26)}
+        validator = ClientSideMetadataTSVValidator(p, project_samples, dimensions_sample_preview_limit=None)
+        _, _, warnings = validator.validate()
+
+        whitespace_warnings = [w for w in warnings if "leading or trailing whitespace" in w]
+        assert len(whitespace_warnings) == 1
+        assert "... (" not in whitespace_warnings[0]
+        assert "--untruncated" not in whitespace_warnings[0]
+        assert "Row 26 (' value_25 ')" in whitespace_warnings[0]
+
 
 class TestListSyntaxValidation:
     """Test validation of Python list notation in cells."""

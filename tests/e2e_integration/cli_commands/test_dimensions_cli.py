@@ -761,6 +761,10 @@ def test_validate_metadata_file_valid(
 
     assert cli_result.exit_code == 0, f"Expected validation to succeed with exit code 0, got {cli_result.exit_code}"
     assert "VALIDATION SUMMARY" in cli_result.stdout, "Expected validation summary"
+    assert re.search(r"Total columns:\s+\d+", cli_result.stdout), "Expected total columns in summary"
+    assert re.search(r"Samples matching project VCF dimensions:\s+\d+/\d+", cli_result.stdout), (
+        "Expected dimensions sample match counts in summary"
+    )
     assert "ERRORS" not in cli_result.stdout, f"Did not expect errors, got: {cli_result.stdout}"
 
 
@@ -803,6 +807,7 @@ def test_validate_metadata_file_with_errors(
     assert "Sample_ID column contains list values" in cli_result.stdout
     assert "Found 3 cell(s) with leading or trailing whitespace" in cli_result.stdout
     assert "This column contains mixed-type cells" in cli_result.stdout
+    assert "Validation failed! Please fix the errors above before uploading." in cli_result.stdout
 
 
 def test_validate_metadata_file_nonexistent(
