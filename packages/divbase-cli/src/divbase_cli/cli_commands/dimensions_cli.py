@@ -354,39 +354,37 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     string_cols = result.string_columns
     mixed_cols = result.mixed_type_columns
 
-    if stats:
-        print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
+    print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
+    print(
+        f"  Total columns: {getattr(stats, 'total_columns', 0)} ({getattr(stats, 'user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
+    )
+
+    samples_in_tsv = getattr(stats, "samples_in_tsv", 0)
+    samples_matching = getattr(stats, "samples_matching_project", 0)
+    total_project = getattr(stats, "total_project_samples", 0)
+
+    print(
+        f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
+    )
+
+    print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols) if numeric_cols else 'None'}")
+    print(f"  String columns ({len(string_cols)}): {', '.join(string_cols) if string_cols else 'None'}")
+    print(
+        f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols) if mixed_cols else 'None'}"
+    )
+
+    if getattr(stats, "has_multi_values", False):
+        print("  Multi-value cells: Yes (Python list notation detected)")
+    else:
+        print("  Multi-value cells: No")
+
+    empty_cells = getattr(stats, "empty_cells_per_column", {})
+    if empty_cells:
         print(
-            f"  Total columns: {getattr(stats, 'total_columns', 0)} ({getattr(stats, 'user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
+            f"  User-defined columns with empty cells ({len(empty_cells)}): {', '.join(f'{col} ({count})' for col, count in empty_cells.items())}"
         )
 
-        samples_in_tsv = getattr(stats, "samples_in_tsv", 0)
-        samples_matching = getattr(stats, "samples_matching_project", 0)
-        total_project = getattr(stats, "total_project_samples", 0)
-
-        print(
-            f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
-        )
-
-        if numeric_cols:
-            print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols)}")
-        if string_cols:
-            print(f"  String columns ({len(string_cols)}): {', '.join(string_cols)}")
-        if mixed_cols:
-            print(f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols)}")
-
-        if getattr(stats, "has_multi_values", False):
-            print("  Multi-value cells: Yes (Python list notation detected)")
-        else:
-            print("  Multi-value cells: No")
-
-        empty_cells = getattr(stats, "empty_cells_per_column", {})
-        if empty_cells:
-            print(
-                f"  User-defined columns with empty cells ({len(empty_cells)}): {', '.join(f'{col} ({count})' for col, count in empty_cells.items())}"
-            )
-
-        print()
+    print()
 
     if errors:
         print("[red bold]ERRORS (must be fixed):[/red bold]")

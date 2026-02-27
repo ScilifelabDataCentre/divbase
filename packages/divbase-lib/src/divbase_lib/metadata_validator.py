@@ -825,3 +825,5 @@ class SharedMetadataValidator:
                     empty_count += 1
             if empty_count > 0:
                 stats.empty_cells_per_column[col] = empty_count
+
+        return stats
