@@ -16,6 +16,7 @@ from divbase_api.crud.project_versions import (
     get_project_version_details,
     list_project_versions,
     soft_delete_version,
+    update_project_version,
 )
 from divbase_api.crud.projects import has_required_role
 from divbase_api.db import get_db
@@ -31,6 +32,8 @@ from divbase_lib.api_schemas.project_versions import (
     DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
+    UpdateVersionRequest,
+    UpdateVersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,6 +116,33 @@ async def project_version_details_endpoint(
         db=db,
         project_id=project.id,
         version_name=version_name,
+    )
+
+
+@project_version_router.patch("/update", status_code=status.HTTP_200_OK, response_model=UpdateVersionResponse)
+async def update_version_endpoint(
+    project_name: str,
+    update_request: UpdateVersionRequest,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update the name and/or description of an existing project version entry.
+
+    The files and timestamp associated with a version entry are immutable and cannot be changed.
+    This is by design to ensure version entries are representations of the project's state at the timepoint they were created at.
+    You can create a new version entry to capture the current state of the project instead.
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.EDIT):
+        raise AuthorizationError("You don't have permission to update a project version for this project.")
+
+    return await update_project_version(
+        db=db,
+        project_id=project.id,
+        version_name=update_request.version_name,
+        new_name=update_request.new_name,
+        new_description=update_request.new_description,
     )
 
 

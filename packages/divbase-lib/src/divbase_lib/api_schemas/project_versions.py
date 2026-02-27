@@ -22,6 +22,12 @@ class DeleteVersionRequest(BaseModel):
     version_name: str = Field(..., description="Name of the version to delete")
 
 
+class UpdateVersionRequest(BaseModel):
+    version_name: str = Field(..., description="Name of the version to update")
+    new_name: str | None = Field(None, description="New name for the version")
+    new_description: str | None = Field(None, description="New description for the version")
+
+
 # Response Models
 class ProjectBasicInfo(BaseModel):
     """Base model for describing a single project version, not for direct use in an endpoint."""
@@ -60,3 +66,9 @@ class DeleteVersionResponse(BaseModel):
         description="Whether the version was already soft-deleted before this request",
     )
     date_deleted: str = Field(..., description="ISO timestamp of when the version was soft-deleted")
+
+
+class UpdateVersionResponse(ProjectBasicInfo):
+    """Response model for updating a version."""
+
+    created_at: str = Field(..., description="ISO timestamp when version was created")
