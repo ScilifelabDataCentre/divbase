@@ -41,6 +41,11 @@ def parse_arguments():
         help="Add a column that will trigger a warning in the TSV validator (e.g., array notation)",
     )
     parser.add_argument(
+        "--add-error-column",
+        action="store_true",
+        help="Add a column that will trigger a hard error in the TSV validator (mixed-type array)",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=12345,
@@ -91,7 +96,7 @@ def generate_random_values(n):
 
 
 def generate_mock_sample_metadata(
-    all_samples: list[str], output_file: Path, num_columns: int, seed: int, add_warning: bool
+    all_samples: list[str], output_file: Path, num_columns: int, seed: int, add_warning: bool, add_error: bool
 ) -> None:
     """
     Generate mock sample metadata with legacy columns (Population, Area, Sex), user-specified number of random columns, and optional warning column.
@@ -101,10 +106,12 @@ def generate_mock_sample_metadata(
     random.seed(seed)
     legacy_cols = ["Population", "Area", "Sex"]
     random_col_names = [f"Col{i + 1}" for i in range(num_columns)]
+    col_names = legacy_cols[:]
+    if add_error:
+        col_names.append("ErrorCol")
     if add_warning:
-        col_names = legacy_cols + ["WarningCol"] + random_col_names
-    else:
-        col_names = legacy_cols + random_col_names
+        col_names.append("WarningCol")
+    col_names += random_col_names
 
     mock_area = ["North", "East", "South", "West"]
     mock_population = [1, 2, 3, 4, 5, 6]
@@ -118,19 +125,22 @@ def generate_mock_sample_metadata(
             population = mock_population[i % len(mock_population)]
             sex = mock_sex[(i // len(mock_area)) % len(mock_sex)]
             row = [str(population), area, sex]
-            if add_warning:
+            if add_error:
                 # Always generate a mixed-type value (random order, using the seed)
                 parts = []
                 for _ in range(3):
                     if random.choice([True, False]):
                         parts.append(str(random.randint(1, 100)))
                     else:
-                        parts.append(random_string(random.randint(4, 6)))
-                warning_col_val = ";".join(parts)
-                random_vals = generate_random_values(num_columns)
-                row = row + [warning_col_val] + random_vals
-            else:
-                row += generate_random_values(num_columns)
+                        parts.append(f'"{random_string(random.randint(4, 6))}"')
+                error_col_val = f"[{', '.join(parts)}]"
+                row.append(error_col_val)
+            if add_warning:
+                # Always generate a bracketed list of strings (not mixed-type)
+                parts = [f'"{random_string(random.randint(4, 6))}"' for _ in range(3)]
+                warning_col_val = f"[{', '.join(parts)}]"
+                row.append(warning_col_val)
+            row += generate_random_values(num_columns)
             writer.write(f"{sample}\t" + "\t".join(row) + "\n")
         print(f"Wrote mock sidecar metadata file to: {output_file}")
 
@@ -146,6 +156,7 @@ def main():
     num_columns = args.columns
     seed = args.seed
     add_warning = args.add_warning_column
+    add_error = args.add_error_column
 
     all_samples = []
     for vcf_path in vcf_paths:
@@ -160,6 +171,7 @@ def main():
         num_columns=num_columns,
         seed=seed,
         add_warning=add_warning,
+        add_error=add_error,
     )
 
 
