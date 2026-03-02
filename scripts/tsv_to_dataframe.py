@@ -10,10 +10,11 @@ python scripts/tsv_to_dataframe.py --tsv path/to/metadata.tsv
 """
 
 import argparse
+from pathlib import Path
 
 import pandas as pd
 
-from divbase_lib.metadata_validator import MetadataValidationResult, SharedMetadataValidator
+from divbase_lib.metadata_validator import SharedMetadataValidator
 
 
 def parse_arguments():
@@ -29,14 +30,14 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def tsv_to_dataframe(file_path) -> MetadataValidationResult:
+def tsv_to_dataframe(file_path) -> pd.DataFrame | None:
     """
     Reads a TSV file and returns a pandas DataFrame. Just runs the loading and validation logic, but does not
     print the results like the client-side ClientSideMetadataTSVValidator does.
 
     Allows for inspection of of the dataframe.
     """
-    validator = SharedMetadataValidator(file_path=file_path, project_samples=set(), skip_dimensions_check=True)
+    validator = SharedMetadataValidator(file_path=Path(file_path), project_samples=set(), skip_dimensions_check=True)
     result = validator.load_and_validate()
     return result.df
 
