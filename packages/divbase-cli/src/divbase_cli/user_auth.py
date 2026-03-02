@@ -289,7 +289,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
         response = httpx.post(
             url=f"{divbase_base_url}/v1/auth/refresh",
             json={"refresh_token": token_data.refresh_token.get_secret_value()},
-            headers={CLI_VERSION_HEADER_KEY: "0.0.0"},
+            headers={CLI_VERSION_HEADER_KEY: cli_version},
         )
     except httpx.HTTPError as e:
         raise DivBaseAPIConnectionError() from e
