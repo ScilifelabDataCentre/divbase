@@ -27,8 +27,9 @@ class APISettings:
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
 
-    # versions before this are denied access to the API, until the user upgrades
-    minimum_cli_version: str = "0.1.0"
+    # versions before this are denied access to the API, until the user has upgraded
+    minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.0")
+    # Used in deciding if to give the user an annoucement on login that a new version of the CLI is available.
     # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
     latest_cli_version: str = api_version
 
