@@ -116,8 +116,8 @@ def sample_metadata_query(
 
     print(f"The results for the query ([{color}]{results.query_message}[/{color}]):")
 
-    unique_sample_ids = results.unique_sample_ids if results.unique_sample_ids else None
-    unique_filenames = results.unique_filenames if results.unique_filenames else None
+    unique_sample_ids = results.unique_sample_ids or []
+    unique_filenames = results.unique_filenames or []
     print(f"Unique Sample IDs: {unique_sample_ids}")
     print(f"Unique filenames: {unique_filenames}\n")
 
