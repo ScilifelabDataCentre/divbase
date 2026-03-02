@@ -19,7 +19,7 @@ $ divbase-cli dimensions [OPTIONS] COMMAND [ARGS]...
 * `update`: Calculate and add the dimensions of a VCF...
 * `show`: Show the dimensions index file for a project.
 * `create-metadata-template`: Use the samples index in a projects...
-* `validate-metadata-file`: Validate a sidecar metadata TSV file...
+* `validate-metadata-file`: Client-side validation of a sidecar...
 
 ## `divbase-cli dimensions update`
 
@@ -77,22 +77,10 @@ $ divbase-cli dimensions create-metadata-template [OPTIONS]
 
 ## `divbase-cli dimensions validate-metadata-file`
 
-Validate a sidecar metadata TSV file against DivBase formatting requirements and project dimensions.
+Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
 
-Validation is run client-side to keep sensitive metadata local during validation.
-
-Validation checks:
-- File is properly tab-delimited
-- First column is named &#x27;#Sample_ID&#x27;
-- No commas in cells
-- Sample_ID has only one value per row (no semicolons)
-- No duplicate sample IDs
-- Invalid characters
-- Basic type consistency in user-defined columns. But not Pandas type inference,
-  as we want to avoid having the user install Pandas just for validation. So just check that numeric columns have only numeric values (excluding header).
-- All samples in the TSV exist in the project&#x27;s dimensions index
-
-Returns errors for critical issues and warnings for non-critical issues.
+Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
+in the TSV file match the sample names in the dimensions index for the project
 
 **Usage**:
 
@@ -106,5 +94,6 @@ $ divbase-cli dimensions validate-metadata-file [OPTIONS] INPUT_FILENAME
 
 **Options**:
 
+* `--untruncated`: Show full (untruncated) validator lists (including sample mismatches and grouped warning row/value previews).
 * `--project TEXT`: Name of the DivBase project, if not provided uses the default in your DivBase config file
 * `--help`: Show this message and exit.
