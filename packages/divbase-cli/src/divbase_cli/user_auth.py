@@ -107,7 +107,18 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
         error_message = response.json().get("detail", "Invalid email or password.")
         raise AuthenticationError(error_message)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        error_details = response.json().get("detail", "No error details provided")
+        error_type = response.json().get("type", "unknown")
+        raise DivBaseAPIError(
+            error_details=error_details,
+            status_code=response.status_code,
+            error_type=error_type,
+            http_method="POST",
+            url=f"{divbase_url}/v1/auth/login",
+        ) from e
 
     data = response.json()
     token_data = TokenData(
