@@ -1,6 +1,6 @@
 # Running Queries: Overview
 
-DivBase allows users to submit queries to checkout sample metadata and VCF data from the DivBase project data store. There types of queries in DivBase are:
+DivBase allows users to submit queries to checkout sample metadata and VCF data from the DivBase project data store. The three types of queries in DivBase are:
 
 - Sample metadata query
 - VCF data query
@@ -8,11 +8,15 @@ DivBase allows users to submit queries to checkout sample metadata and VCF data 
 
 The sample metadata is a user defined, sidecar TSV (tab separated variables) file where users can add any custom metadata as columns. The VCF queries use `bcftools` to subset data from the files in the data store based on user defined filters. The VCF queries can be combined with a sample metadata query to allow users to filter both on data in the sidecar metadata and VCF files in a single query.
 
-TODO
+A few quick things that are good to know when it comes to running DivBase queries:
 
-- [TO BE IMPLEMENTED] think about the `divbase-cli query` commands. it would make sense to use `sample-metadata` (perhaps with `tsv` as a short form) and `vcf`
+- The queries are run as jobs in the DivBase job queue management system since they can potentially take some time to run, depending on the VCF file size and the query itself.
 
-The system will use the latest version the the files for all queries.
+- The system will use the latest version the files for all queries.
+
+- The VCF Dimensions for the project needs to be up-to-date before running any queries, as described in [Before running any queries: run the VCF dimensions command](#before-running-any-queries-run-the-vcf-dimensions-command) below.
+
+This page is meant as medium detailed description of these query commands, and therefore sits in-between the [Quick Start Guide](quick-start.md) and the full guides found here in the Running Queries chapter in terms of level-of-detail. The sections below contain links to the full guides.
 
 ## Before running any queries: run the VCF dimensions command
 
@@ -69,5 +73,7 @@ TODO COPIED OVER FROM QUICKSTART REIMPLEMENT
 DivBase only allows `bcftools view` in its query syntax and no other `bcftools` commands. The `merge`, `concat`, and `annotate` commands are used when processing a query, but should not be defined by the user.
 
 ## Combined sample metadata and VCF data query
+
+TODO - finish writing this section
 
 Uses a sample metadata query to identify the VCF files in the DivBase project to run the VCF queries on.
