@@ -3,7 +3,7 @@ Module responsible for validating the CLI version from incoming requests to the 
 
 Can be used to outright reject a request (via Middleware) from a CLI version that is too old
 OR
-On login, add annoucnement that a new version of the CLI can be installed.
+On login, add announcement that a new version of the CLI can be installed.
 """
 
 from divbase_api.api_config import settings
