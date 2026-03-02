@@ -16,9 +16,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from divbase_api.api_config import settings
+from divbase_api.services.validate_cli_versions import cli_version_outdated
+from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 IMAGE_FONT_EXTENSIONS = [".webp", ".svg", ".jpg", ".jpeg", ".png", ".woff", ".woff2", ".ttf"]
 CSS_JS_EXTENSIONS = [".css", ".js"]
@@ -53,6 +55,34 @@ class CustomHeaderMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class CLIVersionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """
+        Middleware to validate the CLI version from the request header.
+
+        Will reject request if user cli version is too outdated.
+        """
+        response = await call_next(request)
+        cli_version = request.headers.get(CLI_VERSION_HEADER_KEY)
+
+        if not cli_version:
+            return response
+
+        # in middleware, you can't rely on raising exceptions and passing to exception_handlers.py
+        # You have to return a direct response instead.
+        if cli_version_outdated(cli_version=cli_version):
+            message = (
+                "Your install of divbase is too outdated and no longer compatible with DivBase Server. "
+                "You must first update your install of divbase in order to run any more commands. "
+                "If you're not sure how to do that, you can find instructions on how to upgrade here: "
+                f"{settings.api.mkdocs_site_url}/user-guides/installation"
+            )
+            body = {"detail": message, "type": "cli_version_outdated_error"}
+            return JSONResponse(content=body, status_code=400)
+
+        return response
+
+
 def register_middleware(app: FastAPI) -> None:
     """
     Register all middleware to the FastAPI app.
@@ -73,4 +103,5 @@ def register_middleware(app: FastAPI) -> None:
 
     app.add_middleware(middleware_class=GZipMiddleware, minimum_size=1000, compresslevel=5)
     app.add_middleware(CustomHeaderMiddleware)
+    app.add_middleware(CLIVersionMiddleware)
     app.add_middleware(middleware_class=TrustedHostMiddleware, allowed_hosts=allowed_hosts)
