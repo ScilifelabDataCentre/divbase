@@ -14,11 +14,13 @@ import stamina
 import yaml
 from pydantic import SecretStr
 
+from divbase_cli import __version__ as cli_version
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.retries import retry_only_on_retryable_divbase_api_errors
 from divbase_cli.user_config import load_user_config
 from divbase_lib.api_schemas.auth import LogoutRequest
+from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 
@@ -91,7 +93,10 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
                 "username": email,  # OAuth2 uses 'username', not 'email'
                 "password": password.get_secret_value(),
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                CLI_VERSION_HEADER_KEY: cli_version,
+            },
         )
     except httpx.ConnectError:
         # We don't raise the full error as it contains the password in the stack trace.
@@ -207,6 +212,7 @@ def make_authenticated_request(
 
     headers = kwargs.get("headers", {})
     headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
+    headers[CLI_VERSION_HEADER_KEY] = cli_version
     kwargs["headers"] = headers
 
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
@@ -246,6 +252,10 @@ def make_unauthenticated_request(
     E.g. the announcements endpoint.
     """
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
+
+    headers = kwargs.get("headers", {})
+    headers[CLI_VERSION_HEADER_KEY] = cli_version
+    kwargs["headers"] = headers
 
     try:
         response = httpx.request(method=method, url=url, **kwargs)
