@@ -312,14 +312,14 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 
     if is_api_request(request):
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": exc.errors(), "type": "request_validation_error"},
         )
     else:
         return await render_error_page(
             request=request,
             message="Badly formatted request. Please check your input and try again.",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
 
 
