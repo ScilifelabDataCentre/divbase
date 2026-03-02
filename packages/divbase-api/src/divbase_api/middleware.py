@@ -29,7 +29,7 @@ CSS_JS_EXTENSIONS = [".css", ".js"]
 class CustomHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
-        Adds extra headers to all responses.
+        Adds extra headers to all responses after being processed by the route handler.
         Note that some other headers are added via the k8s ingress sitting in front of the API.
         """
         response = await call_next(request)
@@ -60,17 +60,13 @@ class CLIVersionMiddleware(BaseHTTPMiddleware):
         """
         Middleware to validate the CLI version from the request header.
 
-        Will reject request if user cli version is too outdated.
+        Will reject request if user cli version is too outdated before hitting the route handler.
         """
-        response = await call_next(request)
         cli_version = request.headers.get(CLI_VERSION_HEADER_KEY)
 
-        if not cli_version:
-            return response
-
-        # in middleware, you can't rely on raising exceptions and passing to exception_handlers.py
-        # You have to return a direct response instead.
-        if cli_version_outdated(cli_version=cli_version):
+        if cli_version and cli_version_outdated(cli_version=cli_version):
+            # in middleware, you can't rely on raising exceptions and passing to exception_handlers.py
+            # You have to return a direct response instead.
             message = (
                 "Your install of divbase is too outdated and no longer compatible with DivBase Server. "
                 "You must first update your install of divbase in order to run any more commands. "
@@ -80,6 +76,7 @@ class CLIVersionMiddleware(BaseHTTPMiddleware):
             body = {"detail": message, "type": "cli_version_outdated_error"}
             return JSONResponse(content=body, status_code=400)
 
+        response = await call_next(request)
         return response
 
 
