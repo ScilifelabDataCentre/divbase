@@ -689,7 +689,6 @@ class SharedMetadataValidator:
                     f"Affected cells: {preview_text}.{full_output_hint}",
                 )
             )
-            break
 
         return warnings
 
