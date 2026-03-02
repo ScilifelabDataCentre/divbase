@@ -81,7 +81,7 @@ divbase-cli files ls
 
 ## Step 7: Dimensions update
 
-For DivBase to be able to efficiently handle the VCF files in the the project, some key information about each VCF files is fetched from the files. In DivBase, this is refered to as "VCF dimensions". These include for instance which samples and scaffolds that a VCF file contains.
+For DivBase to be able to efficiently handle the VCF files in the the project, some key information about each VCF files is fetched from the files and cached in the server. In DivBase, this is refered to as "VCF dimensions". These include for instance which samples and scaffolds that a VCF file contains.
 
 Update the project dimensions after uploading your files.
 
@@ -94,7 +94,7 @@ This submits a task to the DivBase task management system. The task will wait in
 !!! notes
     1. Please note that it is not possible to run VCF queries in DivBase until the dimensions update task has finished. The reason for this is that the VCF queries use the dimensions data ensure that the queries are feasible and to know which VCF files from the project to process.
 
-    2. Please also note that the `divbase-cli dimensions update` command needs to be done every time a new VCF or a new version of a VCF file is uploaded.
+    2. Please also note that the `divbase-cli dimensions update` command needs to be run every time a new VCF or a new version of a VCF file is uploaded.
 
 ## Step 8: Confirm dimensions update job completion
 
