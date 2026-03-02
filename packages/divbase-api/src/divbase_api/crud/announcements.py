@@ -47,8 +47,8 @@ def new_cli_version_announcement(user_cli_version: str) -> AnnouncementResponse 
     return AnnouncementResponse(
         heading="A new version of DivBase CLI is available",
         message=(
-            f"You are using an outdated version of the DivBase CLI ({user_cli_version}). "
-            f"Please consider upgrading to the latest version for new features, bug fixes, and improved security.\n"
+            f"You are using an outdated version of the DivBase CLI '{user_cli_version}'. "
+            f"Please consider upgrading to the latest version '{settings.api.latest_cli_version}' for new features, bug fixes, and improved security.\n"
             "If you're not sure how to do that, you can find instructions on how to upgrade here: "
             f"{settings.api.mkdocs_site_url}/user-guides/installation"
         ),
