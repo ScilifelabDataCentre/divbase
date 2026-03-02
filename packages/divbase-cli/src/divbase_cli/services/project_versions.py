@@ -10,6 +10,8 @@ from divbase_lib.api_schemas.project_versions import (
     DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
+    UpdateVersionRequest,
+    UpdateVersionResponse,
 )
 
 
@@ -57,6 +59,30 @@ def get_version_details_command(
     )
 
     return ProjectVersionDetailResponse(**response.json())
+
+
+def update_version_command(
+    project_name: str,
+    divbase_base_url: str,
+    version_name: str,
+    new_name: str | None,
+    new_description: str | None,
+) -> UpdateVersionResponse:
+    """Update the name and/or description of an existing project version entry."""
+    request_data = UpdateVersionRequest(
+        version_name=version_name,
+        new_name=new_name,
+        new_description=new_description,
+    )
+
+    response = make_authenticated_request(
+        method="PATCH",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/project-versions/update?project_name={project_name}",
+        json=request_data.model_dump(),
+    )
+
+    return UpdateVersionResponse(**response.json())
 
 
 def delete_version_command(project_name: str, divbase_base_url: str, version_name: str) -> DeleteVersionResponse:

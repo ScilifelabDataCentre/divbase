@@ -39,3 +39,8 @@ scripts/benchmarking/results
 
 # mkdocs build cache
 .cache/
+# mkdocs auto generated files
+docs/cli/_auto_generated/*.md
+
+# pypi 
+dist/

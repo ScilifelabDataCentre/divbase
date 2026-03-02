@@ -29,6 +29,7 @@ from divbase_api.exceptions import (
     ProjectVersionAlreadyExistsError,
     ProjectVersionCreationError,
     ProjectVersionNotFoundError,
+    ProjectVersionSoftDeletedError,
     TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
@@ -240,7 +241,7 @@ async def project_version_already_exists_error_handler(request: Request, exc: Pr
 
 
 async def project_version_not_found_error_handler(request: Request, exc: ProjectVersionNotFoundError):
-    logger.warning(
+    logger.info(
         f"Project version not found error for {request.method} {request.url.path}: {exc.message}", exc_info=True
     )
 
@@ -248,6 +249,21 @@ async def project_version_not_found_error_handler(request: Request, exc: Project
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message, "type": "project_version_not_found_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
+async def project_version_soft_deleted_error_handler(request: Request, exc: ProjectVersionSoftDeletedError):
+    logger.info(
+        f"Project version soft deleted error for {request.method} {request.url.path}: {exc.message}", exc_info=True
+    )
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "project_version_soft_deleted_error"},
             headers=exc.headers,
         )
     else:
@@ -296,14 +312,14 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 
     if is_api_request(request):
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": exc.errors(), "type": "request_validation_error"},
         )
     else:
         return await render_error_page(
             request=request,
             message="Badly formatted request. Please check your input and try again.",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
 
 
@@ -380,6 +396,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionNotFoundError, project_version_not_found_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectVersionSoftDeletedError, project_version_soft_deleted_error_handler)  # type: ignore
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore

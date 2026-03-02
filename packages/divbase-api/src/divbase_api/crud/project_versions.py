@@ -11,6 +11,7 @@ Version entries are created and managed via the API.
 import logging
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +21,7 @@ from divbase_api.exceptions import (
     ProjectVersionAlreadyExistsError,
     ProjectVersionCreationError,
     ProjectVersionNotFoundError,
+    ProjectVersionSoftDeletedError,
 )
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
@@ -29,6 +31,7 @@ from divbase_lib.api_schemas.project_versions import (
     DeleteVersionResponse,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
+    UpdateVersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,13 +66,13 @@ async def add_project_version(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
+
         error_details = str(e.orig).lower()
         if "unique_name_project" in error_details and "unique constraint" in error_details:
             raise ProjectVersionAlreadyExistsError(
                 message=f"A project version with the name '{name}' already exists for this project. Please choose a different name.",
             ) from None
         else:
-            logger.error(f"Unexpected db integrity error when attempting to add a new project version: {e}")
             raise
 
     await db.refresh(new_version)
@@ -129,7 +132,9 @@ async def get_project_version_details(
     result = await db.execute(stmt)
     version_entry = result.one_or_none()
     if version_entry is None:
-        raise ProjectVersionNotFoundError(message=f"Version '{version_name}' not found for the project.")
+        raise ProjectVersionNotFoundError(
+            message=f"Version '{version_name}' was not found for this project. Check if you mistyped the version name or are looking at the wrong project."
+        )
 
     name, description, created_at, is_deleted, files = version_entry
     return ProjectVersionDetailResponse(
@@ -138,6 +143,66 @@ async def get_project_version_details(
         created_at=created_at.isoformat(),
         is_deleted=is_deleted,
         files=files,
+    )
+
+
+async def update_project_version(
+    db: AsyncSession,
+    project_id: int,
+    version_name: str,
+    new_name: str | None,
+    new_description: str | None,
+) -> UpdateVersionResponse:
+    """
+    Update the name and/or description of an existing project version entry.
+
+    Note that the files and timestamp associated with a version entry cannot be updated, only the name and description.
+    This is by design to ensure that version entries remain immutable representations of the state of the project.
+    """
+    if not new_name and not new_description:
+        raise HTTPException(
+            status_code=400,
+            detail="No updates specified. Please provide a new name and/or description to update the version.",
+        )
+
+    stmt = select(ProjectVersionDB).where(
+        ProjectVersionDB.project_id == project_id,
+        ProjectVersionDB.name == version_name,
+    )
+    result = await db.execute(stmt)
+    version_entry = result.scalar_one_or_none()
+    if version_entry is None:
+        raise ProjectVersionNotFoundError(
+            message=f"Version '{version_name}' was not found for this project. Check if you mistyped the version name or are looking at the wrong project."
+        )
+    if version_entry.is_deleted:
+        raise ProjectVersionSoftDeletedError(
+            message=f"Version '{version_name}' has been soft-deleted. You must restore it before you can modify it."
+        )
+
+    if new_name is not None:
+        version_entry.name = new_name
+    if new_description is not None:
+        version_entry.description = new_description
+
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+
+        error_details = str(e.orig).lower()
+        if "unique_name_project" in error_details and "unique constraint" in error_details:
+            raise ProjectVersionAlreadyExistsError(
+                message=f"A version named '{new_name}' already exists in this project. Please choose a different new name.",
+            ) from None
+        else:
+            raise
+
+    await db.refresh(version_entry)
+    return UpdateVersionResponse(
+        name=version_entry.name,
+        description=version_entry.description,
+        created_at=version_entry.created_at.isoformat(),
     )
 
 
@@ -158,7 +223,7 @@ async def soft_delete_version(
     version_entry = result.scalar_one_or_none()
     if version_entry is None:
         raise ProjectVersionNotFoundError(
-            message=f"Version '{version_name}' not found for the project. Perhaps it was already deleted or you mistyped the version name?"
+            message=f"Version '{version_name}' was not found for this project. Perhaps it was already deleted or you mistyped the version name?"
         )
 
     if version_entry.is_deleted and version_entry.date_deleted is not None:

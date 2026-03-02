@@ -62,10 +62,7 @@ plugins:
   meta:
 
 nav:
-  - DivBase: 
-    - Overview: index.md
-    - Contributing: CONTRIBUTING.md
-    - Security Policy: SECURITY.md
+  - DivBase: index.md
   - User Guides:
     - Overview: user-guides/index.md
     - Quick Start Guide: user-guides/quick-start.md
@@ -109,6 +106,8 @@ nav:
     - Testing: development/testing.md
     - Monitoring and observability: development/monitoring_and_observability.md
     - "Monitoring: Celery Worker Metrics": development/worker_metrics.md
+    - Contributing to DivBase development: CONTRIBUTING.md
+    - Security Policy: SECURITY.md
   - "Go to DivBase Website": https://divbase.scilifelab.se
 
 hooks:

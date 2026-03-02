@@ -88,6 +88,13 @@ class ProjectVersionNotFoundError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
+class ProjectVersionSoftDeletedError(DivBaseAPIException):
+    """Raised when a user tries to modify a project version that is soft-deleted."""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
 class VCFDimensionsEntryMissingError(DivBaseAPIException):
     """Raised when there are no entries in the VCF dimensions db table."""
 
