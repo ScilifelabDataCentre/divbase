@@ -799,10 +799,15 @@ class SidecarQueryManager:
         Filter string values in the query vs. cell values in the TSV:
         - Filter strings are handled per semicolon-separated key-value pair: in "key1:value1,value2;key2:value3,value4"
           "key1:value1,value2" is handled separately from "key2:value3,value4".
-        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,va, lue2" and each filter string value is handled separately.
+        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,value2" and each filter string value is handled separately.
         - Cells can have multi-values as long as Python list syntax is used in the TSV cell, e.g. [25, 30, 35].
         - Matching of filter string to cell values uses OR logic: if ANY value in a cell matches ANY filter value, the row matches.
-          E.g. "key2:value3,value4" means that TSV cells in the "key2" column that contain "value3" will match, but also cells that contain "value3;value4" or "value4;value3" will match.
+
+        Note:
+        Even though multi-value cells now use Python list syntax (e.g., [1, 2, 3]), the validator and query logic still check for semicolons and commas in plain string cells.
+        This is  because: semicolons and commas have special meaning in the query filter syntax (semicolon separates key-value pairs, comma separates filter values).
+        If a user enters a semicolon or comma in a plain string cell (not a list), it may cause confusion or unexpected query results, as the query parser may split on these characters and thus will not be able to match against them.
+        Warnings are issued to help users avoid ambiguous or unintended filter behavior.
 
         Summary of how different input filter values are handled:
         - If the filter_string is empty, all records are returned.
