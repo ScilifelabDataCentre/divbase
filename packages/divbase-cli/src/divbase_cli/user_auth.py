@@ -7,6 +7,7 @@ This includes login/logout and the getting, storing, using, and refreshing of ac
 import time
 import warnings
 from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 
 import httpx
@@ -80,14 +81,33 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     return token_data.refresh_token_expires_at
 
 
+def _handle_divbase_api_error(response: httpx.Response, http_method: str, url: str) -> None:
+    """Handles custom display of a HTTP error response returned by DivBase API."""
+    try:
+        response_body = response.json()
+        error_details = response_body.get("detail", "No error message provided.")
+        error_type = response_body.get("type", "unknown")
+    except (JSONDecodeError, ValueError):
+        # most likely situation for this would be if the reverse proxy returns an error, not the server itself.
+        error_details = response.text
+        error_type = "unexpected_server_error"
+
+    raise DivBaseAPIError(
+        error_details=error_details,
+        status_code=response.status_code,
+        error_type=error_type,
+        http_method=http_method,
+        url=url,
+    ) from None
+
+
 @stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
 def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
-    """
-    Log in to the DivBase server and return user tokens.
-    """
+    """Log in to the DivBase server and return user tokens."""
+    login_url = f"{divbase_url}/v1/auth/login"
     try:
         response = httpx.post(
-            f"{divbase_url}/v1/auth/login",
+            url=login_url,
             data={
                 "grant_type": "password",
                 "username": email,  # OAuth2 uses 'username', not 'email'
@@ -103,22 +123,13 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
         # a user could unknowingly dump this into e.g. a bug report/GitHub issue.
         raise DivBaseAPIConnectionError() from None
 
-    if response.status_code == 401:
-        error_message = response.json().get("detail", "Invalid email or password.")
-        raise AuthenticationError(error_message)
-
     try:
         response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        error_details = response.json().get("detail", "No error details provided")
-        error_type = response.json().get("type", "unknown")
-        raise DivBaseAPIError(
-            error_details=error_details,
-            status_code=response.status_code,
-            error_type=error_type,
-            http_method="POST",
-            url=f"{divbase_url}/v1/auth/login",
-        ) from e
+    except httpx.HTTPStatusError:
+        if response.status_code == 401:
+            error_message = response.json().get("detail", "Invalid email or password.")
+            raise AuthenticationError(error_message) from None
+        _handle_divbase_api_error(response=response, http_method="POST", url=login_url)
 
     data = response.json()
     token_data = TokenData(
@@ -180,9 +191,7 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
 
 
 def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
-    """
-    Load user tokens from the specified path.
-    """
+    """Load user tokens from the specified path."""
     if not token_path.exists():
         raise AuthenticationError(
             f"Your access tokens were not found at {token_path}. Please check you are logged in first."
@@ -207,9 +216,7 @@ def make_authenticated_request(
     token_path: Path = cli_settings.TOKENS_PATH,
     **kwargs,
 ) -> httpx.Response:
-    """
-    Make an authenticated request to the DivBase server, handles refreshing tokens if needed.
-    """
+    """Make an authenticated request to the DivBase server, handles refreshing tokens if needed."""
     token_data = load_user_tokens(token_path=token_path)
 
     if token_data.is_access_token_expired():
@@ -236,15 +243,7 @@ def make_authenticated_request(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError:
-        error_details = response.json().get("detail", "No error details provided")
-        error_type = response.json().get("type", "unknown")
-        raise DivBaseAPIError(
-            error_details=error_details,
-            status_code=response.status_code,
-            error_type=error_type,
-            http_method=method,
-            url=url,
-        ) from None
+        _handle_divbase_api_error(response=response, http_method=method, url=url)
 
     return response
 
@@ -276,15 +275,7 @@ def make_unauthenticated_request(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError:
-        error_details = response.json().get("detail", "No error details provided")
-        error_type = response.json().get("type", "unknown")
-        raise DivBaseAPIError(
-            error_details=error_details,
-            status_code=response.status_code,
-            error_type=error_type,
-            http_method=method,
-            url=url,
-        ) from None
+        _handle_divbase_api_error(response=response, http_method=method, url=url)
 
     return response
 
@@ -296,33 +287,29 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     Returns the new TokenData object which can be used immediately in a new request.
     NOTE: We do not need retry logic inside this function as the calling function has it.
     """
+    refresh_url = f"{divbase_base_url}/v1/auth/refresh"
     try:
         response = httpx.post(
-            url=f"{divbase_base_url}/v1/auth/refresh",
+            url=refresh_url,
             json={"refresh_token": token_data.refresh_token.get_secret_value()},
             headers={CLI_VERSION_HEADER_KEY: cli_version},
         )
     except httpx.HTTPError as e:
         raise DivBaseAPIConnectionError() from e
 
-    # Possible if e.g. token revoked on server side.
-    if response.status_code == 401:
-        # Clear logged in status in user config as tokens no longer valid.
-        # Prevents user getting warning about being already logged in when they try to log in again.
-        config = load_user_config()
-        config.set_login_status(url=None, email=None)
-        raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
-
     try:
         response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise DivBaseAPIError(
-            error_details=response.json().get("detail", "No error details provided"),
-            status_code=response.status_code,
-            error_type=response.json().get("type", "unknown"),
-            http_method="POST",
-            url=f"{divbase_base_url}/v1/auth/refresh",
-        ) from e
+    except httpx.HTTPStatusError:
+        # Possible if e.g. token revoked on server side.
+        if response.status_code == 401:
+            # Clear logged in status in user config as tokens no longer valid.
+            # Prevents user getting warning about being already logged in when they try to log in again.
+            config = load_user_config()
+            config.set_login_status(url=None, email=None)
+            raise AuthenticationError(LOGIN_AGAIN_MESSAGE) from None
+
+        _handle_divbase_api_error(response=response, http_method="POST", url=refresh_url)
+
     data = response.json()
 
     new_token_data = TokenData(
