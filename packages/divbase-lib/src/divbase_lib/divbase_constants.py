@@ -44,3 +44,10 @@ UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\")
 # E.g. format: result_of_job_<job-id>.vcf.gz , where <job-id> = 1 and is auto-incremented for every new job.
 # NOTE: If you update this, you should also update the S3 lifecycle policies associated with this.
 QUERY_RESULTS_FILE_PREFIX = "result_of_job_"
+
+# CLI includes this in every request to the server,
+# and server uses it to determine if it should:
+# 1. Reject the request as the version is too outdated
+# 2. Add an announcement about a new CLI version being available when the user logs in.
+# 3. Do Nothing as the user's CLI version is up to date.
+CLI_VERSION_HEADER_KEY = "X-CLI-Version"

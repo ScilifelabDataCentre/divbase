@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 
 from pydantic import SecretStr
 
+from divbase_api import __version__ as api_version
+
 
 @dataclass
 class APISettings:
@@ -24,6 +26,12 @@ class APISettings:
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
+
+    # versions before this are denied access to the API, until the user has upgraded
+    minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.0")
+    # Used in deciding if to give the user an announcement on login that a new version of the CLI is available.
+    # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
+    latest_cli_version: str = api_version
 
 
 @dataclass
@@ -71,7 +79,8 @@ class JWTSettings:
 class EmailSettings:
     """
     Email configuration settings.
-    Currently only working for local development with Mailpit
+    For local development we use Mailpit to catch all emails,
+    In deployed environments, we use SMTP relay.
     """
 
     smtp_server: str = field(init=False)

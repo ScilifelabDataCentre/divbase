@@ -9,7 +9,7 @@ import shutil
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError
+from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_cli.user_auth import LOGIN_AGAIN_MESSAGE
 
@@ -237,3 +237,31 @@ def test_using_revoked_refresh_token_fails(logged_out_user_with_no_config, tmp_p
     result = runner.invoke(app, whoami_command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
+
+
+def test_login_with_outdated_cli_version_fails(logged_out_user_with_no_config, monkeypatch):
+    """Test that login fails if the CLI version is outdated (rejected by the API middleware)"""
+    monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
+
+    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "400" in str(result.exception)
+    assert "cli_version_outdated_error" in str(result.exception)
+
+
+def test_any_command_with_outdated_cli_version_fails(logged_out_user_with_no_config, monkeypatch):
+    """Test that any command fails if the CLI version is outdated."""
+    log_in_as_user()
+
+    monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
+
+    command = "auth whoami"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "400" in str(result.exception)
+    assert "cli_version_outdated_error" in str(result.exception)
