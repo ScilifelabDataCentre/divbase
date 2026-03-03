@@ -231,11 +231,14 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
 
 @dimensions_app.command("create-metadata-template")
 def create_metadata_template_with_project_samples_names(
-    output_filename: str | None = typer.Option(
+    output_path: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Name of the output TSV file to create. Defaults to sample_metadata_<project_name>.tsv. If a file with the same name already exists in the current directory, you will be prompted to confirm if you want to overwrite it.",
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        help="Path to the output TSV file to create. Defaults to sample_metadata_<project_name>.tsv in the current directory. If a file already exists at the given path, you will be prompted to confirm if you want to overwrite it.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
@@ -245,8 +248,8 @@ def create_metadata_template_with_project_samples_names(
 
     project_config = resolve_project(project_name=project)
 
-    if output_filename is None:
-        output_filename = f"sample_metadata_{project_config.name}.tsv"
+    if output_path is None:
+        output_path = Path.cwd() / f"sample_metadata_{project_config.name}.tsv"
 
     response = make_authenticated_request(
         method="GET",
@@ -265,8 +268,6 @@ def create_metadata_template_with_project_samples_names(
         # VCFDimensionsEntryMissingError will be returned. But for some reason, there are no samples in the VCF, this will catch that.
         print("No samples found for this project. No file written.")
         return
-
-    output_path = Path.cwd() / output_filename
 
     # Check if file exists and prompt user for confirmation
     if output_path.exists():
@@ -288,9 +289,13 @@ def create_metadata_template_with_project_samples_names(
 
 @dimensions_app.command("validate-metadata-file")
 def validate_metadata_template_versus_dimensions_and_formatting_constraints(
-    input_filename: str = typer.Argument(
+    input_path: Path = typer.Argument(
         ...,
-        help="Name of the input TSV file to validate.",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        help="Path to the input TSV file to validate.",
     ),
     untruncated: bool = typer.Option(
         False,
@@ -307,12 +312,6 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     # in the TSV file match the sample names in the dimensions index for the project
 
     project_config = resolve_project(project_name=project)
-
-    input_path = Path.cwd() / input_filename
-
-    if not input_path.exists():
-        print(f"Error: File '{input_path}' not found.")
-        raise typer.Exit(code=1)
 
     print(f"Validating local metadata file: {input_path}")
     print(f"Project: {project_config.name}\n")

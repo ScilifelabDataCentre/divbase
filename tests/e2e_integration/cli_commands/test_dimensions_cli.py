@@ -822,5 +822,5 @@ def test_validate_metadata_file_nonexistent(
     command = f"dimensions validate-metadata-file nonexistent_file.tsv --project {project_name}"
     cli_result = runner.invoke(app, command)
 
-    assert cli_result.exit_code == 1, "Expected exit code 1 for nonexistent file"
-    assert "not found" in cli_result.stdout.lower(), "Expected error message about file not found"
+    assert cli_result.exit_code == 2, "Expected exit code 2 for nonexistent file (Typer path validation)"
+    assert "does not exist" in cli_result.output.lower(), "Expected error message about file not existing"
