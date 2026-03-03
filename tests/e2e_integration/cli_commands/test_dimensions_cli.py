@@ -4,6 +4,7 @@ Tests for the "divbase-cli dimensions" subcommand
 
 import ast
 import gzip
+import os
 import re
 from unittest.mock import patch
 
@@ -476,15 +477,43 @@ def test_show_dimensions_sample_names_stdout_streams_rows(
     project_id = project_map[project_name]
     user_id = 1
 
+    expected_sample_names = [
+        "8_HOM-E57",
+        "8_HOM-E59",
+        "8_HOM-E64",
+        "8_HOM-E74",
+        "8_HOM-E78",
+        "1a_HOM-G34",
+        "5a_HOM-I13",
+        "5a_HOM-I14",
+        "5a_HOM-I20",
+        "5a_HOM-I21",
+        "5a_HOM-I7",
+        "1b_HOM-G55",
+        "1b_HOM-G58",
+        "1b_HOM-G83",
+        "5b_HOM-H17",
+        "5b_HOM-H23",
+        "5b_HOM-H25",
+        "5b_HOM-H7",
+        "7_HOM-J21",
+        "4_HOM-P25",
+    ]
+
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     command = f"dimensions show --project {project_name} --sample-names-stdout"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
 
-    lines = [line for line in cli_result.stdout.splitlines() if line.strip()]
-    assert len(lines) > 0, "Expected streamed rows in stdout"
-    assert all("\t" in line for line in lines), "Expected tab-delimited rows in format: filename<TAB>sample_name"
+    output_sample_names = [
+        line.split()[1]
+        for line in cli_result.stdout.splitlines()
+        if len(line.split()) == 2 and line.split()[0].endswith((".vcf", ".vcf.gz"))
+    ]
+    assert output_sample_names, "Expected streamed sample rows in stdout"
+    missing = set(expected_sample_names) - set(output_sample_names)
+    assert not missing, f"Missing sample names in output: {missing}"
 
 
 def test_show_dimensions_truncates_sample_names_in_terminal(
@@ -544,3 +573,254 @@ def test_show_dimensions_rejects_output_and_stdout_together(
         + (str(cli_result.exception) if cli_result.exception else "")
     )
     assert "Use only one of --sample-names-output or --sample-names-stdout." in combined_output
+
+
+@pytest.mark.parametrize(
+    "option_flag,expected_message,expected_items,verify_sorting",
+    [
+        (
+            "--unique-samples",
+            "Unique sample names found",
+            [
+                "1a_HOM-G34",
+                "1b_HOM-G55",
+                "1b_HOM-G58",
+                "1b_HOM-G83",
+                "4_HOM-P25",
+                "5a_HOM-I13",
+                "5a_HOM-I14",
+                "5a_HOM-I20",
+                "5a_HOM-I21",
+                "5a_HOM-I7",
+                "5b_HOM-H17",
+                "5b_HOM-H23",
+                "5b_HOM-H25",
+                "5b_HOM-H7",
+                "7_HOM-J21",
+                "8_HOM-E57",
+                "8_HOM-E59",
+                "8_HOM-E64",
+                "8_HOM-E74",
+                "8_HOM-E78",
+            ],
+            True,  # Should be sorted alphabetically
+        ),
+        (
+            "--unique-scaffolds",
+            "Unique scaffold names found",
+            ["1", "4", "5", "6", "7", "8", "13", "18", "20", "21", "22", "24"],
+            True,  # Should be sorted numerically then alphabetically
+        ),
+    ],
+)
+def test_show_unique_items_parametrized(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+    option_flag,
+    expected_message,
+    expected_items,
+    verify_sorting,
+):
+    """
+    Parametrized test for --unique-samples and --unique-scaffolds options.
+    Tests both the CRUD functions and CLI integration.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} {option_flag}"
+    cli_result = runner.invoke(app, command)
+
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    assert "count:" in cli_result.stdout, "Expected count to be displayed in output"
+    assert expected_message in cli_result.stdout, f"Expected message '{expected_message}' in output"
+    assert "[" in cli_result.stdout and "]" in cli_result.stdout, "Expected list output"
+
+    items = _parse_list_from_cli_output(cli_result.stdout)
+
+    assert isinstance(items, list), f"Expected list, got {type(items)}"
+    assert len(items) > 0, f"Expected at least one item in {option_flag} output"
+
+    if expected_items is not None:
+        assert items == expected_items, f"Expected {expected_items}, got {items}"
+
+    if verify_sorting and option_flag == "--unique-samples":
+        assert items == sorted(items), f"Samples should be sorted alphabetically: {items}"
+    elif verify_sorting and option_flag == "--unique-scaffolds":
+        numeric_items = [s for s in items if s.isdigit()]
+        assert numeric_items == sorted(numeric_items, key=int), "Numeric scaffolds should be sorted numerically"
+
+
+def test_create_metadata_template(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+    tmp_path,
+):
+    """
+    Test the CLI 'dimensions create-metadata-template' command.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+    output_filename = f"test_metadata_{project_name}.tsv"
+    output_path = tmp_path / output_filename
+
+    command = f"dimensions create-metadata-template --project {project_name} --output {output_path}"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    assert output_path.exists(), f"Expected output file {output_path} to exist"
+
+    with open(output_path, "r") as f:
+        lines = f.readlines()
+    assert lines[0].strip() == "#Sample_ID", f"Expected header '#Sample_ID', got {lines[0].strip()}"
+    assert len(lines) > 1, "Expected at least one sample in the template"
+    stdout_lower = cli_result.stdout.lower()
+    assert "unique samples" in stdout_lower or "samples found" in stdout_lower, (
+        f"Expected message about unique samples, got: {cli_result.stdout}"
+    )
+    assert str(output_path) in cli_result.stdout or "written" in stdout_lower, (
+        "Expected output filename or confirmation message"
+    )
+
+
+def test_create_metadata_template_with_overwrite_prompt(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+    tmp_path,
+):
+    """
+    Test that create-metadata-template prompts when file exists.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    output_filename = f"test_metadata_{project_name}.tsv"
+    output_path = tmp_path / output_filename
+
+    # Create template file (does not exist since before)
+    command = f"dimensions create-metadata-template --project {project_name} --output {output_path}"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"First creation failed: {cli_result.stdout}"
+
+    # Try to create template file again and decline overwrite
+    cli_result = runner.invoke(app, command, input="n\n")
+    assert "already exists" in cli_result.stdout, "Expected overwrite prompt"
+    assert "not written" in cli_result.stdout.lower() or cli_result.exit_code != 0, (
+        "Expected message about file not written or non-zero exit"
+    )
+
+    # Try to create template file again and accept overwrite
+    cli_result = runner.invoke(app, command, input="y\n")
+    assert cli_result.exit_code == 0, f"Expected exit code 0, got {cli_result.exit_code}. Output: {cli_result.stdout}"
+    assert "already exists" in cli_result.stdout, "Expected overwrite prompt"
+
+
+def test_validate_metadata_file_valid(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions validate-metadata-file' command with a valid TSV file.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "../..", "fixtures", "sample_metadata_HOM_chr_split_version.tsv"
+    )
+
+    command = f"dimensions validate-metadata-file {fixture_path} --project {project_name}"
+    cli_result = runner.invoke(app, command)
+
+    assert cli_result.exit_code == 0, f"Expected validation to succeed with exit code 0, got {cli_result.exit_code}"
+    assert "VALIDATION SUMMARY" in cli_result.stdout, "Expected validation summary"
+    assert re.search(r"Total columns:\s+\d+", cli_result.stdout), "Expected total columns in summary"
+    assert re.search(r"Samples matching project VCF dimensions:\s+\d+/\d+", cli_result.stdout), (
+        "Expected dimensions sample match counts in summary"
+    )
+    assert "ERRORS" not in cli_result.stdout, f"Did not expect errors, got: {cli_result.stdout}"
+
+
+def test_validate_metadata_file_with_errors(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions validate-metadata-file' command with an invalid TSV file.
+    Only assert fixture-driven messages. Ignore dimensions mismatch/project state-dependent messages.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "../..", "fixtures", "sample_metadata_incorrect_formatting_to_test_tsv_validator.tsv"
+    )
+
+    command = f"dimensions validate-metadata-file {fixture_path} --project {project_name}"
+    cli_result = runner.invoke(app, command)
+
+    assert cli_result.exit_code == 1, f"Expected validation to fail but it passed: {cli_result.stdout}"
+    assert "VALIDATION SUMMARY" in cli_result.stdout, "Expected validation summary"
+    assert "ERRORS" in cli_result.stdout, "Expected errors section"
+    assert "WARNINGS" in cli_result.stdout, "Expected warnings section"
+
+    assert "Expected 4 tab-separated columns from reading the header, found 2" in cli_result.stdout
+    # Rich/terminal wrapping can split long phrases across lines, so assert key fragments.
+    assert "mixed element types" in cli_result.stdout and "in lists" in cli_result.stdout
+    assert "Found 2 cell(s) with invalid list syntax or not parsed as list" in cli_result.stdout
+    assert "Sample_ID is empty or missing in 2 row(s)" in cli_result.stdout
+    assert "Duplicate Sample_IDs found: 'test_duplicate' appears in 2 row(s)" in cli_result.stdout
+    assert "Sample_ID column contains list values" in cli_result.stdout
+    assert "Found 3 cell(s) with leading or trailing whitespace" in cli_result.stdout
+    assert "This column contains mixed-type cells" in cli_result.stdout
+    assert "Validation failed! Please fix the errors above before uploading." in cli_result.stdout
+
+
+def test_validate_metadata_file_nonexistent(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test that validate-metadata-file handles nonexistent files gracefully.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+
+    command = f"dimensions validate-metadata-file nonexistent_file.tsv --project {project_name}"
+    cli_result = runner.invoke(app, command)
+
+    assert cli_result.exit_code == 2, "Expected exit code 2 for nonexistent file (Typer path validation)"
+    assert "does not exist" in cli_result.output.lower(), "Expected error message about file not existing"

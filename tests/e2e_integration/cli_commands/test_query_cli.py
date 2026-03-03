@@ -175,6 +175,44 @@ def test_bcftools_pipe_query(
     )
 
 
+def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_runs(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Tests that running a bcftools-pipe query twice works without running dimensions update between the two runs.
+    Results files are prefixed with QUERY_RESULTS_FILE_PREFIX and _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket
+    skips files that begin with that prefix.
+    """
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    tsv_filter = "Area:West of Ireland,Northern Portugal;"
+    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+
+    first_result = runner.invoke(app, command)
+    assert first_result.exit_code == 0, f"First run failed: {first_result.stdout}"
+    first_task_id = first_result.stdout.strip().split()[-1]
+    first_task = wait_for_task_complete(user_task_id=first_task_id)
+    assert first_task.status == "SUCCESS", f"First run task failed: {first_task.result}"
+
+    second_result = runner.invoke(app, command)
+    assert second_result.exit_code == 0, f"Second run failed: {second_result.stdout}"
+    second_task_id = second_result.stdout.strip().split()[-1]
+    second_task = wait_for_task_complete(user_task_id=second_task_id)
+    assert second_task.status == "SUCCESS", (
+        f"Second run failed with: {second_task.result}. "
+        "This suggests that result files from the first run are incorrectly triggering DimensionsNotUpToDateWithBucketError."
+    )
+
+
 def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_user_with_existing_config):
     project_name = "non_existent_project"
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
@@ -321,7 +359,6 @@ def test_query_exits_when_dimensions_are_outdated(
     Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions index is not up-to-date. Test for these cases:
     1. version_outdated: uploads a new version of an existing VCF file after dimensions update
     2. unindexed: uploads a new VCF file that is not present in the dimensions index
-
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
@@ -348,30 +385,244 @@ def test_query_exits_when_dimensions_are_outdated(
         command = f"files upload {test_file_path}  --project {project_name} --disable-safe-mode"
         result = runner.invoke(app, command)
 
-        assert result.exit_code == 0
-        assert vcf_filename in result.stdout
+        try:
+            assert result.exit_code == 0
+            assert vcf_filename in result.stdout
 
-        params = {
-            "tsv_filter": "Area:West of Ireland;Sex:F",
-            "command": "view -s SAMPLES; view -r 1,4,6,21,24",
-            "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-            "bucket_name": bucket_name,
-            "project_id": project_id,
-            "project_name": project_name,
-            "user_id": 1,
-            "job_id": job_id,
-        }
-        with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
-            bcftools_pipe_task(**params)
-        assert (
-            "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
-            in str(excinfo.value)
+            params = {
+                "tsv_filter": "Area:West of Ireland;Sex:F",
+                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+                "bucket_name": bucket_name,
+                "project_id": project_id,
+                "project_name": project_name,
+                "user_id": 1,
+                "job_id": job_id,
+            }
+            with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
+                bcftools_pipe_task(**params)
+            assert (
+                "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
+                in str(excinfo.value)
+            )
+        finally:
+            # Ensure cleanup always runs for the unindexed scenario to avoid test pollution.
+            if cleanup_file:
+                command = f"files rm {vcf_filename}  --project {project_name}"
+                runner.invoke(app, command)
+
+
+class TestSidecarQueryTaskErrorsPropagation:
+    """Test that errors in sidecar query tasks are propagated correctly to the CLI."""
+
+    def test_error_in_terminal_for_sample_metadata_query_on_tsv_not_in_bucket(
+        self,
+        CONSTANTS,
+        run_update_dimensions,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+    ):
+        """
+        Test that the sample metadata query raises the correct error when the specified TSV file is not found in the project bucket.
+
+        Indirectly covers the case of the user misspells the TSV filename.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        project_id = project_map[project_name]
+        user_id = 1
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
 
-        # Clean up the uploaded file if needed (for unindexed test to not affect other tests)
-        if cleanup_file:
-            command = f"files rm {vcf_filename}  --project {project_name}"
-            runner.invoke(app, command)
+        tsv_filename = "filename_that_does_not_exist_in_bucket.tsv"
+        command = f'query tsv "Area:North" --metadata-tsv-name {tsv_filename} --project {project_name}'
+        cli_result = runner.invoke(app, command)
+
+        assert f"The sample metadata TSV file '{tsv_filename}' was not found in your project '{project_name}'" in str(
+            cli_result.exception
+        ), "Expected error message about missing TSV file in project bucket"
+
+    def test_error_in_terminal_for_sample_metadata_query_when_no_dimensions_file(
+        self,
+        CONSTANTS,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+    ):
+        """
+        Test that the sample metadata query raises the correct error when there is no dimensions file in the project bucket.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        # To test for this, do not run the update_dimensions fixture
+
+        tsv_filename = "sample_metadata_HOM_chr_split_version.tsv"
+        command = f'query tsv "Area:North" --metadata-tsv-name {tsv_filename} --project {project_name} '
+        cli_result = runner.invoke(app, command)
+
+        assert f"The VCF dimensions index in project '{project_name}' is missing or empty" in str(
+            cli_result.exception
+        ), "Expected error message about missing VCF dimensions file in project bucket"
+
+    def test_error_in_terminal_for_sample_metadata_query_tsv_missing_should_be_raised_before_dimensions_check(
+        self,
+        CONSTANTS,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+    ):
+        """
+        Test that the missing TSV in bucket error is raised before the dimensions file check for a case when both are incorrect.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        # To test for this, do not run the update_dimensions fixture
+
+        filename = "sample_metadata.tsv"  # not in the split-scaffold-project bucket
+        command = f'query tsv "Area:North" --metadata-tsv-name {filename} --project {project_name} '
+        cli_result = runner.invoke(app, command)
+
+        assert f"The sample metadata TSV file '{filename}' was not found in your project '{project_name}'" in str(
+            cli_result.exception
+        ), "Expected error message about missing TSV file in project bucket"
+
+    def test_error_in_terminal_for_invalid_filter_syntax(
+        self,
+        CONSTANTS,
+        run_update_dimensions,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+        tmp_path,
+    ):
+        """
+        Test that SidecarInvalidFilterError is raised and propagated to terminal when filter syntax is invalid.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        project_id = project_map[project_name]
+        user_id = 1
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        tsv_filename = "sample_metadata_HOM_chr_split_version.tsv"
+
+        invalid_filter = "Area North"  # Use invalid filter syntax (missing colon)
+        command = f'query tsv "{invalid_filter}" --metadata-tsv-name {tsv_filename} --project {project_name}'
+        cli_result = runner.invoke(app, command)
+
+        assert f"Invalid filter format: '{invalid_filter}'. Expected format 'key:value1,value2' or" in str(
+            cli_result.exception
+        ), "Expected error message about invalid filter syntax"
+
+    def test_error_in_terminal_when_querying_nonexistent_column_in_tsv(
+        self,
+        CONSTANTS,
+        run_update_dimensions,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+        tmp_path,
+    ):
+        """
+        Test that SidecarColumnNotFoundError is raised and propagated to terminal when querying non-existent column.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        project_id = project_map[project_name]
+        user_id = 1
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        tsv_filename = "sample_metadata_HOM_chr_split_version.tsv"
+
+        invalid_filter = "NonExistentColumn:value"  # Query a column that doesn't exist in the TSV
+        command = f'query tsv "{invalid_filter}" --metadata-tsv-name {tsv_filename} --project {project_name}'
+        cli_result = runner.invoke(app, command)
+
+        output = cli_result.stdout + (str(cli_result.exception) if cli_result.exception else "")
+        # Normalize whitespace to handle line wrapping
+        normalized_output = " ".join(output.split())
+        assert cli_result.exit_code == 1, "Expected exit code 1 for invalid filter condition"
+        assert (
+            "Invalid filter conditions: no valid filter conditions could be parsed from 'NonExistentColumn:value'"
+            in normalized_output
+        )
+        assert "NonExistentColumn:value" in normalized_output, "Expected filter string in error message"
+
+    def test_error_in_terminal_when_duplicate_sample_IDs_in_tsv(
+        self,
+        CONSTANTS,
+        run_update_dimensions,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+        tmp_path,
+    ):
+        """
+        Test that SidecarSampleIDError is raised and propagated to terminal when TSV has duplicate Sample_IDs.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        project_id = project_map[project_name]
+        user_id = 1
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        tsv_file = tmp_path / "test_duplicate_sample_ids.tsv"
+        tsv_file.write_text("#Sample_ID\tArea\nS1\tNorth\nS1\tSouth\n8_HOM-E59\tEast\n")
+        command = f"files upload {tsv_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+
+        command = f'query tsv "Area:North" --metadata-tsv-name {tsv_file.name} --project {project_name}'
+        cli_result = runner.invoke(app, command)
+
+        error_text = str(cli_result.exception)
+        assert "Duplicate Sample_IDs found" in error_text and "Each Sample_ID must be unique." in error_text, (
+            f"Expected error message about duplicate Sample_IDs, got: {error_text}"
+        )
+
+    def test_error_in_terminal_for_comma_in_metadata(
+        self,
+        CONSTANTS,
+        run_update_dimensions,
+        db_session_sync,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+        tmp_path,
+    ):
+        """
+        Test that TSV files with commas generate warnings (not errors) and can still be queried.
+        Columns with commas are treated as string columns.
+        """
+        project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        project_id = project_map[project_name]
+        user_id = 1
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        tsv_file = tmp_path / "test_comma_in_data.tsv"
+        tsv_file.write_text("#Sample_ID\tPopulation\n8_HOM-E57\t1,2\n8_HOM-E59\t3\n")
+        command = f"files upload {tsv_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+
+        command = f'query tsv "Population:2" --metadata-tsv-name {tsv_file.name} --project {project_name}'
+        cli_result = runner.invoke(app, command)
+
+        assert cli_result.exit_code == 0, f"Query should succeed with comma warning. Output: {cli_result.output}"
+        assert "comma" in cli_result.output.lower(), "Expected warning message about comma in metadata value"
 
 
 @pytest.mark.integration

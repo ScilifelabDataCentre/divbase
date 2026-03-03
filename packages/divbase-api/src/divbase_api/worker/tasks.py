@@ -15,7 +15,11 @@ from celery.signals import (
     worker_process_init,
 )
 
-from divbase_api.exceptions import VCFDimensionsEntryMissingError
+from divbase_api.exceptions import (
+    ObjectDoesNotExistError,
+    TSVFileNotFoundInProjectError,
+    VCFDimensionsEntryMissingError,
+)
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
@@ -40,7 +44,8 @@ from divbase_api.worker.vcf_dimension_indexing import (
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
-from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
 
 logger = logging.getLogger(__name__)
 
@@ -168,15 +173,29 @@ def sample_metadata_query_task(
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
-    metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-    )
+    try:
+        metadata_path = _download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
+    except ObjectDoesNotExistError:
+        # If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards.
+        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(project_name=project_name)
+        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
+
+    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+
+    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
+        vcf_dimensions_data=vcf_dimensions_data,
+        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+        project_id=project_id,
+    )
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
@@ -750,7 +769,12 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     skipped_vcf_files = set(skipped_vcfs.keys())
 
     vcf_files_in_bucket = {
-        file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")
+        file
+        for file in latest_versions_of_bucket_files
+        if (file.endswith(".vcf") or file.endswith(".vcf.gz"))
+        # Skip files with DivBase result files prefix. Furthermore, result VCF files cannot be indexed by dimensions update due to a DivBase-added header.
+        # Together these two checks should stop results files from being considered for queries.
+        and not file.startswith(QUERY_RESULTS_FILE_PREFIX)
     }
 
     indexed_vcf_files = set(indexed_vcf_lookup.keys())

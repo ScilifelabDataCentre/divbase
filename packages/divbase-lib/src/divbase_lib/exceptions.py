@@ -101,6 +101,35 @@ class SidecarColumnNotFoundError(Exception):
     pass
 
 
+class SidecarSampleIDError(Exception):
+    """Raised when a Sample_ID is invalid or duplicated when loading sidecar data."""
+
+    pass
+
+
+class SidecarMetadataFormatError(Exception):
+    """Raised when the sidecar metadata TSV file has formatting issues (duplicate columns, empty columns, commas in values, etc.)."""
+
+    pass
+
+
+class TaskUserError(Exception):
+    """
+    Raised in Celery tasks when an error needs to propagate back to the CLI user.
+
+    This is intentionally kept as a simple Exception subclass (no custom __init__)
+    to avoid UnpicklableExceptionWrapper when passing through Celery's JSON serialization/deserialization.
+    Complex exception types such as those inheriting from DivBaseAPIException seem to trigger UnpicklableExceptionWrapper.
+
+    This class is essentially a wrapper to allow to use more complex exceptions in Celery tasks and catch them
+    in the API route handlers to return user-friendly error messages to the CLI.
+    In the Celery task use it like:
+        raise TaskUserError(str(SomeComplexError(...))) from None
+    """
+
+    pass
+
+
 class NoVCFFilesFoundError(Exception):
     """Raised when no VCF files are found in the project bucket."""
 

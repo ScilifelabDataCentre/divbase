@@ -1,8 +1,10 @@
+import csv
 import logging
 from pathlib import Path
 
 import typer
 import yaml
+from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import resolve_project
@@ -12,6 +14,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsScaffoldsResult,
     DimensionsShowResult,
 )
+from divbase_lib.metadata_validator import SharedMetadataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +227,174 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
         "indexed_files": dimensions_list,
         "skipped_files": skipped_list,
     }
+
+
+@dimensions_app.command("create-metadata-template")
+def create_metadata_template_with_project_samples_names(
+    output_path: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        help="Path to the output TSV file to create. Defaults to sample_metadata_<project_name>.tsv in the current directory. If a file already exists at the given path, you will be prompted to confirm if you want to overwrite it.",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+) -> None:
+    """
+    Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions areup-to-date.
+    """
+
+    project_config = resolve_project(project_name=project)
+
+    if output_path is None:
+        output_path = Path.cwd() / f"sample_metadata_{project_config.name}.tsv"
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
+    )
+    unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
+
+    sample_count = len(unique_sample_names_sorted)
+    print(
+        f"There were {sample_count} unique samples found in the dimensions file for the {project_config.name} project."
+    )
+
+    if sample_count == 0:
+        # Fallback in case there are no samples in the dimensions index. If no dimensions entry for the project
+        # VCFDimensionsEntryMissingError will be returned. But for some reason, there are no samples in the VCF, this will catch that.
+        print("No samples found for this project. No file written.")
+        return
+
+    # Check if file exists and prompt user for confirmation
+    if output_path.exists():
+        overwrite = typer.confirm(f"File '{output_path}' already exists. Do you want to overwrite it?")
+        if not overwrite:
+            print("File not written. Exiting.")
+            return
+
+    with open(output_path, mode="w", newline="") as tsvfile:
+        writer = csv.writer(tsvfile, delimiter="\t")
+        writer.writerow(["#Sample_ID"])
+        for sample in unique_sample_names_sorted:
+            writer.writerow([sample])
+
+    print(f"A sample metadata template with these sample names was written to: {output_path}")
+
+    # TODO perhaps add a message on how to fill in additional columns and how to upload the metadata file to DivBase?
+
+
+@dimensions_app.command("validate-metadata-file")
+def validate_metadata_template_versus_dimensions_and_formatting_constraints(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        help="Path to the input TSV file to validate.",
+    ),
+    untruncated: bool = typer.Option(
+        False,
+        "--untruncated",
+        help="Show full (untruncated) validator lists (including sample mismatches and grouped warning row/value previews).",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+) -> None:
+    """
+    Validate a sample metadata TSV file (before you upload it to the project's data store) to check that it will work with DivBase queries.
+    """
+    # Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
+    # Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
+    # in the TSV file match the sample names in the dimensions index for the project
+
+    project_config = resolve_project(project_name=project)
+
+    print(f"Validating local metadata file: {input_path}")
+    print(f"Project: {project_config.name}\n")
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=project_config.divbase_url,
+        api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
+    )
+    unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
+
+    dimensions_sample_preview_limit = None if untruncated else 20
+
+    shared_validator = SharedMetadataValidator(
+        file_path=input_path,
+        project_samples=set(unique_sample_names),
+        skip_dimensions_check=False,
+        dimensions_sample_preview_limit=dimensions_sample_preview_limit,
+    )
+    result = shared_validator.load_and_validate()
+
+    errors = [error_entry.message for error_entry in result.errors]
+    warnings = [warning_entry.message for warning_entry in result.warnings]
+    stats = result.stats
+    numeric_cols = result.numeric_columns
+    string_cols = result.string_columns
+    mixed_cols = result.mixed_type_columns
+
+    print("[bold cyan]VALIDATION SUMMARY:[/bold cyan]")
+    print(
+        f"  Total columns: {getattr(stats, 'total_columns', 0)} ({getattr(stats, 'user_defined_columns', 0)} user-defined + 1 Sample_ID column)"
+    )
+
+    samples_in_tsv = getattr(stats, "samples_in_tsv", 0)
+    samples_matching = getattr(stats, "samples_matching_project", 0)
+    total_project = getattr(stats, "total_project_samples", 0)
+
+    print(
+        f"  Samples matching project VCF dimensions: {samples_matching}/{samples_in_tsv} (project has {total_project} total)"
+    )
+
+    print(f"  Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols) if numeric_cols else 'None'}")
+    print(f"  String columns ({len(string_cols)}): {', '.join(string_cols) if string_cols else 'None'}")
+    print(
+        f"  Mixed-type columns treated as string ({len(mixed_cols)}): {', '.join(mixed_cols) if mixed_cols else 'None'}"
+    )
+
+    if getattr(stats, "has_multi_values", False):
+        print("  Multi-value cells: Yes (Python list notation detected)")
+    else:
+        print("  Multi-value cells: No")
+
+    empty_cells = getattr(stats, "empty_cells_per_column", {})
+    if empty_cells:
+        print(
+            f"  User-defined columns with empty cells ({len(empty_cells)}): {', '.join(f'{col} ({count})' for col, count in empty_cells.items())}"
+        )
+
+    print()
+
+    if errors:
+        print("[red bold]ERRORS (must be fixed):[/red bold]")
+        for error in errors:
+            print(f"  - {error}")
+        print()
+
+    if warnings:
+        print("[yellow bold]WARNINGS (should be reviewed):[/yellow bold]")
+        for warning in warnings:
+            print(f"  - {warning}")
+        print()
+
+    if not errors and not warnings:
+        print(
+            "[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements. The file is ready to be uploaded to your DivBase project with 'divbase-cli files upload'"
+        )
+    elif errors:
+        print("[red bold]Validation failed![/red bold] Please fix the errors above before uploading.")
+        raise typer.Exit(code=1)
+    else:
+        print("[yellow bold]Validation passed with warnings![/yellow bold] Review the warnings above.")
+
+    # TODO: Add information about how to upload the validated metadata file to DivBase
 
 
 def _truncate_sample_names_in_entry(entry: dict, sample_names_limit: int) -> None:

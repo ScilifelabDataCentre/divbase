@@ -15,7 +15,7 @@ from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
-from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
+from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import (
@@ -29,7 +29,14 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryRequest,
     SampleMetadataQueryTaskResult,
 )
-from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError
+from divbase_lib.exceptions import (
+    DimensionsNotUpToDateWithBucketError,
+    SidecarColumnNotFoundError,
+    SidecarInvalidFilterError,
+    SidecarMetadataFormatError,
+    SidecarSampleIDError,
+    TaskUserError,
+)
 
 logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
@@ -82,11 +89,19 @@ async def sample_metadata_query(
         # TODO - consider if we split this into 2 routes to handle time out issues on CLI side.
         # Route 1, create job and get back job id.
         # Route 2, get job result by id (with status etc), CLI can poll until done.
-    except VCFDimensionsEntryMissingError:
-        # Catch and raise anew to avoid duplications in the error message
-        raise VCFDimensionsEntryMissingError(project_name=project.name) from None
-    except DimensionsNotUpToDateWithBucketError as e:
-        raise DimensionsNotUpToDateWithBucketError(str(e)) from None
+
+    except (
+        SidecarInvalidFilterError,
+        SidecarColumnNotFoundError,
+        SidecarSampleIDError,
+        SidecarMetadataFormatError,
+        TaskUserError,
+        DimensionsNotUpToDateWithBucketError,
+    ) as e:
+        # These are simple exceptions (that inherit from base Exception) that are able to pass through Celery's JSON serialization/deserialization without becoming UnpicklableExceptionWrapper.
+        # TaskUserError is a wrapper exception that allow to nest more complex exceptions that would normally trigger UnpicklableExceptionWrapper, and still be able to pass through the serialization/deserialization.
+        error_message = str(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message) from None
     except celery.exceptions.TimeoutError:  # type: ignore
         error_message = (
             f"The query is still being processed and has Task ID: {results.id}. \n"
@@ -95,12 +110,6 @@ async def sample_metadata_query(
             f"divbase-cli task-history id {results.id}"
         )
         raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail=error_message) from None
-    except FileNotFoundError:
-        error_message = (
-            f"The sample metadata TSV file named: {sample_metadata_query_request.metadata_tsv_name} was not found in your project {project.name} \n"
-            "Please make sure to upload it first ('divbase-cli files upload ...') and try again."
-        )
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_message) from None
 
     return SampleMetadataQueryTaskResult(**result_dict)
 

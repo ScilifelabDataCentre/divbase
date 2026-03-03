@@ -13,7 +13,7 @@ __pycache__/
 
 # project specific files
 /sample_metadata.tsv
-sample_metadata_*.tsv
+/sample_metadata_*.tsv
 *.vcf
 *.vcf.gz
 *.vcf.gz.csi
@@ -21,6 +21,7 @@ sample_metadata_*.tsv
 !tests/fixtures/*.vcf.gz
 tests/fixtures/temp*
 tests/fixtures/merged*
+divbase_metadata_template*.tsv
 
 # query job config files
 bcftools_divbase_job_config.json

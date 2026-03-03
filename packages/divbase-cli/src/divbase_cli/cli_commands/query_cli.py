@@ -97,14 +97,23 @@ def sample_metadata_query(
 
     results = SampleMetadataQueryTaskResult(**response.json())
 
+    if results.warnings:
+        print("[yellow]Warnings:[/yellow]")
+        for warning in results.warnings:
+            print(f"  • {warning}")
+        print()
+
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
         for sample in results.sample_and_filename_subset:
             print(f"Sample ID: '{sample['Sample_ID']}', Filename: '{sample['Filename']}'")
 
     print(f"The results for the query ([bright_blue]{results.query_message}[/bright_blue]):")
-    print(f"Unique Sample IDs: {results.unique_sample_ids}")
-    print(f"Unique filenames: {results.unique_filenames}\n")
+
+    unique_sample_ids = results.unique_sample_ids or []
+    unique_filenames = results.unique_filenames or []
+    print(f"Unique Sample IDs: {unique_sample_ids}")
+    print(f"Unique filenames: {unique_filenames}\n")
 
 
 @query_app.command("bcftools-pipe")
