@@ -1008,11 +1008,11 @@ class SidecarQueryManager:
             self.query_result = self.df[combined_condition].copy()
             self.query_message = self.filter_string
         else:
-            warning_msg = "Invalid filter conditions: none of the filters matched any records. Returning ALL records. This may be a large result set. Please check your filter keys, value spelling, and syntax."
-            logger.warning(warning_msg)
-            self.warnings.append(warning_msg)
-            self.query_result = self.df
-            self.query_message = f"Invalid filter conditions ({self.filter_string}) - returning ALL records"
+            raise SidecarInvalidFilterError(
+                f"Invalid filter conditions: no valid filter conditions could be parsed from '{self.filter_string}'. "
+                "Please check your filter keys, value spelling, and syntax. "
+                "Expected format: 'Key:Value1,Value2' or 'Key:min-max' for numeric ranges."
+            )
 
         return self
 

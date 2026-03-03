@@ -510,17 +510,12 @@ class TestSidecarQueryTaskErrorsPropagation:
         output = cli_result.stdout + (str(cli_result.exception) if cli_result.exception else "")
         # Normalize whitespace to handle line wrapping
         normalized_output = " ".join(output.split())
+        assert cli_result.exit_code == 1, "Expected exit code 1 for invalid filter condition"
         assert (
-            "Column 'NonExistentColumn' not found in the TSV file. Skipping this filter condition." in normalized_output
-        )
-        assert (
-            "Invalid filter conditions: none of the filters matched any records. Returning ALL records."
+            "Invalid filter conditions: no valid filter conditions could be parsed from 'NonExistentColumn:value'"
             in normalized_output
         )
-        assert (
-            "This may be a large result set. Please check your filter keys, value spelling, and syntax."
-            in normalized_output
-        )
+        assert "NonExistentColumn:value" in normalized_output, "Expected filter string in error message"
 
     def test_error_in_terminal_when_duplicate_sample_IDs_in_tsv(
         self,

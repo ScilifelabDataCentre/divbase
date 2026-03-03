@@ -137,16 +137,14 @@ def test_tsv_query_none_filter(sample_tsv_file, create_sidecar_manager):
 
 @pytest.mark.unit
 def test_tsv_query_column_not_found(sample_tsv_file, caplog, create_sidecar_manager):
-    """Test handling of filter with non-existent column."""
+    """Test that a non-existent column raises SidecarInvalidFilterError."""
     with caplog.at_level(logging.WARNING):
         manager = create_sidecar_manager(sample_tsv_file)
-        manager.run_query(filter_string="NonExistentColumn:Value")
-        query_result = manager.query_result
-        query_message = manager.query_message
+        with pytest.raises(SidecarInvalidFilterError) as exc_info:
+            manager.run_query(filter_string="NonExistentColumn:Value")
 
-    assert len(query_result) == 5, "Should return all records when column not found"
     assert "Column 'NonExistentColumn' not found in the TSV file" in caplog.text
-    assert query_message == "Invalid filter conditions (NonExistentColumn:Value) - returning ALL records"
+    assert "NonExistentColumn:Value" in str(exc_info.value)
 
 
 @pytest.mark.unit
