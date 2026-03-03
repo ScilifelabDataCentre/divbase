@@ -240,8 +240,7 @@ def create_metadata_template_with_project_samples_names(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Use the samples index in a projects dimensions cache to create a TSV metadata template file
-    that has the sample names as pre-filled as the first column.
+    Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions areup-to-date.
     """
 
     project_config = resolve_project(project_name=project)
@@ -301,11 +300,11 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
-
-    Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
-    in the TSV file match the sample names in the dimensions index for the project
+    Validate a sample metadata TSV file (before you upload it to the project's data store) to check that it will work with DivBase queries.
     """
+    # Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
+    # Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
+    # in the TSV file match the sample names in the dimensions index for the project
 
     project_config = resolve_project(project_name=project)
 
