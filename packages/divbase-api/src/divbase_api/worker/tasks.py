@@ -44,6 +44,7 @@ from divbase_api.worker.vcf_dimension_indexing import (
 )
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
 
 logger = logging.getLogger(__name__)
@@ -768,7 +769,12 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     skipped_vcf_files = set(skipped_vcfs.keys())
 
     vcf_files_in_bucket = {
-        file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")
+        file
+        for file in latest_versions_of_bucket_files
+        if (file.endswith(".vcf") or file.endswith(".vcf.gz"))
+        # Skip files with DivBase result files prefix. Furthermore, result VCF files cannot be indexed by dimensions update due to a DivBase-added header.
+        # Together these two checks should stop results files from being considered for queries.
+        and not file.startswith(QUERY_RESULTS_FILE_PREFIX)
     }
 
     indexed_vcf_files = set(indexed_vcf_lookup.keys())

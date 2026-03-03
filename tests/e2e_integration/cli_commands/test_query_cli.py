@@ -175,6 +175,44 @@ def test_bcftools_pipe_query(
     )
 
 
+def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_runs(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Tests that running a bcftools-pipe query twice works without running dimensions update between the two runs.
+    Results files are prefixed with QUERY_RESULTS_FILE_PREFIX and _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket
+    skips files that begin with that prefix.
+    """
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    tsv_filter = "Area:West of Ireland,Northern Portugal;"
+    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+
+    first_result = runner.invoke(app, command)
+    assert first_result.exit_code == 0, f"First run failed: {first_result.stdout}"
+    first_task_id = first_result.stdout.strip().split()[-1]
+    first_task = wait_for_task_complete(user_task_id=first_task_id)
+    assert first_task.status == "SUCCESS", f"First run task failed: {first_task.result}"
+
+    second_result = runner.invoke(app, command)
+    assert second_result.exit_code == 0, f"Second run failed: {second_result.stdout}"
+    second_task_id = second_result.stdout.strip().split()[-1]
+    second_task = wait_for_task_complete(user_task_id=second_task_id)
+    assert second_task.status == "SUCCESS", (
+        f"Second run failed with: {second_task.result}. "
+        "This suggests that result files from the first run are incorrectly triggering DimensionsNotUpToDateWithBucketError."
+    )
+
+
 def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_user_with_existing_config):
     project_name = "non_existent_project"
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
