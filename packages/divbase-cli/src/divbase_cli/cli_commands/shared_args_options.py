@@ -16,5 +16,6 @@ PROJECT_NAME_OPTION = typer.Option(
 FORMAT_AS_TSV_OPTION = typer.Option(
     False,
     "--tsv",
+    "-t",
     help="If set, will print the output in .TSV format for easier programmatic parsing.",
 )

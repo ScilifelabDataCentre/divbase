@@ -69,6 +69,7 @@ nav:
     - Account Management: user-guides/account-management.md
     - Installation: user-guides/installation.md
     - Setup DivBase CLI: user-guides/setup_divbase_cli.md
+    - Managing Project Files: user-guides/files.md
     - Working with VCF Files in DivBase: user-guides/vcf-files.md
     - Running Queries: 
       - Overview: user-guides/running-queries.md
