@@ -25,8 +25,9 @@ from divbase_cli.services.s3_files import (
     stream_file_command,
     upload_files_command,
 )
-from divbase_cli.utils import format_file_size, print_rich_table_as_tsv
+from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+from divbase_lib.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from divbase_cli.utils import format_file_size
+from divbase_lib.utils import format_file_size
 
 
 @pytest.mark.parametrize(
