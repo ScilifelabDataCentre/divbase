@@ -376,6 +376,19 @@ class S3FileManager:
                 return None
         return response.get("ETag", "").strip('"')
 
+    def get_bucket_usage_bytes(self, bucket_name: str) -> int:
+        """
+        Get the total size in bytes of all objects in the bucket.
+
+        Unfortunately there is no single API call to get the total bucket size, hence the summing approach below.
+        """
+        total_size = 0
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Contents", []):
+                total_size += obj["Size"]
+        return total_size
+
 
 def create_s3_file_manager(url: str) -> S3FileManager:
     """Helper function to creates an S3FileManager instance using the S3 service account's credentials"""

@@ -7,12 +7,14 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from celery.schedules import crontab
-from sqlalchemy import delete, text
+from sqlalchemy import delete, select, text
 
 from divbase_api.models.project_versions import ProjectVersionDB
+from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
-from divbase_api.worker.tasks import app
+from divbase_api.services.s3_client import create_s3_file_manager
+from divbase_api.worker.tasks import S3_ENDPOINT_URL, app
 from divbase_api.worker.worker_db import SyncSessionLocal
 
 logger = logging.getLogger(__name__)
@@ -196,20 +198,43 @@ def cleanup_soft_deleted_project_versions():
     }
 
 
+@app.task(name="cron_tasks.update_storage_usage_metrics")
+def update_storage_usage_metrics():
+    """
+    Periodic task to update storage usage metrics for all projects.
+
+    This task runs daily and calculates the total storage used by each project, including all versions and files.
+    """
+    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    with SyncSessionLocal() as db:
+        stmt = select(ProjectDB).where(ProjectDB.is_active == True)  # noqa: E712
+        projects = db.execute(stmt).scalars().all()
+
+        for project in projects:
+            storage_used_bytes = s3_file_manager.get_bucket_usage_bytes(bucket_name=project.bucket_name)
+            project.storage_used_bytes = storage_used_bytes
+            db.add(project)
+
+        db.commit()
+
+    return {
+        "status": "completed",
+        "number_of_projects_updated": len(projects),
+    }
+
+
 # NOTE! If you add a new task here, make sure it starts with "cron_tasks"
+# Don't set to 2 AM or 3 AM due to daylight saving.
+# Timezone for job schedule is CET (defined in app in tasks.py).
 app.conf.beat_schedule = {
     "cleanup-old-tasks-daily": {
         "task": "cron_tasks.cleanup_old_task_history",
-        "schedule": crontab(
-            hour=5, minute=0
-        ),  # Run daily at 5 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        "schedule": crontab(hour=5, minute=0),  # Run daily at 5 AM CET
         "kwargs": {"retention_days": TASK_RETENTION_DAYS},
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",
-        "schedule": crontab(
-            hour=5, minute=15
-        ),  # Run daily at 5:15 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
+        "schedule": crontab(hour=5, minute=15),  # Run daily at 5:15 AM CET
         "kwargs": {
             "stuck_pending_hours": STUCK_PENDING_STATUS_HOURS,
             "stuck_started_hours": STUCK_STARTED_STATUS_HOURS,
@@ -222,5 +247,9 @@ app.conf.beat_schedule = {
     "cleanup-soft-deleted-project-versions-daily": {
         "task": "cron_tasks.cleanup_soft_deleted_project_versions",
         "schedule": crontab(hour=5, minute=25),  # Run daily at 5:25 AM CET
+    },
+    "update-storage-usage-metrics-daily": {
+        "task": "cron_tasks.update_storage_usage_metrics",
+        "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
     },
 }
