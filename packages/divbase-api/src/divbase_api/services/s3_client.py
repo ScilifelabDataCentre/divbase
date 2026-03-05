@@ -8,6 +8,7 @@ See the 'docs/development/s3_transfers.md' for more info on how S3 transfers are
 
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -28,6 +29,8 @@ from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
 logger = logging.getLogger(__name__)
+
+S3_BATCH_SIZE = 1000
 
 
 def retry_on_retriable_checksum_errors(exception: Exception) -> bool:
@@ -67,7 +70,7 @@ class S3FileManager:
         """
         Return a list of all files in the S3 bucket.
 
-        This will run multiple requests if there are more than 1000 files in the bucket.
+        This will run multiple requests if there are more than S3_BATCH_SIZE files in the bucket.
         Used by worker to list all vcf.gz files for processing.
         """
         files = []
@@ -81,14 +84,14 @@ class S3FileManager:
         self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
     ) -> ListObjectsResponse:
         """
-        Return a list of up to 1000 files in the S3 bucket with detailed info about each file.
+        Return a list of up to S3_BATCH_SIZE files in the S3 bucket with detailed info about each file.
         This is used by CLI users via the API.
 
         Pagination is supported via the next_token parameter, so a client may need to make multiple calls to get all files.
         """
         request_args = {
             "Bucket": bucket_name,
-            "MaxKeys": 1000,
+            "MaxKeys": S3_BATCH_SIZE,
         }
         if prefix:
             request_args["Prefix"] = prefix
@@ -208,12 +211,15 @@ class S3FileManager:
         it will still be returned in the response as deleted and you cant distinguish between the two cases.
         Would need to check if the files exist to prevent this behaviour, but have to decide if this is worth doing.
         """
-        delete_dict = {"Objects": [{"Key": obj} for obj in objects]}
-        response = self.s3_client.delete_objects(
-            Bucket=bucket_name,
-            Delete=delete_dict,
-        )
-        deleted_object_names = [object_dict["Key"] for object_dict in response["Deleted"]]
+        deleted_object_names = []
+        for i in range(0, len(objects), S3_BATCH_SIZE):
+            batch = objects[i : i + S3_BATCH_SIZE]
+            delete_dict = {"Objects": [{"Key": obj} for obj in batch]}
+            response = self.s3_client.delete_objects(
+                Bucket=bucket_name,
+                Delete=delete_dict,
+            )
+            deleted_object_names.extend([object_dict["Key"] for object_dict in response.get("Deleted", [])])
         return deleted_object_names
 
     def restore_objects(self, objects: list[str], bucket_name: str) -> RestoreObjectsResponse:
@@ -253,39 +259,42 @@ class S3FileManager:
         if not markers_to_delete:
             return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
 
-        delete_response = self.s3_client.delete_objects(
-            Bucket=bucket_name,
-            Delete={"Objects": markers_to_delete},
-        )
-        for deleted_obj in delete_response.get("Deleted", []):
-            restored_objects.append(deleted_obj["Key"])
+        for i in range(0, len(markers_to_delete), S3_BATCH_SIZE):
+            batch = markers_to_delete[i : i + S3_BATCH_SIZE]
+            delete_response = self.s3_client.delete_objects(
+                Bucket=bucket_name,
+                Delete={"Objects": batch},
+            )
+            for deleted_obj in delete_response.get("Deleted", []):
+                restored_objects.append(deleted_obj["Key"])
 
-        if delete_response.get("Errors"):
-            for error in delete_response["Errors"]:
-                logger.error(
-                    f"Failed to remove delete marker for '{error['Key']}' (version: {error['VersionId']}): "
-                    f"{error['Code']} - {error['Message']}"
-                )
-                not_restored.append(error["Key"])
+            if delete_response.get("Errors"):
+                for error in delete_response["Errors"]:
+                    logger.error(
+                        f"Failed to remove delete marker for '{error['Key']}' (version: {error['VersionId']}): "
+                        f"{error['Code']} - {error['Message']}"
+                    )
+                    not_restored.append(error["Key"])
 
         return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
 
-    def hard_delete_specific_object_versions(self, versioned_objects: dict[str, str], bucket_name: str) -> None:
+    def hard_delete_specific_object_versions(self, objects: list[dict[str, str]], bucket_name: str) -> None:
         """
         Hard delete a file from the S3 bucket by specifying the version of the object to delete.
+
+        The list of objects to delete should have the form:
+        [
+            {"Key": "file1.txt", "VersionId": "version-id-1"},
+            {"Key": "file2.txt", "VersionId": "version-id-2"},
+        ]
 
         For versioned buckets,
         - deleting an object without specifying a version id just adds a deletion marker.
         - If you specify the version id, it hard deletes that specific version of the object.
         """
-        delete_dict = {"Objects": []}
-        for key, version in versioned_objects.items():
-            delete_dict["Objects"].append({"Key": key, "VersionId": version})
-
-        self.s3_client.delete_objects(
-            Bucket=bucket_name,
-            Delete=delete_dict,
-        )
+        for i in range(0, len(objects), S3_BATCH_SIZE):
+            batch = objects[i : i + S3_BATCH_SIZE]
+            self.s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
 
     def latest_version_of_all_files(self, bucket_name: str) -> dict[str, str]:
         """
@@ -375,6 +384,28 @@ class S3FileManager:
                 )
                 return None
         return response.get("ETag", "").strip('"')
+
+    def get_expired_soft_deleted_objects(
+        self, bucket_name: str, cutoff_date: datetime, prefix_exclude: str | None = None
+    ) -> set[str]:
+        """
+        Identify "expired" soft-deleted objects in a bucket.
+
+        A soft-deleted object is one whose latest S3 object version is a delete marker.
+        A soft-deleted object is considered "expired" if its delete marker's LastModified timestamp is earlier than the provided cutoff_date.
+        """
+        paginator = self.s3_client.get_paginator("list_object_versions")
+        expired_objects = set()
+
+        for page in paginator.paginate(Bucket=bucket_name):
+            # Check for delete markers that are the "Latest" version
+            for marker in page.get("DeleteMarkers", []):
+                if marker.get("IsLatest") and marker["LastModified"] < cutoff_date:
+                    object_key = marker["Key"]
+                    if prefix_exclude and object_key.startswith(prefix_exclude):
+                        continue
+                    expired_objects.add(object_key)
+        return expired_objects
 
     def get_bucket_usage_bytes(self, bucket_name: str) -> int:
         """
