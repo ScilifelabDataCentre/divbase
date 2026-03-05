@@ -6,7 +6,7 @@ import ast
 import gzip
 import os
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -189,6 +189,72 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
             update_vcf_dimensions_task(
                 bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
             )
+
+
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
+    mock_create_s3_manager,
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test for the case where:
+    1. A user uploads VCFs and runs dimensions update (files get indexed),
+    2. Then deletes all VCFs from the bucket,
+    3. Then runs dimensions update again.
+
+    This should result in the stale DB entries being deleted and a message indicating the files were deleted being sent in the task results.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    # First run: index VCFs normally using real MinIO
+    first_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    assert first_result["status"] == "completed"
+    indexed_files = first_result.get("VCF_files_added") or []
+    assert indexed_files, "Expected at least one indexed VCF file from the first run"
+
+    # Verify the index has entries in the DB before the second run
+    vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert len(vcf_dimensions_before.get("vcf_files", [])) > 0, "Expected DB to have indexed entries"
+
+    # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
+    mock_empty_s3 = MagicMock()
+    mock_empty_s3.list_files.return_value = []
+    mock_empty_s3.latest_version_of_all_files.return_value = {}
+    mock_create_s3_manager.side_effect = lambda url=None: mock_empty_s3
+
+    # Regression test: Assert that NoVCFFilesFoundError is not raised when stale index entries exist
+    # (earlier versions of the code raised NoVCFFilesFoundError before cleaning up the index)
+    try:
+        second_result = update_vcf_dimensions_task(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+    except NoVCFFilesFoundError as e:
+        raise AssertionError("NoVCFFilesFoundError should not be raised when cleaning up stale index entries") from e
+
+    assert second_result["status"] == "completed", f"Expected completed status, got: {second_result}"
+    assert second_result["VCF_files_added"] is None, "Expected no new files indexed"
+    assert second_result["VCF_files_skipped"] is None, "Expected no skipped files"
+    deleted_files = second_result.get("VCF_files_deleted") or []
+    assert len(deleted_files) > 0, "Expected previously indexed files to be reported as deleted"
+    for file in indexed_files:
+        assert file in deleted_files, f"Expected {file} to be in VCF_files_deleted: {deleted_files}"
+
+    # DB index should now be empty for this project
+    db_session_sync.expire_all()
+    vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions_after.get("vcf_files") == [], (
+        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.get('vcf_files')}"
+    )
 
 
 def test_remove_VCF_and_update_dimension_entry(
