@@ -24,6 +24,8 @@ from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
+    SkippedVCFData,
+    VCFMetadataData,
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
     delete_skipped_vcf,
@@ -491,12 +493,12 @@ def update_vcf_dimensions_task(
             vcf_dims = calculator.calculate_dimensions(Path(file))
 
             if vcf_dims is None:
-                skipped_vcf_data = {
-                    "vcf_file_s3_key": file,
-                    "project_id": project_id,
-                    "s3_version_id": latest_versions_of_bucket_files.get(file),
-                    "skip_reason": "divbase_generated",
-                }
+                skipped_vcf_data = SkippedVCFData(
+                    vcf_file_s3_key=file,
+                    project_id=project_id,
+                    s3_version_id=latest_versions_of_bucket_files.get(file),
+                    skip_reason="divbase_generated",
+                )
 
                 with SyncSessionLocal() as db:
                     create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
@@ -505,16 +507,16 @@ def update_vcf_dimensions_task(
                 logger.info(f"Skipping DivBase-generated result file: {file}")
                 continue
 
-            vcf_metadata_data = {
-                "vcf_file_s3_key": file,
-                "project_id": project_id,
-                "s3_version_id": latest_versions_of_bucket_files.get(file),
-                "samples": vcf_dims["sample_names"],
-                "scaffolds": vcf_dims["scaffolds"],
-                "variant_count": vcf_dims["variants"],
-                "sample_count": vcf_dims["sample_count"],
-                "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
-            }
+            vcf_metadata_data = VCFMetadataData(
+                vcf_file_s3_key=file,
+                project_id=project_id,
+                s3_version_id=latest_versions_of_bucket_files.get(file),
+                samples=vcf_dims.sample_names,
+                scaffolds=vcf_dims.scaffolds,
+                variant_count=vcf_dims.variants,
+                sample_count=vcf_dims.sample_count,
+                file_size_bytes=Path(file).stat().st_size if Path(file).exists() else 0,
+            )
 
             with SyncSessionLocal() as db:
                 create_or_update_vcf_metadata(db=db, vcf_metadata_data=vcf_metadata_data)

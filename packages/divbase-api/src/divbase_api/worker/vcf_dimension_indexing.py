@@ -2,11 +2,19 @@ import gzip
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
+class VCFDimensions:
+    variants: int
+    sample_count: int
+    scaffolds: List[str]
+    sample_names: List[str]
+
+
 class VCFDimensionCalculator:
     """
     Calculates dimensions (samples, variants, scaffolds) from VCF files.
@@ -15,7 +23,7 @@ class VCFDimensionCalculator:
     and returns their dimensions. Database operations are handled via the API.
     """
 
-    def calculate_dimensions(self, vcf_path: Path) -> dict | None:
+    def calculate_dimensions(self, vcf_path: Path) -> VCFDimensions | None:
         """
         Calculate dimensions from a VCF file.
 
@@ -34,7 +42,7 @@ class VCFDimensionCalculator:
             with open(vcf_path, "r") as file:
                 return self._extract_dimensions_from_opened_vcf(file)
 
-    def _extract_dimensions_from_opened_vcf(self, file) -> dict | None:
+    def _extract_dimensions_from_opened_vcf(self, file) -> VCFDimensions | None:
         """
         Parse VCF file and extract dimensions.
 
@@ -60,9 +68,9 @@ class VCFDimensionCalculator:
                 scaffold = line.split("\t", 1)[0]
                 scaffold_names.add(scaffold)
 
-        return {
-            "variants": variant_count,
-            "sample_count": sample_count,
-            "scaffolds": sorted(list(scaffold_names)),
-            "sample_names": sample_IDs,
-        }
+        return VCFDimensions(
+            variants=variant_count,
+            sample_count=sample_count,
+            scaffolds=sorted(list(scaffold_names)),
+            sample_names=sample_IDs,
+        )
