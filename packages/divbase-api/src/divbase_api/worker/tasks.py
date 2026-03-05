@@ -402,26 +402,51 @@ def update_vcf_dimensions_task(
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
 
+    # First, compare the list of VCF files in the bucket with the list of VCF files in the dimensions table.
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+    with SyncSessionLocal() as db:
+        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
+
+    indexed_entries = vcf_dimensions_data.get("vcf_files", [])
+    already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
+
+    vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
+    skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
+
+    for file in vcfs_deleted_from_bucket_since_last_indexing:
+        try:
+            with SyncSessionLocal() as db:
+                delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
+            logger.info(f"Deleted VCF metadata for removed file: {file}")
+        except Exception as e:
+            logger.error(f"Failed to delete VCF metadata for {file}: {e}")
+
+    for file in skipped_deleted_from_bucket:
+        with SyncSessionLocal() as db:
+            delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
+
+    # Early exit if there are no VCF files left in the bucket after updating the dimensions index. If there were no VCF files to begin with, raise exception
     if not vcf_files:
+        if vcfs_deleted_from_bucket_since_last_indexing or skipped_deleted_from_bucket:
+            result = DimensionUpdateTaskResult(
+                status="completed",
+                VCF_files_added=None,
+                VCF_files_skipped=None,
+                VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
+            )
+            return result.model_dump()
         raise NoVCFFilesFoundError(
             f"VCF dimensions file could not be generated since no VCF files were found in the project: {project_name}."
             "Please upload at least one VCF file and run this command again."
         )
 
-    with SyncSessionLocal() as db:
-        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-    indexed_entries = vcf_dimensions_data.get("vcf_files", [])
-    already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
     incomplete_indexed_vcfs = {
         entry["vcf_file_s3_key"]
         for entry in indexed_entries
         if (entry.get("sample_count", 0) > 0 and not entry.get("samples"))
         or (entry.get("variant_count", 0) > 0 and not entry.get("scaffolds"))
     }
-
-    with SyncSessionLocal() as db:
-        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -499,26 +524,6 @@ def update_vcf_dimensions_task(
         except Exception as e:
             logger.error(f"Error indexing {file}: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
-
-    vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
-    if not vcfs_deleted_from_bucket_since_last_indexing:
-        vcfs_deleted_from_bucket_since_last_indexing = None
-    skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
-
-    # TODO this block could be done in one go for calling db once with a list
-    if vcfs_deleted_from_bucket_since_last_indexing:
-        for file in vcfs_deleted_from_bucket_since_last_indexing:
-            try:
-                with SyncSessionLocal() as db:
-                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
-                logger.info(f"Deleted VCF metadata for removed file: {file}")
-            except Exception as e:
-                logger.error(f"Failed to delete VCF metadata for {file}: {e}")
-
-    if skipped_deleted_from_bucket:
-        for file in skipped_deleted_from_bucket:
-            with SyncSessionLocal() as db:
-                delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
 
     _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
