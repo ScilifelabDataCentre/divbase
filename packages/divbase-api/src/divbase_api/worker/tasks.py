@@ -560,7 +560,7 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
-    logger.debug(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
+    logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
 
     objects = {file_name: None for file_name in files_to_download}
     downloaded_files = s3_file_manager.download_files(
@@ -651,11 +651,19 @@ def _delete_job_files_from_worker(
     After uploading results to bucket, delete job files from the worker.
     """
     for vcf_path in vcf_paths:
+        vcf_path = Path(vcf_path)
         try:
             os.remove(vcf_path)
             logger.info(f"Deleted {vcf_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
+        csi_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
+        if csi_path.exists():
+            try:
+                os.remove(csi_path)
+                logger.info(f"Deleted CSI index {csi_path} from worker.")
+            except Exception as e:
+                logger.warning(f"Could not delete CSI index file {csi_path}: {e}")
     if metadata_path is not None:
         try:
             os.remove(metadata_path)

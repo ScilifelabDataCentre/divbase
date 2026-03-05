@@ -143,7 +143,7 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: VCFMetadataDat
     db.commit()
 
     logger.info(
-        f"VCF metadata created/updated for {vcf_metadata_data.vcf_file_s3_key} "
+        f"VCF Dimensions created/updated for {vcf_metadata_data.vcf_file_s3_key} "
         f"in project {vcf_metadata_data.project_id}"
     )
 
