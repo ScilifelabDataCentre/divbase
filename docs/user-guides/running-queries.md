@@ -22,17 +22,38 @@ This page is meant as medium detailed description of these query commands, and t
 
 TODO - finish writing this section
 
-For more details see [VCF Dimensions caching](vcf-dimensions.md)
+To ensure that users get good performance out of DivBase, technical metadata from all VCF files that are uploaded to a DivBase project will be indexed on the DivBase server. For each VCF file name, the server will extract the number and name of all samples, the number and name of all scaffolds, and the number of variants. This technical VCF metadata is referred to as VCF Dimensions in DivBase. The full details of how to use this are described on the page: [VCF Dimensions](vcf-dimensions.md).
 
-For performance reasons and to ensure query feasibility, key metadata from the VCF files must first be cached in DivBase.
-For each VCF in the DivBase project, the system extracts file name, number and name of all samples, number and name of all scaffolds, number of variants,
+DivBase will use the VCF Dimensions whenever a user submits a query to the project. Instead of transferring VCF files internally and reading them each time a user sends a query to DivBase, the server will instead use the VCF Dimensions cache, which is a much quicker process.
 
-DivBase will use this whenever a user submits a query to the project. For instance, the user might make a sample metadata filtering that results in only certain samples. The system knows which file names each requested sample are located in, and will ensure that only those files will be transferred to the worker.
+The VCF Dimensions must be updated each time a new VCF file or a new version of a VCF file is uploaded to the project. This needs to be done manually by running the command:
 
-example
-dimensions show
+```bash
+divbase-cli dimensions update
+```
 
-how to use dimensions show to get all samples in the project
+This command is sent to the DivBase job queue system, since this process can potentially take some time for larger VCF files. DivBase uses `bcftools` to extract the VCF dimensions metadata, which is a fast software. Nevertheless, the time it will take to extract the VCF dimensions will scale proportionally to the VCF file size. You can see this as a once-per-VCF-file-version investment: it will take a little time here up-front, but all subsequent queries to this file will be much faster than they otherwise would be.
+
+Please wait until the VCF dimensions job has finished for your project before you make any queries to DivBase. You can check the status of the job with:
+
+```bash
+divbase-cli task-history user
+```
+
+To see the current VCF dimensions for a project, use:
+
+```bash
+divbase-cli dimensions show
+```
+
+This will print the currently cached VCF Dimensions in DivBase per VCF file name ([see example here](vcf-dimensions.md#dimensions-show))
+
+The VCF Dimensions of the project should now be up-to-date with the VCF files in the projects data store. You are now ready to run queries.
+
+!!! Note
+    Remember that if you or another project member uploads a VCF file to the project, you will need to run `divbase-cli dimensions update` again before running queries.
+
+    When you submit a query, DivBase will use the state of the VCF Dimensions and the VCF files at that very point in time to produce the query results. It is therefore fine if you or another project member uploads new VCF files to the project while a query is queued or running.
 
 ## Sidecar sample metadata queries
 
