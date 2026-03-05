@@ -890,3 +890,106 @@ def test_validate_metadata_file_nonexistent(
 
     assert cli_result.exit_code == 2, "Expected exit code 2 for nonexistent file (Typer path validation)"
     assert "does not exist" in cli_result.output.lower(), "Expected error message about file not existing"
+
+
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_cleans_up_csi_index_files_from_worker(
+    mock_create_s3_manager,
+    CONSTANTS,
+    project_map,
+    tmp_path,
+    monkeypatch,
+):
+    """
+    Test that CSI index files created during dimension calculation are deleted from the worker
+    filesystem after update_vcf_dimensions_task completes.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    monkeypatch.chdir(tmp_path)
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    result = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+
+    assert result["status"] == "completed"
+
+    vcf_files_remaining = list(tmp_path.glob("*.vcf")) + list(tmp_path.glob("*.vcf.gz"))
+    assert vcf_files_remaining == [], (
+        f"Expected all VCF files to be deleted from worker after task, but found: {vcf_files_remaining}"
+    )
+
+    csi_files_remaining = list(tmp_path.glob("*.csi"))
+    assert csi_files_remaining == [], (
+        f"Expected all CSI index files to be deleted from worker after task, but found: {csi_files_remaining}"
+    )
+
+
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_indexes_uncompressed_vcf(
+    mock_create_s3_manager,
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+    tmp_path,
+):
+    """
+    Test that update_vcf_dimensions_task correctly indexes a plain uncompressed .vcf file.
+
+    bcftools index --csi requires bgzipped input, so calculate_dimensions bgzips plain .vcf
+    files to a temp .vcf.gz internally before indexing, then cleans up the temp files.
+    This tests that the full indexing pipeline works end-to-end for uncompressed VCFs.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    plain_vcf_name = "test_uncompressed_plain.vcf"
+    vcf_path = tmp_path / plain_vcf_name
+    vcf_content = (
+        "##fileformat=VCFv4.2\n"
+        "##contig=<ID=1,length=22053058>\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1\tsample2\n"
+        "1\t17504018\t.\tC\tA\t.\tPASS\t.\tGT\t0/1\t0/0\n"
+        "1\t22053057\t.\tG\tA\t.\tPASS\t.\tGT\t1/1\t0/1\n"
+    )
+    vcf_path.write_text(vcf_content)
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(
+        to_upload={plain_vcf_name: vcf_path},
+        bucket_name=bucket_name,
+    )
+
+    try:
+        result = update_vcf_dimensions_task(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        assert result["status"] == "completed"
+        indexed_files = result.get("VCF_files_added") or []
+        assert plain_vcf_name in indexed_files, f"Expected plain .vcf file to be indexed, got: {indexed_files}"
+
+        # Verify the dimensions were stored correctly in the DB
+        db_session_sync.expire_all()
+        vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+        all_indexed_keys = [entry["vcf_file_s3_key"] for entry in vcf_dimensions.get("vcf_files", [])]
+        assert plain_vcf_name in all_indexed_keys
+
+        entry = next(e for e in vcf_dimensions["vcf_files"] if e["vcf_file_s3_key"] == plain_vcf_name)
+        assert entry["sample_count"] == 2
+        assert entry["variant_count"] == 2
+        assert "1" in entry["scaffolds"]
+        assert "sample1" in entry["samples"]
+        assert "sample2" in entry["samples"]
+    finally:
+        # Remove the uploaded file from the bucket to avoid polluting subsequent tests.
+        # auto_clean_dimensions_entries_for_all_projects only cleans the DB, not the bucket.
+        s3_file_manager.soft_delete_objects(objects=[plain_vcf_name], bucket_name=bucket_name)

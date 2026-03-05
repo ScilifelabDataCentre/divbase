@@ -29,6 +29,9 @@ class VCFDimensionCalculator:
 
         Returns None if this is a DivBase-generated result file (should be skipped).
         This is checked for when the header is parsed in _extract_sample_names_from_vcf_header.
+
+        Note: bcftools index --csi requires bgzipped input. Plain .vcf files are bgzipped to a
+        temporary .vcf.gz file for indexing, then the temporary file is cleaned up internally.
         """
         logger.debug(f"Reading: {vcf_path} ...")
 
@@ -36,8 +39,26 @@ class VCFDimensionCalculator:
         if sample_names is None:
             return None
 
-        csi_index_path = self._index_vcf_with_csi(vcf_path)
-        scaffold_names, variant_count = self._extract_scaffold_names_and_variant_count_from_csi_index(csi_index_path)
+        indexing_path = vcf_path
+
+        if vcf_path.suffix == ".vcf":
+            bgzipped_temp = Path(str(vcf_path) + ".gz")
+            self._bgzip_vcf(vcf_path, bgzipped_temp)
+            indexing_path = bgzipped_temp
+
+        try:
+            csi_index_path = self._index_vcf_with_csi(vcf_path=indexing_path)
+            scaffold_names, variant_count = self._extract_scaffold_names_and_variant_count_from_csi_index(
+                csi_index_path=csi_index_path
+            )
+        finally:
+            # Clean up temp bgzipped file and its CSI index; these are not tracked by tasks.py
+            if bgzipped_temp is not None:
+                bgzipped_temp_csi = Path(str(bgzipped_temp) + ".csi")
+                if bgzipped_temp.exists():
+                    bgzipped_temp.unlink()
+                if bgzipped_temp_csi.exists():
+                    bgzipped_temp_csi.unlink()
 
         return VCFDimensions(
             variants=variant_count,
@@ -73,10 +94,27 @@ class VCFDimensionCalculator:
             logger.error(f"Error extracting sample names from the VCF header {vcf_path}: {e}")
             raise
 
+    def _bgzip_vcf(self, vcf_path: Path, output_path: Path) -> None:
+        """
+        Bgzip a plain .vcf file to a bgzipped .vcf.gz file using bcftools view.
+        Required because bcftools index --csi only accepts bgzipped input.
+        """
+        try:
+            subprocess.run(
+                ["bcftools", "view", "-Oz", "-o", str(output_path), str(vcf_path)],
+                check=True,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info(f"Bgzipped {vcf_path} to {output_path} for CSI indexing.")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error bgzipping {vcf_path}: {e}")
+            raise
+
     def _index_vcf_with_csi(self, vcf_path: Path) -> Path:
         """
         Index the VCF file with CSI index using bcftools.
         The CSI index is then used to extract dimensions information.
+        Input must be bgzipped (.vcf.gz); use _bgzip_vcf first for plain .vcf files.
         """
         csi_index_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
         try:
