@@ -52,18 +52,59 @@ The VCF Dimensions cache stores this information for each VCF file in the projec
 
 The `divbase-cli dimensions show` command print **the current state** of the VCF Dimensions cache for the project to the user's terminal. It will display the cached dimensions data for each VCF file, as described in [the previous section](#what-is-cached-by-divbase-cli-dimensions-update). If a project has many VCF files, samples, and/or scaffolds, this display can potentially be long.
 
+```bash
+divbase-cli dimensions show
+```
+
+For each VCF file in the project, it will show the following (example data):
+
+```text
+indexed_files:
+- filename: my_vcf_file1.vcf.gz
+  file_version_ID_in_bucket: <VERSION_ID>
+  last_updated: <TIME_STAMP>
+  dimensions:
+    scaffold_count: 12
+    scaffolds:
+    - 'chr1'
+    - 'chr2'
+    - 'chr3'
+    - 'chr4'
+    - 'chr5'
+    - 'chr6'
+    - 'chr7'
+    - 'chr8'
+    - 'chr9'
+    - 'chr10'
+    - 'chr11'
+    - 'chr12'
+    sample_count: 10
+    sample_names:
+    - 1_ABC
+    - 2_ABC
+    - 3_ABC
+    - 4_ABC
+    - 5_ABC
+    - 6_ABC
+    - 7_ABC
+    - 8_ABC
+    - 8_ABC
+    - 10_ABC
+    variants: 12524
+```
+
 It is also possible to filter the output by adding the following options to the `divbase-cli dimensions show` command:
 
-| Option                   | Description |
-|--------------------------|-------------|
-| `--filename`             | Show only the entry for this VCF filename             |
-| `--unique-scaffolds`     | Show all unique sample names found across all the VCF files in the project            |
-| `--unique-samples`       | Show all unique scaffold names found across all the VCF files in the project            |
-| `--sample-names-limit`   | Maximum number of sample names to display per list in terminal output. [default: 20]            |
-| `--sample-names-output`  | Write full sample names to file instead of truncating in terminal output. Mutually exclusive with --sample-names-stdout.            |
-| `--sample-names-stdout`  | Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.              |
+| Option                   | Description                                                                                                             |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `--filename`             | Show only the entry for this VCF filename                                                                               |
+| `--unique-scaffolds`     | Show all unique sample names found across all the VCF files in the project                                              |
+| `--unique-samples`       | Show all unique scaffold names found across all the VCF files in the project                                            |
+| `--sample-names-limit`   | Maximum number of sample names to display per list in terminal output. [default: 20]                                    |
+| `--sample-names-output`  | Write full sample names to file instead of truncating in terminal output. Mutually exclusive with --sample-names-stdout.|
+| `--sample-names-stdout`  | Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.                   |
 
-(This information can also be displayed in the terminal with `divbase-cli dimensions show -h`.
+(This information can also be displayed in the terminal with `divbase-cli dimensions show -h`)
 
 !!! Note
     If the user is running `divbase-cli` in a UNIX environment, it is possible to send the full output to file with UNIX shell output redirection, e.g. `divbase-cli dimensions show > my_dimensions_cache.txt`. This should be equivalent of using the `--sample-names-output` option.
