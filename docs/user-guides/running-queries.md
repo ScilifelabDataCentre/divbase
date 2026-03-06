@@ -20,8 +20,6 @@ This page is meant as medium detailed description of these query commands, and t
 
 ## Before running any queries: run the VCF dimensions command
 
-TODO - finish writing this section
-
 To ensure that users get good performance out of DivBase, technical metadata from all VCF files that are uploaded to a DivBase project will be indexed on the DivBase server. For each VCF file name, the server will extract the number and name of all samples, the number and name of all scaffolds, and the number of variants. This technical VCF metadata is referred to as VCF Dimensions in DivBase. The full details of how to use this are described on the page: [VCF Dimensions](vcf-dimensions.md).
 
 DivBase will use the VCF Dimensions whenever a user submits a query to the project. Instead of transferring VCF files internally and reading them each time a user sends a query to DivBase, the server will instead use the VCF Dimensions cache, which is a much quicker process.
