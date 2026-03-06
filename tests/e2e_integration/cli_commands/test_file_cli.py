@@ -36,7 +36,7 @@ runner = CliRunner()
 def start_with_clean_project(CONSTANTS):
     """
     For tests that require a project with a clean bucket, this fixture will
-    ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before running the test.
+    ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before and after running the test.
 
     Caution:
     If you modify the approach make sure your implementation does not just add delete markers.
@@ -48,7 +48,6 @@ def start_with_clean_project(CONSTANTS):
         aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
         aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
     )
-
     # pylance does not understand boto3 resource returns types, hence ignore below
     cleaned_project_bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][CONSTANTS["CLEANED_PROJECT"]]
 
@@ -56,6 +55,9 @@ def start_with_clean_project(CONSTANTS):
     bucket.object_versions.delete()
 
     yield
+
+    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
+    bucket.object_versions.delete()
 
 
 @pytest.fixture(scope="module")
