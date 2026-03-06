@@ -242,11 +242,11 @@ def download_files(
     )
 
     if download_results.successful:
-        print("[green bold]Successfully downloaded the following files:[/green bold]")
+        print("\n[green bold]Successfully downloaded the following files:[/green bold]")
         for success in download_results.successful:
             print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
     if download_results.failed:
-        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
+        print("\n[red bold]ERROR: Failed to download the following files:[/red bold]")
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
 

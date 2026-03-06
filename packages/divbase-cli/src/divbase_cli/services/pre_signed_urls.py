@@ -21,6 +21,7 @@ from pathlib import Path
 
 import httpx
 import stamina
+from rich import print
 
 from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.retries import retry_only_on_retryable_http_errors
@@ -95,6 +96,7 @@ def download_multiple_pre_signed_urls(
         for obj in pre_signed_urls:
             output_file_path = download_dir / obj.name
             object_name = obj.name
+            print(f"Downloading '{object_name}'...", end=" ")
             try:
                 result = _download_single_pre_signed_url(
                     httpx_client=client,
@@ -103,9 +105,11 @@ def download_multiple_pre_signed_urls(
                     output_file_path=output_file_path,
                     object_name=object_name,
                 )
+                print("[bold green]Success[/bold green]")
             except httpx.HTTPError as err:
                 output_file_path.unlink(missing_ok=True)  # Clean up possible partial file
                 result = FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
+                print("[bold red]Failed[/bold red]")
 
             if isinstance(result, SuccessfulDownload):
                 successful_downloads.append(result)
