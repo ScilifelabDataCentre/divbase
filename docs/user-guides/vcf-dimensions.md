@@ -17,7 +17,7 @@ There are four CLI commands sorted under `divbase-cli dimensions`:
 
 - [update](#dimensions-update)
 
-- [show]((#dimensions-show))
+- [show](#dimensions-show)
 
 - [create-metadata-template](sidecar-metadata.md#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)
 
@@ -98,8 +98,8 @@ It is also possible to filter the output by adding the following options to the 
 | Option                   | Description                                                                                                             |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | `--filename`             | Show only the entry for this VCF filename                                                                               |
-| `--unique-scaffolds`     | Show all unique sample names found across all the VCF files in the project                                              |
-| `--unique-samples`       | Show all unique scaffold names found across all the VCF files in the project                                            |
+| `--unique-scaffolds`     | Show all unique scaffold names found across all the VCF files in the project                                            |
+| `--unique-samples`       | Show all unique sample names found across all the VCF files in the project                                              |
 | `--sample-names-limit`   | Maximum number of sample names to display per list in terminal output. [default: 20]                                    |
 | `--sample-names-output`  | Write full sample names to file instead of truncating in terminal output. Mutually exclusive with --sample-names-stdout.|
 | `--sample-names-stdout`  | Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.                   |

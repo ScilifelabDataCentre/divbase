@@ -12,7 +12,7 @@ A few quick things that are good to know when it comes to running DivBase querie
 
 - The queries are run as jobs in the DivBase job queue management system since they can potentially take some time to run, depending on the VCF file size and the query itself.
 
-- The system will use the latest version the files for all queries.
+- The system will use the latest version of the files for all queries.
 
 - The VCF Dimensions for the project needs to be up-to-date before running any queries, as described in [Before running any queries: run the VCF dimensions command](#before-running-any-queries-run-the-vcf-dimensions-command) below.
 

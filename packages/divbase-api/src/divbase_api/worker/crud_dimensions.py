@@ -135,7 +135,7 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: VCFMetadataDat
     db.execute(stmt)
 
     # Flush instead of commit here so that the INSERT/UPDATE is visible to get_vcf_metadata_by_keys below.
-    # The flush will be visible to other operations within the same db session, but will not yet be committed to the database (invisivle to other db sessions).
+    # The flush will be visible to other operations within the same db session, but will not yet be committed to the database (invisible to other db sessions).
     # This avoids concurrency issues for the child tables if two identical dimensions update jobs are run concurrently in the job system.
     db.flush()
 
