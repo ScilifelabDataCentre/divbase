@@ -32,6 +32,7 @@ from divbase_lib.api_schemas.s3 import (
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
     RestoreObjectsResponse,
+    SoftDeletedObjectDetails,
 )
 from divbase_lib.divbase_constants import (
     MAX_S3_API_BATCH_SIZE,
@@ -96,6 +97,17 @@ def list_files_command(
         all_matches = [obj for obj in all_matches if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
 
     return all_matches
+
+
+def list_soft_deleted_files_command(divbase_base_url: str, project_name: str) -> list[SoftDeletedObjectDetails]:
+    """List all soft-deleted files in a project."""
+    api_route = f"v1/s3/list/soft-deleted?project_name={project_name}"
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=divbase_base_url,
+        api_route=api_route,
+    )
+    return [SoftDeletedObjectDetails(**obj) for obj in response.json()]
 
 
 def get_file_info_command(divbase_base_url: str, project_name: str, object_name: str) -> ObjectInfoResponse:

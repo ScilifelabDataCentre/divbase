@@ -20,6 +20,7 @@ from divbase_cli.services.s3_files import (
     download_files_command,
     get_file_info_command,
     list_files_command,
+    list_soft_deleted_files_command,
     restore_objects_command,
     soft_delete_objects_command,
     stream_file_command,
@@ -49,6 +50,12 @@ def list_files(
         "-r",
         help="If set, will also show DivBase query results files which are hidden by default.",
     ),
+    show_deleted_files: bool = typer.Option(
+        False,
+        "--show-deleted-files",
+        "-s",
+        help="Show the files in the project that are currently soft deleted. These files can be recovered within a certain time frame after deletion",
+    ),
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
@@ -58,8 +65,34 @@ def list_files(
     By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
     To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
     """
+    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix_filter):
+        print(
+            "The --show-deleted-files option cannot be used with --include-results-files or --prefix. "
+            "Please use these options separately."
+        )
+        raise typer.Exit(1)
+
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    if show_deleted_files:
+        files = list_soft_deleted_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+        )
+
+        if not files:
+            print(f"No soft deleted files found for the project '{project_config.name}'.")
+            return
+
+        print(f"Soft deleted files for the project '{project_config.name}':")
+        for file_details in files:
+            cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+            print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
+        print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
+        print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
+        return
 
     files = list_files_command(
         divbase_base_url=logged_in_url,
