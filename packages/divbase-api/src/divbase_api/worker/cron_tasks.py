@@ -341,8 +341,8 @@ app.conf.beat_schedule = {
         "task": "cron_tasks.update_storage_usage_metrics",
         "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
     },
-    "hard-delete-expired-soft-deleted-objects-daily": {
+    "hard-delete-expired-soft-deleted-objects-weekly": {
         "task": "cron_tasks.hard_delete_expired_soft_deleted_objects",
-        "schedule": crontab(hour=5, minute=35),  # Run daily at 5:35 AM CET
+        "schedule": crontab(day_of_week=1, hour=5, minute=35),  # Run every Monday at 5:35 AM CET
     },
 }
