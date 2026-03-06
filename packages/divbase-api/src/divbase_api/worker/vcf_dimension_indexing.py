@@ -19,8 +19,9 @@ class VCFDimensionCalculator:
     """
     Calculates dimensions (samples, variants, scaffolds) from VCF files.
 
-    This is a pure utility class with no side effects - it only reads VCF files
-    and returns their dimensions. Database operations are handled via the API.
+    Uses bcftools to index the VCF file with a CSI index and extract scaffold names
+    and variant count from the index stats. bcftools is also used to extract the sample names from
+    the VCF header.
     """
 
     def calculate_dimensions(self, vcf_path: Path) -> VCFDimensions | None:
