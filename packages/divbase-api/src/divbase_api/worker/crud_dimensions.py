@@ -158,7 +158,8 @@ def delete_vcf_metadata(db: Session, vcf_file_s3_key: str, project_id: int) -> N
     """
     FOR CELERY WORKERS, not for user interactions with API.
 
-    Delete a VCF metadata entry by S3 key and project ID.
+    Delete a VCF metadata entry by S3 key and project ID. The batch version in delete_vcf_metadata_batch
+    is more efficient and is preferred over this. This function is kept in the codebase for legacy and edge case reason.
 
     Called when a VCF file is removed from the project bucket.
     """
@@ -169,6 +170,27 @@ def delete_vcf_metadata(db: Session, vcf_file_s3_key: str, project_id: int) -> N
     db.commit()
 
     logger.info(f"Deleted VCF metadata for {vcf_file_s3_key} in project {project_id}. Rows affected: {result.rowcount}")
+
+
+def delete_vcf_metadata_batch(db: Session, vcf_file_s3_key_batch: list[str], project_id: int) -> None:
+    """
+    FOR CELERY WORKERS, not for user interactions with API.
+
+    Batch delete VCF metadata entries by a list of S3 keys and project ID.
+    This is a version of delete_vcf_metadata that delete multiple entries in a single transaction.
+
+    Called when multiple VCF files are removed from the project bucket, e.g. when an entire project is deleted.
+    """
+    stmt = delete(VCFMetadataDB).where(
+        VCFMetadataDB.vcf_file_s3_key.in_(vcf_file_s3_key_batch), VCFMetadataDB.project_id == project_id
+    )
+    result = db.execute(stmt)
+    db.commit()
+
+    logger.info(
+        f"Batch deleted VCF metadata for {len(vcf_file_s3_key_batch)} files in project {project_id}. "
+        f"Rows affected: {result.rowcount}"
+    )
 
 
 def get_skipped_vcf_by_keys(db: Session, vcf_file_s3_key: str, project_id: int) -> SkippedVCFDB | None:
@@ -216,7 +238,8 @@ def delete_skipped_vcf(db: Session, vcf_file_s3_key: str, project_id: int) -> No
     """
     FOR CELERY WORKERS, not for user interactions with API.
 
-    Delete a skipped VCF entry by S3 key and project ID.
+    Delete a skipped VCF entry by S3 key and project ID. The batch version in delete_skipped_vcf_batch
+    is more efficient and is preferred over this. This function is kept in the codebase for legacy and edge case reasons.
     """
     # TODO - add test for deleting a non existant entry, does it raise an error?
     stmt = delete(SkippedVCFDB).where(
@@ -227,4 +250,25 @@ def delete_skipped_vcf(db: Session, vcf_file_s3_key: str, project_id: int) -> No
 
     logger.info(
         f"Deleted skipped VCF entry for {vcf_file_s3_key} in project {project_id}. Rows affected: {result.rowcount}"
+    )
+
+
+def delete_skipped_vcf_batch(db: Session, vcf_file_s3_key_batch: list[str], project_id: int) -> None:
+    """
+    FOR CELERY WORKERS, not for user interactions with API.
+
+    Batch delete skipped VCF entries by a list of S3 keys and project ID.
+    This is a version of delete_skipped_vcf that deletes multiple entries in a single transaction.
+
+    Called when multiple skipped VCF files are removed from the project bucket.
+    """
+    stmt = delete(SkippedVCFDB).where(
+        SkippedVCFDB.vcf_file_s3_key.in_(vcf_file_s3_key_batch), SkippedVCFDB.project_id == project_id
+    )
+    result = db.execute(stmt)
+    db.commit()
+
+    logger.info(
+        f"Batch deleted skipped VCF entries for {len(vcf_file_s3_key_batch)} files in project {project_id}. "
+        f"Rows affected: {result.rowcount}"
     )

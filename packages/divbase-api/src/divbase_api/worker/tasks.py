@@ -28,8 +28,8 @@ from divbase_api.worker.crud_dimensions import (
     VCFMetadataData,
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
-    delete_skipped_vcf,
-    delete_vcf_metadata,
+    delete_skipped_vcf_batch,
+    delete_vcf_metadata_batch,
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
@@ -615,26 +615,30 @@ def _remove_stale_dimensions_db_entries(
     deleted_dimensions_entries = []
 
     # Remove stale indexed VCFs
-    for file in indexed_vcf_keys:
-        if file not in current_vcf_files_in_bucket:
-            try:
-                with SyncSessionLocal() as db:
-                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
-                deleted_dimensions_entries.append(file)
-                logger.info(f"Removed stale DB entry for '{file}'. File no longer in bucket.")
-            except Exception as e:
-                logger.error(f"Failed to remove stale DB entry for '{file}': {e}")
+    stale_indexed = [file for file in indexed_vcf_keys if file not in current_vcf_files_in_bucket]
+    if stale_indexed:
+        try:
+            with SyncSessionLocal() as db:
+                delete_vcf_metadata_batch(db=db, vcf_file_s3_key_batch=stale_indexed, project_id=project_id)
+            deleted_dimensions_entries.extend(stale_indexed)
+            logger.info(
+                f"Removed {len(stale_indexed)} stale indexed VCF DB entries. Files no longer in bucket: {stale_indexed}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to batch remove stale indexed VCF DB entries: {e}")
 
     # Remove stale skipped VCFs
-    for file in skipped_vcf_keys:
-        if file not in current_vcf_files_in_bucket:
-            try:
-                with SyncSessionLocal() as db:
-                    delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
-                deleted_dimensions_entries.append(file)
-                logger.info(f"Removed stale DB entry for '{file}'. File no longer in bucket.")
-            except Exception as e:
-                logger.error(f"Failed to remove stale DB entry for '{file}': {e}")
+    stale_skipped = [file for file in skipped_vcf_keys if file not in current_vcf_files_in_bucket]
+    if stale_skipped:
+        try:
+            with SyncSessionLocal() as db:
+                delete_skipped_vcf_batch(db=db, vcf_file_s3_key_batch=stale_skipped, project_id=project_id)
+            deleted_dimensions_entries.extend(stale_skipped)
+            logger.info(
+                f"Removed {len(stale_skipped)} stale skipped VCF DB entries. Files no longer in bucket: {stale_skipped}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to batch remove stale skipped VCF DB entries: {e}")
 
     return deleted_dimensions_entries
 

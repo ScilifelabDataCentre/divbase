@@ -15,7 +15,15 @@ from typer.testing import CliRunner
 
 from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 from divbase_api.services.s3_client import create_s3_file_manager
-from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
+from divbase_api.worker.crud_dimensions import (
+    SkippedVCFData,
+    create_or_update_skipped_vcf,
+    delete_skipped_vcf_batch,
+    delete_vcf_metadata,
+    delete_vcf_metadata_batch,
+    get_skipped_vcfs_by_project_worker,
+    get_vcf_metadata_by_project,
+)
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
@@ -273,6 +281,83 @@ def test_remove_VCF_and_update_dimension_entry(
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
     assert vcf_file not in filenames
+
+
+def test_delete_vcf_metadata_batch(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test that delete_vcf_metadata_batch removes the specified entries and leaves others intact.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    first_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    indexed_files = first_result.get("VCF_files_added", [])
+    assert len(indexed_files) >= 2, "Need at least 2 indexed files for this test"
+
+    batch_to_delete = indexed_files[:2]
+    remaining_files = indexed_files[2:]
+
+    delete_vcf_metadata_batch(db=db_session_sync, vcf_file_s3_key_batch=batch_to_delete, project_id=project_id)
+
+    db_session_sync.expire_all()
+    updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+
+    for vcf_file in batch_to_delete:
+        assert vcf_file not in filenames, f"Expected {vcf_file} to be deleted, but found in: {filenames}"
+
+    for vcf_file in remaining_files:
+        assert vcf_file in filenames, f"Expected {vcf_file} to remain, but missing from: {filenames}"
+
+
+def test_delete_skipped_vcf_batch(
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test that delete_skipped_vcf_batch removes the specified skipped VCF entries and leaves others intact.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[project_name]
+
+    skipped_files = ["skipped_test_1.vcf.gz", "skipped_test_2.vcf.gz", "skipped_test_3.vcf.gz"]
+    for vcf_file in skipped_files:
+        create_or_update_skipped_vcf(
+            db=db_session_sync,
+            skipped_vcf_data=SkippedVCFData(
+                vcf_file_s3_key=vcf_file,
+                project_id=project_id,
+                s3_version_id="test-version-id",
+                skip_reason="test skip reason",
+            ),
+        )
+
+    skipped_before = get_skipped_vcfs_by_project_worker(db=db_session_sync, project_id=project_id)
+    for vcf_file in skipped_files:
+        assert vcf_file in skipped_before, f"Expected {vcf_file} to be present before batch delete"
+
+    batch_to_delete = skipped_files[:2]
+    remaining = skipped_files[2:]
+
+    delete_skipped_vcf_batch(db=db_session_sync, vcf_file_s3_key_batch=batch_to_delete, project_id=project_id)
+
+    skipped_after = get_skipped_vcfs_by_project_worker(db=db_session_sync, project_id=project_id)
+
+    for vcf_file in batch_to_delete:
+        assert vcf_file not in skipped_after, f"Expected {vcf_file} to be deleted, but still present"
+
+    for vcf_file in remaining:
+        assert vcf_file in skipped_after, f"Expected {vcf_file} to remain, but missing"
 
 
 @patch("divbase_api.worker.tasks.create_s3_file_manager")
