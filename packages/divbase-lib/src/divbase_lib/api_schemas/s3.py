@@ -46,6 +46,14 @@ class ListObjectsResponse(BaseModel):
     )
 
 
+## list soft-deleted objects models ##
+class SoftDeletedObjectDetails(BaseModel):
+    """Details about a single soft-deleted object in an S3 bucket."""
+
+    name: str = Field(..., description="The name of the object in the bucket.")
+    last_modified: datetime = Field(..., description="The date and time the object was deleted.")
+
+
 ## file info models ##
 class ObjectVersionInfo(BaseModel):
     """Detailed information about a single version of an S3 object."""
