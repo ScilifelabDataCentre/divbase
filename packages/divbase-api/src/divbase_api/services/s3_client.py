@@ -23,6 +23,7 @@ from divbase_lib.api_schemas.s3 import (
     ObjectInfoResponse,
     ObjectVersionInfo,
     RestoreObjectsResponse,
+    SoftDeletedObjectDetails,
 )
 from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
 from divbase_lib.exceptions import ChecksumVerificationError
@@ -113,6 +114,28 @@ class S3FileManager:
 
         new_next_token: str | None = response.get("NextContinuationToken")
         return ListObjectsResponse(objects=items, next_token=new_next_token)
+
+    def list_soft_deleted_files(self, bucket_name: str) -> list[SoftDeletedObjectDetails]:
+        """
+        list all soft-deleted filesobjects in a bucket.
+        A soft-deleted object is one whose latest S3 object version is a delete marker.
+
+        NOTE: As we expect the number of soft-deleted files to be low, we can just paginate here,
+        rather than have the client make multiple calls with next tokens like in 'list_files_detailed'.
+        """
+        paginator = self.s3_client.get_paginator("list_object_versions")
+        soft_deleted_files = []
+
+        for page in paginator.paginate(Bucket=bucket_name):
+            for marker in page.get("DeleteMarkers", []):
+                if marker.get("IsLatest"):
+                    soft_deleted_files.append(
+                        SoftDeletedObjectDetails(
+                            name=marker["Key"],
+                            last_modified=marker["LastModified"],
+                        )
+                    )
+        return soft_deleted_files
 
     def get_detailed_object_info(self, bucket_name: str, object_name: str) -> ObjectInfoResponse:
         """
