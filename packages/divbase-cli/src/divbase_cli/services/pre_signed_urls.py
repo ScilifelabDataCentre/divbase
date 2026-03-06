@@ -262,6 +262,7 @@ def upload_multiple_singlepart_pre_signed_urls(
     successful_uploads, failed_uploads = [], []
     with httpx.Client() as client:
         for obj in pre_signed_urls:
+            print(f"Uploading '{obj.name}'...", end=" ")
             result = _upload_one_singlepart_pre_signed_url(
                 httpx_client=client,
                 pre_signed_url=obj.pre_signed_url,
@@ -271,8 +272,10 @@ def upload_multiple_singlepart_pre_signed_urls(
             )
 
             if isinstance(result, SuccessfulUpload):
+                print("[bold green]Success[/bold green]")
                 successful_uploads.append(result)
             else:
+                print("[bold red]Failed[/bold red]")
                 failed_uploads.append(result)
 
     return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
@@ -315,6 +318,7 @@ def perform_multipart_upload(
     """
     object_name = file_path.name
     file_size = file_path.stat().st_size
+    print(f"Uploading '{object_name}'...", end=" ")
 
     # 1. Create multipart upload
     create_request = CreateMultipartUploadRequest(name=object_name, content_length=file_size)
@@ -357,6 +361,7 @@ def perform_multipart_upload(
             json=complete_request_body.model_dump(),
         )
         completed_upload = CompleteMultipartUploadResponse(**response.json())
+        print("[bold green]Success[/bold green]")
         return SuccessfulUpload(file_path=file_path, object_name=completed_upload.name)
 
     # 4. If any unexpected error occurs, abort the multipart upload
@@ -373,6 +378,7 @@ def perform_multipart_upload(
         except (DivBaseAPIConnectionError, DivBaseAPIError):
             logger.error(f"Failed to abort multipart upload for object '{object_name}' after an upload error.")
 
+        print("[bold red]Failed[/bold red]")
         return FailedUpload(object_name=object_name, file_path=file_path, exception=e)
 
 
