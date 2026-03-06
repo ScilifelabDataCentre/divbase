@@ -133,13 +133,19 @@ def create_or_update_vcf_metadata(db: Session, vcf_metadata_data: VCFMetadataDat
     )
 
     db.execute(stmt)
-    db.commit()
+
+    # Flush instead of commit here so that the INSERT/UPDATE is visible to get_vcf_metadata_by_keys below.
+    # The flush will be visible to other operations within the same db session, but will not yet be committed to the database (invisivle to other db sessions).
+    # This avoids concurrency issues for the child tables if two identical dimensions update jobs are run concurrently in the job system.
+    db.flush()
 
     # Get the upserted/updated entry from the main model (=parent object) and use it to add the samples and scaffolds to the respective FK tables (=child objects)
     vcf_metadata = get_vcf_metadata_by_keys(db, vcf_metadata_data.vcf_file_s3_key, vcf_metadata_data.project_id)
     # Important! This is a full replacement based on the VCF files in the bucket, not an append. If a samples in a vcf file is added, changed, or removed, the relationship will delete the existing samples entries for that VCF with cascade="all, delete-orphan" and insert the new ones.
     vcf_metadata.samples = [VCFMetadataSamplesDB(sample_name=name) for name in samples]
     vcf_metadata.scaffolds = [VCFMetadataScaffoldsDB(scaffold_name=name) for name in scaffolds]
+
+    # Single commit for parent upsert and child table updates.
     db.commit()
 
     logger.info(
