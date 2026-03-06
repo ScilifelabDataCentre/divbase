@@ -413,24 +413,16 @@ def update_vcf_dimensions_task(
     indexed_entries = vcf_dimensions_data.get("vcf_files", [])
     already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
 
-    vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
-    skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
-
-    for file in vcfs_deleted_from_bucket_since_last_indexing:
-        try:
-            with SyncSessionLocal() as db:
-                delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
-            logger.info(f"Deleted VCF metadata for removed file: {file}")
-        except Exception as e:
-            logger.error(f"Failed to delete VCF metadata for {file}: {e}")
-
-    for file in skipped_deleted_from_bucket:
-        with SyncSessionLocal() as db:
-            delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
+    vcfs_deleted_from_bucket_since_last_indexing = _remove_stale_dimensions_db_entries(
+        indexed_vcf_keys=set(already_indexed_vcfs),
+        skipped_vcf_keys=set(already_skipped_vcfs),
+        current_vcf_files_in_bucket=set(vcf_files),
+        project_id=project_id,
+    )
 
     # Early exit if there are no VCF files left in the bucket after updating the dimensions index. If there were no VCF files to begin with, raise exception
     if not vcf_files:
-        if vcfs_deleted_from_bucket_since_last_indexing or skipped_deleted_from_bucket:
+        if vcfs_deleted_from_bucket_since_last_indexing:
             result = DimensionUpdateTaskResult(
                 status="completed",
                 VCF_files_added=None,
@@ -529,6 +521,32 @@ def update_vcf_dimensions_task(
 
     _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
 
+    # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
+    # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
+    # Updating dimensions, however, is a more expensive operation, so if a version or new VCF has been added, the job will need to be resubmitted to the queue.
+
+    final_vcf_files_in_bucket = set()
+    for file in s3_file_manager.list_files(bucket_name=bucket_name):
+        if file.endswith(".vcf") or file.endswith(".vcf.gz"):
+            final_vcf_files_in_bucket.add(file)
+
+    with SyncSessionLocal() as db:
+        post_run_indexed = set()
+        for entry in get_vcf_metadata_by_project(project_id=project_id, db=db).get("vcf_files", []):
+            post_run_indexed.add(entry["vcf_file_s3_key"])
+
+    with SyncSessionLocal() as db:
+        post_run_skipped = set(get_skipped_vcfs_by_project_worker(db=db, project_id=project_id).keys())
+
+    deleted_during_run = _remove_stale_dimensions_db_entries(
+        indexed_vcf_keys=post_run_indexed,
+        skipped_vcf_keys=post_run_skipped,
+        current_vcf_files_in_bucket=final_vcf_files_in_bucket,
+        project_id=project_id,
+    )
+    if deleted_during_run:
+        vcfs_deleted_from_bucket_since_last_indexing.extend(deleted_during_run)
+
     if not files_indexed_by_this_job:
         files_indexed_by_this_job = None
     if not divbase_results_files_skipped_by_this_job:
@@ -582,6 +600,43 @@ def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
     )
+
+
+def _remove_stale_dimensions_db_entries(
+    indexed_vcf_keys: set[str],
+    skipped_vcf_keys: set[str],
+    current_vcf_files_in_bucket: set[str],
+    project_id: int,
+) -> list[str]:
+    """
+    Delete VCF dimensions DB entries (both indexed and skipped) for VCF files that are no longer present
+    in the bucket. Returns the list of file keys that were removed.
+    """
+    deleted_dimensions_entries = []
+
+    # Remove stale indexed VCFs
+    for file in indexed_vcf_keys:
+        if file not in current_vcf_files_in_bucket:
+            try:
+                with SyncSessionLocal() as db:
+                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
+                deleted_dimensions_entries.append(file)
+                logger.info(f"Removed stale DB entry for '{file}'. File no longer in bucket.")
+            except Exception as e:
+                logger.error(f"Failed to remove stale DB entry for '{file}': {e}")
+
+    # Remove stale skipped VCFs
+    for file in skipped_vcf_keys:
+        if file not in current_vcf_files_in_bucket:
+            try:
+                with SyncSessionLocal() as db:
+                    delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
+                deleted_dimensions_entries.append(file)
+                logger.info(f"Removed stale DB entry for '{file}'. File no longer in bucket.")
+            except Exception as e:
+                logger.error(f"Failed to remove stale DB entry for '{file}': {e}")
+
+    return deleted_dimensions_entries
 
 
 def _check_for_unnecessary_files_for_region_query(
