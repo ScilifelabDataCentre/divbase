@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from divbase_api.models.project_versions import ProjectVersionDB
+from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.security import TokenType
@@ -31,6 +32,7 @@ from divbase_api.worker.cron_tasks import (
     cleanup_soft_deleted_project_versions,
     cleanup_stuck_tasks_task,
     hard_delete_expired_soft_deleted_objects,
+    update_storage_usage_metrics,
 )
 
 
@@ -528,6 +530,23 @@ def test_cleanup_soft_deleted_project_versions_with_no_old_entries(
 
     assert result["status"] == "completed"
     assert result["number_of_project_versions_hard_deleted"] == 0
+
+
+def test_update_storage_usage_metrics(db_session_sync: Session, CONSTANTS: dict):
+    for project in db_session_sync.execute(select(ProjectDB)).scalars().all():
+        assert project.storage_used_bytes == 0
+
+    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+        result = update_storage_usage_metrics()
+
+    assert result["status"] == "completed"
+    assert result["number_of_projects_updated"] == len(CONSTANTS["PROJECT_TO_BUCKET_MAP"])
+
+    for project in db_session_sync.execute(select(ProjectDB)).scalars().all():
+        if project.name in ["empty-project", "cleaned-project"]:
+            assert project.storage_used_bytes == 0
+        if project.name in ["project1", "project2"]:
+            assert project.storage_used_bytes > 0
 
 
 @pytest.mark.parametrize(
