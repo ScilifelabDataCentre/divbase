@@ -24,10 +24,12 @@ from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
+    SkippedVCFData,
+    VCFMetadataData,
     create_or_update_skipped_vcf,
     create_or_update_vcf_metadata,
-    delete_skipped_vcf,
-    delete_vcf_metadata,
+    delete_skipped_vcf_batch,
+    delete_vcf_metadata_batch,
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
@@ -402,26 +404,43 @@ def update_vcf_dimensions_task(
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
 
+    # First, compare the list of VCF files in the bucket with the list of VCF files in the dimensions table.
+    with SyncSessionLocal() as db:
+        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+    with SyncSessionLocal() as db:
+        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
+
+    indexed_entries = vcf_dimensions_data.get("vcf_files", [])
+    already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
+
+    vcfs_deleted_from_bucket_since_last_indexing = _remove_stale_dimensions_db_entries(
+        indexed_vcf_keys=set(already_indexed_vcfs),
+        skipped_vcf_keys=set(already_skipped_vcfs),
+        current_vcf_files_in_bucket=set(vcf_files),
+        project_id=project_id,
+    )
+
+    # Early exit if there are no VCF files left in the bucket after updating the dimensions index. If there were no VCF files to begin with, raise exception
     if not vcf_files:
+        if vcfs_deleted_from_bucket_since_last_indexing:
+            result = DimensionUpdateTaskResult(
+                status="completed",
+                VCF_files_added=None,
+                VCF_files_skipped=None,
+                VCF_files_deleted=vcfs_deleted_from_bucket_since_last_indexing,
+            )
+            return result.model_dump()
         raise NoVCFFilesFoundError(
             f"VCF dimensions file could not be generated since no VCF files were found in the project: {project_name}."
             "Please upload at least one VCF file and run this command again."
         )
 
-    with SyncSessionLocal() as db:
-        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-    indexed_entries = vcf_dimensions_data.get("vcf_files", [])
-    already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
     incomplete_indexed_vcfs = {
         entry["vcf_file_s3_key"]
         for entry in indexed_entries
         if (entry.get("sample_count", 0) > 0 and not entry.get("samples"))
         or (entry.get("variant_count", 0) > 0 and not entry.get("scaffolds"))
     }
-
-    with SyncSessionLocal() as db:
-        already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
@@ -466,12 +485,12 @@ def update_vcf_dimensions_task(
             vcf_dims = calculator.calculate_dimensions(Path(file))
 
             if vcf_dims is None:
-                skipped_vcf_data = {
-                    "vcf_file_s3_key": file,
-                    "project_id": project_id,
-                    "s3_version_id": latest_versions_of_bucket_files.get(file),
-                    "skip_reason": "divbase_generated",
-                }
+                skipped_vcf_data = SkippedVCFData(
+                    vcf_file_s3_key=file,
+                    project_id=project_id,
+                    s3_version_id=latest_versions_of_bucket_files.get(file),
+                    skip_reason="divbase_generated",
+                )
 
                 with SyncSessionLocal() as db:
                     create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
@@ -480,16 +499,16 @@ def update_vcf_dimensions_task(
                 logger.info(f"Skipping DivBase-generated result file: {file}")
                 continue
 
-            vcf_metadata_data = {
-                "vcf_file_s3_key": file,
-                "project_id": project_id,
-                "s3_version_id": latest_versions_of_bucket_files.get(file),
-                "samples": vcf_dims["sample_names"],
-                "scaffolds": vcf_dims["scaffolds"],
-                "variant_count": vcf_dims["variants"],
-                "sample_count": vcf_dims["sample_count"],
-                "file_size_bytes": Path(file).stat().st_size if Path(file).exists() else 0,
-            }
+            vcf_metadata_data = VCFMetadataData(
+                vcf_file_s3_key=file,
+                project_id=project_id,
+                s3_version_id=latest_versions_of_bucket_files.get(file),
+                samples=vcf_dims.sample_names,
+                scaffolds=vcf_dims.scaffolds,
+                variant_count=vcf_dims.variants,
+                sample_count=vcf_dims.sample_count,
+                file_size_bytes=Path(file).stat().st_size if Path(file).exists() else 0,
+            )
 
             with SyncSessionLocal() as db:
                 create_or_update_vcf_metadata(db=db, vcf_metadata_data=vcf_metadata_data)
@@ -500,27 +519,33 @@ def update_vcf_dimensions_task(
             logger.error(f"Error indexing {file}: {str(e)}")
             return {"status": "error", "error": str(e), "task_id": task_id}
 
-    vcfs_deleted_from_bucket_since_last_indexing = list(set(already_indexed_vcfs) - set(vcf_files))
-    if not vcfs_deleted_from_bucket_since_last_indexing:
-        vcfs_deleted_from_bucket_since_last_indexing = None
-    skipped_deleted_from_bucket = list(set(already_skipped_vcfs) - set(vcf_files))
-
-    # TODO this block could be done in one go for calling db once with a list
-    if vcfs_deleted_from_bucket_since_last_indexing:
-        for file in vcfs_deleted_from_bucket_since_last_indexing:
-            try:
-                with SyncSessionLocal() as db:
-                    delete_vcf_metadata(db=db, vcf_file_s3_key=file, project_id=project_id)
-                logger.info(f"Deleted VCF metadata for removed file: {file}")
-            except Exception as e:
-                logger.error(f"Failed to delete VCF metadata for {file}: {e}")
-
-    if skipped_deleted_from_bucket:
-        for file in skipped_deleted_from_bucket:
-            with SyncSessionLocal() as db:
-                delete_skipped_vcf(db=db, vcf_file_s3_key=file, project_id=project_id)
-
     _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+
+    # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
+    # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
+    # Updating dimensions, however, is a more expensive operation, so if a version or new VCF has been added, the job will need to be resubmitted to the queue.
+
+    final_vcf_files_in_bucket = set()
+    for file in s3_file_manager.list_files(bucket_name=bucket_name):
+        if file.endswith(".vcf") or file.endswith(".vcf.gz"):
+            final_vcf_files_in_bucket.add(file)
+
+    with SyncSessionLocal() as db:
+        post_run_indexed = set()
+        for entry in get_vcf_metadata_by_project(project_id=project_id, db=db).get("vcf_files", []):
+            post_run_indexed.add(entry["vcf_file_s3_key"])
+
+    with SyncSessionLocal() as db:
+        post_run_skipped = set(get_skipped_vcfs_by_project_worker(db=db, project_id=project_id).keys())
+
+    deleted_during_run = _remove_stale_dimensions_db_entries(
+        indexed_vcf_keys=post_run_indexed,
+        skipped_vcf_keys=post_run_skipped,
+        current_vcf_files_in_bucket=final_vcf_files_in_bucket,
+        project_id=project_id,
+    )
+    if deleted_during_run:
+        vcfs_deleted_from_bucket_since_last_indexing.extend(deleted_during_run)
 
     if not files_indexed_by_this_job:
         files_indexed_by_this_job = None
@@ -553,7 +578,7 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
-    logger.debug(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
+    logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
 
     objects = {file_name: None for file_name in files_to_download}
     downloaded_files = s3_file_manager.download_files(
@@ -575,6 +600,47 @@ def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
     )
+
+
+def _remove_stale_dimensions_db_entries(
+    indexed_vcf_keys: set[str],
+    skipped_vcf_keys: set[str],
+    current_vcf_files_in_bucket: set[str],
+    project_id: int,
+) -> list[str]:
+    """
+    Delete VCF dimensions DB entries (both indexed and skipped) for VCF files that are no longer present
+    in the bucket. Returns the list of file keys that were removed.
+    """
+    deleted_dimensions_entries = []
+
+    # Remove stale indexed VCFs
+    stale_indexed = [file for file in indexed_vcf_keys if file not in current_vcf_files_in_bucket]
+    if stale_indexed:
+        try:
+            with SyncSessionLocal() as db:
+                delete_vcf_metadata_batch(db=db, vcf_file_s3_key_batch=stale_indexed, project_id=project_id)
+            deleted_dimensions_entries.extend(stale_indexed)
+            logger.info(
+                f"Removed {len(stale_indexed)} stale indexed VCF DB entries. Files no longer in bucket: {stale_indexed}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to batch remove stale indexed VCF DB entries: {e}")
+
+    # Remove stale skipped VCFs
+    stale_skipped = [file for file in skipped_vcf_keys if file not in current_vcf_files_in_bucket]
+    if stale_skipped:
+        try:
+            with SyncSessionLocal() as db:
+                delete_skipped_vcf_batch(db=db, vcf_file_s3_key_batch=stale_skipped, project_id=project_id)
+            deleted_dimensions_entries.extend(stale_skipped)
+            logger.info(
+                f"Removed {len(stale_skipped)} stale skipped VCF DB entries. Files no longer in bucket: {stale_skipped}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to batch remove stale skipped VCF DB entries: {e}")
+
+    return deleted_dimensions_entries
 
 
 def _check_for_unnecessary_files_for_region_query(
@@ -644,11 +710,19 @@ def _delete_job_files_from_worker(
     After uploading results to bucket, delete job files from the worker.
     """
     for vcf_path in vcf_paths:
+        vcf_path = Path(vcf_path)
         try:
             os.remove(vcf_path)
             logger.info(f"Deleted {vcf_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
+        csi_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
+        if csi_path.exists():
+            try:
+                os.remove(csi_path)
+                logger.info(f"Deleted CSI index {csi_path} from worker.")
+            except Exception as e:
+                logger.warning(f"Could not delete CSI index file {csi_path}: {e}")
     if metadata_path is not None:
         try:
             os.remove(metadata_path)
