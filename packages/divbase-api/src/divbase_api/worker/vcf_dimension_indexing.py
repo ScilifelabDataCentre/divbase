@@ -119,6 +119,7 @@ class VCFDimensionCalculator:
         Input must be bgzipped (.vcf.gz); use _bgzip_vcf first for plain .vcf files.
         """
         csi_index_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
+        logger.info(f"Creating CSI index for {vcf_path}...")
         try:
             subprocess.run(
                 ["bcftools", "index", "--csi", str(vcf_path), "-o", str(csi_index_path)],
@@ -136,10 +137,17 @@ class VCFDimensionCalculator:
         Extract scaffold names and total variant count from the CSI index file using bcftools.
 
         The output of bcftools index --stats have three columns: contig name, contig length (. if unknown) and number of records for the contig
+
+        The bcftools manual states that the input to the index command is the VCF, but the vcf.gz.csi also works.
+        This method assumes that a valid CSI index file exists for the VCF. Thus, to make the input args clear,
+        the method takes the CSI index path, and strips the .csi suffix from that to get the corresponding VCF path.
         """
+
+        indexed_vcf_path_without_csi_suffix = csi_index_path.with_suffix("")
+
         try:
             result = subprocess.run(
-                ["bcftools", "index", "--stats", str(csi_index_path)],
+                ["bcftools", "index", "--stats", str(indexed_vcf_path_without_csi_suffix)],
                 check=True,
                 stdout=subprocess.PIPE,
                 text=True,
