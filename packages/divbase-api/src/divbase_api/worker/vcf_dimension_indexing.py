@@ -40,6 +40,7 @@ class VCFDimensionCalculator:
             return None
 
         indexing_path = vcf_path
+        bgzipped_temp = None
 
         if vcf_path.suffix == ".vcf":
             bgzipped_temp = Path(str(vcf_path) + ".gz")
