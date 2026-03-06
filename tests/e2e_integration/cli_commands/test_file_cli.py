@@ -214,6 +214,80 @@ def test_list_files_hides_results_files_by_default(logged_in_edit_user_with_exis
     assert f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz" in list_result_include.stdout
 
 
+def test_list_soft_deleted_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """
+    Test that the 'files ls --show-deleted-files' command lists soft-deleted files.
+    It should also show soft deleted results files by default, so this is also checked here.
+    """
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    test_file = tmp_path / "soft_deleted_file.tsv"
+    test_file.write_text("This file will be soft-deleted.")
+    test_results_file = tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}181291829182.vcf.gz"
+    test_results_file.write_text("This is a test results file.")
+
+    result = runner.invoke(app, f"files upload {test_file} {test_results_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files rm {test_file.name} {test_results_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files")
+    assert result.exit_code == 0
+    assert test_file.name in result.stdout
+    assert test_results_file.name in result.stdout
+
+
+def test_list_soft_deleted_files_empty_project(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that 'files ls --show-deleted-files' shows no files in an empty project."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files")
+    assert result.exit_code == 0
+    assert "no soft deleted files found" in result.stdout.lower()
+
+
+def test_list_soft_deleted_does_not_accept_other_flags(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that 'files ls --show-deleted-files' cannot be used with other flags like --prefix or --include-results-files."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files --include-results-files")
+    assert result.exit_code == 1
+
+    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files --prefix some_prefix")
+    assert result.exit_code == 1
+
+
+@pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
+def test_list_soft_deleted_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that the 'files ls --show-deleted-files' command handles pagination correctly."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    upload_dir = tmp_path / "many_files_dir"
+    upload_dir.mkdir()
+    num_files = 1005  # S3 hard limits at 1000, so guarantee pagination by going over that
+
+    file_names = [f"test_file_{i}.tsv" for i in range(num_files)]
+    for name in file_names:
+        (upload_dir / name).write_text(f"content_{name}")
+
+    upload_command = f"files upload --upload-dir {upload_dir} --project {clean_project}"
+    upload_result = runner.invoke(app, upload_command)
+    assert upload_result.exit_code == 0
+
+    # Delete files in batches of 100 (as that endpoint has that limit)
+    for batch_start in range(0, num_files, 100):
+        file_batch = file_names[batch_start : batch_start + 100]
+        delete_command = f"files rm {' '.join(file_batch)} --project {clean_project}"
+        delete_result = runner.invoke(app, delete_command)
+        assert delete_result.exit_code == 0
+
+    list_command = f"files ls --project {clean_project} --show-deleted-files"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+
+    for name in file_names:
+        assert name in list_result.stdout
+
+
 def test_file_info_single_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test the 'files info' command for a file with a single version."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
