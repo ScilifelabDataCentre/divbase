@@ -276,7 +276,7 @@ query_app = typer.Typer(
 
 
 @query_app.command("bcftools-pipe")
-def pipe_query(
+def vcf_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
