@@ -206,9 +206,11 @@ def download_files_command(
                 project_version=project_version,
                 missing_files=missing_objects,
             )
-        # we validated in CLI command that
-        to_download = {file: project_version_details.files[file] for file in raw_files_input}
-        json_data = [{"name": obj, "version_id": to_download[obj]} for obj in raw_files_input]
+
+        json_data = []
+        for file_name, file_details in project_version_details.files.items():
+            if file_name in raw_files_input:
+                json_data.append({"name": file_name, "version_id": file_details["version_id"]})
     else:
         # parse raw file inputs to see if any specific version ids were provided using format:
         # file_name:version_id (not possible when using project_version)
