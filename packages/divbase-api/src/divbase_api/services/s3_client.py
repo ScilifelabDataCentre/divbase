@@ -17,6 +17,7 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
+from divbase_lib.api_schemas.project_versions import FileDetails
 from divbase_lib.api_schemas.s3 import (
     ListObjectsResponse,
     ObjectDetails,
@@ -323,6 +324,8 @@ class S3FileManager:
         """
         Identify the latest version of each file in the bucket.
         Returns a dictionary with the file name as the key and the version ID as the value.
+
+        Used by the worker to compare current state of bucket to last run dimensions update job.
         """
         files = {}
         paginator = self.s3_client.get_paginator("list_object_versions")
@@ -330,6 +333,25 @@ class S3FileManager:
             for obj in page.get("Versions", []):
                 if obj["IsLatest"]:
                     files[obj["Key"]] = obj["VersionId"]
+        return files
+
+    def state_of_latest_version_of_all_files(self, bucket_name: str) -> dict[str, FileDetails]:
+        """
+        Get the state of the latest version of each file in the bucket.
+        Returns a dictionary with the file name as the key and an object containing details about the latest version as the value.
+
+        Used to by API to create a new project version entry with details about the state of each file at that version.
+        """
+        files = {}
+        paginator = self.s3_client.get_paginator("list_object_versions")
+        for page in paginator.paginate(Bucket=bucket_name):
+            for obj in page.get("Versions", []):
+                if obj["IsLatest"]:
+                    files[obj["Key"]] = FileDetails(
+                        version_id=obj["VersionId"],
+                        size=obj["Size"],
+                        etag=obj["ETag"].strip('"'),
+                    )
         return files
 
     @stamina.retry(on=retry_on_retriable_checksum_errors, attempts=3)

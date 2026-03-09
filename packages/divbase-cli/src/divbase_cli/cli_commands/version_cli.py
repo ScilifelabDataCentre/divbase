@@ -17,6 +17,7 @@ from divbase_cli.services.project_versions import (
     update_version_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
+from divbase_lib.utils import format_file_size
 
 version_app = typer.Typer(
     no_args_is_help=True,
@@ -148,6 +149,7 @@ def list_versions(
 def get_version_info(
     version: str = typer.Argument(help="Specific version to retrieve information for"),
     project: str | None = PROJECT_NAME_OPTION,
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
     Provide detailed information about a user specified project version, including all files present and their unique hashes.
@@ -159,17 +161,33 @@ def get_version_info(
         project_name=project_config.name, divbase_base_url=logged_in_url, version_name=version
     )
 
-    print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
-    print(f"Entry created at: {format_timestamp(version_details.created_at)}")
-    if version_details.description:
-        print(f"Description: {version_details.description}")
-    if version_details.is_deleted:
-        print(
-            "[red]WARNING: This version has been soft-deleted and will soon be permanently deleted unless restored - Contact a DivBase admin to prevent this.[/red]"
+    table = Table(title=f"Project version files for {project_config.name}")
+    table.add_column("Name", style="cyan", no_wrap=True)
+    table.add_column("Version ID", style="magenta")
+    table.add_column("MD5 Checksum", style="green")
+    table.add_column("Size", style="yellow")
+    for object_name, file_details in version_details.files.items():
+        file_size = format_file_size(file_details["size"])
+
+        table.add_row(
+            object_name,
+            file_details["version_id"],
+            file_details["etag"],
+            file_size,
         )
-    print("Files at this version:")
-    for object_name, hash in version_details.files.items():
-        print(f"- '{object_name}' : '{hash}'")
+
+    if not format_output_as_tsv:
+        print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
+        print(f"Entry created at: {format_timestamp(version_details.created_at)}")
+        if version_details.description:
+            print(f"Description: {version_details.description}")
+        if version_details.is_deleted:
+            print(
+                "[red]WARNING: This version has been soft-deleted and will soon be permanently deleted unless restored - Contact a DivBase admin to prevent this.[/red]"
+            )
+        print(table)
+    else:
+        print_rich_table_as_tsv(table=table)
 
 
 @version_app.command("rm")
