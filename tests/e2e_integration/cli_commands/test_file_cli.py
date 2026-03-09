@@ -882,6 +882,160 @@ def test_upload_and_download_large_file_triggers_multipart(
     assert downloaded_checksum == expected_checksum
 
 
+def test_download_all_cmd(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test the 'files download-all' command."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    test_files = {
+        "file1.tsv": "content 1",
+        "file2.tsv": "content 2",
+        "file3.vcf.gz": "fake vcf content",
+    }
+    for name, content in test_files.items():
+        (tmp_path / name).write_text(content)
+        result = runner.invoke(app, f"files upload {tmp_path / name} --project {clean_project}")
+        assert result.exit_code == 0
+
+    command = f"files download-all --project {clean_project} --download-dir {download_dir}"
+    result = runner.invoke(app, command, input="y\n")
+
+    assert result.exit_code == 0
+    assert "There are '3' files to download" in result.stdout
+    assert "Successfully downloaded" in result.stdout
+    for name, content in test_files.items():
+        assert name in result.stdout
+        downloaded_file = download_dir / name
+        assert downloaded_file.exists()
+        assert downloaded_file.read_text() == content
+
+
+def test_download_all_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test the 'files download-all --dry-run' command."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_name = "dry_run_test.tsv"
+    (tmp_path / file_name).write_text("dry run content")
+    result = runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    command = f"files download-all --project {clean_project} --download-dir {download_dir} --dry-run"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "dry run" in result.stdout.lower()
+    assert file_name in result.stdout
+    assert not (download_dir / file_name).exists()
+
+
+def test_download_all_resume_skip(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test the 'files download-all --resume' command where files already exist and match checksum."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_name = "resume_skip_test.tsv"
+    content = "matching content"
+    (tmp_path / file_name).write_text(content)
+    result = runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # First download
+    runner.invoke(app, f"files download-all --project {clean_project} --download-dir {download_dir}", input="y\n")
+    assert (download_dir / file_name).exists()
+
+    # Second download with --resume
+    command = f"files download-all --project {clean_project} --download-dir {download_dir} --resume"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "No files left to download" in result.stdout
+    assert "your folder matches the project's store" in result.stdout
+
+
+def test_download_all_resume_overwrite(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test the 'files download-all --resume' command where files already exist but have different checksum."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_name = "resume_overwrite_test.tsv"
+    original_content = "original server content"
+    (tmp_path / file_name).write_text(original_content)
+    result = runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    (download_dir / file_name).write_text("different local content")
+
+    # download-all --resume, should warn, we cancel the run this time, as warning should come before prompt
+    command = f"files download-all --project {clean_project} --download-dir {download_dir} --resume"
+    result = runner.invoke(app, command, input="n\n")
+    assert result.exit_code == 0
+    assert "Warning: The following files already exist" in result.stdout
+    assert file_name in result.stdout
+
+    # now run it for real and validate actually overwrote.
+    result = runner.invoke(app, command, input="y\n")
+    assert (download_dir / file_name).read_text() == original_content
+
+
+def test_download_all_at_project_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test 'files download-all --project-version' command."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_name = "version_test.tsv"
+    v1_content = "v1 content"
+    v2_content = "v2 content"
+    project_version = "download_at_project_version_test"
+
+    # upload v1, create project version, upload v2
+    (tmp_path / file_name).write_text(v1_content)
+    runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project}")
+    runner.invoke(app, f"version add {project_version} --project {clean_project}")
+    (tmp_path / file_name).write_text(v2_content)
+    runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project} --disable-safe-mode")
+
+    command = f"files download-all --project {clean_project} --download-dir {download_dir} --project-version {project_version}"
+    result = runner.invoke(app, command, input="y\n")
+
+    assert result.exit_code == 0
+    assert (download_dir / file_name).read_text() == v1_content
+
+
+def test_download_all_empty_project(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test 'files download-all' for an empty project."""
+    empty_project = CONSTANTS["EMPTY_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    command = f"files download-all --project {empty_project} --download-dir {download_dir}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "no files to download" in result.stdout.lower()
+
+
+def test_download_all_user_aborts(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test 'files download-all' when user says 'no' to confirmation."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+
+    file_name = "abort_test.tsv"
+    (tmp_path / file_name).write_text("some content")
+    runner.invoke(app, f"files upload {tmp_path / file_name} --project {clean_project}")
+
+    command = f"files download-all --project {clean_project} --download-dir {download_dir}"
+    result = runner.invoke(app, command, input="n\n")
+    assert result.exit_code == 0
+    assert not (download_dir / file_name).exists()
+
+
 def test_stream_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test streaming a simple text file."""
     query_project = CONSTANTS["QUERY_PROJECT"]

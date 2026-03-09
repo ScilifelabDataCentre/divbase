@@ -345,11 +345,11 @@ def download_all_files(
     total_size_bytes = sum(file.size_bytes for file in files_to_download)
     formatted_total_size = format_file_size(size_bytes=total_size_bytes)
 
-    print(f"There are '{len(files_to_download)}' files to downloaded with a total size of: {formatted_total_size}.")
+    print(f"There are '{len(files_to_download)}' files to download with a total size of: {formatted_total_size}.")
 
     if not dry_run:
         # (dry run will auto exit in the download_files_command)
-        do_download = typer.confirm("Do you want to proceed with the download?", abort=True)
+        do_download = typer.confirm("Do you want to proceed with the download?")
         if not do_download:
             print("Download cancelled...")
             return
