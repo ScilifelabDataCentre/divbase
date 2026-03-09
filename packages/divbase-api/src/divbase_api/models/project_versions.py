@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -11,16 +11,32 @@ if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectDB
 
 
+class FileDetails(TypedDict):
+    """Details about a single file in a project version, ETag (is checksum) and size is in bytes."""
+
+    version_id: str
+    etag: str
+    size: int
+
+
 class ProjectVersionDB(BaseDBModel):
     """
     DB Model for project versions.
     An entry here corresponds to the overall state of all files in the project's bucket
     at a given timestamp. Entries are manually created by the users via API.
 
-    The "files" column stores the mapping a JSON object with structure:
+    The "files" column stores the mapping as a JSON object with structure:
     {
-        "file_name1": "version_id1",
-        "file_name2": "version_id2"
+        "file_name1": {
+            "version_id": "version_id1",
+            "etag": "etag1",
+            "size": 1024
+        },
+        "file_name2": {
+            "version_id": "version_id2",
+            "etag": "etag2",
+            "size": 2048
+        }
     }
 
     id, created_at and updated_at are inherited from BaseDBModel.
@@ -31,7 +47,7 @@ class ProjectVersionDB(BaseDBModel):
     name: Mapped[str] = mapped_column(String(100), index=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    files: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
+    files: Mapped[dict[str, FileDetails]] = mapped_column(JSONB, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(default=False)
     date_deleted: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
