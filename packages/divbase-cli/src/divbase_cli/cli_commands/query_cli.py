@@ -17,6 +17,7 @@ TODO:
 """
 
 import logging
+from pathlib import Path
 
 import typer
 from rich import print
@@ -119,6 +120,21 @@ def sample_metadata_query(
 @query_app.command("bcftools-pipe")
 def pipe_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
+    samples: str | None = typer.Option(
+        None,
+        help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter and --samples-file.",
+    ),
+    samples_file: Path | None = typer.Option(
+        None,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help=(
+            "Path to a UTF-8 text file with one sample ID per line. Mutually exclusive with --tsv-filter and --samples."
+        ),
+    ),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     project: str | None = PROJECT_NAME_OPTION,
@@ -134,9 +150,23 @@ def pipe_query(
     TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
     TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
     """
+
+    has_tsv_filter = tsv_filter is not None
+    has_samples = samples is not None
+    has_samples_file = samples_file is not None
+    if sum([has_tsv_filter, has_samples, has_samples_file]) > 1:
+        raise typer.BadParameter("Use only one of --tsv-filter, --samples, or --samples-file.")
+
+    normalized_samples = _normalize_samples_input(samples=samples, samples_file=samples_file)
+
     project_config = resolve_project(project_name=project)
 
-    request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
+    request_data = BcftoolsQueryRequest(
+        tsv_filter=tsv_filter,
+        command=command,
+        metadata_tsv_name=metadata_tsv_name,
+        samples=normalized_samples,
+    )
 
     response = make_authenticated_request(
         method="POST",
@@ -147,3 +177,28 @@ def pipe_query(
 
     task_id = response.json()
     print(f"Job submitted successfully with task id: {task_id}")
+
+
+def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> list[str] | None:
+    """
+    Normalize sample selection inputs from CLI options into a single list[str] or None.
+    """
+    if samples is not None:
+        normalized = [sample.strip() for sample in samples.split(",") if sample.strip()]
+        if not normalized:
+            raise typer.BadParameter("--samples must contain at least one non-empty sample ID.")
+        return normalized
+
+    if samples_file is not None:
+        normalized = [line.strip() for line in samples_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if not normalized:
+            raise typer.BadParameter(f"Samples file is empty: {samples_file}")
+        invalid_lines = [line for line in normalized if "," in line]
+        if invalid_lines:
+            raise typer.BadParameter(
+                "Invalid --samples-file format: expected one sample ID per line with no commas. "
+                "Use --samples for comma-separated input."
+            )
+        return normalized
+
+    return None
