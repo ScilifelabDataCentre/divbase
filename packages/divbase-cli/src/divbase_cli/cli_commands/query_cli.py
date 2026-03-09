@@ -46,15 +46,20 @@ BCFTOOLS_ARGUMENT = typer.Option(
         """,
 )
 
-# In 1 command this is required, other optional, hence only defining the text up here.
-TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to filter on.
-    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-    are the column header names in the tsv, and values are the column values. 
-    Multiple values for a key are separated by commas, and multiple keys are 
-    separated by semicolons. When multple keys are provided, an intersect query 
-    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-    """
+# Sample metadata and VCF queries both use the same core text, so it is defined up here.
+TSV_FILTER_SYNTAX = (
+    "String consisting of keys:values in the tsv file to filter on. "
+    "The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the keys are the column header names in the tsv, "
+    "and values are the column values. Multiple values for a key are separated by commas, and multiple keys are "
+    "separated by semicolons. When multiple keys are provided, an intersect query will be performed. "
+    "E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'."
+)
 
+TSV_FILTER_HELP_TEXT_VCF = (
+    "This option calculates the samples to filter the VCFs on based on a sample metadata query. "
+    + TSV_FILTER_SYNTAX
+    + "\n\nMutually exclusive with --samples and --samples-file."
+)
 
 query_app = typer.Typer(
     help="Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase API",
@@ -66,7 +71,7 @@ query_app = typer.Typer(
 def sample_metadata_query(
     filter: str = typer.Argument(
         ...,
-        help=TSV_FILTER_HELP_TEXT,
+        help=TSV_FILTER_SYNTAX,
     ),
     show_sample_results: bool = typer.Option(
         default=False,
@@ -119,7 +124,7 @@ def sample_metadata_query(
 
 @query_app.command("bcftools-pipe")
 def vcf_query(
-    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
+    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT_VCF),
     samples: str | None = typer.Option(
         None,
         help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter and --samples-file.",
