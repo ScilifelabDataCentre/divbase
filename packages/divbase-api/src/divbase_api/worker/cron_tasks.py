@@ -256,7 +256,8 @@ def hard_delete_expired_soft_deleted_objects():
             for version in project_versions:
                 if not version.files:
                     continue
-                for filename, version_id in version.files.items():
+                for filename, version_details in version.files.items():
+                    version_id = version_details["version_id"]
                     if filename not in protected_versions_map:
                         protected_versions_map[filename] = set()
                     protected_versions_map[filename].add(version_id)

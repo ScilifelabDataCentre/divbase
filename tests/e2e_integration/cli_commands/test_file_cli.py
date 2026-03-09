@@ -273,9 +273,9 @@ def test_list_soft_deleted_files_handles_pagination(logged_in_edit_user_with_exi
     upload_result = runner.invoke(app, upload_command)
     assert upload_result.exit_code == 0
 
-    # Delete files in batches of 100 (as that endpoint has that limit)
-    for batch_start in range(0, num_files, 100):
-        file_batch = file_names[batch_start : batch_start + 100]
+    # Delete files in batches of MAX_S3_API_BATCH_SIZE (as that endpoint has that limit)
+    for batch_start in range(0, num_files, MAX_S3_API_BATCH_SIZE):
+        file_batch = file_names[batch_start : batch_start + MAX_S3_API_BATCH_SIZE]
         delete_command = f"files rm {' '.join(file_batch)} --project {clean_project}"
         delete_result = runner.invoke(app, delete_command)
         assert delete_result.exit_code == 0
@@ -705,7 +705,7 @@ def test_download_more_than_100_files_at_once(logged_in_edit_user_with_existing_
     """
     upload_dir = tmp_path / "many_files_for_download"
     upload_dir.mkdir()
-    num_files = 105
+    num_files = MAX_S3_API_BATCH_SIZE + 5
 
     for i in range(num_files):
         (upload_dir / f"download_test_{i}.tsv").write_text(f"content_{i}")

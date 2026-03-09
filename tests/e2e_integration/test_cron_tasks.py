@@ -437,7 +437,10 @@ def create_soft_deleted_project_version(db_session_sync):
         project_version = ProjectVersionDB(
             project_id=1,
             name=name,
-            files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
+            files={
+                "file1.tsv": {"version_id": "v1somehash", "etag": "etag1", "size": 1024},
+                "file2.tsv": {"version_id": "v2somehash", "etag": "etag2", "size": 2048},
+            },
             is_deleted=True,
             date_deleted=date_deleted,
         )
@@ -587,11 +590,11 @@ def test_hard_delete_expired_soft_deleted_objects(
     file_to_keep = tmp_path / "test_purge_protected.txt"
     file_to_keep.write_text("in a project version, so kept")
     s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_keep.name: file_to_keep})
-    v1_id = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
+    v1_details = s3_file_manager.state_of_latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
 
     file_to_keep.write_text("will be deleted but prior version will be kept")
     s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_keep.name: file_to_keep})
-    v2_id = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
+    v2_details = s3_file_manager.state_of_latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
 
     s3_file_manager.soft_delete_objects(objects=[file_to_keep.name, file_to_purge.name], bucket_name=bucket_name)
 
@@ -599,7 +602,7 @@ def test_hard_delete_expired_soft_deleted_objects(
     project_version = ProjectVersionDB(
         project_id=project_id,
         name="test_protection_version",
-        files={file_to_keep.name: v1_id},
+        files={file_to_keep.name: v1_details},
     )
     db_session_sync.add(project_version)
     with contextlib.suppress(IntegrityError):
@@ -632,8 +635,8 @@ def test_hard_delete_expired_soft_deleted_objects(
         ]
 
         version_ids = [v["VersionId"] for v in versions_keep.get("Versions", []) if v["Key"] == file_to_keep.name]
-        assert v1_id in version_ids
-        assert v2_id not in version_ids
+        assert v1_details["version_id"] in version_ids
+        assert v2_details["version_id"] not in version_ids
 
         delete_markers = versions_keep.get("DeleteMarkers", [])
         # The file should have a latest version that is a delete marker
@@ -643,7 +646,7 @@ def test_hard_delete_expired_soft_deleted_objects(
     else:
         # no files should have been touched by this operation
         ids = [v["VersionId"] for v in versions_keep.get("Versions", []) if v["Key"] == file_to_keep.name]
-        assert v1_id in ids
-        assert v2_id in ids
+        assert v1_details["version_id"] in ids
+        assert v2_details["version_id"] in ids
         assert any(v["Key"] == file_to_purge.name for v in versions_purge.get("Versions", []))
         assert any(m["Key"] == file_to_purge.name for m in versions_purge.get("DeleteMarkers", []))
