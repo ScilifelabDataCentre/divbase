@@ -4,6 +4,8 @@ Schemas for project versioning routes.
 Project versions are the state of all files in a project's storage bucket at a given time point.
 """
 
+from typing import TypedDict
+
 from pydantic import BaseModel, Field
 
 
@@ -49,12 +51,21 @@ class ProjectVersionInfo(ProjectBasicInfo):
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
 
 
+# Typed dict used as used in db model
+class FileDetails(TypedDict):
+    """Details about a single file in a project version, ETag (is checksum) and size is in bytes."""
+
+    version_id: str
+    etag: str
+    size: int
+
+
 class ProjectVersionDetailResponse(ProjectBasicInfo):
     """Full information about a single project version, including the files at that version."""
 
     created_at: str = Field(..., description="ISO timestamp when version was created")
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
-    files: dict[str, str] = Field(..., description="Mapping of file names to their version IDs")
+    files: dict[str, FileDetails] = Field(..., description="Mapping of file names to their version IDs")
 
 
 class DeleteVersionResponse(BaseModel):

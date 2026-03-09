@@ -1,22 +1,15 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
+from divbase_lib.api_schemas.project_versions import FileDetails
 
 if TYPE_CHECKING:
     from divbase_api.models.projects import ProjectDB
-
-
-class FileDetails(TypedDict):
-    """Details about a single file in a project version, ETag (is checksum) and size is in bytes."""
-
-    version_id: str
-    etag: str
-    size: int
 
 
 class ProjectVersionDB(BaseDBModel):
