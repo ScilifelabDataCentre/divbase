@@ -327,7 +327,8 @@ def download_all_files(
         print("Download cancelled...")
         return
 
-    raw_files_input = [f"{file.name}:{file.version_id}" for file in files_to_download]
+    # TODO think about project versions for raw_files_input
+    raw_files_input = [file.name for file in files_to_download]
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
