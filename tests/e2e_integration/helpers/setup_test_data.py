@@ -143,6 +143,12 @@ TEST_PROJECTS = {
             "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
         ],
     },
+    "pagination-project": {
+        "description": "8th test project",
+        "bucket_name": "divbase-local-pagination-project",
+        "storage_quota_bytes": 10737418240,
+        "files": [],  # files added by fixture, as tests in these buckets only run if --run-slow flag set.
+    },
 }
 
 USER_ROLES = {
