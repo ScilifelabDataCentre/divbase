@@ -3,6 +3,7 @@ Service layer for DivBase CLI S3 file operations.
 """
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -46,6 +47,20 @@ from divbase_lib.s3_checksums import (
     calculate_md5_checksum,
     convert_checksum_hex_to_base64,
 )
+
+
+@dataclass
+class ToDownload:
+    """
+    Represent a file to be download in the download-all command. This unifies the 2 ways we get the files needed:
+    1. From the latest files in the bucket (listing files)
+    2. From a user defined project version (getting the files from the version details)"
+    """
+
+    name: str
+    etag: str
+    size_bytes: int
+    version_id: str | None = None  # latest version if None
 
 
 def list_files_command(
@@ -208,7 +223,11 @@ def download_files_command(
     if dry_run:
         print("\n[green bold]Dry run enabled, The following files would have been downloaded:[/green bold]")
         for file_info in json_data:
-            print(f"- '{file_info['name']}' (version_id: '{file_info['version_id']}')")
+            version_id = file_info["version_id"]
+            if version_id:
+                print(f"- '{file_info['name']}' (version_id: '{version_id}')")
+            else:
+                print(f"- '{file_info['name']}' (latest version)")
         raise typer.Exit(0)
 
     successful_downloads, failed_downloads = [], []
@@ -371,13 +390,13 @@ def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_
 
 
 def filter_out_already_downloaded_files(
-    all_files: list[ObjectDetails], download_dir: Path
-) -> tuple[list[ObjectDetails], list[ObjectDetails]]:
+    all_files: list[ToDownload], download_dir: Path
+) -> tuple[list[ToDownload], list[ToDownload]]:
     """
     Filter out files that already exist in a local directory with the same checksum.
 
     Returns two lists:
-    1. files_to_download: files that do not exist locally or have a different checksum and therefore
+    1. Files that do not exist locally and need to be downloaded.
     2. Files that are not identical to the file in S3 and will be overwritten if the user wants to download them.
     """
     files_to_download, files_to_overwrite = [], []

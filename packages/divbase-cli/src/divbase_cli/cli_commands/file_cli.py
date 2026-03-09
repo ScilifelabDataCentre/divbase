@@ -13,7 +13,9 @@ from typing_extensions import Annotated
 from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
+from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
+    ToDownload,
     download_files_command,
     filter_out_already_downloaded_files,
     get_file_info_command,
@@ -273,25 +275,48 @@ def download_all_files(
     """
     Download all files in the project's store on DivBase.
     Before the download proceeds you'll be prompted if you want to continue.
-    DivBaseQuery results files will not be included in the download.
+    DivBase Query results files will not be included in the download.
 
-    You can resume ('--resume' / '-r') a 'download-all' command, make sure you're downloading into the same directory.
+    TODO - can you combine resume and disable checksums? I think no?
+
+    You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
+    all_files: list[ToDownload] = []
     if project_version:
-        # TODO - Should refactor the project version logic to store the version id, etag, size etc...
-        # Then can be easily incoporated here, otherwise need to head each object which doesn't scale.
-        raise NotImplementedError("Downloading all files at a specific project version is not implemented yet.")
+        version_details = get_version_details_command(
+            project_name=project_config.name, divbase_base_url=logged_in_url, version_name=project_version
+        )
+        for version_name, file_details in version_details.files.items():
+            all_files.append(
+                ToDownload(
+                    name=version_name,
+                    etag=file_details["etag"],
+                    size_bytes=file_details["size"],
+                    version_id=file_details["version_id"],
+                )
+            )
+
     else:
-        all_files = list_files_command(
+        list_files_response = list_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
             prefix_filter=None,
             include_results_files=False,
         )
+        for file_details in list_files_response:
+            all_files.append(
+                ToDownload(
+                    name=file_details.name,
+                    etag=file_details.etag,
+                    size_bytes=file_details.size,
+                    version_id=None,  # latest version
+                )
+            )
+
     if not all_files:
         print("No files to download as there are no files in the project's store.")
         return
@@ -310,10 +335,14 @@ def download_all_files(
                 print(f"- '{file.name}'")
 
         files_to_download.extend(files_to_overwrite)
+
+        if not files_to_download:
+            print("No files left to download, your folder matches the project's store on DivBase, exiting...")
+            return
     else:
         files_to_download = all_files
 
-    total_size_bytes = sum(file.size for file in files_to_download)
+    total_size_bytes = sum(file.size_bytes for file in files_to_download)
     formatted_total_size = format_file_size(size_bytes=total_size_bytes)
 
     print(f"There are '{len(files_to_download)}' files to downloaded with a total size of: {formatted_total_size}.")
@@ -325,8 +354,10 @@ def download_all_files(
             print("Download cancelled...")
             return
 
-    # TODO think about project versions for raw_files_input
-    raw_files_input = [file.name for file in files_to_download]
+    if project_version:
+        raw_files_input = [f"{file.name}:{file.version_id}" for file in files_to_download]
+    else:
+        raw_files_input = [file.name for file in files_to_download]
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
@@ -334,7 +365,7 @@ def download_all_files(
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
         dry_run=dry_run,
-        project_version=None,  # Will project versions already handled at this point, and specified version ids in raw_files_input
+        project_version=None,  # We already know the version id of each file, so can skip the processing here.
     )
 
     _pretty_print_download_results(download_results=download_results)
