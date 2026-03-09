@@ -21,6 +21,7 @@ class BcftoolsQueryRequest(BaseModel):
     tsv_filter: str
     metadata_tsv_name: str
     command: str  # TODO add field to decribe that this is bcftools commands
+    samples: Optional[list[str]] = None
 
 
 # Models for task kwargs and task results. Reused in task history schemas too, hence pydantic models and not just dataclasses.
@@ -46,6 +47,7 @@ class BcftoolsQueryKwargs(BaseModel):
     project_name: str
     user_id: int
     job_id: int
+    samples: Optional[list[str]] = None
 
 
 class SampleMetadataQueryTaskResult(BaseModel):
