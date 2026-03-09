@@ -25,7 +25,6 @@ from divbase_cli.services.s3_files import (
     upload_files_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
-from divbase_lib.api_schemas.s3 import ObjectDetails
 from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
 from divbase_lib.utils import format_file_size
 
@@ -55,6 +54,11 @@ DISABLE_VERIFY_CHECKSUMS_OPTION = (
 PROJECT_VERSION_OPTION = typer.Option(
     default=None,
     help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
+)
+
+# TODO, -d flag taken by dir, think about what is best
+DRY_RUN_OPTION = typer.Option(
+    False, "--dry-run", help="If set, will not actually download the files, just print what would be downloaded."
 )
 
 
@@ -214,6 +218,7 @@ def download_files(
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
+    dry_run: bool = DRY_RUN_OPTION,
     disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
     project_version: str | None = PROJECT_VERSION_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
@@ -244,6 +249,7 @@ def download_files(
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
+        dry_run=dry_run,
         project_version=project_version,
     )
 
@@ -259,11 +265,7 @@ def download_all_files(
         "-r",
         help="If set, will attempt to resume an interrupted download. Will check which files have already been fully downloaded (by checking if a file with the same name and checksum already exists in the download directory) and skip downloading those files again.",
     ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",  # TODO, "-d" flag taken by download dir
-        help="If set, will not actually download the files, just print which files would be downloaded and their total size.",
-    ),
+    dry_run: bool = DRY_RUN_OPTION,
     disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
     project_version: str | None = PROJECT_VERSION_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
@@ -279,7 +281,6 @@ def download_all_files(
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
-    all_files: list[ObjectDetails]
     if project_version:
         # TODO - Should refactor the project version logic to store the version id, etag, size etc...
         # Then can be easily incoporated here, otherwise need to head each object which doesn't scale.
@@ -315,17 +316,14 @@ def download_all_files(
     total_size_bytes = sum(file.size for file in files_to_download)
     formatted_total_size = format_file_size(size_bytes=total_size_bytes)
 
-    if dry_run:
-        print("\n[green bold]Dry run enabled, The following files would have been downloaded:[/green bold]")
-        for file in files_to_download:
-            print(f"- '{file.name}' (size: '{format_file_size(file.size)}')")
-        return
-
     print(f"There are '{len(files_to_download)}' files to downloaded with a total size of: {formatted_total_size}.")
-    do_download = typer.confirm("Do you want to proceed with the download?", abort=True)
-    if not do_download:
-        print("Download cancelled...")
-        return
+
+    if not dry_run:
+        # (dry run will auto exit in the download_files_command)
+        do_download = typer.confirm("Do you want to proceed with the download?", abort=True)
+        if not do_download:
+            print("Download cancelled...")
+            return
 
     # TODO think about project versions for raw_files_input
     raw_files_input = [file.name for file in files_to_download]
@@ -335,8 +333,10 @@ def download_all_files(
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
-        project_version=None,  # project versions already handled at this point, and specified version ids in raw_files_input
+        dry_run=dry_run,
+        project_version=None,  # Will project versions already handled at this point, and specified version ids in raw_files_input
     )
+
     _pretty_print_download_results(download_results=download_results)
 
 

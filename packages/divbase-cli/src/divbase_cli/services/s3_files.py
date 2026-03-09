@@ -7,6 +7,7 @@ from pathlib import Path
 
 import httpx
 import typer
+from rich import print
 
 from divbase_cli.cli_exceptions import (
     FileDoesNotExistInSpecifiedVersionError,
@@ -154,6 +155,7 @@ def download_files_command(
     raw_files_input: list[str],
     download_dir: Path,
     verify_checksums: bool,
+    dry_run: bool,
     project_version: str | None = None,
 ) -> DownloadOutcome:
     """
@@ -202,6 +204,12 @@ def download_files_command(
                 json_data.append({"name": name, "version_id": version_id})
             else:
                 json_data.append({"name": file_input, "version_id": None})
+
+    if dry_run:
+        print("\n[green bold]Dry run enabled, The following files would have been downloaded:[/green bold]")
+        for file_info in json_data:
+            print(f"- '{file_info['name']}' (version_id: '{file_info['version_id']}')")
+        raise typer.Exit(0)
 
     successful_downloads, failed_downloads = [], []
     for i in range(0, len(json_data), MAX_S3_API_BATCH_SIZE):
