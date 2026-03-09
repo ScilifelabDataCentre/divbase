@@ -496,7 +496,10 @@ def test_cleanup_soft_deleted_project_versions_only_affects_soft_deleted(
     active_version = ProjectVersionDB(
         project_id=1,
         name="v1.0.active",
-        files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
+        files={
+            "file1.tsv": {"version_id": "v1somehash", "etag": "etag1", "size": 1024},
+            "file2.tsv": {"version_id": "v2somehash", "etag": "etag2", "size": 2048},
+        },
     )
     db_session_sync.add(active_version)
     db_session_sync.commit()
