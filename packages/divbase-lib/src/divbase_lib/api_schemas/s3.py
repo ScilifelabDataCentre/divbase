@@ -30,6 +30,7 @@ class ObjectDetails(BaseModel):
     """Details about a single object in an S3 bucket."""
 
     name: str = Field(..., description="The name of the object in the bucket.")
+    version_id: str = Field(..., description="The version ID of the object.")
     size: int = Field(..., description="The size of the object in bytes.")
     last_modified: datetime = Field(..., description="The date and time the object was last modified.")
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")

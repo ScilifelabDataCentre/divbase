@@ -352,16 +352,50 @@ def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_
         server_checksums = {item.object_name: item.md5_checksum for item in server_checksum_responses}
 
         for file in batch_files:
-            if file.stat().st_size > S3_MULTIPART_UPLOAD_THRESHOLD:
-                calculated_checksum = calculate_composite_md5_s3_etag(file_path=file)
-            else:
-                calculated_checksum = calculate_md5_checksum(file_path=file, output_format=MD5CheckSumFormat.HEX)
-
-            local_checksums[file.name] = calculated_checksum
-            if server_checksums.get(file.name) and server_checksums[file.name] == calculated_checksum:
-                already_uploaded_files[file] = calculated_checksum
+            local_checksums[file.name] = _calc_local_checksum(file_path=file)
+            if server_checksums.get(file.name) and server_checksums[file.name] == local_checksums[file.name]:
+                already_uploaded_files[file] = local_checksums[file.name]
 
     if already_uploaded_files:
         raise FilesAlreadyInProjectError(existing_files=already_uploaded_files, project_name=project_name)
 
     return local_checksums
+
+
+def filter_out_already_downloaded_files(
+    all_files: list[ObjectDetails], download_dir: Path
+) -> tuple[list[ObjectDetails], list[ObjectDetails]]:
+    """
+    Filter out files that already exist in a local directory with the same checksum.
+
+    Returns two lists:
+    1. files_to_download: files that do not exist locally or have a different checksum and therefore
+    2. Files that are not identical to the file in S3 and will be overwritten if the user wants to download them.
+    """
+    files_to_download, files_to_overwrite = [], []
+
+    for s3_file in all_files:
+        local_file_path = download_dir / s3_file.name
+
+        if not local_file_path.exists():
+            files_to_download.append(s3_file)
+            continue
+
+        local_checksum = _calc_local_checksum(file_path=local_file_path)
+        if local_checksum != s3_file.etag:
+            files_to_overwrite.append(s3_file)
+
+    return files_to_download, files_to_overwrite
+
+
+def _calc_local_checksum(file_path: Path) -> str:
+    """
+    Calculate the checksum for a local file. Handles whether to use a single or composite checksum based on file size.
+
+    This is used to validate the integrity of a file before upload.
+    Or determine if a file can be skipped from downloading.
+    """
+    if file_path.stat().st_size > S3_MULTIPART_UPLOAD_THRESHOLD:
+        return calculate_composite_md5_s3_etag(file_path=file_path)
+    else:
+        return calculate_md5_checksum(file_path=file_path, output_format=MD5CheckSumFormat.HEX)

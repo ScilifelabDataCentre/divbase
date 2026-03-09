@@ -106,6 +106,7 @@ class S3FileManager:
             items.append(
                 ObjectDetails(
                     name=obj["Key"],
+                    version_id=obj["VersionId"],
                     size=obj["Size"],
                     last_modified=obj["LastModified"],
                     etag=obj["ETag"].strip('"'),
