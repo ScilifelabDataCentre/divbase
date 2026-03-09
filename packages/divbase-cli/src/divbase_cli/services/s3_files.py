@@ -141,13 +141,17 @@ def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_fi
     Soft delete objects from the project's bucket.
     Returns a list of the soft deleted objects
     """
-    response = make_authenticated_request(
-        method="DELETE",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/?project_name={project_name}",
-        json=all_files,
-    )
-    return response.json()
+    deleted_objects = []
+    for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
+        batch_files = all_files[i : i + MAX_S3_API_BATCH_SIZE]
+        response = make_authenticated_request(
+            method="DELETE",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/?project_name={project_name}",
+            json=batch_files,
+        )
+        deleted_objects.extend(response.json())
+    return deleted_objects
 
 
 def restore_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> RestoreObjectsResponse:
@@ -155,13 +159,21 @@ def restore_objects_command(divbase_base_url: str, project_name: str, all_files:
     Restore soft_deleted objects in the project's bucket.
     Returns an object containing a list of the restored objects, and those that were not restored.
     """
-    response = make_authenticated_request(
-        method="POST",
-        divbase_base_url=divbase_base_url,
-        api_route=f"v1/s3/restore?project_name={project_name}",
-        json=all_files,
-    )
-    return RestoreObjectsResponse(**response.json())
+    all_restored = []
+    all_not_restored = []
+    for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
+        batch_files = all_files[i : i + MAX_S3_API_BATCH_SIZE]
+        response = make_authenticated_request(
+            method="POST",
+            divbase_base_url=divbase_base_url,
+            api_route=f"v1/s3/restore?project_name={project_name}",
+            json=batch_files,
+        )
+        batch_response = RestoreObjectsResponse(**response.json())
+        all_restored.extend(batch_response.restored)
+        all_not_restored.extend(batch_response.not_restored)
+
+    return RestoreObjectsResponse(restored=all_restored, not_restored=all_not_restored)
 
 
 def download_files_command(
