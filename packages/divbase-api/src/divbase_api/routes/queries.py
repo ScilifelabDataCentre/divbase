@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
+from divbase_api.crud.vcf_dimensions import get_unique_samples_by_project_async
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
@@ -129,6 +130,20 @@ async def create_bcftools_jobs(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
 
+    if bcftools_query_request.samples is not None:
+        project_samples = set(await get_unique_samples_by_project_async(db=db, project_id=project.id))
+        missmatched_samples = sorted(set(bcftools_query_request.samples) - project_samples)
+        if missmatched_samples:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "The following sample IDs were not found in the project's dimensions index: "
+                    f"{', '.join(missmatched_samples)}. "
+                    "Please verify that sample name are correctly spelled. If the sample name are correct, please make sure the dimensions index is up to date"
+                    "by running 'divbase-cli dimensions update --project <project_name>'."
+                ),
+            )
+
     job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
@@ -144,6 +159,7 @@ async def create_bcftools_jobs(
         project_name=project.name,
         user_id=current_user.id,
         job_id=job_id,
+        samples=bcftools_query_request.samples,
     )
 
     result = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())
