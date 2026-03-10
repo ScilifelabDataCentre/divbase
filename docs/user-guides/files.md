@@ -14,6 +14,7 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 - [`ls`](#listing-files): List files in your project
 - [`info`](#getting-file-information): Get detailed info about a specific file (and every version of the file) in the project
 - [`download`](#downloading-files): Download files
+- [`download-all`](#downloading-all-files): Download all files in the project
 - [`stream`](#streaming-files): Stream a file's content to standard out
 - [`upload`](#uploading-files): Upload files
 - [`rm`](#deleting-files): Soft delete files
@@ -57,13 +58,18 @@ divbase-cli files stream "sample_metadata.tsv:[version_id]"
 
 ## What if I want to delete a file permanently?
 
-TODO - Fill in when cron job that permanently deletes files after X days of being soft deleted has been implemented? AND If they are not in a project version?
+A soft deleted file will still contribute to your projects storage quota as it is recoverable. Your storage usage can be seen on your projects page on the DivBase website.
+
+A file will be hard deleted (not recoverable) if both of these conditions are met:
+
+- The file has been soft deleted for more than 30 days. During this time period, [you can restore a soft deleted file](#restoring-files)
+- The file is not [part of a project version](./project-versioning.md). If it is a part of the project version the project version would have to be deleted first.
 
 ## Details on each command
 
-In the below section, we provide detailed information on how to use each command related to managing files in your project.
+In this section, we provide more information on how to use each command related to working with files in your project.
 
-!!! info "Remember to get help and a full list of options for any command, you can always run:"
+!!! info "To get help and a full list of options for any command, you can always run:"
 
     ```bash
     divbase-cli files <command> --help # or -h
@@ -155,6 +161,37 @@ divbase-cli files download file1.txt file2.csv --project-version v1.0.0
 
 This is avoids the need to figure out the specific version IDs for each file and is especially useful if you want to download a large number of files as they existed at a specific point in time.
 
+### Downloading all files
+
+To download all files in your project's store use the `download-all` command:
+
+```bash
+divbase-cli files download-all
+```
+
+This will download all current files in your project except for DivBase query results files. Before the download starts, you'll be prompted to confirm whether you want to proceed. The command will display the total number of files and their combined size.
+
+!!! Info "Resume a download"
+    Use the `--resume` flag to continue a `download-all` command that got interupted.
+    This will skip files already downloaded with the same file name and MD5 checksum.
+    You need to use the same download directory (`--download-dir`) as your initial run.
+
+Other flags:
+
+- Specify the download directory with `--download-dir`.
+- Use `--dry-run` to see what would have been downloaded.
+- skip checksum validation with `--disable-verify-checksums` strongly discouraged. Downloading the actual files takes much longer than this step too.
+
+#### Downloading all files from a project version
+
+As with the `files download` command, you can download all files as they existed at a specific project version:
+
+```bash
+divbase-cli files download-all --project-version v1.0.0
+```
+
+(This can be used in combination with the above flags too.)
+
 ### Streaming files
 
 You can stream a file's content directly to your terminal's standard output without having to first download it. This is very useful for piping data into other command-line tools.
@@ -193,7 +230,7 @@ divbase-cli files rm file1.txt file2.csv
 
     A hard delete is when the file is permanently deleted from DivBase and can no longer be accessed or restored.
 
-    After a certain time period, files are hard deleted from DivBase, before that time you can restore the file(s). TODO - info on how long files kept (link to another section).
+    After a certain time period, soft deleted files will be hard deleted from DivBase [see here for more details](). Before that time you can restore the file(s).
 
 ### Restoring files
 
