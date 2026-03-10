@@ -23,7 +23,7 @@
 
             <!-- Project Overview -->
             <div class="row mb-4">
-                <div class="col-md-8">
+                <div class="col-md-8 mb-3">
                     <div class="card">
                         <div class="card-header">
                             <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Project Information</h5>
@@ -67,22 +67,22 @@
                         </div>
                         <div class="card-body">
                             <div class="text-center mb-3">
-                                <p class="mb-2">
-                                    <ul class="list-group">
-                                        <li class="list-group-item">Storage used: <strong>{{ project.storage_used }}</strong></li>
-                                        <li class="list-group-item">Storage quota: <strong>{{ project.storage_quota }}</strong></li>
-                                        <li class="list-group-item">Percentage used: <strong>{{ project.storage_used_percent }}%</strong></li>
-                                    </ul>
-                                </p>
+                                <ul class="list-group">
+                                    <li class="list-group-item">Storage used: <strong>{{ project.storage_used }}</strong></li>
+                                    <li class="list-group-item">Storage quota: <strong>{{ project.storage_quota }}</strong></li>
+                                    <li class="list-group-item">Percentage used: <strong>{{ project.storage_used_percent }}%</strong></li>
+                                </ul>
                             </div>
                         <div class="progress">
                             <div 
                                 class="progress-bar bg-success" 
                                 role="progressbar" 
-                                style="width: {{ project.storage_used_percent }}%" 
-                                aria-valuenow="{{ project.storage_used_percent }}%" 
+                                style="width: {{ 100 if project.storage_used_percent > 100 else project.storage_used_percent }}%" 
+                                aria-label="Storage usage"
+                                aria-valuenow="{{ project.storage_used_percent }}" 
                                 aria-valuemin="0" 
-                                aria-valuemax="100"></div>
+                                aria-valuemax="100">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -107,7 +107,6 @@
                                 </button>
                             </div>
                             <pre id="cliCommand"><code>divbase-cli config add {{ project.name }}</code></pre>
-                            </div>
                         </div>
                     </div>
                 </div>
