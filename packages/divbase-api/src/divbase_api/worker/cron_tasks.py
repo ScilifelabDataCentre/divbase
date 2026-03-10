@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from celery.schedules import crontab
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
@@ -209,19 +209,21 @@ def update_storage_usage_metrics():
     """
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
     with SyncSessionLocal() as db:
-        stmt = select(ProjectDB).where(ProjectDB.is_active == True)  # noqa: E712
-        projects = db.execute(stmt).scalars().all()
+        stmt = select(ProjectDB.id, ProjectDB.bucket_name).where(ProjectDB.is_active.is_(True))
+        projects = db.execute(stmt).all()
 
-        for project in projects:
-            storage_used_bytes = s3_file_manager.get_bucket_usage_bytes(bucket_name=project.bucket_name)
-            project.storage_used_bytes = storage_used_bytes
-            db.add(project)
+    project_updates = []
+    for project_id, bucket_name in projects:
+        storage_used_bytes = s3_file_manager.get_bucket_usage_bytes(bucket_name=bucket_name)
+        project_updates.append({"id": project_id, "storage_used_bytes": storage_used_bytes})
 
+    with SyncSessionLocal() as db:
+        db.execute(update(ProjectDB), project_updates)
         db.commit()
 
     return {
         "status": "completed",
-        "number_of_projects_updated": len(projects),
+        "number_of_projects_updated": len(project_updates),
     }
 
 
