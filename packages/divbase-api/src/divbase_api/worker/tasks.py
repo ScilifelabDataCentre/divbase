@@ -4,6 +4,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from itertools import combinations
 from pathlib import Path
 
@@ -62,6 +63,30 @@ app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 CELERY_TASKMETA_TABLE_NAME = "celery_taskmeta"
 CELERY_GROUPMETA_TABLE_NAME = "celery_groupmeta"
+
+
+class VCFQuerySampleSelectionMode(str, Enum):
+    """
+    Enum for the different sample selection modes.
+    """
+
+    SAMPLE_METADATA_QUERY = "sample_metadata_query"
+    CLI_SAMPLES = "cli_samples"
+    ALL_SAMPLES = "all_samples"
+
+
+@dataclasses.dataclass
+class SampleModeResult:
+    """
+    Resolved sample/file inputs for the bcftools pipeline. Returned by every sample selection mode resolver
+    so the rest of the pipeline can be shared regardless of how samples were selected.
+    """
+
+    files_to_download: list[str]
+    sample_and_filename_subset: list[dict]
+    unique_sample_ids: list[str]
+    metadata_path: Path | None = None
+
 
 # Celery results backend config
 app.conf.update(
@@ -234,14 +259,15 @@ def sample_metadata_query_task(
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
 def bcftools_pipe_task(
-    tsv_filter: str,
+    tsv_filter: str | None,
+    metadata_tsv_name: str | None,
     command: str,
-    metadata_tsv_name: str,
     bucket_name: str,
     project_id: int,
     project_name: str,
     user_id: int,
     job_id: int,
+    samples: list[str] | None = None,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -271,29 +297,39 @@ def bcftools_pipe_task(
         project_id=project_id,
     )
 
-    metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-    )
+    sample_selection_mode = _determine_sample_selection_mode(tsv_filter=tsv_filter, samples=samples)
 
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-        project_id=project_id,
-        vcf_dimensions_data=vcf_dimensions_data,
-    )
+    if sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
+        resolved_sample_mode_results = _resolve_inputs_for_sample_metadata_mode(
+            metadata_tsv_name=metadata_tsv_name,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
+            tsv_filter=tsv_filter,
+            project_id=project_id,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
+        resolved_sample_mode_results = _resolve_inputs_for_cli_samples_mode(
+            samples=samples,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
+        resolved_sample_mode_results = _resolve_inputs_for_all_samples_mode(
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
 
-    files_to_download = metadata_result.unique_filenames
-    sample_and_filename_subset = metadata_result.sample_and_filename_subset
+    files_to_download = resolved_sample_mode_results.files_to_download
+    sample_and_filename_subset = resolved_sample_mode_results.sample_and_filename_subset
+    metadata_path = resolved_sample_mode_results.metadata_path
 
     if "view -r" in command:
         files_to_download = _check_for_unnecessary_files_for_region_query(
             command=command,
-            files_to_download=metadata_result.unique_filenames,
+            files_to_download=files_to_download,
             vcf_dimensions_data=vcf_dimensions_data,
         )
-
         sample_and_filename_subset = [
-            entry for entry in metadata_result.sample_and_filename_subset if entry["Filename"] in files_to_download
+            entry for entry in sample_and_filename_subset if entry["Filename"] in files_to_download
         ]
 
     _check_if_samples_can_be_combined_with_bcftools(
@@ -336,7 +372,7 @@ def bcftools_pipe_task(
     bcftools_inputs = dataclasses.asdict(
         BCFToolsInput(
             sample_and_filename_subset=sample_and_filename_subset,
-            sampleIDs=metadata_result.unique_sample_ids,
+            sampleIDs=resolved_sample_mode_results.unique_sample_ids,
             filenames=files_to_download,
         )
     )
@@ -641,6 +677,97 @@ def _remove_stale_dimensions_db_entries(
             logger.error(f"Failed to batch remove stale skipped VCF DB entries: {e}")
 
     return deleted_dimensions_entries
+
+
+def _determine_sample_selection_mode(tsv_filter: str | None, samples: list[str] | None) -> VCFQuerySampleSelectionMode:
+    if tsv_filter is not None:
+        return VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
+    if samples is not None:
+        return VCFQuerySampleSelectionMode.CLI_SAMPLES
+    return VCFQuerySampleSelectionMode.ALL_SAMPLES
+
+
+def _resolve_inputs_for_sample_metadata_mode(
+    metadata_tsv_name: str,
+    bucket_name: str,
+    s3_file_manager: S3FileManager,
+    tsv_filter: str,
+    project_id: int,
+    vcf_dimensions_data: dict,
+) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline based on the sample metadata query TSV filter.
+    For the mode: VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
+    """
+
+    metadata_path = _download_sample_metadata(
+        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
+    metadata_result = run_sidecar_metadata_query(
+        file=metadata_path,
+        filter_string=tsv_filter,
+        project_id=project_id,
+        vcf_dimensions_data=vcf_dimensions_data,
+    )
+    return SampleModeResult(
+        files_to_download=metadata_result.unique_filenames,
+        sample_and_filename_subset=metadata_result.sample_and_filename_subset,
+        unique_sample_ids=metadata_result.unique_sample_ids,
+        metadata_path=metadata_path,
+    )
+
+
+def _resolve_inputs_for_cli_samples_mode(
+    samples: list[str],
+    vcf_dimensions_data: dict,
+) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline based on a list of sample names provided directly via the CLI.
+    Uses already-fetched vcf_dimensions_data to map each requested sample to its VCF file — no extra DB call needed.
+    For the mode: VCFQuerySampleSelectionMode.CLI_SAMPLES
+    """
+    samples_set = set(samples)
+    sample_and_filename_subset = []
+    files_to_download = []
+
+    for vcf_entry in vcf_dimensions_data["vcf_files"]:
+        filename = vcf_entry["vcf_file_s3_key"]
+        for sample_id in vcf_entry.get("samples", []):
+            if sample_id in samples_set:
+                sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+                if filename not in files_to_download:
+                    files_to_download.append(filename)
+
+    return SampleModeResult(
+        files_to_download=files_to_download,
+        sample_and_filename_subset=sample_and_filename_subset,
+        unique_sample_ids=samples,
+        metadata_path=None,
+    )
+
+
+def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data=dict) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline when all samples in the project should be included.
+    For the mode: VCFQuerySampleSelectionMode.ALL_SAMPLES
+    """
+    sample_and_filename_subset = []
+    files_to_download = []
+    unique_sample_ids = set()
+
+    for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
+        filename = vcf_entry["vcf_file_s3_key"]
+        files_to_download.append(filename)
+        for sample_id in vcf_entry.get("samples", []):
+            sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+            unique_sample_ids.add(sample_id)
+
+    return SampleModeResult(
+        files_to_download=files_to_download,
+        sample_and_filename_subset=sample_and_filename_subset,
+        unique_sample_ids=list(unique_sample_ids),
+        metadata_path=None,
+    )
 
 
 def _check_for_unnecessary_files_for_region_query(
