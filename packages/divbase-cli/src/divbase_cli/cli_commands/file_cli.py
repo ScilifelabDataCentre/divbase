@@ -278,10 +278,16 @@ def download_all_files(
     Before the download proceeds you'll be prompted if you want to continue.
     DivBase Query results files will not be included in the download.
 
-    TODO - can you combine resume and disable checksums? I think no?
-
     You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
     """
+    if resume and disable_verify_checksums:
+        print(
+            "The --resume and --disable-verify-checksums options cannot be used together, "
+            "as checksums are used to determine which files don't need to be downloaded. \n"
+            "Exiting... "
+        )
+        return
+
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
