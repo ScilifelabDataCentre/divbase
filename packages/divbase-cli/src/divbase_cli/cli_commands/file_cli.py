@@ -44,7 +44,7 @@ DOWNLOAD_DIR_OPTION = typer.Option(
         You can also specify "." to download to the current directory.""",
 )
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
-    None,
+    False,
     "--disable-verify-checksums",
     "-nc",
     help="Turn off checksum verification which is on by default. "
@@ -52,13 +52,16 @@ DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
 )
 PROJECT_VERSION_OPTION = typer.Option(
-    default=None,
+    None,
+    "--project-version",
+    "-pv",
     help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
 )
-
-# TODO, -d flag taken by dir, think about what is best
 DRY_RUN_OPTION = typer.Option(
-    False, "--dry-run", help="If set, will not actually download the files, just print what would be downloaded."
+    False,
+    "--dry-run",
+    "-n",
+    help="If set, will not actually download the files, just print what would be downloaded.",
 )
 
 
