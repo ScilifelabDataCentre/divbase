@@ -43,15 +43,13 @@ DOWNLOAD_DIR_OPTION = typer.Option(
         If also not specified in your user config, downloads to the current directory.
         You can also specify "." to download to the current directory.""",
 )
-DISABLE_VERIFY_CHECKSUMS_OPTION = (
-    typer.Option(
-        None,
-        "--disable-verify-checksums",
-        "-nc",
-        help="Turn off checksum verification which is on by default. "
-        "Checksum verification means all downloaded files are verified against their MD5 checksums."
-        "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
-    ),
+DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
+    None,
+    "--disable-verify-checksums",
+    "-nc",
+    help="Turn off checksum verification which is on by default. "
+    "Checksum verification means all downloaded files are verified against their MD5 checksums."
+    "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
 )
 PROJECT_VERSION_OPTION = typer.Option(
     default=None,
@@ -221,7 +219,7 @@ def download_files(
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
     dry_run: bool = DRY_RUN_OPTION,
-    disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
+    disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
     project_version: str | None = PROJECT_VERSION_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
 ):
@@ -268,7 +266,7 @@ def download_all_files(
         help="If set, will attempt to resume an interrupted download. Will check which files have already been fully downloaded (by checking if a file with the same name and checksum already exists in the download directory) and skip downloading those files again.",
     ),
     dry_run: bool = DRY_RUN_OPTION,
-    disable_verify_checksums: Annotated[bool, DISABLE_VERIFY_CHECKSUMS_OPTION] = False,
+    disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
     project_version: str | None = PROJECT_VERSION_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
 ):
