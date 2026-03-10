@@ -271,6 +271,7 @@ def hard_delete_expired_soft_deleted_objects():
                 prefix_exclude=QUERY_RESULTS_FILE_PREFIX,  # handled by diff cron task.
             )
 
+            objects_to_re_soft_delete = []
             for object_name in candidate_objects_to_purge:
                 protected_ids = protected_versions_map.get(object_name, set())
 
@@ -283,8 +284,11 @@ def hard_delete_expired_soft_deleted_objects():
                 # Delete both file versions and delete markers of the object.
                 objects_to_delete = []
                 for version in versions_resp.get("Versions", []):
-                    if version["Key"] == object_name and version["VersionId"] not in protected_ids:
-                        objects_to_delete.append({"Key": object_name, "VersionId": version["VersionId"]})
+                    if version["Key"] == object_name:
+                        if version["VersionId"] not in protected_ids:
+                            objects_to_delete.append({"Key": object_name, "VersionId": version["VersionId"]})
+                        else:
+                            objects_to_re_soft_delete.append(object_name)
 
                 for marker in versions_resp.get("DeleteMarkers", []):
                     if marker["Key"] == object_name:
@@ -298,10 +302,11 @@ def hard_delete_expired_soft_deleted_objects():
 
                     per_project_delete_count[project.name] += len(objects_to_delete)
 
-            # We take advantage of a special behaviour of S3, that you can delete objects that don't exist.
-            # This ensures that if a protected version now becomes the latest, it wont be used in queries/downloadable etc..
+            # If the latest version of a file was hard deleted, but an older version is protected.
+            # Then we need to re-add a delete marker, otherwise the protected file will become the latest.
+            # Which would make it show up in ls, download and query jobs...
             s3_file_manager.soft_delete_objects(
-                objects=list(candidate_objects_to_purge),
+                objects=objects_to_re_soft_delete,
                 bucket_name=project.bucket_name,
             )
 
