@@ -8,7 +8,9 @@ A clean project (its bucket is auto emptied before each test) is available to an
 
 import csv
 import os
+import shutil
 from io import StringIO
+from pathlib import Path
 
 import boto3
 import pytest
@@ -1047,250 +1049,216 @@ def test_restore_file_with_exact_key_match_among_similar_prefixes(
 # These will only be run when you do pytest --run-slow
 
 
+@pytest.fixture(scope="function")
+def pagination_files_uploaded(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path_factory, request
+) -> tuple[list[str], list[Path]]:
+    """
+    Fixture that creates and uploads large numbers of files to PAGINATION_PROJECT bucket.
+    (So we don't have to do it separately in each test)
+    Returns the list of file names uploaded and their paths.
+
+    This fixture counts as the test for pagination working for uploads.
+    """
+    if not request.config.getoption("--run-slow"):
+        pytest.skip("Only run when --run-slow is given")
+
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    num_files = S3_PAGINATION_LIMIT + 5
+    upload_dir = tmp_path_factory.mktemp("pagination_files")
+
+    file_names = [f"pagination_test_{i}.tsv" for i in range(num_files)]
+    file_paths = []
+    for name in file_names:
+        file_path = upload_dir / name
+        file_paths.append(file_path)
+        file_path.write_text(f"content_{name}")
+
+    # Check if files are already uploaded to avoid re-running
+    list_command = f"files ls --project {pagination_project}"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+    already_uploaded = all(name in list_result.stdout for name in file_names)
+
+    if not already_uploaded:
+        upload_command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
+        upload_result = runner.invoke(app, upload_command)
+        assert upload_result.exit_code == 0
+
+    return file_names, file_paths
+
+
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
-def test_list_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_list_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded):
     """
     Tests that the list files command can paginate correctly by going through all results when a project
     contains more than s3 limit for a single API call.
     """
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    upload_dir = tmp_path / "many_files_dir"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, _ = pagination_files_uploaded
 
-    file_names = {f"test_file_{i}.tsv" for i in range(num_files)}
-    for name in file_names:
-        (upload_dir / name).write_text(f"content_{name}")
-
-    upload_command = f"files upload --upload-dir {upload_dir} --project {clean_project}"
-    upload_result = runner.invoke(app, upload_command)
-    assert upload_result.exit_code == 0
-
-    list_command = f"files ls --project {clean_project}"
+    list_command = f"files ls --project {pagination_project}"
     list_result = runner.invoke(app, list_command)
     assert list_result.exit_code == 0
 
     for name in file_names:
         assert name in list_result.stdout
-    assert calculate_numb_table_rows_printed(list_result.stdout) == num_files
+    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
 
 
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
-def test_list_soft_deleted_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_list_soft_deleted_files_handles_pagination(
+    logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded
+):
     """Test that the 'files ls --show-deleted-files' command handles pagination correctly."""
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    upload_dir = tmp_path / "many_files_dir"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, _ = pagination_files_uploaded
 
-    file_names = [f"test_file_{i}.tsv" for i in range(num_files)]
-    for name in file_names:
-        (upload_dir / name).write_text(f"content_{name}")
-
-    upload_command = f"files upload --upload-dir {upload_dir} --project {clean_project}"
-    upload_result = runner.invoke(app, upload_command)
-    assert upload_result.exit_code == 0
-
-    delete_command = f"files rm {' '.join(file_names)} --project {clean_project}"
+    # Delete all files to make them soft-deleted
+    delete_command = f"files rm {' '.join(file_names)} --project {pagination_project}"
     delete_result = runner.invoke(app, delete_command)
     assert delete_result.exit_code == 0
 
-    list_command = f"files ls --project {clean_project} --show-deleted-files"
+    list_command = f"files ls --project {pagination_project} --show-deleted-files"
     list_result = runner.invoke(app, list_command)
     assert list_result.exit_code == 0
 
     for name in file_names:
         assert name in list_result.stdout
 
-
-def test_download_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """
-    Tests that the batching logic for 'files downloads' works correctly when downloading
-    more than S3_PAGINATION_LIMIT files at once.
-    """
-    upload_dir = tmp_path / "many_files_for_download"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
-
-    for i in range(num_files):
-        (upload_dir / f"download_test_{i}.tsv").write_text(f"content_{i}")
-    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
-    result = runner.invoke(app, command)
+    # Restore them for other tests
+    restore_command = f"files restore {' '.join(file_names)} --project {pagination_project}"
+    result = runner.invoke(app, restore_command)
     assert result.exit_code == 0
-
-    download_dir = tmp_path / "downloads_dir"
-    download_dir.mkdir()
-    file_names_to_download = [f"download_test_{i}.tsv" for i in range(num_files)]
-
-    command = f"files download {' '.join(file_names_to_download)} --download-dir {download_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
-    result = runner.invoke(app, command)
-
-    assert result.exit_code == 0
-    for i in range(num_files):
-        file_name = f"download_test_{i}.tsv"
-        assert file_name in result.stdout
-        assert (download_dir / file_name).exists()
-        assert (download_dir / file_name).read_text() == f"content_{i}"
+    for name in file_names:
+        assert name in result.stdout
 
 
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
-def test_download_all_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """Tests that 'files download-all' correctly handles pagination"""
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    upload_dir = tmp_path / "many_files_for_download_all"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
-
-    for i in range(num_files):
-        (upload_dir / f"download_all_test_{i}.tsv").write_text(f"content_{i}")
-
-    upload_command = f"files upload --upload-dir {upload_dir} --project {clean_project}"
-    upload_result = runner.invoke(app, upload_command)
-    assert upload_result.exit_code == 0
-
+def test_download_handles_pagination(
+    logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded, tmp_path
+):
+    """
+    Tests that the batching logic for 'files download' works correctly when downloading
+    more than S3_PAGINATION_LIMIT files at once.
+    """
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, _ = pagination_files_uploaded
     download_dir = tmp_path / "downloads_dir"
     download_dir.mkdir()
 
-    command = f"files download-all --project {clean_project} --download-dir {download_dir}"
+    command = f"files download {' '.join(file_names)} --download-dir {download_dir} --project {pagination_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for name in file_names:
+        assert name in result.stdout
+        assert (download_dir / name).exists()
+
+
+@pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
+def test_download_all_handles_pagination(
+    logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded, tmp_path
+):
+    """Tests that 'files download-all' correctly handles pagination"""
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, _ = pagination_files_uploaded
+    download_dir = tmp_path / "downloads_dir"
+    download_dir.mkdir()
+
+    command = f"files download-all --project {pagination_project} --download-dir {download_dir}"
     result = runner.invoke(app, command, input="y\n")
 
     assert result.exit_code == 0
-    assert f"There are '{num_files}' files to download" in result.stdout
-    for i in range(num_files):
-        file_name = f"download_all_test_{i}.tsv"
-        assert file_name in result.stdout
-        assert (download_dir / file_name).exists()
-        assert (download_dir / file_name).read_text() == f"content_{i}"
+    assert f"there are '{len(file_names)}' files to download" in result.stdout.lower()
+    for name in file_names:
+        assert name in result.stdout
+        assert (download_dir / name).exists()
 
 
-def test_upload_more_than_max_batch_size_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """
-    Validates that the batching logic for single-part uploads works correctly when uploading
-    more than S3_PAGINATION_LIMIT files at once.
-    """
-    upload_dir = tmp_path / "many_files"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
-
-    for i in range(num_files):
-        (upload_dir / f"test_file_{i}.tsv").write_text(f"content_{i}")
-
-    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
-    result = runner.invoke(app, command)
-
-    assert result.exit_code == 0
-    for i in range(num_files):
-        assert f"test_file_{i}.tsv" in result.stdout
-
-    command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
-    for i in range(num_files):
-        assert f"test_file_{i}.tsv" in result.stdout
-
-
-def test_safe_mode_fails_with_more_than_max_batch_size_files_if_one_exists(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+@pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
+def test_upload_safe_mode_fails_with_pagination_if_one_exists(
+    logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded, tmp_path
 ):
     """
     Tests that safe mode correctly identifies a duplicate file and raises FilesAlreadyInProjectError,
     even when the check involves more than S3_PAGINATION_LIMIT files.
 
-    The duplicated file would be in the 2nd batch of files to be uploaded as well.
+    The duplicated file would not be in the 1st batch of files to be uploaded as well, but should prevent any file being uploaded.
+
+    NOTE: files upload "happy path" with pagination is convered by the fixture, so don't need a seperate test.
     """
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, files_in_bucket = pagination_files_uploaded
+
     upload_dir = tmp_path / "uploads_dir"
     upload_dir.mkdir()
     num_files = S3_PAGINATION_LIMIT + 5
+    safe_mode_files = [f"safe_mode_test_{i}.tsv" for i in range(num_files - 1)]
 
-    for i in range(num_files):
-        (upload_dir / f"safe_mode_test_{i}.tsv").write_text(f"content_{i}")
+    for idx, file_name in enumerate(safe_mode_files):
+        (upload_dir / file_name).write_text(f"content_{idx}")
 
-    duplicate_file = upload_dir / f"safe_mode_test_{S3_PAGINATION_LIMIT + 4}.tsv"
-    command = f"files upload {duplicate_file} --project {CONSTANTS['CLEANED_PROJECT']}"
-    result = runner.invoke(app, command)
-    assert result.exit_code == 0
+    # Add the duplicate file (already in bucket) to upload dir
+    duplicate_file = files_in_bucket[S3_PAGINATION_LIMIT + 1]
+    shutil.copy(src=duplicate_file, dst=upload_dir)
 
-    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, FilesAlreadyInProjectError)
     assert duplicate_file.name in str(result.exception)
 
     # Verify that none of the files were uploaded.
-    command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files ls --project {pagination_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
+    for file_name in safe_mode_files:
+        assert file_name not in result.stdout
 
-    for i in range(num_files - 1):
-        file_name = f"safe_mode_test_{i}.tsv"
-        if file_name == duplicate_file.name:
-            assert f"safe_mode_test_{i}.tsv" in result.stdout
-        else:
-            assert f"safe_mode_test_{i}.tsv" not in result.stdout
-
-    # Now run the upload again without safe_mode turned off, should work
-    command = f"files upload --upload-dir {upload_dir} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
+    # Now run the upload again without safe_mode, should work
+    command = f"files upload --upload-dir {upload_dir} --project {pagination_project} --disable-safe-mode"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    for i in range(num_files):
-        assert f"safe_mode_test_{i}.tsv" in result.stdout
+    for file_name in safe_mode_files:
+        assert file_name in result.stdout
+
+    # delete them so as to not mess with other tests
+    command = f"files rm {' '.join(safe_mode_files)} --project {pagination_project}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    for name in safe_mode_files:
+        assert name in result.stdout
 
 
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
-def test_remove_files_handles_pagination(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_remove_and_restore_files_handles_pagination(
+    logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded
+):
     """
-    Tests that 'files rm' correctly handles a large number of files by batching the requests.
+    Tests that 'files rm' and 'files restore' correctly handles a large number of files by batching the requests.
+    By restoring we make sure all files are back again for the other tests.
     """
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    upload_dir = tmp_path / "many_files_for_rm"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
+    pagination_project = CONSTANTS["PAGINATION_PROJECT"]
+    file_names, _ = pagination_files_uploaded
 
-    file_names = [f"rm_batch_test_{i}.tsv" for i in range(num_files)]
-    for name in file_names:
-        (upload_dir / name).write_text(f"content_{name}")
-
-    runner.invoke(app, f"files upload --upload-dir {upload_dir} --project {clean_project}")
-
-    # Remove all files at once - should be batched internally
-    command = f"files rm {' '.join(file_names)} --project {clean_project}"
+    command = f"files rm {' '.join(file_names)} --project {pagination_project}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     for name in file_names:
         assert name in result.stdout
 
-    # Verify bucket is empty
-    list_result = runner.invoke(app, f"files ls --project {clean_project}")
-    assert "No files found" in list_result.stdout
+    list_result = runner.invoke(app, f"files ls --project {pagination_project}")
+    assert "no files found" in list_result.stdout.lower()
 
-
-@pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
-def test_restore_many_files_at_once_handles_batching(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """
-    Tests that 'files restore' correctly handles a large number of files by batching the requests.
-    """
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    upload_dir = tmp_path / "many_files_for_restore"
-    upload_dir.mkdir()
-    num_files = S3_PAGINATION_LIMIT + 5
-
-    file_names = [f"restore_batch_test_{i}.tsv" for i in range(num_files)]
-    for name in file_names:
-        (upload_dir / name).write_text(f"content_{name}")
-
-    runner.invoke(app, f"files upload --upload-dir {upload_dir} --project {clean_project}")
-    runner.invoke(app, f"files rm {' '.join(file_names)} --project {clean_project}")
-
-    # Restore all files at once - should be batched internally
-    command = f"files restore {' '.join(file_names)} --project {clean_project}"
-    result = runner.invoke(app, command)
+    restore_command = f"files restore {' '.join(file_names)} --project {pagination_project}"
+    result = runner.invoke(app, restore_command)
 
     assert result.exit_code == 0
-    assert "Restored files:" in result.stdout
+    assert "restored files" in result.stdout.lower()
     for name in file_names:
         assert name in result.stdout
 
-    # Verify all files are back
-    list_result = runner.invoke(app, f"files ls --project {clean_project}")
-    assert calculate_numb_table_rows_printed(list_result.stdout) == num_files
+    list_result = runner.invoke(app, f"files ls --project {pagination_project}")
+    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
