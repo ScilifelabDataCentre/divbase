@@ -47,8 +47,8 @@ divbase-cli files stream sample_metadata.tsv
 If you want to download/stream a specific older version of a file, you can included the `Version ID` shown in the `info` command output like this:
 
 ```bash
-divbase-cli files download "sample_metadata.tsv:[version_id]"
-divbase-cli files stream "sample_metadata.tsv:[version_id]"
+divbase-cli files download "sample_metadata.tsv:VERSION_ID"
+divbase-cli files stream "sample_metadata.tsv:VERSION_ID"
 ```
 
 !!! info "You can't upload an identical file twice"
@@ -172,7 +172,7 @@ divbase-cli files download-all
 This will download all current files in your project except for DivBase query results files. Before the download starts, you'll be prompted to confirm whether you want to proceed. The command will display the total number of files and their combined size.
 
 !!! Info "Resume a download"
-    Use the `--resume` flag to continue a `download-all` command that got interupted.
+    Use the `--resume` flag to continue a `download-all` command that got interrupted.
     This will skip files already downloaded with the same file name and MD5 checksum.
     You need to use the same download directory (`--download-dir`) as your initial run.
 
@@ -230,7 +230,7 @@ divbase-cli files rm file1.txt file2.csv
 
     A hard delete is when the file is permanently deleted from DivBase and can no longer be accessed or restored.
 
-    After a certain time period, soft deleted files will be hard deleted from DivBase [see here for more details](). Before that time you can restore the file(s).
+    After a certain time period, soft deleted files will be hard deleted from DivBase [see here for more details](#what-if-i-want-to-delete-a-file-permanently). Before that time you can restore the file(s).
 
 ### Restoring files
 
