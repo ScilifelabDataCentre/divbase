@@ -14,17 +14,16 @@ import time
 DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
 DOCKER_COMPOSE_OVERIDE_FILE = "docker/divbase_compose.tests.yaml"
 DOCKER_COMPOSE_CI_OVERRIDE = "docker/divbase_compose.tests.ci.yaml"
+TESTING_STACK_NAME = "divbase-tests"
 
 GH_ACTION_RUN = os.getenv("GITHUB_ACTIONS_RUNNER") == "true"
 compose_command_prefix = f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIDE_FILE} "
 stop_command_prefix = f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIDE_FILE} "
 
 if GH_ACTION_RUN:
-    TESTING_STACK_NAME = "divbase-tests-ci"
     COMPOSE_COMMAND = shlex.split(compose_command_prefix + f"-f {DOCKER_COMPOSE_CI_OVERRIDE} up -d")
     STOP_COMMAND = shlex.split(stop_command_prefix + f"-f {DOCKER_COMPOSE_CI_OVERRIDE} down -v")
 else:  # local dev pytest run
-    TESTING_STACK_NAME = "divbase-tests"
     COMPOSE_COMMAND = shlex.split(compose_command_prefix + "up -d --build")
     STOP_COMMAND = shlex.split(stop_command_prefix + "down -v")
 

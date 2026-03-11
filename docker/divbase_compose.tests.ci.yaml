@@ -1,4 +1,4 @@
-name: divbase-tests-ci # Used by GH actions runner, to not rebuild images already built and pushed to GHCR in a diff action. 
+name: divbase-tests # Used by GH actions runner, to not rebuild images already built and pushed to GHCR in a diff action. 
 services:
   worker-quick: # image names provided by GH actions workflow via env vars
     image: ${DIVBASE_WORKER_IMAGE}
