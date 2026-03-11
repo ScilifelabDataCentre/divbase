@@ -18,7 +18,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
 from divbase_api.services.validate_cli_versions import cli_version_outdated
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
@@ -90,7 +90,7 @@ def register_middleware(app: FastAPI) -> None:
     request -> last added middleware -> ... -> first added middleware -> route handler
     route handler -> first added middleware -> ... -> last added middleware -> response
     """
-    if settings.api.environment in ["local_dev", "test"]:
+    if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
         allowed_hosts = ["localhost"]
     else:
         frontend_host = urlparse(settings.api.frontend_base_url).hostname
