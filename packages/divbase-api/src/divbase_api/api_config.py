@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 
 from pydantic import SecretStr
 
-from divbase_api import __version__ as api_version
+from divbase_lib import __version__ as lib_version
+
+LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
 
 
 @dataclass
@@ -31,7 +33,7 @@ class APISettings:
     minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.0")
     # Used in deciding if to give the user an announcement on login that a new version of the CLI is available.
     # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
-    latest_cli_version: str = api_version
+    latest_cli_version: str = lib_version
 
 
 @dataclass
@@ -99,7 +101,7 @@ class EmailSettings:
 
     def __post_init__(self):
         """Handle enviroment specific email settings."""
-        if os.getenv("DIVBASE_ENV") in ["local_dev", "test"]:
+        if os.getenv("DIVBASE_ENV") in LOCAL_DEV_ENVIRONMENTS:
             # using mailpit in docker stack
             self.smtp_server = "mailpit"
             self.smtp_port = 1025
@@ -157,7 +159,7 @@ class Settings:
             if isinstance(setting, SecretStr):
                 if setting.get_secret_value() == "NOT_SET":
                     raise ValueError(f"A required environment variable was not set: {setting_name=}")
-                if self.api.environment not in ["local_dev", "test"] and setting.get_secret_value() == "badpassword":
+                if self.api.environment not in LOCAL_DEV_ENVIRONMENTS and setting.get_secret_value() == "badpassword":
                     raise ValueError(
                         f"A secret environment variable was set to badpassword for a non local environment: {setting_name=}"
                     )

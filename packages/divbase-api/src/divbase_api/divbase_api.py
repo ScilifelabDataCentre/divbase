@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.api_config import settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
 from divbase_api.db import (
     check_db_migrations_up_to_date,
     create_first_admin_user,
@@ -69,13 +69,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(core_router, prefix="/api/v1/core", tags=["core"])
 app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
 app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
 app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
+if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
+    # not needed in deployed enviroments, so no need to expose it.
+    app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
