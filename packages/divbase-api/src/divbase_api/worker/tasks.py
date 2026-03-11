@@ -14,6 +14,7 @@ from celery.signals import (
     task_prerun,
     worker_process_init,
 )
+from sqlalchemy.exc import SQLAlchemyError
 
 from divbase_api.exceptions import (
     ObjectDoesNotExistError,
@@ -606,8 +607,11 @@ def _remove_stale_dimensions_db_entries(
     """
     Delete VCF dimensions DB entries (both indexed and skipped) for VCF files that are no longer present
     in the bucket. Returns the list of file keys that were removed.
+
     """
     deleted_dimensions_entries = []
+
+    error_msg_to_user = "Failed to clean up stale VCF dimensions entries. Please retry 'divbase-cli dimensions update --project <project_name>'."
 
     # Remove stale indexed VCFs
     stale_indexed = [file for file in indexed_vcf_keys if file not in current_vcf_files_in_bucket]
@@ -618,9 +622,13 @@ def _remove_stale_dimensions_db_entries(
             logger.info(
                 f"Removed {len(stale_indexed)} stale indexed VCF DB entries. Files no longer in bucket: {stale_indexed}"
             )
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Failed to batch remove stale indexed VCF DB entries: {e}")
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Failed to batch remove stale indexed VCF DB entries for project {project_id}. "
+                f"Files: {stale_indexed}. DB error: {e}",
+                exc_info=True,
+            )
+            raise TaskUserError(error_msg_to_user) from None
 
     # Remove stale skipped VCFs
     stale_skipped = [file for file in skipped_vcf_keys if file not in current_vcf_files_in_bucket]
@@ -631,9 +639,13 @@ def _remove_stale_dimensions_db_entries(
             logger.info(
                 f"Removed {len(stale_skipped)} stale skipped VCF DB entries. Files no longer in bucket: {stale_skipped}"
             )
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Failed to batch remove stale skipped VCF DB entries: {e}")
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Failed to batch remove stale skipped VCF DB entries for project {project_id}. "
+                f"Files: {stale_skipped}. DB error: {e}",
+                exc_info=True,
+            )
+            raise TaskUserError(error_msg_to_user) from None
 
     return deleted_dimensions_entries
 
