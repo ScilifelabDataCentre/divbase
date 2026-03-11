@@ -2,8 +2,6 @@
 CRUD operations for users.
 """
 
-from datetime import datetime, timezone
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,46 +61,6 @@ async def create_user(
 
     user = UserDB(**user_dict, hashed_password=hashed_password, is_admin=is_admin, email_verified=email_verified)
     db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def deactivate_user(db: AsyncSession, user_id: int) -> UserDB:
-    """Deactivate a user"""
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
-    user.is_active = False
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def reactivate_user(db: AsyncSession, user_id: int) -> UserDB:
-    """Reactivate a user"""
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
-    user.is_active = True
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def soft_delete_user(db: AsyncSession, user_id: int) -> UserDB:
-    """Soft delete a user"""
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
-    user.is_deleted = True
-    user.is_active = False  # also deactivate as deleted users should not be active
-    user.date_deleted = datetime.now(tz=timezone.utc)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def revert_soft_delete_user(db: AsyncSession, user_id: int) -> UserDB:
-    """Revert soft delete of a user"""
-    user = await get_user_by_id_or_raise(db=db, id=user_id)
-    user.is_deleted = False
-    user.is_active = True  # reactivate the user if deactivated too.
-    user.date_deleted = None
     await db.commit()
     await db.refresh(user)
     return user
