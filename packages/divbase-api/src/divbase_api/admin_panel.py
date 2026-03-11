@@ -126,21 +126,23 @@ class UserView(ModelView):
         "updated_at",
     ]
     exclude_fields_from_create = [
+        "id",
+        "created_at",
+        "updated_at",
         "project_memberships",
         "is_deleted",
         "is_active",
         "last_password_change",
         "date_deleted",
-        "created_at",
-        "updated_at",
     ]
     exclude_fields_from_edit = [
+        "id",
+        "created_at",
+        "updated_at",
         "project_memberships",
         "password",
         "hashed_password",  # hashed_password wont be defined yet but needs to be included here.
         "last_password_change",
-        "created_at",
-        "updated_at",
     ]
     exclude_fields_from_detail = ["hashed_password", "password"]
 
@@ -242,8 +244,8 @@ class ProjectView(ModelView):
     ]
 
     exclude_fields_from_list = ["description", "storage_used_bytes"]
-    exclude_fields_from_create = ["storage_used_bytes", "is_active"]
-    exclude_fields_from_edit = ["storage_used_bytes"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "storage_used_bytes", "is_active"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "storage_used_bytes"]
     exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
@@ -303,7 +305,7 @@ class ProjectMembershipView(ModelView):
 
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
-    exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "project_id"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
@@ -408,8 +410,8 @@ class RevokedTokenView(ModelView):
     ]
 
     exclude_fields_from_list = ["user_id"]
-    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "user_id", "revoked_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "revoked_at", "revoked_reason"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
@@ -422,7 +424,14 @@ class RevokedTokenView(ModelView):
             raise FormValidationError(errors={"token_type": str(exc)})
 
         if isinstance(exc, IntegrityError):
-            raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+            orig_message = str(exc.orig).lower() if exc.orig else str(exc).lower()
+
+            if "token_jti" in orig_message and "unique constraint" in orig_message:
+                raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+            else:
+                raise FormValidationError(
+                    errors={"token_jti": f"Unexpected integrity error: {orig_message} " + orig_message}
+                )
 
         return super().handle_exception(exc)
 
