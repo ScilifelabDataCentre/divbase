@@ -2,14 +2,6 @@ name: Build and Push images to GitHub Container Registry
 # The logic for settings Docker image tags is in ./scripts/ci/set_docker_tag.sh
 
 on:
-#   push:
-#     # Tag = commit hash
-#     branches:
-#       - main 
-#     paths-ignore:
-#       - 'README.md'
-#       - 'docs/**'
-#       - '.gitignore'
   release:
     # Tag = release version
     types: [published]
@@ -68,4 +60,5 @@ jobs:
             file: ./docker/${{ matrix.dockerfile }}
             tags: |
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ steps.set-tag.outputs.tag }}
+                ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ github.sha }}
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:latest

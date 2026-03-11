@@ -1,0 +1,15 @@
+name: divbase-tests-ci # Used by GH actions runner, to not rebuild images already built and pushed to GHCR in a diff action. 
+services:
+  worker-quick: # image names provided by GH actions workflow via env vars
+    image: ${DIVBASE_WORKER_IMAGE}
+    # Using !reset null completely removes the build instructions from the base file
+    build: !reset null 
+  worker-long:
+    image: ${DIVBASE_WORKER_IMAGE}
+    build: !reset null
+  db-migrator:
+    image: ${DIVBASE_FASTAPI_IMAGE}
+    build: !reset null
+  fastapi:
+    image: ${DIVBASE_FASTAPI_IMAGE}
+    build: !reset null

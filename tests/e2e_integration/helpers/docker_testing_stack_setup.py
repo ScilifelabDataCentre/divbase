@@ -1,21 +1,32 @@
 """
 Helper module to set up and tear down the docker compose stack used for testing purposes.
+
+When running tests in GH actions we don't need to build the images, so we supply an additional override compose file to do this
+And update the compose commands accordingly (e.g. drop the --build flag).
 """
 
 import json
+import os
 import shlex
 import subprocess
 import time
 
 DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
-DOCKER_COMPOSE_OVERIIDE_FILE = "docker/divbase_compose.tests.yaml"
-COMPOSE_COMMAND = shlex.split(
-    f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} up -d --build"
-)
+DOCKER_COMPOSE_OVERIDE_FILE = "docker/divbase_compose.tests.yaml"
+DOCKER_COMPOSE_CI_OVERRIDE = "docker/divbase_compose.tests.ci.yaml"
 
-STOP_COMMAND = shlex.split(f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIIDE_FILE} down -v")
+GH_ACTION_RUN = os.getenv("GITHUB_ACTIONS_RUNNER") == "true"
+compose_command_prefix = f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIDE_FILE} "
+stop_command_prefix = f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIDE_FILE} "
 
-TESTING_STACK_NAME = "divbase-tests"
+if GH_ACTION_RUN:
+    TESTING_STACK_NAME = "divbase-tests-ci"
+    COMPOSE_COMMAND = shlex.split(compose_command_prefix + f"-f {DOCKER_COMPOSE_CI_OVERRIDE} up -d")
+    STOP_COMMAND = shlex.split(stop_command_prefix + f"-f {DOCKER_COMPOSE_CI_OVERRIDE} down -v")
+else:  # local dev pytest run
+    TESTING_STACK_NAME = "divbase-tests"
+    COMPOSE_COMMAND = shlex.split(compose_command_prefix + "up -d --build")
+    STOP_COMMAND = shlex.split(stop_command_prefix + "down -v")
 
 
 def start_compose_stack() -> None:
