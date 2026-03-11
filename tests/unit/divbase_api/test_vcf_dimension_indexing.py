@@ -4,8 +4,11 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
+from divbase_api.worker.tasks import _remove_stale_dimensions_db_entries
 from divbase_api.worker.vcf_dimension_indexing import VCFDimensionCalculator, VCFDimensions
+from divbase_lib.exceptions import TaskUserError
 
 
 @pytest.fixture
@@ -197,3 +200,91 @@ class TestCalculateDimensions:
         assert result.sample_count == 2
         assert result.scaffolds == ["chr1", "chr2", "chr3"]
         assert result.variants == 42
+
+
+class TestStaleDimensionsCleanup:
+    def test_remove_stale_dimensions_no_stale_entries_returns_empty_list(self):
+        """Test that for the case of no stale entrie, helper function returns an empty list."""
+        db = MagicMock()
+
+        with (
+            patch("divbase_api.worker.tasks.delete_vcf_metadata_batch") as mock_delete_indexed,
+            patch("divbase_api.worker.tasks.delete_skipped_vcf_batch") as mock_delete_skipped,
+        ):
+            deleted = _remove_stale_dimensions_db_entries(
+                indexed_vcf_keys={"a.vcf.gz"},
+                skipped_vcf_keys={"b.vcf.gz"},
+                current_vcf_files_in_bucket={"a.vcf.gz", "b.vcf.gz"},
+                project_id=1,
+                db=db,
+            )
+
+        assert deleted == []
+        mock_delete_indexed.assert_not_called()
+        mock_delete_skipped.assert_not_called()
+
+    def test_remove_stale_dimensions_deletes_stale_indexed_and_skipped(self):
+        """Test that stale indexed and skipped entries are both deleted by the helper function."""
+        db = MagicMock()
+
+        with (
+            patch("divbase_api.worker.tasks.delete_vcf_metadata_batch") as mock_delete_indexed,
+            patch("divbase_api.worker.tasks.delete_skipped_vcf_batch") as mock_delete_skipped,
+        ):
+            deleted = _remove_stale_dimensions_db_entries(
+                indexed_vcf_keys={"keep.vcf.gz", "old_indexed.vcf.gz"},
+                skipped_vcf_keys={"old_skipped.vcf.gz"},
+                current_vcf_files_in_bucket={"keep.vcf.gz"},
+                project_id=7,
+                db=db,
+            )
+
+        assert set(deleted) == {"old_indexed.vcf.gz", "old_skipped.vcf.gz"}
+        mock_delete_indexed.assert_called_once_with(db=db, vcf_file_s3_key_batch=["old_indexed.vcf.gz"], project_id=7)
+        mock_delete_skipped.assert_called_once_with(db=db, vcf_file_s3_key_batch=["old_skipped.vcf.gz"], project_id=7)
+
+    def test_remove_stale_dimensions_raises_task_user_error_when_indexed_delete_fails(self):
+        """Test that indexed cleanup DB errors fail with TaskUserError."""
+        db = MagicMock()
+
+        with (
+            patch(
+                "divbase_api.worker.tasks.delete_vcf_metadata_batch",
+                side_effect=SQLAlchemyError("db down"),
+            ) as mock_delete_indexed,
+            patch("divbase_api.worker.tasks.delete_skipped_vcf_batch") as mock_delete_skipped,
+            pytest.raises(TaskUserError, match="Failed to clean up stale VCF dimensions entries"),
+        ):
+            _remove_stale_dimensions_db_entries(
+                indexed_vcf_keys={"old_indexed.vcf.gz"},
+                skipped_vcf_keys={"old_skipped.vcf.gz"},
+                current_vcf_files_in_bucket=set(),
+                project_id=99,
+                db=db,
+            )
+
+        mock_delete_indexed.assert_called_once()
+        mock_delete_skipped.assert_not_called()
+
+    def test_remove_stale_dimensions_raises_task_user_error_when_skipped_delete_fails(self):
+        """Test that skipped cleanup DB errors also fail with TaskUserError."""
+        db = MagicMock()
+
+        with (
+            patch("divbase_api.worker.tasks.delete_vcf_metadata_batch") as mock_delete_indexed,
+            patch(
+                "divbase_api.worker.tasks.delete_skipped_vcf_batch",
+                side_effect=SQLAlchemyError("db issue"),
+            ) as mock_delete_skipped,
+            pytest.raises(TaskUserError, match="Failed to clean up stale VCF dimensions entries"),
+        ):
+            _remove_stale_dimensions_db_entries(
+                indexed_vcf_keys={"old_indexed.vcf.gz"},
+                skipped_vcf_keys={"old_skipped.vcf.gz"},
+                current_vcf_files_in_bucket=set(),
+                project_id=42,
+                db=db,
+            )
+
+        mock_delete_indexed.assert_called_once()
+        mock_delete_skipped.assert_called_once()
