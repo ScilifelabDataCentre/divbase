@@ -13,7 +13,7 @@ import time
 
 DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
 DOCKER_COMPOSE_OVERIDE_FILE = "docker/divbase_compose.tests.yaml"
-DOCKER_COMPOSE_CI_OVERRIDE = "docker/divbase_compose.ci.yaml"
+DOCKER_COMPOSE_CI_OVERRIDE = "docker/divbase_compose.tests.ci.yaml"
 
 GH_ACTION_RUN = os.getenv("GITHUB_ACTIONS_RUNNER") == "true"
 compose_command_prefix = f"docker compose -f {DOCKER_COMPOSE_FILE} -f {DOCKER_COMPOSE_OVERIDE_FILE} "
