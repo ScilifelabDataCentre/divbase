@@ -6,7 +6,7 @@ import ast
 import gzip
 import os
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -15,7 +15,15 @@ from typer.testing import CliRunner
 
 from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 from divbase_api.services.s3_client import create_s3_file_manager
-from divbase_api.worker.crud_dimensions import delete_vcf_metadata, get_vcf_metadata_by_project
+from divbase_api.worker.crud_dimensions import (
+    SkippedVCFData,
+    create_or_update_skipped_vcf,
+    delete_skipped_vcf_batch,
+    delete_vcf_metadata,
+    delete_vcf_metadata_batch,
+    get_skipped_vcfs_by_project_worker,
+    get_vcf_metadata_by_project,
+)
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
@@ -191,6 +199,72 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
             )
 
 
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
+    mock_create_s3_manager,
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test for the case where:
+    1. A user uploads VCFs and runs dimensions update (files get indexed),
+    2. Then deletes all VCFs from the bucket,
+    3. Then runs dimensions update again.
+
+    This should result in the stale DB entries being deleted and a message indicating the files were deleted being sent in the task results.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    # First run: index VCFs normally using real MinIO
+    first_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    assert first_result["status"] == "completed"
+    indexed_files = first_result.get("VCF_files_added") or []
+    assert indexed_files, "Expected at least one indexed VCF file from the first run"
+
+    # Verify the index has entries in the DB before the second run
+    vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert len(vcf_dimensions_before.get("vcf_files", [])) > 0, "Expected DB to have indexed entries"
+
+    # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
+    mock_empty_s3 = MagicMock()
+    mock_empty_s3.list_files.return_value = []
+    mock_empty_s3.latest_version_of_all_files.return_value = {}
+    mock_create_s3_manager.side_effect = lambda url=None: mock_empty_s3
+
+    # Regression test: Assert that NoVCFFilesFoundError is not raised when stale index entries exist
+    # (earlier versions of the code raised NoVCFFilesFoundError before cleaning up the index)
+    try:
+        second_result = update_vcf_dimensions_task(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+    except NoVCFFilesFoundError as e:
+        raise AssertionError("NoVCFFilesFoundError should not be raised when cleaning up stale index entries") from e
+
+    assert second_result["status"] == "completed", f"Expected completed status, got: {second_result}"
+    assert second_result["VCF_files_added"] is None, "Expected no new files indexed"
+    assert second_result["VCF_files_skipped"] is None, "Expected no skipped files"
+    deleted_files = second_result.get("VCF_files_deleted") or []
+    assert len(deleted_files) > 0, "Expected previously indexed files to be reported as deleted"
+    for file in indexed_files:
+        assert file in deleted_files, f"Expected {file} to be in VCF_files_deleted: {deleted_files}"
+
+    # DB index should now be empty for this project
+    db_session_sync.expire_all()
+    vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions_after.get("vcf_files") == [], (
+        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.get('vcf_files')}"
+    )
+
+
 def test_remove_VCF_and_update_dimension_entry(
     CONSTANTS,
     db_session_sync,
@@ -207,6 +281,83 @@ def test_remove_VCF_and_update_dimension_entry(
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
     assert vcf_file not in filenames
+
+
+def test_delete_vcf_metadata_batch(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test that delete_vcf_metadata_batch removes the specified entries and leaves others intact.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    first_result = run_update_dimensions(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+    indexed_files = first_result.get("VCF_files_added", [])
+    assert len(indexed_files) >= 2, "Need at least 2 indexed files for this test"
+
+    batch_to_delete = indexed_files[:2]
+    remaining_files = indexed_files[2:]
+
+    delete_vcf_metadata_batch(db=db_session_sync, vcf_file_s3_key_batch=batch_to_delete, project_id=project_id)
+
+    db_session_sync.expire_all()
+    updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+
+    for vcf_file in batch_to_delete:
+        assert vcf_file not in filenames, f"Expected {vcf_file} to be deleted, but found in: {filenames}"
+
+    for vcf_file in remaining_files:
+        assert vcf_file in filenames, f"Expected {vcf_file} to remain, but missing from: {filenames}"
+
+
+def test_delete_skipped_vcf_batch(
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+):
+    """
+    Test that delete_skipped_vcf_batch removes the specified skipped VCF entries and leaves others intact.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_id = project_map[project_name]
+
+    skipped_files = ["skipped_test_1.vcf.gz", "skipped_test_2.vcf.gz", "skipped_test_3.vcf.gz"]
+    for vcf_file in skipped_files:
+        create_or_update_skipped_vcf(
+            db=db_session_sync,
+            skipped_vcf_data=SkippedVCFData(
+                vcf_file_s3_key=vcf_file,
+                project_id=project_id,
+                s3_version_id="test-version-id",
+                skip_reason="test skip reason",
+            ),
+        )
+
+    skipped_before = get_skipped_vcfs_by_project_worker(db=db_session_sync, project_id=project_id)
+    for vcf_file in skipped_files:
+        assert vcf_file in skipped_before, f"Expected {vcf_file} to be present before batch delete"
+
+    batch_to_delete = skipped_files[:2]
+    remaining = skipped_files[2:]
+
+    delete_skipped_vcf_batch(db=db_session_sync, vcf_file_s3_key_batch=batch_to_delete, project_id=project_id)
+
+    skipped_after = get_skipped_vcfs_by_project_worker(db=db_session_sync, project_id=project_id)
+
+    for vcf_file in batch_to_delete:
+        assert vcf_file not in skipped_after, f"Expected {vcf_file} to be deleted, but still present"
+
+    for vcf_file in remaining:
+        assert vcf_file in skipped_after, f"Expected {vcf_file} to remain, but missing"
 
 
 @patch("divbase_api.worker.tasks.create_s3_file_manager")
@@ -824,3 +975,106 @@ def test_validate_metadata_file_nonexistent(
 
     assert cli_result.exit_code == 2, "Expected exit code 2 for nonexistent file (Typer path validation)"
     assert "does not exist" in cli_result.output.lower(), "Expected error message about file not existing"
+
+
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_cleans_up_csi_index_files_from_worker(
+    mock_create_s3_manager,
+    CONSTANTS,
+    project_map,
+    tmp_path,
+    monkeypatch,
+):
+    """
+    Test that CSI index files created during dimension calculation are deleted from the worker
+    filesystem after update_vcf_dimensions_task completes.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    monkeypatch.chdir(tmp_path)
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    result = update_vcf_dimensions_task(
+        bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+    )
+
+    assert result["status"] == "completed"
+
+    vcf_files_remaining = list(tmp_path.glob("*.vcf")) + list(tmp_path.glob("*.vcf.gz"))
+    assert vcf_files_remaining == [], (
+        f"Expected all VCF files to be deleted from worker after task, but found: {vcf_files_remaining}"
+    )
+
+    csi_files_remaining = list(tmp_path.glob("*.csi"))
+    assert csi_files_remaining == [], (
+        f"Expected all CSI index files to be deleted from worker after task, but found: {csi_files_remaining}"
+    )
+
+
+@patch("divbase_api.worker.tasks.create_s3_file_manager")
+def test_update_dimensions_indexes_uncompressed_vcf(
+    mock_create_s3_manager,
+    CONSTANTS,
+    db_session_sync,
+    project_map,
+    tmp_path,
+):
+    """
+    Test that update_vcf_dimensions_task correctly indexes a plain uncompressed .vcf file.
+
+    bcftools index --csi requires bgzipped input, so calculate_dimensions bgzips plain .vcf
+    files to a temp .vcf.gz internally before indexing, then cleans up the temp files.
+    This tests that the full indexing pipeline works end-to-end for uncompressed VCFs.
+    """
+    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    plain_vcf_name = "test_uncompressed_plain.vcf"
+    vcf_path = tmp_path / plain_vcf_name
+    vcf_content = (
+        "##fileformat=VCFv4.2\n"
+        "##contig=<ID=1,length=22053058>\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample1\tsample2\n"
+        "1\t17504018\t.\tC\tA\t.\tPASS\t.\tGT\t0/1\t0/0\n"
+        "1\t22053057\t.\tG\tA\t.\tPASS\t.\tGT\t1/1\t0/1\n"
+    )
+    vcf_path.write_text(vcf_content)
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(
+        to_upload={plain_vcf_name: vcf_path},
+        bucket_name=bucket_name,
+    )
+
+    try:
+        result = update_vcf_dimensions_task(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        assert result["status"] == "completed"
+        indexed_files = result.get("VCF_files_added") or []
+        assert plain_vcf_name in indexed_files, f"Expected plain .vcf file to be indexed, got: {indexed_files}"
+
+        # Verify the dimensions were stored correctly in the DB
+        db_session_sync.expire_all()
+        vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+        all_indexed_keys = [entry["vcf_file_s3_key"] for entry in vcf_dimensions.get("vcf_files", [])]
+        assert plain_vcf_name in all_indexed_keys
+
+        entry = next(e for e in vcf_dimensions["vcf_files"] if e["vcf_file_s3_key"] == plain_vcf_name)
+        assert entry["sample_count"] == 2
+        assert entry["variant_count"] == 2
+        assert "1" in entry["scaffolds"]
+        assert "sample1" in entry["samples"]
+        assert "sample2" in entry["samples"]
+    finally:
+        # Remove the uploaded file from the bucket to avoid polluting subsequent tests.
+        # auto_clean_dimensions_entries_for_all_projects only cleans the DB, not the bucket.
+        s3_file_manager.soft_delete_objects(objects=[plain_vcf_name], bucket_name=bucket_name)
