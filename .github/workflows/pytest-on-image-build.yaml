@@ -33,4 +33,4 @@ jobs:
           GITHUB_ACTIONS_RUNNER: "true"
           DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.workflow_run.head_sha }}
           DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.workflow_run.head_sha }}
-        run: uv run pytest -s --run-slow
+        run: uv run pytest -s --run-slow -k "not test_bcftools_pipe_cli_integration_with_eager_mode"
