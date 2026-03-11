@@ -4,7 +4,7 @@ repos:
   hooks:
   - id: check-yaml
     args: [--allow-multiple-documents]
-    exclude: ^docker/.*tests\.yaml$ #fails due to !override, skip for now 
+    exclude: divbase_compose\.tests\.(ci\.)?yaml$
   - id: check-json
   - id: check-added-large-files
   - id: check-merge-conflict
