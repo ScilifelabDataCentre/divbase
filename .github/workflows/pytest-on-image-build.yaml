@@ -4,6 +4,11 @@ on:
     workflows: ["Build and Push images to GitHub Container Registry"]
     types:
       - completed
+  workflow_dispatch: # TODO - temp for debugging, so don't need to rebuild images.
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test against (e.g. a commit SHA or release tag)'
+        required: true
 
 jobs:
   run-pytest-on-newly-built-images:
@@ -11,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.image_tag }} # TODO - temp for debugging. checkout at same state as images built with.
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -23,7 +30,7 @@ jobs:
 
       - name: Pull new images built in the previous workflow run
         env:
-          TAG: ${{ github.event.workflow_run.head_sha }}
+          TAG: ${{ github.event.inputs.image_tag }} # TODO swap back to ${{ github.event.workflow_run.head_sha }}
         run: |
           docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:$TAG
           docker pull ghcr.io/scilifelabdatacentre/divbase-worker:$TAG
@@ -31,6 +38,6 @@ jobs:
       - name: Run pytest including slow tests
         env: 
           GITHUB_ACTIONS_RUNNER: "true"
-          DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.workflow_run.head_sha }}
-          DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.workflow_run.head_sha }}
-        run: uv run pytest -s --run-slow -k "not test_bcftools_pipe_cli_integration_with_eager_mode"
+          DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.inputs.image_tag }} # TODO swap back to ${{ github.event.workflow_run.head_sha }}
+          DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.inputs.image_tag }} # TODO swap back to ${{ github.event.workflow_run.head_sha }}
+        run: FORCE_TERMINAL=1 COLUMNS=1000 uv run pytest --run-slow
