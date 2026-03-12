@@ -7,6 +7,7 @@ import datetime
 import logging
 import os
 import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ class BCFToolsInput:
     sample_and_filename_subset: list[dict[str, str]]
     sampleIDs: list[str]
     filenames: list[str]
+    auto_sample_injection: bool = True
 
 
 def run_sidecar_metadata_query(
@@ -202,10 +204,14 @@ class BcftoolsQueryManager:
         """
         filenames = bcftools_inputs.get("filenames")
         sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
+        auto_sample_injection = bcftools_inputs.get("auto_sample_injection", True)
 
         if not command or command.strip() == ";" or command.strip() == "":
             raise BcftoolsPipeEmptyCommandError()
         command_list = command.split(";")
+        pipe_has_explicit_sample_option = any(
+            self._command_has_explicit_sample_option(cmd.strip()) for cmd in command_list if cmd.strip()
+        )
         commands_config_structure = []
         current_inputs = filenames
 
@@ -232,6 +238,8 @@ class BcftoolsQueryManager:
                 "input_files": current_inputs,
                 "sample_subset": sample_and_filename_subset,
                 "output_temp_files": output_temp_files,
+                "pipe_has_explicit_sample_option": pipe_has_explicit_sample_option,
+                "auto_sample_injection": auto_sample_injection,
             }
 
             commands_config_structure.append(command_details)
@@ -297,6 +305,12 @@ class BcftoolsQueryManager:
         For each processed file, a temporary output file is created, which is then used as input for the next command
         in the outer loop. Each temporary output file is indexed with a .csi index file using ensure_csi_index().
 
+        Automatically inserts resolved samples as the first subsetting step if there is no user-submitted view -s option
+        or view --samples in the command.
+
+        For instance, if the user submitted the command: "view -r chr1:1-1000" and the samples S1 and S2 are in the file,
+        the command will be automatically converted to "view -s S1,S2 -r chr1:1-1000".
+
         Returns a tuple of (output_temp_files, metrics) where metrics contains accumulated CPU and memory stats
         for all bcftools subprocesses executed in this command.
         """
@@ -318,9 +332,23 @@ class BcftoolsQueryManager:
                 if record["Filename"] == file:
                     samples_in_file.append(record["Sample_ID"])
 
-            samples_in_file_bcftools_formatted = ",".join(samples_in_file)
+            # Automatically insert resolved samples as the first subsetting step only when there is no explicit sample in the user-submitted command
+            cmd_with_samples = command.strip()  # Use user-submitted command as starting point
 
-            cmd_with_samples = command.strip().replace("SAMPLES", samples_in_file_bcftools_formatted)
+            # Default behavior: if no user-submitted view -S option, insert a view -S command with the resolved samplesat the beginning of the pipe
+            # If there is a user-submitted view -S option, do not insert the resolved samples at the beginning of the pipe.
+            if (
+                cmd_config["auto_sample_injection"]
+                and cmd_config["counter"] == 0
+                and samples_in_file
+                and not cmd_config["pipe_has_explicit_sample_option"]
+            ):
+                samples_in_file_bcftools_formatted = ",".join(samples_in_file)
+                if cmd_with_samples == "view":
+                    cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted}"
+                elif cmd_with_samples.startswith("view "):
+                    cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted} {cmd_with_samples[5:]}"
+
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
@@ -409,6 +437,26 @@ class BcftoolsQueryManager:
         }
 
         return output_temp_files, metrics
+
+    def _command_has_explicit_sample_option(self, command: str) -> bool:
+        """
+        Check if a single bcftools command contains user-submittedsample selection options.
+        Used by run_current_command() determine if automatic view -S with the resolved samples should be used as the first command in the pipe or not.
+
+        Note: -S/--samples-file is not supported and blocked earlier in tasks.py.
+        """
+        args = shlex.split(command)
+
+        for arg in args:
+            if arg in ("-s", "--samples"):
+                return True
+            if arg.startswith("--samples="):
+                return True
+            # Support short-option attached forms like '-sS1,S2'
+            if arg.startswith("-s") and arg != "-s" and not arg.startswith("--"):
+                return True
+
+        return False
 
     def run_bcftools(self, command: str) -> subprocess.Popen:
         """

@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import os
 import re
+import shlex
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -23,7 +24,11 @@ from divbase_api.exceptions import (
     VCFDimensionsEntryMissingError,
 )
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
-from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
+from divbase_api.services.queries import (
+    BCFToolsInput,
+    BcftoolsQueryManager,
+    run_sidecar_metadata_query,
+)
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
     SkippedVCFData,
@@ -283,6 +288,14 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
+    if _command_uses_bcftools_sample_file_option(command):
+        raise TaskUserError(
+            "Do not use bcftools sample-file options in '--command' (-S/--samples-file). "
+            "Use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project. "
+            "You may still use bcftools '-s/--samples' in '--command' if you want explicit control where in the bcftools pipe that samples are subsetted."
+            "sample selection happens."
+        )
+
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
     with SyncSessionLocal() as db:
@@ -375,6 +388,8 @@ def bcftools_pipe_task(
             sample_and_filename_subset=sample_and_filename_subset,
             sampleIDs=resolved_sample_mode_results.unique_sample_ids,
             filenames=files_to_download,
+            # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
+            auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
         )
     )
 
@@ -694,6 +709,28 @@ def _determine_sample_selection_mode(tsv_filter: str | None, samples: list[str] 
     return VCFQuerySampleSelectionMode.ALL_SAMPLES
 
 
+def _command_uses_bcftools_sample_file_option(command: str) -> bool:
+    """
+    Detect sample-file options in user-submitted bcftools command pipe.
+    Include the whitepsace sample file forms allowed in bcftools: '-S file.txt' and '-Sfile.txt'
+    Users should use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project.
+    """
+    args = shlex.split(command)
+
+    for arg in args:
+        if arg == "-S":
+            return True
+        if arg.startswith("-S") and arg != "-S" and not arg.startswith("--"):
+            return True
+
+        if arg in ("--samples-file", "--sample-file"):
+            return True
+        if arg.startswith("--samples-file=") or arg.startswith("--sample-file="):
+            return True
+
+    return False
+
+
 def _resolve_inputs_for_sample_metadata_mode(
     metadata_tsv_name: str,
     bucket_name: str,
@@ -733,27 +770,43 @@ def _resolve_inputs_for_cli_samples_mode(
     Uses already-fetched vcf_dimensions_data to map each requested sample to its VCF file — no extra DB call needed.
     For the mode: VCFQuerySampleSelectionMode.CLI_SAMPLES
     """
-    samples_set = set(samples)
-    sample_and_filename_subset = []
-    files_to_download = []
+    requested_samples = list(dict.fromkeys(samples))
+    requested_set = set(requested_samples)
+    files_to_download: list[str] = []
+    sample_and_filename_subset: list[dict[str, str]] = []
+    matched_samples: set[str] = set()
 
-    for vcf_entry in vcf_dimensions_data["vcf_files"]:
+    for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
         filename = vcf_entry["vcf_file_s3_key"]
         for sample_id in vcf_entry.get("samples", []):
-            if sample_id in samples_set:
+            if sample_id in requested_set:
                 sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+                matched_samples.add(sample_id)
                 if filename not in files_to_download:
                     files_to_download.append(filename)
+
+    missing_samples = [sample_id for sample_id in requested_samples if sample_id not in matched_samples]
+
+    if missing_samples:
+        raise TaskUserError(
+            f"The following sample IDs were not found in the project's dimensions index: {', '.join(missing_samples)}."
+        )
+
+    matched_sample_ids = []
+    matched_sample_ids_set = {entry["Sample_ID"] for entry in sample_and_filename_subset}
+    for sample_id in samples:
+        if sample_id in matched_sample_ids_set and sample_id not in matched_sample_ids:
+            matched_sample_ids.append(sample_id)
 
     return SampleModeResult(
         files_to_download=files_to_download,
         sample_and_filename_subset=sample_and_filename_subset,
-        unique_sample_ids=samples,
+        unique_sample_ids=matched_sample_ids,
         metadata_path=None,
     )
 
 
-def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data=dict) -> SampleModeResult:
+def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: dict) -> SampleModeResult:
     """
     Resolve sample and file inputs for the bcftools pipeline when all samples in the project should be included.
     For the mode: VCFQuerySampleSelectionMode.ALL_SAMPLES
