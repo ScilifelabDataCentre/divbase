@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -35,4 +36,4 @@ jobs:
           GITHUB_ACTIONS_RUNNER: "true"
           DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.workflow_run.head_sha }}
           DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.workflow_run.head_sha }}
-        run: uv run pytest -s tests/e2e_integration/cli_commands/test_file_cli.py # TODO temp test on a subset
+        run: uv run pytest -s --run-slow
