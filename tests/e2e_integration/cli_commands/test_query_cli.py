@@ -156,7 +156,7 @@ def test_bcftools_pipe_query(
     user_id = 1
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    arg_command = "view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -164,15 +164,68 @@ def test_bcftools_pipe_query(
     assert "Job submitted" in result.stdout
 
     user_task_id = result.stdout.strip().split()[-1]
-    _ = wait_for_task_complete(user_task_id=user_task_id)
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
 
     command = f"files ls --project {project_name} --include-results-files"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert any(QUERY_RESULTS_FILE_PREFIX in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
-        f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output"
+    assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
+        f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
     )
+
+
+def test_bcftools_pipe_query_direct_samples_mode(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test running a bcftools pipe query using direct sample IDs from CLI."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    arg_command = "view -r 21:15000000-25000000"
+    command = (
+        f"query bcftools-pipe --samples '5a_HOM-I13,1b_HOM-G58' --command '{arg_command}' --project {project_name} "
+    )
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Job submitted" in result.stdout
+    user_task_id = result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+
+
+def test_bcftools_pipe_query_all_samples_mode(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test running a bcftools pipe query without --tsv-filter/--samples (all-samples mode)."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    arg_command = "view -r 21:15000000-25000000"
+    command = f"query bcftools-pipe --command '{arg_command}' --project {project_name} "
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Job submitted" in result.stdout
+    user_task_id = result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
 
 
 def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_runs(
@@ -194,7 +247,7 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    arg_command = "view -r 21:15000000-25000000"
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
 
     first_result = runner.invoke(app, command)
@@ -216,7 +269,7 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
 def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_user_with_existing_config):
     project_name = "non_existent_project"
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES"
+    arg_command = "view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
@@ -232,6 +285,8 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
         ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command"),
         # empty command string
         ("DEFAULT", "DEFAULT", "", "Empty"),
+        # sample-file options in --command are rejected early by task guard
+        ("DEFAULT", "DEFAULT", "view -S samples.txt", "Do not use bcftools sample-file options"),
     ],
 )
 def test_bcftools_pipe_query_errors(
@@ -251,7 +306,7 @@ def test_bcftools_pipe_query_errors(
     if "DEFAULT" in tsv_filter:
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
-        command = "view -s SAMPLES"
+        command = "view -r 21:15000000-25000000"
 
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -297,7 +352,7 @@ def test_get_task_status_by_task_id(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    arg_command = "view -r 21:15000000-25000000"
 
     command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     first_task_result = runner.invoke(app, command)
@@ -391,7 +446,7 @@ def test_query_exits_when_dimensions_are_outdated(
 
             params = {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "bucket_name": bucket_name,
                 "project_id": project_id,
@@ -633,7 +688,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 "user_id": 1,
@@ -649,7 +704,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 "user_id": 1,
@@ -663,7 +718,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Only one file remained after concatenation, renamed this file to",
                 f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
-                "Cleaning up 14 temporary files",
             ],
             [],
         ),
@@ -671,7 +725,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 31,34,36,321,324",
+                "command": "view -r 31,34,36,321,324",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
@@ -690,7 +744,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
@@ -718,7 +772,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Portugal",
-                "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+                "command": "view -r 21:15000000-25000000",
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "project_name": "query-project",
                 # project_id is added dynamically in the tests
@@ -735,7 +789,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Merged all temporary files into 'merged_unsorted_",
                 f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
-                "Cleaning up 7 temporary files",
             ],
             [],
         ),
@@ -743,7 +796,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
@@ -765,7 +818,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 12 temporary files",
             ],
             [],
         ),
@@ -773,7 +825,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf,Iceland",
-                "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
+                "command": "view -r 1,4,6,8,13,18,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
@@ -798,7 +850,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 19 temporary files",
             ],
             [],
         ),

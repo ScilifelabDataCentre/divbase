@@ -14,7 +14,7 @@ from divbase_lib.exceptions import (
 @pytest.mark.unit
 def test_build_commands_config_single_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config correctly structures a configuration for a single command."""
-    command = "view -s SAMPLES"
+    command = "view -r 21:15000000-25000000"
 
     result = bcftools_manager.build_commands_config(command, example_sidecar_metadata_inputs_outputs)
 
@@ -42,12 +42,14 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
             )
 
     assert len(cmd_config["output_temp_files"]) == len(example_sidecar_metadata_inputs_outputs["filenames"])
+    assert cmd_config["auto_sample_injection"] is True
+    assert cmd_config["pipe_has_explicit_sample_option"] is False
 
 
 @pytest.mark.unit
 def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config correctly structures a configuration for two commands."""
-    commands = "view -s SAMPLES; view -r 21:15000000-25000000"
+    commands = "view -r 21:15000000-25000000; view -G"
 
     result = bcftools_manager.build_commands_config(commands, example_sidecar_metadata_inputs_outputs)
 
@@ -56,7 +58,7 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
 
     expected_configs = [
         {
-            "command": "view -s SAMPLES",
+            "command": "view -r 21:15000000-25000000",
             "counter": 0,
             "input_files": example_sidecar_metadata_inputs_outputs["filenames"],
             "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
@@ -64,7 +66,7 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
             "output_files_count": len(example_sidecar_metadata_inputs_outputs["filenames"]),
         },
         {
-            "command": "view -r 21:15000000-25000000",
+            "command": "view -G",
             "counter": 1,
             "input_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
             "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
@@ -97,6 +99,55 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
                     assert filename.startswith("temp_subset_") and filename.endswith(".bcf"), (
                         f"Command {i + 1}: {file_key} file {filename} does not match expected pattern"
                     )
+        assert cmd_config["auto_sample_injection"] is True
+        assert cmd_config["pipe_has_explicit_sample_option"] is False
+
+
+@pytest.mark.unit
+def test_build_commands_config_detects_explicit_sample_option(
+    bcftools_manager, example_sidecar_metadata_inputs_outputs
+):
+    """Test that explicit -s/--samples in the user command is detected for the whole pipe."""
+
+    commands = "view -r 21:15000000-25000000; view --samples SAMPLE1,SAMPLE2"
+
+    result = bcftools_manager.build_commands_config(commands, example_sidecar_metadata_inputs_outputs)
+
+    assert len(result) == 2
+    assert all(cmd["pipe_has_explicit_sample_option"] is True for cmd in result)
+
+
+@pytest.mark.unit
+def test_build_commands_config_respects_auto_sample_injection_flag(
+    bcftools_manager, example_sidecar_metadata_inputs_outputs
+):
+    """Test that auto sample injection can be disabled (all-samples mode behavior)."""
+
+    bcftools_inputs = {
+        **example_sidecar_metadata_inputs_outputs,
+        "auto_sample_injection": False,
+    }
+    result = bcftools_manager.build_commands_config("view -r 21:15000000-25000000", bcftools_inputs)
+
+    assert len(result) == 1
+    assert result[0]["auto_sample_injection"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "command,expected",
+    [
+        ("view -s S1,S2", True),
+        ("view --samples S1,S2", True),
+        ("view --samples=S1,S2", True),
+        ("view -sS1,S2", True),
+        ("view -S samples.txt", False),
+        ("view --samples-file samples.txt", False),
+        ("view -r 1:1000-2000", False),
+    ],
+)
+def test_command_has_explicit_sample_option(bcftools_manager, command, expected):
+    assert bcftools_manager._command_has_explicit_sample_option(command) is expected
 
 
 @pytest.mark.unit
@@ -104,43 +155,43 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
     """Test that build_commands_config handles edge cases correctly with valid bcftools commands."""
 
     # Case 1: Command with special characters
-    special_char_cmd = "view -s SAMPLES; view --min-af 0.05 --max-af 0.95; view -i 'GT=\"het\"'"
+    special_char_cmd = "view -r 1:1000-2000; view --min-af 0.05 --max-af 0.95; view -i 'GT=\"het\"'"
     result = bcftools_manager.build_commands_config(special_char_cmd, example_sidecar_metadata_inputs_outputs)
 
     assert len(result) == 3, "Should create three command configurations"
-    assert result[0]["command"] == "view -s SAMPLES"
+    assert result[0]["command"] == "view -r 1:1000-2000"
     assert result[1]["command"] == "view --min-af 0.05 --max-af 0.95"
     assert result[2]["command"] == "view -i 'GT=\"het\"'"
 
     # Case 2: Empty command in the middle that should be skipped
-    empty_middle_cmd = "view -s SAMPLES;; view -i 'INFO/DP>10'"
+    empty_middle_cmd = "view -r 1:1000-2000;; view -i 'INFO/DP>10'"
     result = bcftools_manager.build_commands_config(empty_middle_cmd, example_sidecar_metadata_inputs_outputs)
     assert len(result) == 2, "Should create two command configurations (empty one is skipped)"
-    assert result[0]["command"] == "view -s SAMPLES"
+    assert result[0]["command"] == "view -r 1:1000-2000"
     assert result[1]["command"] == "view -i 'INFO/DP>10'"
 
     # Case 3: Commands with extra whitespace
-    whitespace_cmd = "  view -s SAMPLES  ;  view -G  "
+    whitespace_cmd = "  view -r 1:1000-2000  ;  view -G  "
     result = bcftools_manager.build_commands_config(whitespace_cmd, example_sidecar_metadata_inputs_outputs)
 
     assert len(result) == 2, "Should create two command configurations"
-    assert result[0]["command"] == "view -s SAMPLES", "Leading/trailing spaces should be stripped"
+    assert result[0]["command"] == "view -r 1:1000-2000", "Leading/trailing spaces should be stripped"
     assert result[1]["command"] == "view -G", "Leading/trailing spaces should be stripped"
 
     # Case 4: Command with quotation marks and complex filtering
-    quoted_cmd = "view -s \"SAMPLE1,SAMPLE2\"; view -r 1:1000-2000; view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
+    quoted_cmd = "view -r \"1:1000-2000\"; view -r 2:1000-2000; view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
     result = bcftools_manager.build_commands_config(quoted_cmd, example_sidecar_metadata_inputs_outputs)
 
     assert len(result) == 3, "Should create three command configurations"
-    assert result[0]["command"] == 'view -s "SAMPLE1,SAMPLE2"', "Quotes should be preserved"
-    assert result[1]["command"] == "view -r 1:1000-2000"
+    assert result[0]["command"] == 'view -r "1:1000-2000"', "Quotes should be preserved"
+    assert result[1]["command"] == "view -r 2:1000-2000"
     assert result[2]["command"] == "view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
 
     # Case 5: Command with multiple consecutive semicolons
-    multi_semicolon_cmd = "view -s SAMPLES;;;view -m2 -M2 -v snps"
+    multi_semicolon_cmd = "view -r 1:1000-2000;;;view -m2 -M2 -v snps"
     result = bcftools_manager.build_commands_config(multi_semicolon_cmd, example_sidecar_metadata_inputs_outputs)
     assert len(result) == 2, "Should create two command configurations (empty ones are skipped)"
-    assert result[0]["command"] == "view -s SAMPLES"
+    assert result[0]["command"] == "view -r 1:1000-2000"
     assert result[1]["command"] == "view -m2 -M2 -v snps", "Should select biallelic SNPs"
 
 
@@ -168,7 +219,7 @@ def test_bcftools_pipe_unsupported_command_error(bcftools_manager):
 def test_build_commands_config_invalid_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config rejects unsupported bcftools commands."""
 
-    merge_command = "view -s SAMPLES; merge -m none; view -i 'GT=\"het\"'"
+    merge_command = "view -r 1:1000-2000; merge -m none; view -i 'GT=\"het\"'"
 
     with pytest.raises(BcftoolsPipeUnsupportedCommandError) as exc_info:
         bcftools_manager.build_commands_config(merge_command, example_sidecar_metadata_inputs_outputs)
@@ -203,6 +254,18 @@ def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_m
     with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
         bcftools_manager.build_commands_config("  ;  ", example_sidecar_metadata_inputs_outputs)
     assert "Empty command provided" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@patch("os.path.exists", return_value=True)
+def test_execute_pipe_empty_command_raises_before_processing(
+    mock_exists_in_docker, bcftools_manager, example_sidecar_metadata_inputs_outputs
+):
+    """
+    Test that if execute_pipe gets an empty command string, it should fail immediately.
+    """
+    with pytest.raises(BcftoolsPipeEmptyCommandError):
+        bcftools_manager.execute_pipe("", example_sidecar_metadata_inputs_outputs, job_id=1)
 
 
 @pytest.mark.unit
@@ -326,6 +389,33 @@ def test_command_failure_async_inside_container(mock_exists_in_docker, mock_pope
 
     assert "view -h sample.vcf" in str(excinfo.value)
     assert "non-zero exit status 1" in str(excinfo.value)
+
+
+@pytest.mark.unit
+@patch("subprocess.Popen")
+@patch("os.path.exists")
+def test_run_bcftools_uses_shlex_split_for_quoted_args(mock_exists_in_docker, mock_popen, bcftools_manager):
+    """Test that quoted expressions passed as single commands/args to bcftools subprocess call."""
+
+    mock_exists_in_docker.return_value = True
+    mock_proc = MagicMock()
+    mock_popen.return_value = mock_proc
+
+    command = "view -i 'GT=\"het\"' sample.vcf"
+    result = bcftools_manager.run_bcftools(command)
+
+    assert result == mock_proc
+    mock_popen.assert_called_once_with(["bcftools", "view", "-i", 'GT="het"', "sample.vcf"])
+
+
+@pytest.mark.unit
+def test_run_bcftools_parse_error_raises_bcftools_command_error(bcftools_manager):
+    """Test that malformed shell-like command strings raise BcftoolsCommandError."""
+
+    with pytest.raises(BcftoolsCommandError) as excinfo:
+        bcftools_manager.run_bcftools('view -i \'GT="het" sample.vcf')
+
+    assert "Could not parse bcftools command arguments" in str(excinfo.value)
 
 
 @pytest.mark.unit
