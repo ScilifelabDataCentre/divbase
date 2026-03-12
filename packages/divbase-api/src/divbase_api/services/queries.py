@@ -349,6 +349,9 @@ class BcftoolsQueryManager:
                 elif cmd_with_samples.startswith("view "):
                     cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted} {cmd_with_samples[5:]}"
 
+            # Ensure source VCFs are indexed *before* command execution.
+            self.ensure_csi_index(file)
+
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
@@ -424,6 +427,7 @@ class BcftoolsQueryManager:
                     ) from None
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
+            # Ensure temporary output VCFs are indexed *after* command execution.
             self.ensure_csi_index(temp_file)
             self._log_file_size(temp_file)
 
