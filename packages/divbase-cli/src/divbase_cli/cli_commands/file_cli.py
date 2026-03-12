@@ -71,7 +71,7 @@ def list_files(
     prefix_filter: str | None = typer.Option(
         None,
         "--prefix",
-        "-p",
+        "-pre",
         help="Optional prefix to filter the listed files by name (only list files starting with this prefix).",
     ),
     include_results_files: bool = typer.Option(
