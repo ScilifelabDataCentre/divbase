@@ -14,6 +14,13 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Install bcftools # some test set up data calling bcftool directly
+        run: | 
+          git clone --recurse-submodules https://github.com/samtools/htslib.git
+          git clone https://github.com/samtools/bcftools.git
+          cd bcftools
+          make
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
