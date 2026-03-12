@@ -4,12 +4,18 @@ services:
     image: ${DIVBASE_WORKER_IMAGE}
     # Using !reset null completely removes the build instructions from the base file
     build: !reset null 
+    extra_hosts: # needed to connect to s3 which is on diff network 
+      - "host.docker.internal:host-gateway"
   worker-long:
     image: ${DIVBASE_WORKER_IMAGE}
     build: !reset null
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   db-migrator:
     image: ${DIVBASE_FASTAPI_IMAGE}
     build: !reset null
   fastapi:
     image: ${DIVBASE_FASTAPI_IMAGE}
     build: !reset null
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
