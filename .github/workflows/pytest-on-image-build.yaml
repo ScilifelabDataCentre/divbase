@@ -9,7 +9,10 @@ on:
       image_tag:
         description: 'Docker image tag to test against (e.g. a commit SHA or release tag)'
         required: true
-        
+  pull_request: # TODO - temp for debugging, so don't need to rebuild images.
+    branches:
+      - main
+
 jobs:
   run-pytest-on-newly-built-images:
     name: python
