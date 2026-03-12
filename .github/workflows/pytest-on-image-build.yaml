@@ -37,4 +37,4 @@ jobs:
           GITHUB_ACTIONS_RUNNER: "true"
           DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.workflow_run.head_sha }}
           DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.workflow_run.head_sha }}
-        run: uv run pytest -s --run-slow
+        run: FORCE_TERMINAL=1 COLUMNS=1000 uv run pytest --run-slow
