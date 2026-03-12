@@ -92,4 +92,7 @@ def wait_for_docker_stack_healthy(stack_name, timeout=120):
             return
         print("Waiting for containers to become healthy...")
         time.sleep(5)
+    print("\n--- TODO, temp debugging in gh actions ---")
+    subprocess.run(["docker", "compose", "-p", TESTING_STACK_NAME, "logs"])
+    subprocess.run(["docker", "compose", "-p", TESTING_STACK_NAME, "ps"])
     raise RuntimeError("Some containers failed to become healthy in time.")
