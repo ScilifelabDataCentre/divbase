@@ -62,5 +62,3 @@ jobs:
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ steps.set-tag.outputs.tag }}
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ github.sha }}
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:latest
-            cache-from: type=gha,scope=${{ matrix.image_name }}
-            cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
