@@ -288,13 +288,7 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
-    if _command_uses_bcftools_sample_file_option(command):
-        raise TaskUserError(
-            "Do not use bcftools sample-file options in '--command' (-S/--samples-file). "
-            "Use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project. "
-            "You may still use bcftools '-s/--samples' in '--command' if you want explicit control where in the bcftools pipe that samples are subsetted."
-            "sample selection happens."
-        )
+    _validate_user_submitted_bcftools_command(command)
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
@@ -709,26 +703,47 @@ def _determine_sample_selection_mode(tsv_filter: str | None, samples: list[str] 
     return VCFQuerySampleSelectionMode.ALL_SAMPLES
 
 
-def _command_uses_bcftools_sample_file_option(command: str) -> bool:
+def _validate_user_submitted_bcftools_command(command: str) -> None:
     """
-    Detect sample-file options in user-submitted bcftools command pipe.
-    Include the whitepsace sample file forms allowed in bcftools: '-S file.txt' and '-Sfile.txt'
-    Users should use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project.
+    Validate that user-submitted bcftools command(s) are valid for DivBase.
+    Intended to be run early in bcftools_pipe_task and make early exits when needed.
     """
-    args = shlex.split(command)
+    valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
+    sample_file_option_error_message = (
+        "Do not use bcftools sample-file options in '--command' (-S/--samples-file). "
+        "Use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project. "
+        "You may still use bcftools '-s/--samples' in '--command' if you want explicit control where in the bcftools pipe that samples are subsetted."
+        "sample selection happens."
+    )
+    long_sample_file_flag = "--samples-file"
 
-    for arg in args:
-        if arg == "-S":
-            return True
-        if arg.startswith("-S") and arg != "-S" and not arg.startswith("--"):
-            return True
+    for position, raw_cmd in enumerate(command.split(";"), start=1):
+        cmd = raw_cmd.strip()
+        if not cmd:
+            continue
 
-        if arg in ("--samples-file", "--sample-file"):
-            return True
-        if arg.startswith("--samples-file=") or arg.startswith("--sample-file="):
-            return True
+        parse_error_message = f"Could not parse --command segment at position {position}: {cmd}"
+        try:
+            args = shlex.split(cmd)
+        except ValueError:
+            raise TaskUserError(parse_error_message) from None
 
-    return False
+        if not args:
+            raise TaskUserError(parse_error_message)
+
+        for arg in args:
+            # Short sample-file forms: '-S file.txt' and attached '-Sfile.txt'
+            short_sample_file_flag = arg == "-S" or (len(arg) > 2 and arg[:2] == "-S")
+            long_sample_file_flag_used = arg == long_sample_file_flag or arg.startswith(f"{long_sample_file_flag}=")
+            if short_sample_file_flag or long_sample_file_flag_used:
+                raise TaskUserError(sample_file_option_error_message)
+
+        cmd_name = args[0]
+        if cmd_name not in valid_commands:
+            raise TaskUserError(
+                f"Unsupported bcftools command '{cmd_name}' at position {position}. "
+                f"Only the following commands are supported: {', '.join(valid_commands)}"
+            )
 
 
 def _resolve_inputs_for_sample_metadata_mode(
