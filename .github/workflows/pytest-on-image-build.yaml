@@ -35,12 +35,12 @@ jobs:
         env:
           TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
-          docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:$TAG
-          docker pull ghcr.io/scilifelabdatacentre/divbase-worker:$TAG
+          docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:latest # TODO, temp
+          docker pull ghcr.io/scilifelabdatacentre/divbase-worker:latest # TODO, temp
 
       - name: Run pytest including slow tests
         env: 
           GITHUB_ACTIONS_RUNNER: "true"
-          DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.event.workflow_run.head_sha }}
-          DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.event.workflow_run.head_sha }}
+          DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:latest # TODO, temp
+          DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:latest # TODO, temp
         run: uv run pytest -s tests/e2e_integration/cli_commands/test_file_cli.py # TODO, run subset of tests I know are failing
