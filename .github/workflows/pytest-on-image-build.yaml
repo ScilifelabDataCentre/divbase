@@ -43,4 +43,4 @@ jobs:
           GITHUB_ACTIONS_RUNNER: "true"
           DIVBASE_FASTAPI_IMAGE: ghcr.io/scilifelabdatacentre/divbase-fastapi:1040600dc58c1a7394d49eba1829b3576a5460de # TODO swap back to ${{ github.event.workflow_run.head_sha }}
           DIVBASE_WORKER_IMAGE: ghcr.io/scilifelabdatacentre/divbase-worker:1040600dc58c1a7394d49eba1829b3576a5460de # TODO swap back to ${{ github.event.workflow_run.head_sha }}
-        run: FORCE_TERMINAL=1 COLUMNS=1000 tests/e2e_integration/cli_commands/test_file_cli.py # TODO, run subset of tests I know are failing
+        run: uv run pytest -s tests/e2e_integration/cli_commands/test_file_cli.py # TODO, run subset of tests I know are failing
