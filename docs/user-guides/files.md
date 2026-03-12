@@ -7,7 +7,7 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
     - Files are versioned, so uploading a new file with the same name does not delete the existing file.
     - You can access and restore previous versions of a file at any time.
     - When you view/download/stream files, you are always working with the latest version of that file by default, but you can also specify older versions if needed.
-    - Every file uploaded to your project get a unique `Version ID`. These IDs are used internally by DivBase to keep track of files and their versions, but you can also use them to access specific versions of files if needed
+    - Every file uploaded to your project gets a unique `Version ID`. These IDs are used internally by DivBase to keep track of files and their versions, but you can also use them to access specific versions of files if needed
 
 ## Quick links to each `divbase-cli files` subcommand
 
@@ -22,7 +22,7 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 
 ## How do I work with file versions?
 
-This is perhaps easiest to understand with an example. Lets upload 2 different versions of the file `sample_metadata.tsv to our default DivBase project:
+This is perhaps easiest to understand with an example. Lets upload 2 different versions of the file `sample_metadata.tsv` to our default DivBase project:
 
 ```bash
 divbase-cli files upload sample_metadata.tsv
@@ -36,7 +36,7 @@ divbase-cli files info sample_metadata.tsv
 
 Here we see both versions of the file are still present in the project.
 
-If you run any of the following commands, you will automatically use the latest version of the file. This is also true for any queries you submit to DivBase.
+If you run any of the following commands, you will automatically use/see the latest version of the file. This is also true for any queries you submit to DivBase.
 
 ```bash
 divbase-cli files ls
@@ -57,6 +57,11 @@ divbase-cli files stream "sample_metadata.tsv:VERSION_ID"
     The MD5 checksum is also used to validate the upload process occurred without data loss.
 
 ## What if I want to delete a file permanently?
+
+??? question "What is the difference between a "soft" and "hard" delete?"
+    - A "soft delete" means the file is not actually deleted. The file is instead marked as deleted, and will no longer appear in the default file listings or be accessible through normal download/stream commands or be available in queries.
+
+    - A hard delete is when the file is permanently deleted from DivBase and can no longer be accessed or restored.
 
 A soft deleted file will still contribute to your projects storage quota as it is recoverable. Your storage usage can be seen on your projects page on the DivBase website.
 
@@ -85,7 +90,7 @@ divbase-cli files ls
 
 This will display a table with the file name, size, upload date, and MD5 checksum for each file.
 
-- You can filter the list by a prefix using the `--prefix` (or `-p`) flag:
+- You can filter the list by a prefix using the `--prefix` (or `-pre`) flag:
 
     ```bash
     divbase-cli files ls --prefix my-data-
@@ -224,13 +229,7 @@ divbase-cli files rm file1.txt file2.csv
 
 - As with the upload and download commands, you can instead provide a list of files to delete with a text file using `--file-list` flag.
 - Use `--dry-run` to see which files would be deleted without actually deleting them.
-
-!!! info "What is a soft delete?"
-    A "soft delete" means the file is not actually deleted. The file is instead marked as deleted, and will no longer appear in the default file listings or be accessible through normal download/stream commands or can be used in queries.
-
-    A hard delete is when the file is permanently deleted from DivBase and can no longer be accessed or restored.
-
-    After a certain time period, soft deleted files will be hard deleted from DivBase [see here for more details](#what-if-i-want-to-delete-a-file-permanently). Before that time you can restore the file(s).
+- Direct hard deleting of files is currently not supported, soft-deleted files are instead deleted after a certain time period, [see here for more details](#what-if-i-want-to-delete-a-file-permanently).
 
 ### Restoring files
 
@@ -240,4 +239,10 @@ If you have soft-deleted a file and want to restore it, use the `restore` comman
 divbase-cli files restore file1.txt file2.csv
 ```
 
-- As with the other commands, you can provide a list of files to restore with a text file using `--file-list` flag.
+As with the other commands, you can provide a list of files to restore with a text file using `--file-list` flag.
+
+To see which files can are currently soft deleted and can be restored you can do:
+
+```bash
+divbase-cli files ls --show-deleted-files
+```
