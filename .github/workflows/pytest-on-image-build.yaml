@@ -31,7 +31,7 @@ jobs:
       - name: Install the project
         run: | 
           uv sync --locked --dev
-          playwright install chromium
+          uv run playwright install chromium
 
       - name: Pull new images built in the previous workflow run
         env:
