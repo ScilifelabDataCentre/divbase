@@ -43,6 +43,7 @@ from divbase_lib.api_schemas.s3 import (
     PreSignedSinglePartUploadResponse,
     PresignedUploadPartUrlResponse,
     RestoreObjectsResponse,
+    SoftDeletedObjectDetails,
     UploadSinglePartObjectRequest,
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE
@@ -124,6 +125,28 @@ async def list_file_details(
         prefix=list_request.prefix,
         next_token=list_request.next_token,
     )
+
+
+@s3_router.get("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
+async def list_soft_deleted_files(
+    project_name: str,
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    List all soft-deleted files in the project's bucket.
+    All soft-deleted objects are obtained at once, so there is no need for pagination with next tokens.
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.READ):
+        raise AuthorizationError("You don't have permission to list soft-deleted files in this project.")
+
+    s3_file_manager = S3FileManager(
+        url=settings.s3.endpoint_url,
+        access_key=settings.s3.access_key.get_secret_value(),
+        secret_key=settings.s3.secret_key.get_secret_value(),
+    )
+
+    return await run_in_threadpool(s3_file_manager.list_soft_deleted_files, bucket_name=project.bucket_name)
 
 
 @s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)

@@ -39,10 +39,20 @@
                 <!-- Storage Info -->
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <small class="text-muted">Storage Used</small>
+                        <small class="text-muted">Storage Used (updated daily)</small>
                         <small class="text-muted">
-                            {{ "%.1f"|format(project.storage_used_gb) }} GB / {{ "%.1f"|format(project.storage_quota_gb) }} GB
+                            {{ project.storage_used }} of {{ project.storage_quota }} 
                         </small>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div 
+                            class="progress-bar bg-success" 
+                            role="progressbar" 
+                            style="width: {{ project.storage_used_percent }}%" 
+                            aria-valuenow="{{ project.storage_used_percent }}%" 
+                            aria-valuemin="0" 
+                            aria-valuemax="100">
+                        </div>
                     </div>
                 </div>
                 

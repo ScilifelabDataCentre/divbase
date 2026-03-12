@@ -69,6 +69,7 @@ nav:
     - Account Management: user-guides/account-management.md
     - Installation: user-guides/installation.md
     - Setup DivBase CLI: user-guides/setup_divbase_cli.md
+    - Managing Project Files: user-guides/files.md
     - Working with VCF Files in DivBase: user-guides/vcf-files.md
     - Running Queries: 
       - Overview: user-guides/running-queries.md
@@ -78,6 +79,7 @@ nav:
       - How to create efficient DivBase queries: user-guides/how-to-create-efficient-divbase-queries.md
       - "Tutorial: Running a query on a public dataset": user-guides/tutorial-query-on-public-data.md
     - Managing Project Versions: user-guides/project-versioning.md
+    - Using DivBase Programmatically: user-guides/using-divbase-programmatically.md
     - Troubleshooting: user-guides/troubleshooting.md      
   - CLI Command Reference: 
     - Overview: cli/index.md

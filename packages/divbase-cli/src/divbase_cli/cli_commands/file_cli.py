@@ -1,8 +1,5 @@
 """
 Command line interface for managing files in a DivBase project's store on DivBase.
-
-TODO - Download all files option.
-TODO - skip checked option (aka skip files that already exist in same local dir with correct checksum).
 """
 
 from pathlib import Path
@@ -16,21 +13,56 @@ from typing_extensions import Annotated
 from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
+from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
+    ToDownload,
     download_files_command,
+    filter_out_already_downloaded_files,
     get_file_info_command,
     list_files_command,
+    list_soft_deleted_files_command,
     restore_objects_command,
     soft_delete_objects_command,
     stream_file_command,
     upload_files_command,
 )
-from divbase_cli.utils import format_file_size, print_rich_table_as_tsv
+from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+from divbase_lib.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+
+DOWNLOAD_DIR_OPTION = typer.Option(
+    None,
+    "--download-dir",
+    "-d",
+    help="""Directory to download the files to. 
+        If not provided, defaults to what you specified in your user config. 
+        If also not specified in your user config, downloads to the current directory.
+        You can also specify "." to download to the current directory.""",
+)
+DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
+    False,
+    "--disable-verify-checksums",
+    "-nc",
+    help="Turn off checksum verification which is on by default. "
+    "Checksum verification means all downloaded files are verified against their MD5 checksums."
+    "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
+)
+PROJECT_VERSION_OPTION = typer.Option(
+    None,
+    "--project-version",
+    "-pv",
+    help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
+)
+DRY_RUN_OPTION = typer.Option(
+    False,
+    "--dry-run",
+    "-n",
+    help="If set, will not actually download the files, just print what would be downloaded.",
+)
 
 
 @file_app.command("ls")
@@ -39,7 +71,7 @@ def list_files(
     prefix_filter: str | None = typer.Option(
         None,
         "--prefix",
-        "-p",
+        "-pre",
         help="Optional prefix to filter the listed files by name (only list files starting with this prefix).",
     ),
     include_results_files: bool = typer.Option(
@@ -47,6 +79,12 @@ def list_files(
         "--include-results-files",
         "-r",
         help="If set, will also show DivBase query results files which are hidden by default.",
+    ),
+    show_deleted_files: bool = typer.Option(
+        False,
+        "--show-deleted-files",
+        "-s",
+        help="Show the files in the project that are currently soft deleted. These files can be recovered within a certain time frame after deletion",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ):
@@ -57,8 +95,34 @@ def list_files(
     By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
     To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
     """
+    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix_filter):
+        print(
+            "The --show-deleted-files option cannot be used with --include-results-files or --prefix. "
+            "Please use these options separately."
+        )
+        raise typer.Exit(1)
+
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    if show_deleted_files:
+        files = list_soft_deleted_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+        )
+
+        if not files:
+            print(f"No soft deleted files found for the project '{project_config.name}'.")
+            return
+
+        print(f"Soft deleted files for the project '{project_config.name}':")
+        for file_details in files:
+            cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+            print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
+        print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
+        print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
+        return
 
     files = list_files_command(
         divbase_base_url=logged_in_url,
@@ -156,26 +220,10 @@ def download_files(
         None, help="Space separated list of files/objects to download from the project's store on DivBase."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
-    download_dir: str = typer.Option(
-        None,
-        help="""Directory to download the files to. 
-            If not provided, defaults to what you specified in your user config. 
-            If also not specified in your user config, downloads to the current directory.
-            You can also specify "." to download to the current directory.""",
-    ),
-    disable_verify_checksums: Annotated[
-        bool,
-        typer.Option(
-            "--disable-verify-checksums",
-            help="Turn off checksum verification which is on by default. "
-            "Checksum verification means all downloaded files are verified against their MD5 checksums."
-            "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
-        ),
-    ] = False,
-    project_version: str | None = typer.Option(
-        default=None,
-        help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
-    ),
+    download_dir: str = DOWNLOAD_DIR_OPTION,
+    dry_run: bool = DRY_RUN_OPTION,
+    disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
+    project_version: str | None = PROJECT_VERSION_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
@@ -204,19 +252,130 @@ def download_files(
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
         verify_checksums=not disable_verify_checksums,
+        dry_run=dry_run,
         project_version=project_version,
     )
 
-    if download_results.successful:
-        print("[green bold]Successfully downloaded the following files:[/green bold]")
-        for success in download_results.successful:
-            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
-    if download_results.failed:
-        print("[red bold]ERROR: Failed to download the following files:[/red bold]")
-        for failed in download_results.failed:
-            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+    _pretty_print_download_results(download_results=download_results)
 
-        raise typer.Exit(1)
+
+@file_app.command("download-all")
+def download_all_files(
+    download_dir: str = DOWNLOAD_DIR_OPTION,
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        "-r",
+        help="If set, will attempt to resume an interrupted download. Will check which files have already been fully downloaded (by checking if a file with the same name and checksum already exists in the download directory) and skip downloading those files again.",
+    ),
+    dry_run: bool = DRY_RUN_OPTION,
+    disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
+    project_version: str | None = PROJECT_VERSION_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Download all files in the project's store on DivBase.
+    Before the download proceeds you'll be prompted if you want to continue.
+    DivBase Query results files will not be included in the download.
+
+    You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
+    """
+    if resume and disable_verify_checksums:
+        print(
+            "The --resume and --disable-verify-checksums options cannot be used together, "
+            "as checksums are used to determine which files don't need to be downloaded. \n"
+            "Exiting... "
+        )
+        return
+
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    download_dir_path = resolve_download_dir(download_dir=download_dir)
+
+    all_files: list[ToDownload] = []
+    if project_version:
+        version_details = get_version_details_command(
+            project_name=project_config.name, divbase_base_url=logged_in_url, version_name=project_version
+        )
+        for version_name, file_details in version_details.files.items():
+            all_files.append(
+                ToDownload(
+                    name=version_name,
+                    etag=file_details["etag"],
+                    size_bytes=file_details["size"],
+                    version_id=file_details["version_id"],
+                )
+            )
+
+    else:
+        list_files_response = list_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+            prefix_filter=None,
+            include_results_files=False,
+        )
+        for file_details in list_files_response:
+            all_files.append(
+                ToDownload(
+                    name=file_details.name,
+                    etag=file_details.etag,
+                    size_bytes=file_details.size,
+                    version_id=None,  # latest version
+                )
+            )
+
+    if not all_files:
+        print("No files to download as there are no files in the project's store.")
+        return
+
+    # filter files to download based on those which already exist.
+    if resume:
+        files_to_download, files_to_overwrite = filter_out_already_downloaded_files(
+            all_files=all_files, download_dir=download_dir_path
+        )
+        if files_to_overwrite:
+            print(
+                "[yellow bold]Warning: The following files already exist in the download directory but have a different checksum."
+                "If you choose to proceed, these files will be overwritten by the download:[/yellow bold]"
+            )
+            for file in files_to_overwrite:
+                print(f"- '{file.name}'")
+
+        files_to_download.extend(files_to_overwrite)
+
+        if not files_to_download:
+            print("No files left to download, your folder matches the project's store on DivBase, exiting...")
+            return
+    else:
+        files_to_download = all_files
+
+    total_size_bytes = sum(file.size_bytes for file in files_to_download)
+    formatted_total_size = format_file_size(size_bytes=total_size_bytes)
+
+    print(f"There are '{len(files_to_download)}' files to download with a total size of: {formatted_total_size}.")
+
+    if not dry_run:
+        # (dry run will auto exit in the download_files_command)
+        do_download = typer.confirm("Do you want to proceed with the download?")
+        if not do_download:
+            print("Download cancelled...")
+            return
+
+    if project_version:
+        raw_files_input = [f"{file.name}:{file.version_id}" for file in files_to_download]
+    else:
+        raw_files_input = [file.name for file in files_to_download]
+    download_results = download_files_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        raw_files_input=raw_files_input,
+        download_dir=download_dir_path,
+        verify_checksums=not disable_verify_checksums,
+        dry_run=dry_run,
+        project_version=None,  # We already know the version id of each file, so can skip the processing here.
+    )
+
+    _pretty_print_download_results(download_results=download_results)
 
 
 @file_app.command("stream")
@@ -309,12 +468,12 @@ def upload_files(
     )
 
     if uploaded_results.successful:
-        print("[green bold] The following files were successfully uploaded: [/green bold]")
+        print("[green bold]\nThe following files were successfully uploaded: [/green bold]")
         for object in uploaded_results.successful:
             print(f"- '{object.object_name}' created from file at: '{object.file_path.resolve()}'")
 
     if uploaded_results.failed:
-        print("[red bold]ERROR: Failed to upload the following files:[/red bold]")
+        print("[red bold]\nERROR: Failed to upload the following files:[/red bold]")
         for failed in uploaded_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
 
@@ -457,3 +616,17 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
 
     if unsupported_chars:
         raise UnsupportedFileNameError(unsupported_files=unsupported_chars)
+
+
+def _pretty_print_download_results(download_results):
+    """Helper fn used by download and download all commands to print the results of the download in a nice format."""
+    if download_results.successful:
+        print("\n[green bold]Successfully downloaded the following files:[/green bold]")
+        for success in download_results.successful:
+            print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
+
+    if download_results.failed:
+        print("\n[red bold]ERROR: Failed to download the following files:[/red bold]")
+        for failed in download_results.failed:
+            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+        raise typer.Exit(1)
