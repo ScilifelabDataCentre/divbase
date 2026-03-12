@@ -479,6 +479,15 @@ class BcftoolsQueryManager:
         Returns the subprocess.Popen object so the caller can monitor resource usage.
         """
         logger.info(f"Running: bcftools {command}")
+        try:
+            command_args = shlex.split(command)
+        except ValueError as e:
+            raise BcftoolsCommandError(
+                command=command, error_details=f"Could not parse bcftools command arguments: {e}"
+            ) from None
+
+        if not command_args:
+            raise BcftoolsCommandError(command=command, error_details="Empty bcftools command after parsing") from None
 
         in_docker = os.path.exists("/.dockerenv")
         in_k8s = self._is_in_kubernetes()
@@ -486,7 +495,7 @@ class BcftoolsQueryManager:
         if in_docker or in_k8s:
             logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
             try:
-                proc = subprocess.Popen(["bcftools"] + command.split())
+                proc = subprocess.Popen(["bcftools"] + command_args)
                 return proc
             except Exception as e:
                 logger.error(f"Failed to run bcftools directly: {e}")
@@ -495,7 +504,7 @@ class BcftoolsQueryManager:
             try:
                 container_id = self.get_container_id(self.CONTAINER_NAME)
                 logger.debug(f"Executing command in container with ID: {container_id}")
-                docker_cmd = ["docker", "exec", container_id, "bcftools"] + command.split()
+                docker_cmd = ["docker", "exec", container_id, "bcftools"] + command_args
                 proc = subprocess.Popen(docker_cmd)
                 return proc
             except BcftoolsEnvironmentError:
