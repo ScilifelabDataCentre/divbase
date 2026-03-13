@@ -3,15 +3,19 @@ CRUD operations for task history.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
+from divbase_api.worker.tasks import TaskName
 
 logger = logging.getLogger(__name__)
+
+ACTIVE_CELERY_STATUSES = {"PENDING", "STARTED", "RETRY"}
 
 
 async def get_tasks_pg(
@@ -105,8 +109,97 @@ async def update_task_history_entry_with_celery_task_id(
     create_task_history_entry(), then submit a celery task with .apply_async and get the celery task ID, and then update the table entry with the celery task ID using this function.
     """
 
-    stmt = update(TaskHistoryDB).where(TaskHistoryDB.id == job_id).values(task_id=task_id)
+    stmt = (
+        update(TaskHistoryDB)
+        .where(
+            TaskHistoryDB.id == job_id,
+            TaskHistoryDB.task_id.is_(None),
+        )
+        .values(task_id=task_id)
+    )
     result = await db.execute(stmt)
     if result.rowcount == 0:
-        raise ValueError(f"TaskHistoryDB entry with id={job_id} not found")
+        raise ValueError(f"TaskHistoryDB entry with id={job_id} not found or already finalized with task_id")
+    await db.commit()
+
+
+async def create_provisional_dimensions_reservation(db: AsyncSession, user_id: int, project_id: int) -> int:
+    """
+    Creates a provisional reservation for dimensions update by creating a TaskHistoryDB entry with task_id=None and
+    task_name="update_vcf_dimensions_task". This allows the update_vcf_dimensions_task to be associated with this entry
+    once the celery task is created and gets its task_id, and allows the task history to be visible in the UI as soon
+    as the reservation is made rather than waiting for the celery task to be created.
+    """
+
+    # TaskName.UPDATE_VCF_DIMENSIONS.value is string, with is needed to not have to handle enums in the migrations
+
+    task_history_entry = TaskHistoryDB(
+        task_id=None, task_name=TaskName.UPDATE_VCF_DIMENSIONS.value, user_id=user_id, project_id=project_id
+    )
+    db.add(task_history_entry)
+    await db.commit()
+    await db.refresh(task_history_entry)
+    return task_history_entry.id
+
+
+async def get_active_dimensions_contenders(
+    db: AsyncSession,
+    project_id: int,
+    provisional_entry_ttl_seconds: int = 120,
+    celerytaskmeta_entry_gap_ttl_seconds: int = 3600,  # 1 hour in the queue without being picked up by a worker
+) -> list[int]:
+    """
+    Get active dimensions-update contenders for a project.
+
+    provisional_entry_cutoff is the time between: the task submission arrives to the API and is written to the db as a
+    provisional entry (task_id is None), AND the update of the entry with the celery task_id after async_apply has sucessfully enqued the task.
+
+    celery_taskmeta_entry_gap_cutoff is the time between: the celery task_id is written to the db after async_apply has sucessfully enqued the task,
+    AND the celery_taskmeta entry is written to the db with the status (i.e. a worker has picked up the task and started).
+    """
+    now = datetime.now(timezone.utc)
+    provisional_entry_cutoff = now - timedelta(seconds=provisional_entry_ttl_seconds)
+    celery_taskmeta_entry_gap_cutoff = now - timedelta(seconds=celerytaskmeta_entry_gap_ttl_seconds)
+
+    stmt = (
+        select(TaskHistoryDB.id)
+        .outerjoin(CeleryTaskMeta, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(
+            TaskHistoryDB.project_id == project_id,
+            TaskHistoryDB.task_name == TaskName.UPDATE_VCF_DIMENSIONS.value,
+            or_(
+                and_(
+                    TaskHistoryDB.task_id.is_(None),
+                    TaskHistoryDB.created_at >= provisional_entry_cutoff,
+                ),
+                and_(
+                    TaskHistoryDB.task_id.is_not(None),
+                    CeleryTaskMeta.status.in_(ACTIVE_CELERY_STATUSES),
+                ),
+                and_(
+                    TaskHistoryDB.task_id.is_not(None),
+                    CeleryTaskMeta.task_id.is_(None),
+                    TaskHistoryDB.created_at >= celery_taskmeta_entry_gap_cutoff,
+                ),
+            ),
+        )
+        .order_by(TaskHistoryDB.id.asc())
+    )
+
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def delete_dimensions_provisional_reservation(db: AsyncSession, job_id: int) -> None:
+    """
+    Deletes a provisional dimensions reservation entry. For instance if it has lost a concurrent race.
+    """
+    stmt = delete(TaskHistoryDB).where(
+        and_(
+            TaskHistoryDB.id == job_id,
+            TaskHistoryDB.task_name == TaskName.UPDATE_VCF_DIMENSIONS.value,
+            TaskHistoryDB.task_id.is_(None),
+        )
+    )
+    await db.execute(stmt)
     await db.commit()
