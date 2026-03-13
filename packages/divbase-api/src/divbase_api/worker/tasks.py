@@ -4,6 +4,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from itertools import combinations
 from pathlib import Path
 
@@ -79,6 +80,16 @@ app.conf.update(
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
+
+
+class TaskName(str, Enum):
+    """
+    Single source-of-truth for Celery task names. Allows these names name to be reused in other layer of the codebase.
+    """
+
+    SAMPLE_METADATA_QUERY = "tasks.sample_metadata_query"
+    BCFTOOLS_QUERY = "tasks.bcftools_query"
+    UPDATE_VCF_DIMENSIONS = "tasks.update_vcf_dimensions_task"
 
 
 @worker_process_init.connect
@@ -162,7 +173,7 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-@app.task(name="tasks.sample_metadata_query", tags=["quick"])
+@app.task(name=TaskName.SAMPLE_METADATA_QUERY.value, tags=["quick"])
 def sample_metadata_query_task(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -233,7 +244,7 @@ def sample_metadata_query_task(
     return result
 
 
-@app.task(name="tasks.bcftools_query", tags=["slow"])
+@app.task(name=TaskName.BCFTOOLS_QUERY.value, tags=["slow"])
 def bcftools_pipe_task(
     tsv_filter: str,
     command: str,
@@ -388,7 +399,7 @@ def bcftools_pipe_task(
     return {"status": "completed", "output_file": output_file}
 
 
-@app.task(name="tasks.update_vcf_dimensions_task")
+@app.task(name=TaskName.UPDATE_VCF_DIMENSIONS.value)
 def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
