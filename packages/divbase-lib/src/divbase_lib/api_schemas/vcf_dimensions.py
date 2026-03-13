@@ -31,6 +31,16 @@ class DimensionUpdateTaskResult(BaseModel):
     )
 
 
+class DimensionsUpdateSubmitResult(BaseModel):
+    """Result model for submitting a dimensions update job."""
+
+    job_id: int
+    outcome: str = Field(
+        ...,
+        description="Whether a new job was enqueued or an existing active job was reused. Allowed values: 'new', 'existing'.",
+    )
+
+
 class DimensionsShowResult(BaseModel):
     """Result model for showing VCF dimensions for a project."""
 
