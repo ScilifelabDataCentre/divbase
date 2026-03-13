@@ -13,6 +13,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
+    DimensionsUpdateSubmitResult,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator
 
@@ -39,8 +40,14 @@ def update_dimensions_index(
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
 
-    task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    submission_result = DimensionsUpdateSubmitResult(**response.json())
+    if submission_result.outcome == "existing":
+        print(
+            f"There is already an active dimensions update task enqueued for this project. It has job id: {submission_result.job_id}"
+        )
+        return
+
+    print(f"Job submitted successfully with task id: {submission_result.job_id}")
 
 
 @dimensions_app.command("show")
