@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 
-
 {% block title %}DivBase Home page{% endblock %}
+
+{% block custom_preloads %}
+<link rel="preload" fetchpriority="high" as="image" href="/static/img/home_hero.webp" type="image/webp">
+{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -10,6 +13,16 @@
             {% if announcements %}
                 {% include "components/announcements.html" %}
             {% endif %}
+
+            <section class="scilife-hero">
+                <div class="scilife-hero-content">
+                    <h1 class="scilife-hero-title mb-3">DivBase: Share and query genetic variant data at scale</h1>
+                    <h2 class="scilife-hero-subtitle">
+                        Secure platform for managing genomic variants and metadata files of non-human species.
+                    </h2>
+                </div>
+            </section>
+
             <div class="d-flex justify-content-between align-items-center">
                 <div class="scilife-subsection">
                     <h2><i class="bi bi-database-fill me-2"></i>Welcome to DivBase</h2>

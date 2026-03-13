@@ -88,6 +88,110 @@ footer {
   }
 }
 
+/* hero control */
+/* hero control */
+.scilife-hero {
+  --hero-min-height: 60vh;
+  --hero-bg-position: center center;
+
+  position: relative;
+  overflow: hidden;
+  padding: 1.2rem 0;
+  margin-bottom: 1rem;
+  background: url("/static/img/home_hero.webp") no-repeat
+    var(--hero-bg-position);
+  background-size: cover;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--hero-min-height);
+  max-width: 1444px;
+}
+.scilife-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.scilife-hero-content {
+  position: relative;
+  z-index: 1;
+  margin: 2rem;
+  text-align: left;
+}
+.scilife-hero-title {
+  --hero-margin-right: 0;
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin-right: var(--hero-margin-right);
+}
+.scilife-hero-subtitle {
+  --hero-margin-right: 0;
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin-right: var(--hero-margin-right);
+}
+
+@media (max-width: 575px) {
+  .scilife-hero {
+    --hero-min-height: 40vh;
+    --hero-bg-position: 80% center;
+  }
+}
+@media (min-width: 576px) and (max-width: 767px) {
+  .scilife-hero {
+    --hero-min-height: 30vh;
+    --hero-bg-position: 80% center;
+  }
+}
+@media (min-width: 768px) and (max-width: 991px) {
+  .scilife-hero {
+    --hero-min-height: 35vh;
+    --hero-bg-position: 75% center;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 30%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 30%;
+  }
+}
+@media (min-width: 992px) and (max-width: 1199px) {
+  .scilife-hero {
+    --hero-min-height: 30vh;
+    --hero-bg-position: 70% center;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 10%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 30%;
+  }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .scilife-hero {
+    --hero-min-height: 24vh;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 20%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 43%;
+  }
+}
+@media (min-width: 1400px) {
+  .scilife-hero {
+    --hero-min-height: 27vh;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 20%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 47%;
+  }
+}
+
 /* profile card control */
 .scilife-profile-card {
   display: flex;
