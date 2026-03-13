@@ -698,32 +698,18 @@ def test_show_dimensions_truncates_sample_names_in_terminal(
 
 
 def test_show_dimensions_rejects_output_and_stdout_together(
-    CONSTANTS,
-    run_update_dimensions,
-    project_map,
-    logged_in_edit_user_with_existing_config,
-    tmp_path,
+    CONSTANTS, logged_in_edit_user_with_existing_config, tmp_path
 ):
     """
     Test that using --sample-names-output and --sample-names-stdout together fails.
+    As fails early, don't need to setup dimensions for this test
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    project_id = project_map[project_name]
-    user_id = 1
-
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
-
     output_path = tmp_path / "sample_names.tsv"
     command = f"dimensions show --project {project_name} --sample-names-output {output_path} --sample-names-stdout"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code != 0, "Expected command to fail when both output modes are provided"
-    combined_output = (
-        (cli_result.stdout or "")
-        + (getattr(cli_result, "stderr", "") or "")
-        + (str(cli_result.exception) if cli_result.exception else "")
-    )
-    assert "Use only one of --sample-names-output or --sample-names-stdout." in combined_output
+    assert "Use only one of --sample-names-output or --sample-names-stdout." in cli_result.stderr
 
 
 @pytest.mark.parametrize(
