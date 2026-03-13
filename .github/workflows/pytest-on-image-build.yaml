@@ -14,7 +14,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Install bcftools # some test set up data calling bcftool directly
+      - name: Install bcftools # some test set up data calling bcftools directly
         run: | 
           sudo apt-get update  
           sudo apt-get install autoconf automake make gcc perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libperl-dev libgsl0-dev
@@ -41,6 +41,11 @@ jobs:
         run: |
           docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:$TAG
           docker pull ghcr.io/scilifelabdatacentre/divbase-worker:$TAG
+
+      - name: Allow container to write to test fixtures # actions runner uid=1001, but container runs as 1000 
+        # So container does not have permissions to write to the mounted test fixtures, required by test_bcftools_pipe_cli_integration_with_eager_mode 
+        # volume mount made in docker/divbase_compose.tests.yaml 
+        run: chmod -R a+w tests/fixtures
 
       - name: Run pytest including slow tests
         env: 
