@@ -1,31 +1,31 @@
 /* Brand colors */
 :root {
   --scilife-lime: #a7c947;
-  --scilife-lime-075: #BDD775;
-  --scilife-lime-050: #D3E4A3;
-  --scilife-lime-025: #E9F2D1;
+  --scilife-lime-075: #bdd775;
+  --scilife-lime-050: #d3e4a3;
+  --scilife-lime-025: #e9f2d1;
 
   /* Grape should be used modestly as a 'color pop' or on smaller details */
-  --scilife-grape: #491F53;
-  --scilife-grape-075: #77577E;
-  --scilife-grape-050: #A48FA9;
-  --scilife-grape-025: #D2C7D4;
+  --scilife-grape: #491f53;
+  --scilife-grape-075: #77577e;
+  --scilife-grape-050: #a48fa9;
+  --scilife-grape-025: #d2c7d4;
 
-  --scilife-teal: #045C64;
-  --scilife-teal-075: #43858B;
-  --scilife-teal-050: #82AEB2;
-  --scilife-teal-025: #C0D6D8;
-  --scilife-teal-light: #E6F2F3;
+  --scilife-teal: #045c64;
+  --scilife-teal-075: #43858b;
+  --scilife-teal-050: #82aeb2;
+  --scilife-teal-025: #c0d6d8;
+  --scilife-teal-light: #e6f2f3;
 
-  --scilife-aqua: #4C979F;
-  --scilife-aqua-075: #79B1B7;
-  --scilife-aqua-050: #A6CBCF;
-  --scilife-aqua-025: #D2E5E7;
+  --scilife-aqua: #4c979f;
+  --scilife-aqua-075: #79b1b7;
+  --scilife-aqua-050: #a6cbcf;
+  --scilife-aqua-025: #d2e5e7;
 
-  --scilife-light-grey: #E5E5E5;
-  --scilife-medium-grey: #A6A6A6;
+  --scilife-light-grey: #e5e5e5;
+  --scilife-medium-grey: #a6a6a6;
   --scilife-contrast-okay-grey: #727272;
-  --scilife-dark-grey: #3F3F3F;
+  --scilife-dark-grey: #3f3f3f;
 }
 
 a {
@@ -35,15 +35,13 @@ body {
   font-family: "Roboto", Arial, sans-serif;
 }
 
-
-
 /* navbar control */
 .navbar-brand {
   padding-top: auto;
   padding-bottom: 0;
 }
 .scilife-navbar-logo {
-    height: clamp(2rem, 2vw, 3rem);
+  height: clamp(2rem, 2vw, 3rem);
 }
 .scilife-nav-link {
   color: var(--scilife-dark-grey);
@@ -58,16 +56,13 @@ body {
   letter-spacing: 0.045rem;
 }
 
-
-
-
 /* footer control */
 footer {
-    background-color: #ebebeb;
+  background-color: #ebebeb;
 }
 .scilife-footer-text a {
   color: var(--scilife-teal);
-  font-size: 1.00rem;
+  font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0.045rem;
   text-decoration: none;
@@ -93,8 +88,6 @@ footer {
   }
 }
 
-
-
 /* profile card control */
 .scilife-profile-card {
   display: flex;
@@ -105,7 +98,7 @@ footer {
 }
 .scilife-profile-card h2 {
   color: #222;
-  font-size: 1.20rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.0625rem;
   margin-top: auto;
@@ -132,7 +125,7 @@ footer {
 }
 .scilife-project-card h2 {
   color: #222;
-  font-size: 1.20rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.0625rem;
   margin-top: auto;
@@ -169,9 +162,8 @@ footer {
 .scilife-numb-project-badge {
   font-size: 1.25rem;
   background-color: var(--scilife-grape-075);
-  color: white; 
+  color: white;
 }
-
 
 /* General text control */
 .scilife-subsection h2 {
@@ -201,9 +193,6 @@ footer {
   line-height: 1.7rem;
 }
 
-
-
-
 .scilife-confirm-button {
   font-size: 1.2rem;
   align-self: flex-end;
@@ -221,15 +210,13 @@ footer {
   border-color: var(--scilife-lime);
 }
 
-
-
 /* Control the copy to clipboard button */
 .clipboard {
   display: flex;
   justify-content: flex-end;
 }
 p + .clipboard {
-  margin-top: -1rem; 
+  margin-top: -1rem;
 }
 .clipboard-button {
   padding: 2px 7px 5px 7px;

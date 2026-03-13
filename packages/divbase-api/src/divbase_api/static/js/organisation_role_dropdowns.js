@@ -10,14 +10,18 @@ Alongside validation of the inputs on the client side. (Pydantic used for server
 
 document.addEventListener("DOMContentLoaded", function () {
   const organisationDropdown = document.getElementById("organisation_dropdown");
-  const otherOrganisationDiv = document.getElementById("other_organisation_div");
+  const otherOrganisationDiv = document.getElementById(
+    "other_organisation_div",
+  );
   const otherOrganisationInput = document.getElementById("organisation_other");
 
   const roleDropdown = document.getElementById("role_dropdown");
   const otherRoleDiv = document.getElementById("role_other_div");
   const otherRoleInput = document.getElementById("role_other");
 
-  const form = document.getElementById("registerForm") || document.getElementById("editProfileForm");
+  const form =
+    document.getElementById("registerForm") ||
+    document.getElementById("editProfileForm");
   if (!form) {
     return;
   }
@@ -37,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
     validateOtherInput(
       organisationDropdown,
       otherOrganisationInput,
-      "Please specify your organisation (at least 3 characters)."
+      "Please specify your organisation (at least 3 characters).",
     );
   }
 
@@ -46,7 +50,7 @@ document.addEventListener("DOMContentLoaded", function () {
     validateOtherInput(
       roleDropdown,
       otherRoleInput,
-      "Please specify your role (at least 3 characters)."
+      "Please specify your role (at least 3 characters).",
     );
   }
 
@@ -86,8 +90,7 @@ document.addEventListener("DOMContentLoaded", function () {
     validateOtherRoleInput();
   });
 
-
-  // Form submission, prevent submission if any validation failures. 
+  // Form submission, prevent submission if any validation failures.
   form.addEventListener("submit", function (event) {
     validateOtherOrganisationInput();
     validateOtherRoleInput();
@@ -98,9 +101,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Run on page load to ensure form is in correct state if form submission fails 
+  // Run on page load to ensure form is in correct state if form submission fails
   // and page/form is re-rendered with previous values.
-  // e.g. password don't match etc... 
+  // e.g. password don't match etc...
   organisationDropdown.dispatchEvent(new Event("change"));
   roleDropdown.dispatchEvent(new Event("change"));
 });
