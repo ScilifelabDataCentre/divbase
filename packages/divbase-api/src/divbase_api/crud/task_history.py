@@ -8,14 +8,17 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.crud_constants import (
+    ACTIVE_CELERY_STATUSES,
+    CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS,
+    PROVISIONAL_ENTRY_TTL_SECONDS,
+)
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
-from divbase_api.worker.tasks import TaskName
+from divbase_api.worker.task_names import TaskName
 
 logger = logging.getLogger(__name__)
-
-ACTIVE_CELERY_STATUSES = {"PENDING", "STARTED", "RETRY"}
 
 
 async def get_tasks_pg(
@@ -145,8 +148,8 @@ async def create_provisional_dimensions_reservation(db: AsyncSession, user_id: i
 async def get_active_dimensions_contenders(
     db: AsyncSession,
     project_id: int,
-    provisional_entry_ttl_seconds: int = 120,
-    celerytaskmeta_entry_gap_ttl_seconds: int = 3600,  # 1 hour in the queue without being picked up by a worker
+    provisional_entry_ttl_seconds: int = PROVISIONAL_ENTRY_TTL_SECONDS,
+    celerytaskmeta_entry_gap_ttl_seconds: int = CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS,
 ) -> list[int]:
     """
     Get active dimensions-update contenders for a project.
