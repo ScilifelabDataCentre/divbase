@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api import __version__ as divbase_version
 from divbase_api.api_config import settings
 from divbase_api.crud.announcements import get_active_announcements
 from divbase_api.db import get_db
@@ -24,6 +25,7 @@ fr_core_router = APIRouter()
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir.resolve())
 templates.env.globals["mkdocs_site_url"] = settings.api.mkdocs_site_url
+templates.env.globals["divbase_version"] = divbase_version
 
 
 @fr_core_router.get("/", response_class=HTMLResponse)
