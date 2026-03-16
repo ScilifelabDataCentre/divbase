@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# Runs immediately to determine user preference #}
+    <script src="/static/js/determine_theme.js"></script>
+
     <title>{% block title %}DivBase{% endblock %}</title>
     <meta http-equiv="content-language" content="en">
 
@@ -30,6 +34,7 @@
     {# Google Font for Roboto #}
     <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap" rel="stylesheet">
 
+    <script src="/static/js/change_theme.js"></script>
 </head>
 
 <body class="d-flex flex-column min-vh-100">

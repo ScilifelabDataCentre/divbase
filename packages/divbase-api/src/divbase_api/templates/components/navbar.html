@@ -60,6 +60,25 @@
                     </a>
                 </li>
                 {% endif %}
+                {# light/dark theme toggle #}
+                <li class="nav-item dropdown">
+                    <button class="btn btn-link nav-link scilife-nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-label="Toggle theme">
+                        <i class="bi bi-circle-half me-1" fill="currentColor"></i>Theme
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="swap-theme">
+                        <li>
+                            <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="light">
+                                <i class="bi bi-brightness-high-fill me-1" fill="currentColor"></i>Light
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="dark">
+                                <i class="bi bi-moon-stars-fill me-1" fill="currentColor"></i>Dark
+                            </button>
+                        </li>
+                    </ul>
+                </li>
+
             </ul>
         </div>
     </div>
