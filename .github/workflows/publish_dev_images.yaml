@@ -77,11 +77,9 @@ jobs:
           uv run playwright install chromium
 
       - name: Pull new images built in the previous workflow run
-        env:
-          TAG: ${{ github.sha }}
         run: |
-          docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:$TAG
-          docker pull ghcr.io/scilifelabdatacentre/divbase-worker:$TAG
+          docker pull ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.sha }}
+          docker pull ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.sha }}
 
       - name: Allow container to write to test fixtures # actions runner uid=1001, but container runs as 1000 
         # So container does not have permissions to write to the mounted test fixtures, required by test_bcftools_pipe_cli_integration_with_eager_mode 
