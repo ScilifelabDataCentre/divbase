@@ -1,7 +1,6 @@
 name: Build and deploy the divbase documentation website
 on:
-  release:
-    types: [published]
+  # NOTE: A new release will auto publish a new version of the docs, see release.yaml.
   workflow_dispatch:
 
 permissions:
