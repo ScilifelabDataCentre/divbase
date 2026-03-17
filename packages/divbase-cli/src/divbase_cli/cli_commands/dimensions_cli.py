@@ -47,7 +47,7 @@ def update_dimensions_index(
         )
         return
 
-    print(f"Job submitted successfully with task id: {submission_result.job_id}")
+    print(f"Job submitted successfully with job id: {submission_result.job_id}")
 
 
 @dimensions_app.command("show")

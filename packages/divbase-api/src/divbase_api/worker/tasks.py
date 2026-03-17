@@ -572,9 +572,9 @@ def _check_if_concurrent_dimensions_update_task_exist(
     project_id: int, task_id: str
 ) -> DimensionUpdateTaskResult | None:
     """
-    Helper function to check if another concurrent dimensions update task exist for the same project.
+    Helper function to check if another concurrent dimensions update task exists for the same project.
     This is used as a worker-side gate to avoid duplicate processing of dimensions update tasks, which can be heavy for large VCF files.
-    If the current task is not the winner of the race, return an result with a message, and use this in the main task to exit.
+    If the current task is not the winner of the race, return a result with a message, and use this in the main task to exit.
     """
     with SyncSessionLocal() as db:
         is_winner, current_job_id, winner_job_id = resolve_dimensions_winner_for_worker(

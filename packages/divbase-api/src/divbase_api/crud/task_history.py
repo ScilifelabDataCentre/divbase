@@ -129,12 +129,12 @@ async def update_task_history_entry_with_celery_task_id(
 async def create_provisional_dimensions_reservation(db: AsyncSession, user_id: int, project_id: int) -> int:
     """
     Creates a provisional reservation for dimensions update by creating a TaskHistoryDB entry with task_id=None and
-    task_name="update_vcf_dimensions_task". This allows the update_vcf_dimensions_task to be associated with this entry
-    once the celery task is created and gets its task_id, and allows the task history to be visible in the UI as soon
-    as the reservation is made rather than waiting for the celery task to be created.
+    task_name="tasks.update_vcf_dimensions_task". This allows the update_vcf_dimensions_task to be associated with this
+    entry once the celery task is created and gets its task_id, and allows the task history to be visible in the UI as
+    soon as the reservation is made rather than waiting for the celery task to be created.
     """
 
-    # TaskName.UPDATE_VCF_DIMENSIONS.value is string, with is needed to not have to handle enums in the migrations
+    # TaskName.UPDATE_VCF_DIMENSIONS.value is a string, which is needed to not have to handle enums in the migrations
 
     task_history_entry = TaskHistoryDB(
         task_id=None, task_name=TaskName.UPDATE_VCF_DIMENSIONS.value, user_id=user_id, project_id=project_id
@@ -154,11 +154,13 @@ async def get_active_dimensions_contenders(
     """
     Get active dimensions-update contenders for a project.
 
-    provisional_entry_cutoff is the time between: the task submission arrives to the API and is written to the db as a
-    provisional entry (task_id is None), AND the update of the entry with the celery task_id after async_apply has sucessfully enqued the task.
+    provisional_entry_cutoff is the time between: the task submission arriving at the API and being written to the
+    database as a provisional entry (task_id is None), and the update of the entry with the Celery task_id after
+    async_apply has successfully enqueued the task.
 
-    celery_taskmeta_entry_gap_cutoff is the time between: the celery task_id is written to the db after async_apply has sucessfully enqued the task,
-    AND the celery_taskmeta entry is written to the db with the status (i.e. a worker has picked up the task and started).
+    celery_taskmeta_entry_gap_cutoff is the time between: the Celery task_id being written to the database after
+    async_apply has successfully enqueued the task, and the CeleryTaskMeta entry being written to the database with
+    the status (i.e. a worker has picked up the task and started).
     """
     now = datetime.now(timezone.utc)
     provisional_entry_cutoff = now - timedelta(seconds=provisional_entry_ttl_seconds)

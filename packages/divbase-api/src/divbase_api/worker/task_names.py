@@ -7,7 +7,7 @@ from enum import Enum
 
 class TaskName(str, Enum):
     """
-    Single source-of-truth for Celery task names. Allows these names name to be reused in other layer of the codebase.
+    Single source-of-truth for Celery task names. Allows these names to be reused in other layers of the codebase.
     """
 
     SAMPLE_METADATA_QUERY = "tasks.sample_metadata_query"
