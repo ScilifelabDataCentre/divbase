@@ -17,16 +17,16 @@ APP_NAME = "divbase-cli"
 APP_DIR = Path(typer.get_app_dir(APP_NAME))
 DEFAULT_METADATA_TSV_NAME = "sample_metadata.tsv"
 DEFAULT_LOG_LEVEL = "INFO"
-DEV_MODE = bool(os.getenv("DIVBASE_DEV", "false") == "true")
+DEV_MODE = os.getenv("DIVBASE_DEV", "0") == "1"
 CONFIG_PATH = APP_DIR / "config.yaml"
 TOKENS_PATH = APP_DIR / ".secrets"
 
 if DEV_MODE:
     DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
-    DEFAULT_LOGGING_ON = True
+    DEFAULT_LOGGING_ON = "1"
 else:
     DEFAULT_DIVBASE_API_URL = "https://divbase-dev.scilifelab-2-dev.sys.kth.se/api"  # TODO - prod url when time
-    DEFAULT_LOGGING_ON = False
+    DEFAULT_LOGGING_ON = "0"
 
 
 @dataclass
@@ -42,7 +42,7 @@ class DivBaseCLISettings:
     TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
-    LOGGING_ON: bool = bool(os.getenv("DIVBASE_LOGGING_ON", str(DEFAULT_LOGGING_ON)) == "true")
+    LOGGING_ON: bool = os.getenv("DIVBASE_LOGGING_ON", DEFAULT_LOGGING_ON) == "1"
     LOG_LEVEL: str = os.getenv("DIVBASE_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
     def __post_init__(self):
