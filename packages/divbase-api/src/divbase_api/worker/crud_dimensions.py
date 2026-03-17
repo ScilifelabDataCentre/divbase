@@ -7,14 +7,22 @@ packages/divbase-api/src/divbase_api/crud/vcf_dimensions.py
 import dataclasses
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import List
 
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.session import Session
 
+from divbase_api.crud.crud_constants import (
+    ACTIVE_CELERY_STATUSES,
+    CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS,
+    PROVISIONAL_ENTRY_TTL_SECONDS,
+)
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
+from divbase_api.worker.task_names import TaskName
 
 logger = logging.getLogger(__name__)
 
@@ -272,3 +280,66 @@ def delete_skipped_vcf_batch(db: Session, vcf_file_s3_key_batch: list[str], proj
         f"Batch deleted skipped VCF entries for {len(vcf_file_s3_key_batch)} files in project {project_id}. "
         f"Rows affected: {result.rowcount}"
     )
+
+
+def resolve_dimensions_winner_for_worker(
+    db: Session,
+    project_id: int,
+    task_id: str,
+    provisional_entry_ttl_seconds: int = PROVISIONAL_ENTRY_TTL_SECONDS,
+    celerytaskmeta_entry_gap_ttl_seconds: int = CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS,
+) -> tuple[bool, int | None, int | None]:
+    """
+    FOR CELERY WORKERS, not for user interactions with API.
+
+    Check if the current dimensions update task is the race winner among potential concurrent dimensions update tasks for the same project,
+    based on the task history and Celery task meta tables.
+
+    Essentially a worker version of the API's get_active_dimensions_contenders()
+    """
+    now = datetime.now(timezone.utc)
+    provisional_entry_cutoff = now - timedelta(seconds=provisional_entry_ttl_seconds)
+    celery_taskmeta_entry_gap_cutoff = now - timedelta(seconds=celerytaskmeta_entry_gap_ttl_seconds)
+
+    current_job_stmt = select(TaskHistoryDB.id).where(
+        TaskHistoryDB.project_id == project_id,
+        TaskHistoryDB.task_name == TaskName.UPDATE_VCF_DIMENSIONS.value,
+        TaskHistoryDB.task_id == task_id,
+    )
+    current_job_id = db.execute(current_job_stmt).scalar_one_or_none()
+
+    # Avoid blocking task if there is CeleryTaskMeta drift.
+    if current_job_id is None:
+        return True, None, None
+
+    winner_stmt = (
+        select(TaskHistoryDB.id)
+        .outerjoin(CeleryTaskMeta, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(
+            TaskHistoryDB.project_id == project_id,
+            TaskHistoryDB.task_name == TaskName.UPDATE_VCF_DIMENSIONS.value,
+            or_(
+                and_(
+                    TaskHistoryDB.task_id.is_(None),
+                    TaskHistoryDB.created_at >= provisional_entry_cutoff,
+                ),
+                and_(
+                    TaskHistoryDB.task_id.is_not(None),
+                    CeleryTaskMeta.status.in_(ACTIVE_CELERY_STATUSES),
+                ),
+                and_(
+                    TaskHistoryDB.task_id.is_not(None),
+                    CeleryTaskMeta.task_id.is_(None),
+                    TaskHistoryDB.created_at >= celery_taskmeta_entry_gap_cutoff,
+                ),
+            ),
+        )
+        .order_by(TaskHistoryDB.id.asc())
+        .limit(1)
+    )
+    winner_job_id = db.execute(winner_stmt).scalar_one_or_none()
+
+    if winner_job_id is None:
+        winner_job_id = current_job_id
+
+    return current_job_id == winner_job_id, current_job_id, winner_job_id

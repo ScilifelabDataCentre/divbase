@@ -145,6 +145,12 @@ class TaskHistoryDisplayManager:
             return f"[{colour}]{result_message}[/{colour}]"
 
         elif isinstance(task.result, DimensionUpdateTaskResult):
+            if task.result.status == "skipped_duplicate":
+                result_message = task.result.message or "Skipped duplicate dimensions update task."
+                if task.result.duplicate_of_job_id is not None:
+                    result_message += f"\nActive dimensions update job id: {task.result.duplicate_of_job_id}"
+                return f"[{colour}]{result_message}[/{colour}]"
+
             result_message = (
                 f"VCF file dimensions index added or updated:\n  {task.result.VCF_files_added}\n"
                 f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"

@@ -33,6 +33,7 @@ from divbase_api.worker.crud_dimensions import (
     delete_vcf_metadata_batch,
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
+    resolve_dimensions_winner_for_worker,
 )
 from divbase_api.worker.metrics import (
     ENABLE_WORKER_METRICS_PER_TASK,
@@ -42,6 +43,7 @@ from divbase_api.worker.metrics import (
     store_task_metric_in_cache,
     update_prometheus_gauges_from_cache,
 )
+from divbase_api.worker.task_names import TaskName
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
@@ -162,7 +164,7 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-@app.task(name="tasks.sample_metadata_query", tags=["quick"])
+@app.task(name=TaskName.SAMPLE_METADATA_QUERY.value, tags=["quick"])
 def sample_metadata_query_task(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -233,7 +235,7 @@ def sample_metadata_query_task(
     return result
 
 
-@app.task(name="tasks.bcftools_query", tags=["slow"])
+@app.task(name=TaskName.BCFTOOLS_QUERY.value, tags=["slow"])
 def bcftools_pipe_task(
     tsv_filter: str,
     command: str,
@@ -388,7 +390,7 @@ def bcftools_pipe_task(
     return {"status": "completed", "output_file": output_file}
 
 
-@app.task(name="tasks.update_vcf_dimensions_task")
+@app.task(name=TaskName.UPDATE_VCF_DIMENSIONS.value)
 def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
@@ -447,9 +449,7 @@ def update_vcf_dimensions_task(
 
     if incomplete_indexed_vcfs:
         logger.warning(
-            "Found %d VCF dimension entries with missing child rows. Forcing re-index even when version is unchanged: %s",
-            len(incomplete_indexed_vcfs),
-            sorted(incomplete_indexed_vcfs),
+            f"Found {len(incomplete_indexed_vcfs)} VCF dimension entries with missing child rows. Forcing re-index even when version is unchanged: {sorted(incomplete_indexed_vcfs)}"
         )
 
     non_indexed_vcfs = [
@@ -469,6 +469,16 @@ def update_vcf_dimensions_task(
             )
         )
     ]
+
+    # Check if another concurrent dimensions update task has already won the race (i.e. was enqueued and picked up by worker before this task)
+    # Do this before downloading files (first expensive operation in the task)
+    # If another task is the winner, exit task with skipped_duplicate status.
+    another_task_is_race_winner = _check_if_concurrent_dimensions_update_task_exist(
+        project_id=project_id,
+        task_id=task_id,
+    )
+    if another_task_is_race_winner:
+        return another_task_is_race_winner.model_dump()
 
     _ = _download_vcf_files(
         files_to_download=non_indexed_vcfs,
@@ -556,6 +566,35 @@ def update_vcf_dimensions_task(
 
         # Convert to dict since celery serializes to JSON when writing to results backend. Pydantic model serialization is not supported by celery
         return result.model_dump()
+
+
+def _check_if_concurrent_dimensions_update_task_exist(
+    project_id: int, task_id: str
+) -> DimensionUpdateTaskResult | None:
+    """
+    Helper function to check if another concurrent dimensions update task exists for the same project.
+    This is used as a worker-side gate to avoid duplicate processing of dimensions update tasks, which can be heavy for large VCF files.
+    If the current task is not the winner of the race, return a result with a message, and use this in the main task to exit.
+    """
+    with SyncSessionLocal() as db:
+        is_winner, current_job_id, winner_job_id = resolve_dimensions_winner_for_worker(
+            db=db, project_id=project_id, task_id=task_id
+        )
+
+    if is_winner:
+        return None
+
+    logger.info(
+        f"Skipping duplicate dimensions task for project_id={project_id}. current_job_id={current_job_id} winner_job_id={winner_job_id} task_id={task_id}"
+    )
+    return DimensionUpdateTaskResult(
+        status="skipped_duplicate",
+        VCF_files_added=None,
+        VCF_files_skipped=None,
+        VCF_files_deleted=None,
+        duplicate_of_job_id=winner_job_id,
+        message=f"Skipped duplicate dimensions update; active job id: {winner_job_id}",
+    )
 
 
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:

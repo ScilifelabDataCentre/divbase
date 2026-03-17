@@ -29,6 +29,23 @@ class DimensionUpdateTaskResult(BaseModel):
     VCF_files_deleted: Optional[list[str]] = Field(
         None, description="VCF files that have been deleted from the project and thus have been dropped from the index"
     )
+    duplicate_of_job_id: Optional[int] = Field(
+        None,
+        description="The job ID of the task that this task is a duplicate of. Only set if the task is a duplicate.",
+    )
+    message: Optional[str] = Field(
+        None, description="A message describing the outcome of the task. Only set if the task is a duplicate."
+    )
+
+
+class DimensionsUpdateSubmitResult(BaseModel):
+    """Result model for submitting a dimensions update job."""
+
+    job_id: int
+    outcome: str = Field(
+        ...,
+        description="Whether a new job was enqueued or an existing active job was reused. Allowed values: 'new', 'existing'.",
+    )
 
 
 class DimensionsShowResult(BaseModel):

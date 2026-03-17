@@ -39,6 +39,7 @@ class TaskHistoryDB(BaseDBModel):
         nullable=True,  # nullable so that cronjob tasks can use project_id None
         index=True,
     )
+    task_name: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
 
     user: Mapped["UserDB"] = relationship("UserDB", back_populates="task_history")
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="task_history")

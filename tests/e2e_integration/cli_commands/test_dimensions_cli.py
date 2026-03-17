@@ -3,9 +3,11 @@ Tests for the "divbase-cli dimensions" subcommand
 """
 
 import ast
+import concurrent.futures
 import gzip
 import os
 import re
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +28,9 @@ from divbase_api.worker.crud_dimensions import (
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_cli.cli_exceptions import DivBaseAPIError
+from divbase_cli.config_resolver import resolve_project
 from divbase_cli.divbase_cli import app
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.exceptions import NoVCFFilesFoundError
 
 runner = CliRunner()
@@ -59,6 +63,50 @@ def _parse_list_from_cli_output(stdout: str) -> list:
     list_start = list_text.find("[")
     list_end = list_text.rfind("]") + 1
     return ast.literal_eval(list_text[list_start:list_end])
+
+
+def test_dimensions_update_endpoint_deduplicates_two_concurrent_submissions(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test that two near-simultaneous dimensions update submissions for the same project should hit the concurrency gates
+    in the endpoint and resolve to the same (=race winner) DivBase job ID.
+
+
+    Uses two threads to simulate two near-simultaneous dimensions update submissions for the same project
+    Barrier(2) means that the 2 threads will wait for each other to reach the barrier before continuing
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_config = resolve_project(project_name=project_name)
+
+    # Submit two requests concurrently for the same project.
+    # Barrier aligns both threads before sending the PUT request.
+
+    barrier = threading.Barrier(2)
+
+    def submit_dimensions_update() -> dict:
+        barrier.wait(
+            timeout=2.0
+        )  # Ensure that the two threads wait for each other to reach the barrier before continuing
+        response = make_authenticated_request(
+            method="PUT",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+        )
+        return response.json()
+
+    # Start two concurrent submissions for the same project.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(submit_dimensions_update) for _ in range(2)]
+        payloads = [future.result(timeout=10.0) for future in futures]
+
+    job_ids = [payload["job_id"] for payload in payloads]
+    outcomes = [payload["outcome"] for payload in payloads]
+
+    assert len(set(job_ids)) == 1, f"Expected both submissions to reuse the same job id, got {job_ids}"
+    assert all(outcome in {"new", "existing"} for outcome in outcomes), f"Unexpected outcomes: {outcomes}"
+    assert "existing" in outcomes, f"Expected at least one deduplicated submission, got outcomes={outcomes}"
 
 
 def test_update_vcf_dimensions_task_directly(

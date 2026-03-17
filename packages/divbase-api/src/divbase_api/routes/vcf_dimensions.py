@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
-from divbase_api.crud.task_history import create_task_history_entry
+from divbase_api.crud.task_history import (
+    create_provisional_dimensions_reservation,
+    delete_dimensions_provisional_reservation,
+    get_active_dimensions_contenders,
+    update_task_history_entry_with_celery_task_id,
+)
 from divbase_api.crud.vcf_dimensions import (
     get_skipped_vcfs_by_project_async,
     get_unique_samples_by_project_async,
@@ -25,6 +30,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
+    DimensionsUpdateSubmitResult,
     DimensionUpdateKwargs,
 )
 
@@ -78,12 +84,14 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     )
 
 
-@vcf_dimensions_router.put("/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED)
+@vcf_dimensions_router.put(
+    "/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED, response_model=DimensionsUpdateSubmitResult
+)
 async def update_vcf_dimensions_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-) -> int:
+) -> DimensionsUpdateSubmitResult:
     """
     Update the VCF dimensions files for the specified project
     """
@@ -91,6 +99,31 @@ async def update_vcf_dimensions_endpoint(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
+
+    # Check if there is already is an active dimensions update task for the project
+    # Avoids creating an unnecessary provisional entry if there is already an active task
+    active_dimensions_contenders_since_before = await get_active_dimensions_contenders(db, project.id)
+    if active_dimensions_contenders_since_before:
+        return DimensionsUpdateSubmitResult(job_id=active_dimensions_contenders_since_before[0], outcome="existing")
+
+    provisional_job_id = await create_provisional_dimensions_reservation(
+        db=db, user_id=current_user.id, project_id=project.id
+    )
+
+    # Check if two concurrent dimensions update requests have been made for the project
+    active_dimensions_concurrent_to_current_request = await get_active_dimensions_contenders(
+        db=db, project_id=project.id
+    )
+    winner_job_id = (
+        active_dimensions_concurrent_to_current_request[0]
+        if active_dimensions_concurrent_to_current_request
+        else provisional_job_id
+    )
+
+    if winner_job_id != provisional_job_id:
+        # if provisional_job_id lost the race, delete it.
+        await delete_dimensions_provisional_reservation(db=db, job_id=provisional_job_id)
+        return DimensionsUpdateSubmitResult(job_id=winner_job_id, outcome="existing")
 
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,
@@ -101,14 +134,13 @@ async def update_vcf_dimensions_endpoint(
 
     results = update_vcf_dimensions_task.apply_async(kwargs=task_kwargs.model_dump())
 
-    job_id = await create_task_history_entry(
-        user_id=current_user.id,
-        project_id=project.id,
-        task_id=results.id,
+    await update_task_history_entry_with_celery_task_id(
         db=db,
+        job_id=provisional_job_id,
+        task_id=results.id,
     )
 
-    return job_id
+    return DimensionsUpdateSubmitResult(job_id=provisional_job_id, outcome="new")
 
 
 @vcf_dimensions_router.get(
