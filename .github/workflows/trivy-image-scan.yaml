@@ -1,7 +1,7 @@
 name: Run trivy image scan whenever new images are built and published to GHCR
 on:
   workflow_run:
-    workflows: ["Build and Push images to GitHub Container Registry"]
+    workflows: ["Release a new version of DivBase", "Build and Push DEV images to GitHub Container Registry"] 
     types:
       - completed
   schedule:
@@ -21,11 +21,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Determine image tag to scan
+        id: image-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: "image"
-          image-ref: ghcr.io/scilifelabdatacentre/${{ matrix.image-name }}:latest
+          image-ref: ghcr.io/scilifelabdatacentre/${{ matrix.image-name }}:${{ steps.image-tag.outputs.tag }}
           ignore-unfixed: true
           format: "sarif"
           output: "trivy-results.sarif"

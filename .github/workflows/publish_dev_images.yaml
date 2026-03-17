@@ -1,15 +1,18 @@
-name: Build and Push DEV images to GitHub Container Registry, run pytest on the newly built images
+name: Build and push DEV images to ghcr, run pytest on the newly built images
 
 on: 
   # NOTE: for a release build of the images, see release.yaml. 
   # The workflow_dispatch can be used for dev images
-  # images are tagged with "latest-dev" and commit hash
+  # images are tagged with "latest-dev" and the commit hash
+  # This workflow builds and publishes the images before running the tests
+  # so you don't have to wait to put them on the dev cluster
+  # For the release builds, we run tests before building the images.
   workflow_dispatch:
 
 jobs:
   push-to-container-registry:
     if: github.repository == 'ScilifelabDataCentre/divbase'  
-    name: Build and push DivBase DEV images to GitHub Container Registry
+    name: Build and push DEV images to ghcr
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,10 +47,8 @@ jobs:
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:${{ github.sha }}
                 ghcr.io/scilifelabdatacentre/${{ matrix.image_name }}:latest-dev
 
-  # this job runs after the images are already built, so you don't have to wait to put them on the dev cluster
-  # For the release builds, we do the opposite order and run tests before building the images, see release.yaml
   run-pytest-on-newly-built-images:
-    name: python
+    name: Run pytest on the newly built DEV images
     needs: push-to-container-registry
     runs-on: ubuntu-latest
     steps:
