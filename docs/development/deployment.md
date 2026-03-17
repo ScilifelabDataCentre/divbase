@@ -1,16 +1,26 @@
 # Deployment of DivBase Server
 
-- DivBase is deployed on a kubernetes cluster and its deployment is managed in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase), see there for details.
+DivBase is deployed on a kubernetes cluster and its deployment is managed in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase), see there for details.
 
-- In this repository the main thing that needs to be done is to build and push the new docker images for the API and worker.
+In this repository there are 3 things related to deployment:
 
-- We have a GitHub Actions workflow that does this (`.github/workflows/publish_images.yaml`). You can trigger a workflow_dispatch to manually create the docker images at a given commit.
+1. Release the docker images of the api and worker to the GitHub Container Registry (GHCR)
+2. Publish new versions of the divbase-cli and divbase-lib packages to PyPI.
+3. Publish the documentation to GitHub Pages (which is used for hosting the docs site).
 
-- Head to the actions tag on GitHub and to the action "Build and push both docker images to the GitHub Container Registry". From there click run manual workflow. You can choose to specify the name of the image tag if you want. Otherwise leave the input blank and it will be tagged with the full commit hash.
+For releases, we have a GitHub Actions workflow (`release.yaml`) that does all three of these things automatically when the release is published.
 
-## Deployment of DivBase CLI
+- For development and testing purposes, you can run specific github actions via `workflow_dispatch`:
 
-The packages divbase-cli and divbase-lib are published to PyPI for user installation via pip/uv etc...
+  - `publish_dev_images.yaml`: Build and push new docker images to the GitHub Container Registry. Images will be tagged with commit hash and latest-dev. A pytest run will run after the images are built to test the new images.
+  - `publish-to-test-pypi.yaml`: Publish divbase-lib and divbase-cli packages to **Test** PyPI.
+  - `publish_docs.yaml`: Publish a new version of the docs site (we have no dev docs site, just 1 single shared docs site).
+
+- To trigger a workflow_dispatch, head to the actions tag on GitHub and to the action name of choice.
+
+## Publishing of `divbase-cli` and `divbase-lib`
+
+The packages `divbase-cli` and `divbase-lib` are published to PyPI for user installation via pip/uv etc...
 
 We have accounts on both [PyPI](https://pypi.org/) and [TestPyPI](https://test.pypi.org). With TestPyPI you can publish test versions of the packages before pushing to the main PyPI repository. Users wont accidentally install versions on the test instance unless they explicitly specify to install from there.
 
@@ -20,10 +30,6 @@ We have accounts on both [PyPI](https://pypi.org/) and [TestPyPI](https://test.p
 - [divbase-lib on test PyPI](https://test.pypi.org/project/divbase-lib/)
 
 (Login credentials are in bitwarden, but if you use the GH actions below you don't need to use them.)
-
-## Considerations for Kubernetes deployment
-
-TODO: add some lessons learned from the k8s deployment, e.g. on resources needed for the celery worker.
 
 ### Good to know
 
@@ -80,7 +86,7 @@ To test how the installation of a new version would be without affecting the pro
 
 ### Publishing to PyPI
 
-The production release is automated, once a new release is published on GitHub, a GitHub Actions workflow (`publish-to-pypi.yaml`) will run to publish the packages to PyPI.
+The production release is automated, once a new GH release is published on GitHub, the actions workflow (`release.yaml`) will run to publish the packages to PyPI.
 
 If something goes wrong with the GH action that automatically publishes to PyPI:
 
@@ -100,3 +106,7 @@ If something goes wrong with the GH action that automatically publishes to PyPI:
     ```
     [see here for why you need to add the flag --no-sources to the build steps](https://docs.astral.sh/uv/guides/package/#building-your-package).
     But this should really not be needed in normal cases.
+
+## Considerations for Kubernetes deployment
+
+TODO: add some lessons learned from the k8s deployment, e.g. on resources needed for the celery worker.
