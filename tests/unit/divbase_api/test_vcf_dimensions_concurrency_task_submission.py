@@ -3,6 +3,7 @@ Unit tests for VCF dimensions API route for the race condition gates to handle t
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,13 +33,18 @@ def _run_update_endpoint(db: MagicMock) -> DimensionsUpdateSubmitResult:
     """Helper function that runs the update endpoint with the given mocked db and fixed project/user info. Returns the endpoint result."""
     project = ProjectTest(id=7, name="test-project", bucket_name="test-bucket")
     user = UserTest(id=99)
-    return asyncio.run(
-        vcf_dimensions.update_vcf_dimensions_endpoint(
-            project_name=project.name,
-            project_and_user_and_role=(project, user, ProjectRoles.EDIT),
-            db=db,
-        )
-    )
+    with (
+        ThreadPoolExecutor(max_workers=1) as pool
+    ):  # Use separate thread per test call to avoid event loop collisions/errors when running the full test stack with pytest -s -v
+        return pool.submit(
+            lambda: asyncio.run(
+                vcf_dimensions.update_vcf_dimensions_endpoint(
+                    project_name=project.name,
+                    project_and_user_and_role=(project, user, ProjectRoles.EDIT),
+                    db=db,
+                )
+            )
+        ).result(timeout=5.0)
 
 
 def test_update_vcf_dimensions_endpoint_reuses_existing_active_job():
