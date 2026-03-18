@@ -8,6 +8,9 @@ on:
   # so you don't have to wait to put them on the dev cluster
   # For the release builds, we run tests before building the images.
   workflow_dispatch:
+  pull_request: # TODO - temp for testing
+    branches:
+      - main
 
 jobs:
   push-to-container-registry:
