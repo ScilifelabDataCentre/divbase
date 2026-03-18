@@ -149,11 +149,5 @@ jobs:
       - name: Install the project
         run: uv sync --locked --dev
 
-      - name: Cache mkdocs deps
-        uses: actions/cache@v5
-        with: 
-          key: ${{ github.ref }}
-          path: .cache
-
       - name: Deploy documentation
         run: uv run mkdocs gh-deploy --force
