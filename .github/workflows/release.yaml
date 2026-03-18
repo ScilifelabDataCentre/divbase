@@ -8,6 +8,9 @@ name: Release a new version of DivBase
 on:
   release:
     types: [published]
+  pull_request: # TODO - temp for testing
+    branches:
+      - main 
 
 jobs:
 
