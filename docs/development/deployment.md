@@ -16,7 +16,7 @@ For releases, we have a GitHub Actions workflow (`release.yaml`) that does all t
   - `publish-to-test-pypi.yaml`: Publish divbase-lib and divbase-cli packages to **Test** PyPI.
   - `publish_docs.yaml`: Publish a new version of the docs site (we have no dev docs site, just 1 single shared docs site).
 
-- To trigger a workflow_dispatch, head to the actions tag on GitHub and to the action name of choice.
+- To trigger a workflow_dispatch, head to the "Actions tab" on GitHub and to the action name of choice.
 
 ## Publishing of `divbase-cli` and `divbase-lib`
 

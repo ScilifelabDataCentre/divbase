@@ -1,11 +1,11 @@
 name: Run trivy image scan whenever new images are built and published to GHCR
 on:
   workflow_run:
-    workflows: ["Release a new version of DivBase", "Build and Push DEV images to GitHub Container Registry"] 
+    workflows: ["Release a new version of DivBase", "Build and push DEV images to ghcr and run pytest on the images"] 
     types:
       - completed
   schedule:
-    - cron: '15 5 * * 3' # runs at 5:15 AM every Wednesday
+    - cron: '15 5 * * 3'
 
 jobs:
   scan:

@@ -1,4 +1,4 @@
-name: Build and push DEV images to ghcr, run pytest on the newly built images
+name: Build and push DEV images to ghcr and run pytest on the images
 
 on: 
   # NOTE: for a release build of the images, see release.yaml. 

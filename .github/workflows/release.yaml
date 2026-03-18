@@ -1,7 +1,7 @@
 name: Release a new version of DivBase
 # Triggered when a GitHub release is published
 # Order: Build Docker images -> run pytest -> push images.  
-# If that works, 2 seperate jobs run: (1) build and publish the PyPI packages and (2) make a new release of the docs.
+# If that works, 2 separate jobs run: (1) build and publish the PyPI packages and (2) make a new release of the docs.
 # docker images are tagged with commit hash, the commit tag (semver) and "latest".
 # pypi packages have version numbering set by their __init__.py, which should be updated in the release commit.
 
