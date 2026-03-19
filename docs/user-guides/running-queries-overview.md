@@ -1,6 +1,8 @@
 # Running Queries: Overview
 
-In DivBase, there are three query workflows:
+A core functionality of DivBase is to allow users to checkout user-defined subsets of the VCF data and sample metadata contained in their project. In DivBase, the action of checking out data like this is called a _query_.
+
+There are three query workflows:
 
 - Query sidecar metadata only
 - Query VCF data only

@@ -548,7 +548,7 @@ class BcftoolsQueryManager:
 
         unsorted_output_file = f"merged_unsorted_{identifier}.bcf"
         annotated_unsorted_output_file = f"merged_annotated_unsorted_{identifier}.bcf"
-        divbase_header_for_vcf = "divbase_header.txt"
+        divbase_header_for_vcf = "divbase_header.txt"  # Stored as temp txt on the worker for compatibility with bcftools annotate -h option, which requires a text file input for the header.
         self.temp_files.append(unsorted_output_file)
         self.temp_files.append(annotated_unsorted_output_file)
         self.temp_files.append(divbase_header_for_vcf)
