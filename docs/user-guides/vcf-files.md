@@ -14,6 +14,8 @@ TODO
     - we can provide suggestions on how to split
     - example script from mouse VCF benchmarking to split a larger VCF into 20 smaller by chromosome: <https://github.com/ScilifelabDataCentre/divbase/blob/per-task-cpu-ram-metrics/scripts/benchmarking/split_mouse_vcf_per_scaffold.sh>
 
+TODO: there are bcftools rules for merge and concat, so we need to be clear here about how the files should be stuctured when it comes to duplicate data.
+
 ## Managing VCF files in DivBase
 
 DivBase is built to help users manage their VCF data. For this to work well, users need to consider the following when uploading data
