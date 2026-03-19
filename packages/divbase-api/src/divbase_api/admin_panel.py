@@ -40,6 +40,7 @@ from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.queue_status import QueueStatus
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
@@ -628,6 +629,80 @@ class AnnouncementView(ModelView):
     exclude_fields_from_detail = []
 
 
+class QueueStatusView(ModelView):
+    """
+    Custom admin panel View for the QueueStatus model.
+
+    This is a singleton table (only 1 row allowed).
+    Deletion and creation are disabled - only editing the existing row is allowed.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", disabled=True),
+        BooleanField("is_closed", help_text="Is the queue closed for new tasks?"),
+        DateTimeField(
+            "scheduled_start",
+            label="Scheduled closure start time (UTC time)",
+            help_text="(THIS IS UTC TIME) Optional: When should the queue closure take effect? Leave empty for immediate effect.",
+        ),
+        TextAreaField(
+            "reason_for_users",
+            help_text=(
+                "Message shown to users when the queue is closed (max 500 characters)."
+                "You could write: \n"
+                "The queuing system is currently closed for new tasks due to planned upcoming maintenance. Please try again later."
+            ),
+        ),
+        DateTimeField(
+            "created_at",
+            label="Created At (UTC time)",
+            help_text="Timestamp when the entry was created. Value determined by system.",
+            disabled=True,
+        ),
+        DateTimeField(
+            "updated_at",
+            label="Updated At (UTC time)",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
+    ]
+
+    exclude_fields_from_list = []
+    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_detail = []
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion - this is a singleton table."""
+        return False
+
+    def can_create(self, request: Request) -> bool:
+        """Disable creation - this is a singleton table with only 1 row."""
+        # 1st row created by the alembic migration
+        return False
+
+    async def validate(self, request: Request, data: dict[str, Any]) -> None:
+        errors: dict[str, str] = {}
+
+        if data.get("scheduled_start") and not data.get("is_closed"):
+            errors["scheduled_start"] = "Cannot have a scheduled start time without the queue being closed."
+
+        reason = data.get("reason_for_users") or ""
+        if data.get("is_closed") and not reason.strip():
+            errors["reason_for_users"] = "Reason for users is required when the queue is closed."
+
+        if len(reason) > 500:
+            errors["reason_for_users"] = "Message must be 500 characters or less."
+
+        if errors:
+            raise FormValidationError(errors=errors)
+
+        return await super().validate(request=request, data=data)
+
+    # NOTE, no serialize_field_value/_format_cet_datetime override on purpose here
+    # as does not work well when modyfying the timestamp in edit view, easier to just display as UTC
+
+
 class DivBaseAuthProvider(AuthProvider):
     """
     This class enables starlette-admin to make use of DivBase's pre-existing auth system.
@@ -711,4 +786,5 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
     )
+    admin.add_view(QueueStatusView(QueueStatus, icon="fas fa-power-off", label="Queue Status", identity="queue-status"))
     admin.mount_to(app)
