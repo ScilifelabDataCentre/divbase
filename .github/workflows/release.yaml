@@ -1,0 +1,153 @@
+name: Release a new version of DivBase
+# Triggered when a GitHub release is published
+# Order: Build Docker images -> run pytest -> push images.  
+# If that works, 2 separate jobs run: (1) build and publish the PyPI packages and (2) make a new release of the docs.
+# docker images are tagged with commit hash, the commit tag (semver) and "latest".
+# pypi packages have version numbering set by their __init__.py, which should be updated in the release commit.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  build-test-publish-images:
+    name: Run pytest, if successful publish docker images
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # ghcr publishing needs write
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v6
+
+      - name: Build fastapi image, no push
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          load: true
+          context: .
+          file: ./docker/fastapi.dockerfile
+          tags: divbase-fastapi:test
+
+      - name: Build worker image, no push
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          load: true
+          context: .
+          file: ./docker/worker.dockerfile
+          tags: divbase-worker:test
+
+      - name: Install bcftools # some test set up data calling bcftools directly
+        run: | 
+          sudo apt-get update  
+          sudo apt-get install autoconf automake make gcc perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libperl-dev libgsl0-dev
+          git clone --recurse-submodules https://github.com/samtools/htslib.git
+          git clone https://github.com/samtools/bcftools.git
+          cd bcftools
+          make
+          sudo make install 
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.15"
+          enable-cache: true
+
+      - name: Install project and test dependencies
+        run: | 
+          uv sync --locked --dev
+          uv run playwright install chromium
+
+      - name: Allow container to write to test fixtures # actions runner uid=1001, but container runs as 1000 
+        # So container does not have permissions to write to the mounted test fixtures, required by test_bcftools_pipe_cli_integration_with_eager_mode 
+        # volume mount made in docker/divbase_compose.tests.yaml 
+        run: chmod -R a+w tests/fixtures
+
+      - name: Run pytest including slow tests
+        env: 
+          GITHUB_ACTIONS_RUNNER: "true"
+          DIVBASE_FASTAPI_IMAGE: divbase-fastapi:test
+          DIVBASE_WORKER_IMAGE: divbase-worker:test
+        run: FORCE_TERMINAL=1 COLUMNS=1000 uv run pytest --run-slow
+
+      # publish images to GHCR
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push fastapi image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: .
+          file: ./docker/fastapi.dockerfile
+          tags: | 
+            ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.ref_name }} 
+            ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.sha }}
+            ghcr.io/scilifelabdatacentre/divbase-fastapi:latest
+      - name: Push worker image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: .
+          file: ./docker/worker.dockerfile
+          tags: | 
+            ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.ref_name }}
+            ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.sha }}
+            ghcr.io/scilifelabdatacentre/divbase-worker:latest
+      
+  build-pypi-packages:
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    uses: ./.github/workflows/build-pypi-packages.yaml
+
+  # NOTE: artifacts are scoped to the current workflow run, so you don't need to worry that this
+  # action will publish older packages built from other runs/release attempts that e.g. failed pytest. 
+  publish-to-pypi:
+    name: Publish divbase-lib and divbase-cli to PyPI
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    needs: [build-test-publish-images, build-pypi-packages]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # For trusted publishing
+    environment:
+      name: pypi
+    
+    steps:
+      - name: Download built packages
+        uses: actions/download-artifact@v7
+        with:
+          name: Packages
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+
+  # Publish docs to GitHub pages
+  deploy-docs:
+    name: Publish DivBase documentation to GitHub Pages
+    if: github.repository == 'ScilifelabDataCentre/divbase'
+    needs: build-test-publish-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # for pushing to gh-pages branch
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.15"
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --locked --dev
+
+      - name: Deploy documentation
+        run: uv run mkdocs gh-deploy --force
