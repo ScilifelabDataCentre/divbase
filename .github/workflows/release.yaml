@@ -8,9 +8,6 @@ name: Release a new version of DivBase
 on:
   release:
     types: [published]
-  pull_request: # TODO - temp for testing
-    branches:
-      - main 
 
 jobs:
 
@@ -90,7 +87,8 @@ jobs:
           push: true
           context: .
           file: ./docker/fastapi.dockerfile
-          tags: | # TODO - removed for testing as from pr branch ref-name is invalid tag format, not a problem for releases ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.ref_name }} 
+          tags: | 
+            ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.ref_name }} 
             ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.sha }}
             ghcr.io/scilifelabdatacentre/divbase-fastapi:latest
       - name: Push worker image
@@ -99,7 +97,8 @@ jobs:
           push: true
           context: .
           file: ./docker/worker.dockerfile
-          tags: | #  TODO - see above   ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.ref_name }}
+          tags: | 
+            ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.ref_name }}
             ghcr.io/scilifelabdatacentre/divbase-worker:${{ github.sha }}
             ghcr.io/scilifelabdatacentre/divbase-worker:latest
       
