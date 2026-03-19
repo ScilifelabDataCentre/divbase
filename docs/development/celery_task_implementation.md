@@ -185,6 +185,7 @@ class TaskHistoryResult(BaseModel):
   ```
 
 - The dependency injection in `project_and_user_and_role` and the helper function `has_required_role` are used to connect to the database and check that the user has permission to submit tasks to this project. See the example below for how to use it in an endpoint function.
+- Tasks should also call the `check_queue_closed_for_new_tasks` fn to validate the queue is not down (i.e. due to planned maintenance). This function raises a `QueueClosedError` if the queue is closed, which is handled in the API layer to return a 400 error with a message to the user.
 - To enqueue the task function defined in `tasks.py` in the job system, use `result = <TASK_FUNCTION>.apply_async()`. This returns some initial Celery task metadata, including the Celery task UUID.
   - The established pattern in DivBase is - for clarity - to call `.apply_async()` with keyword arguments and not arguments. Specifically, the Pydantic kwargs model can be populated, and then dumped in to Python dict in `.apply_async()` since Celery cannot de/serialise Pydantic mdoels. This ensures that kwarg types are validated before enqueuing the task.
 - Call the `create_task_history_entry()` CRUD function to record the Celery task UUID in `TaskHistoryDB` along with user and project ID. This function will return the DivBase task ID, which is the autoincrementing id from the postgreSQL table. This is an integer and much easier for the users to handle than long UUIDs.
@@ -210,6 +211,9 @@ async def create_bcftools_jobs(
     # Then calls on another helper function to check if the credentials are enough to grant permission
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
+
+    # validation queue is not closed, will raise custom error to user if so.
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     # Pack the required task arguments in the corresponding Pydantic model (see Section 2.2.)
     # This ensures that the kwargs are type validated
