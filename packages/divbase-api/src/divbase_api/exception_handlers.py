@@ -30,6 +30,7 @@ from divbase_api.exceptions import (
     ProjectVersionCreationError,
     ProjectVersionNotFoundError,
     ProjectVersionSoftDeletedError,
+    QueueClosedError,
     TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
     UserRegistrationError,
@@ -378,6 +379,18 @@ async def object_does_not_exist_error_handler(request: Request, exc: ObjectDoesN
         )
 
 
+async def queue_closed_error_handler(request: Request, exc: QueueClosedError):
+    logger.debug(f"Queue closed error for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "queue_closed_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with FastAPI app.
@@ -402,6 +415,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore
     app.add_exception_handler(DownloadedFileChecksumMismatchError, downloaded_file_checksum_mismatch_error_handler)  # type: ignore
     app.add_exception_handler(ObjectDoesNotExistError, object_does_not_exist_error_handler)  # type: ignore
+    app.add_exception_handler(QueueClosedError, queue_closed_error_handler)  # type: ignore
 
     # These cover more generic/unexpected HTTP errors - the exceptions above take precedence
     app.add_exception_handler(HTTPException, generic_http_exception_handler)  # type: ignore
