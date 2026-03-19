@@ -640,17 +640,28 @@ class QueueStatusView(ModelView):
     page_size_options = PAGINATION_DEFAULTS
     fields = [
         IntegerField("id", disabled=True),
-        BooleanField("is_closed", help_text="Is the queue closed for new tasks?"),
+        BooleanField(
+            "is_closed",
+            help_text=(
+                "Is the queue closed for new tasks? "
+                "If the scheduled start time is in the past or not set, the queue is closed. "
+                "If scheduled start time is in the future, queue will be closed at that time."
+            ),
+        ),
         DateTimeField(
             "scheduled_start",
             label="Scheduled closure start time (UTC time)",
-            help_text="(THIS IS UTC TIME) Optional: When should the queue closure take effect? Leave empty for immediate effect.",
+            help_text=(
+                "(THIS IS UTC TIME) Optional: When should the queue closure set above take effect? "
+                "Leave empty for queue to be closed immediatialy "
+                "If the queue is open and you set this field, it will do nothing."
+            ),
         ),
         TextAreaField(
             "reason_for_users",
             help_text=(
-                "Message shown to users when the queue is closed (max 500 characters)."
-                "You could write: \n"
+                "Message shown to users when the queue is closed (max 500 characters). "
+                "You could write: "
                 "The queuing system is currently closed for new tasks due to planned upcoming maintenance. Please try again later."
             ),
         ),
@@ -681,6 +692,16 @@ class QueueStatusView(ModelView):
         # 1st row created by the alembic migration
         return False
 
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `scheduled_start` field is set to None
+        if `is_closed` is set to False.
+        """
+        if not data.get("is_closed"):
+            data["scheduled_start"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
+
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         errors: dict[str, str] = {}
 
@@ -700,7 +721,7 @@ class QueueStatusView(ModelView):
         return await super().validate(request=request, data=data)
 
     # NOTE, no serialize_field_value/_format_cet_datetime override on purpose here
-    # as does not work well when modyfying the timestamp in edit view, easier to just display as UTC
+    # as does not work well when modifying the timestamp in edit view, easier to just display as UTC
 
 
 class DivBaseAuthProvider(AuthProvider):

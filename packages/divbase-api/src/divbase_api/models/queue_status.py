@@ -1,7 +1,7 @@
 """
-QueueStatus db model is used to define whether the DivBase queing system is closed to new tasks.
+QueueStatus db model is used to define whether the DivBase queuing system is closed to new tasks.
 
-The use case for this is prior to a schedlued upgrade, we may want to empty the queue:
+The use case for this is prior to a scheduled upgrade, we may want to empty the queue:
 1. (Day before upgrade): Go to admin panel, set is_closed to True (optionally schedule when the queue will be closed).
 2. (Day of upgrade): Validate queue is empty, perform upgrade,
 3. Once happy, go to admin panel, set is_closed to False to allow new tasks to be created again.
