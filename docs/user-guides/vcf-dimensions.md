@@ -4,11 +4,21 @@ The DivBase query system is built around the DivBase server having cached key te
 
 This allows the DivBase server to make quick checks against against the project VCF Dimensions cache when users submit a query or validate a sidecar metadata TSV file instead of having to read each VCF file every time a query is submitted. This makes the server-side operations more efficient when it comes to internal transfer and reading of files, and for checking VCF query feasibility against the requirements of `bcftools`. For the user, this will lead to faster feedback, especially when the system needs to send an error or warning message.
 
-**An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries**. Updating it is done with the command `divbase-cli dimensions update`. The command needs to be run every time the VCF files in a DivBase project has changed, that is:
+**An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries**.
 
-- When any new VCF file is uploaded to the project.
+All query commands rely on the dimensions cache to quickly resolve samples, scaffolds, and file compatibility.
+Every time a new VCF files has been added added or and existic VCF version has been replaced with a new version, run:
 
-- When an existing VCF file is replaced with a new version.
+```bash
+divbase-cli dimensions update --project <PROJECT_NAME>
+
+# This will return the job ID of the submitted job. Example:
+# Job submitted successfully with task id: 123
+
+# Job status can be viewed with e.g.
+divbase-cli task-history id 123
+
+```
 
 !!! Warning
     DivBase system does not automatically run `divbase-cli dimensions update` when files are uploaded. This needs to be manually done by one project member that has at least an EDIT role in the project.

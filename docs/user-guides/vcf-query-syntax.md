@@ -9,7 +9,14 @@ Users can query the VCF data in their project with or without combining it to a 
 Example of a VCF query that identifies the samples and VCF files to filter on in the project's datastore and then applies a subset based on genomic range:
 
 ```bash
-divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10"" --command "view -r 21:15000000-25000000"
+divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10" --command "view -r 21:15000000-25000000"
+
+# This will return the job ID of the submitted job. Example:
+# Job submitted successfully with task id: 123
+
+# Job status can be viewed with e.g.
+divbase-cli task-history id 123
+
 ```
 
 The outcome a DivBase VCF query is a single results file with merged/concatenated data that fulfills all filters.
@@ -57,6 +64,13 @@ divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10"" --command "vie
 ```
 
 For example, the system might find that the samples that fulfill the [sample metadata query](docs/user-guides/sidecar-metadata.md) set with `--tsv-filter` are, say, `S2`, `S5` `S28` `S108` and that they described in the files `file1.vcf`, `file3.vcf`, `file4.vcf`. The DivBase server will then act on only these three files and subset based on the four samples.
+
+!!! Tip
+    Before using `--tsv-filter` in `query vcf`, you can do a dry-run of metadata query to ensure that the metadata query returns the expected samples and VCF files:
+
+    ```bash
+    divbase-cli query tsv "Area:North,West;Weight:>10"
+    ```
 
 ### 3.2. Mode B1: Direct sample list (--samples)
 
@@ -145,6 +159,8 @@ Distinguish between:
 - Source VCF files: not modified by query jobs
 - Sidecar metadata TSV: read-only during query
 - Result VCF files: new files created on successful jobs
+
+Re-running a query creates additional result files.
 
 Note!
 
