@@ -122,7 +122,7 @@ def sample_metadata_query(
     print(f"Unique filenames: {unique_filenames}\n")
 
 
-@query_app.command("bcftools-pipe")
+@query_app.command("vcf")
 def vcf_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT_VCF),
     samples: str | None = typer.Option(

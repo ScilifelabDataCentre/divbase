@@ -175,13 +175,13 @@ DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF da
 For instance, to subset all VCF files in the project on a chromosomal region in a scaffold named `21`:
 
 ```bash
-divbase-cli query bcftools-pipe --command "view -r 21:15000000-25000000"
+divbase-cli query vcf --command "view -r 21:15000000-25000000"
 ```
 
 The VCF queries can be combined with sidecar sample metadata queries with `--tsv-filter` and the fixed expression `view -s SAMPLES` (where `SAMPLES` tells DivBase to use the results from the sidecar filtering as input for `bcftools view -s`). In this way, only the VCF files that fulfil the sample metadata query will be used in the `bcftools` subset commands. An example:
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
 ```
 
 !!! note
@@ -195,7 +195,7 @@ You can check the status of all of your submitted jobs using:
 divbase-cli task-history user
 ```
 
-Once a `bcftools-pipe` job is complete, you can download the resulting merged vcf file:
+Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
 divbase-cli files download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/results/

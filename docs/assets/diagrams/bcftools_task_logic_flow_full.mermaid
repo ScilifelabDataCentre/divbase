@@ -10,8 +10,8 @@ flowchart TB
     end
 
     start([Start]):::green
-    CLI_command[divbase-cli query bcftools-pipe<br/>--tsv-filter column:value<br/>--command view ...<br/>--metadata-tsv-name file.tsv<br/>--project project_name]:::gray
-    API_request[API request to<br/>endpoint /query/bcftools-pipe/]:::khaki
+    CLI_command[divbase-cli query vcf<br/>--tsv-filter column:value<br/>--command view ...<br/>--metadata-tsv-name file.tsv<br/>--project project_name]:::gray
+    API_request[API request to<br/>endpoint /query/vcf/]:::khaki
     submit_task[Submit bcftools_pipe_task.apply_async<br/>task to queue]:::khaki
 
     worker_picks_up_task[Idle worker picks up task from queue and runs it]

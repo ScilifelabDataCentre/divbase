@@ -89,7 +89,7 @@ divbase-cli task-history user
 ## 3. Submit a query job
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli query vcf --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
 note that we are specifically using the `tutorial_mock_metadata_mgpv3snps.tsv` sample metadata. If this is not specified, the query will default to `sample_metadata.tsv`.

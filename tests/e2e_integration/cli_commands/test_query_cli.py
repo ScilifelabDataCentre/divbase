@@ -158,7 +158,7 @@ def test_bcftools_pipe_query(
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
@@ -191,9 +191,7 @@ def test_bcftools_pipe_query_direct_samples_mode(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     arg_command = "view -r 21:15000000-25000000"
-    command = (
-        f"query bcftools-pipe --samples '5a_HOM-I13,1b_HOM-G58' --command '{arg_command}' --project {project_name} "
-    )
+    command = f"query vcf --samples '5a_HOM-I13,1b_HOM-G58' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -218,7 +216,7 @@ def test_bcftools_pipe_query_all_samples_mode(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     arg_command = "view -r 21:15000000-25000000"
-    command = f"query bcftools-pipe --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -236,7 +234,7 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     project_map,
 ):
     """
-    Tests that running a bcftools-pipe query twice works without running dimensions update between the two runs.
+    Tests that running a vcf query twice works without running dimensions update between the two runs.
     Results files are prefixed with QUERY_RESULTS_FILE_PREFIX and _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket
     skips files that begin with that prefix.
     """
@@ -248,7 +246,7 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
 
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -r 21:15000000-25000000"
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
 
     first_result = runner.invoke(app, command)
     assert first_result.exit_code == 0, f"First run failed: {first_result.stdout}"
@@ -271,7 +269,7 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert isinstance(result.exception, ProjectNotInConfigError)
 
@@ -313,7 +311,7 @@ def test_bcftools_pipe_query_errors(
     user_id = 1
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
-    command_str = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+    command_str = f"query vcf --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
     response = runner.invoke(app, command_str)
 
     assert response.exit_code == 0
@@ -354,7 +352,7 @@ def test_get_task_status_by_task_id(
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
     arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     first_task_result = runner.invoke(app, command)
     assert first_task_result.exit_code == 0
     first_task_id = first_task_result.stdout.strip().split()[-1]
@@ -869,7 +867,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     db_session_sync,
 ):
     """
-    This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
+    This is a special integration test that allows for running vcf queries directly in eager mode
     in a way that allows for catching the logs that otherwise would be printed inside the workers. For
     comparison, running a CLIrunner test will only give the "task submitted" log back.
 

@@ -241,7 +241,7 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
 
 @pytest.mark.unit
 def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
-    """Test that fails on various variations of when user inputs empty --command to bcftools-pipe in the CLI."""
+    """Test that fails on various variations of when user inputs empty --command to divbase-cli query vcf command in the CLI."""
 
     with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
         bcftools_manager.build_commands_config("", example_sidecar_metadata_inputs_outputs)

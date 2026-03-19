@@ -217,7 +217,7 @@ Unique filenames: ['HOM_20ind_17SNPs_last_10_samples.vcf.gz', 'HOM_20ind_17SNPs_
 
 ### 3. Query the data in the VCF files based on sample metadata
 
-DivBase uses bcftools to query data contained in the VCF files. One of the main ideas of DivBase is that data in a project can split over multiple VCF files. Queries that require bcftools operations can potentially take long time to complete. Therefore, these queries are submitted to a queue in the DivBase job manager system which is based on Celery. Running `divbase-cli query bcftools-pipe` commands will therefor return a Celery task-id to `stdout`. To check the status of a task:
+DivBase uses bcftools to query data contained in the VCF files. One of the main ideas of DivBase is that data in a project can split over multiple VCF files. Queries that require bcftools operations can potentially take long time to complete. Therefore, these queries are submitted to a queue in the DivBase job manager system which is based on Celery. Running `divbase-cli query vcf` commands will therefor return a Celery task-id to `stdout`. To check the status of a task:
 
 ```bash
 divbase-cli query task-status --task-id <ID>
@@ -230,7 +230,7 @@ Bcftools subset/filters are set by the `--command` option. The syntax is experim
 At the moment, the sample metadata query needs to be included in the query. To subset on the samples identified in the sample metadata query, use `--command view -s SAMPLES`:
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES" --metadata-tsv-name sample_metadata.tsv
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES" --metadata-tsv-name sample_metadata.tsv
 ```
 
 When several VCF files are part of the query, the DivBase backend ensure that they each are subset on their own and that all subsets are combined into a single results file using `bcftools merge` or `bcftools concat`, depending on the combinations of samples in each VCF file (see the bcftools manual for more information on the requirements for the `merge` and `concat` commands). Please note that the user do not need to specify `merge` and `concat` or concat in `--command`!
@@ -238,5 +238,5 @@ When several VCF files are part of the query, the DivBase backend ensure that th
 It is possible to create pipes of bcftools operations by semicolon separation. This example first subsets each VCF files on the samples from the metadata queries, and then pipes each results of that subset to a new subset that filters based on scaffold `21` at coordinates `15000000-25000000`:
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000" --metadata-tsv-name sample_metadata.tsv
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000" --metadata-tsv-name sample_metadata.tsv
 ```

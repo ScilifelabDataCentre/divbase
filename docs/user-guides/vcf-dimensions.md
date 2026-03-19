@@ -121,7 +121,7 @@ Several DivBase CLI commands required that the VCF dimensions cache of the proje
 
 `divbase-cli query tsv`
 
-`divbase-cli query bcftools-pipe`
+`divbase-cli query vcf`
 
 TODO: describe how these commands use the dimensions and how they behave when the dimensions cache is missing or not up to date with the project's S3 bucket
 
