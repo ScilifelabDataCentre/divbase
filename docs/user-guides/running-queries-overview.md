@@ -8,7 +8,7 @@ In DivBase, there are three query workflows:
 
 All queries depend on an up-to-date VCF dimensions cache.
 
-## 1. Prerequisites
+## Prerequisites
 
 First, ensure that VCF files have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
 
@@ -24,7 +24,7 @@ To be able to query on sample metadata, you also need to upload a TSV file to th
 
 Once the VCF dimensions update job is finished and the dimensions cache of the project is up-to-date, continue with one of the query paths below.
 
-## 2. Query paths
+## Query paths
 
 | What you want to do | Command | Full guide |
 |---|---|---|
@@ -32,7 +32,7 @@ Once the VCF dimensions update job is finished and the dimensions cache of the p
 | Submit a VCF subset job | `divbase-cli query vcf --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
 | Use metadata filter + VCF filter together | `divbase-cli query vcf --tsv-filter "<FILTER>" --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
 
-## 3. Minimal examples
+## Minimal examples
 
 ```bash
 # Metadata query only
@@ -47,7 +47,7 @@ divbase-cli query vcf \
   --command "view -r 21:15000000-25000000"
 ```
 
-## 4. What happens after query submission
+## What happens after query submission?
 
 - `query tsv` directly returns the sample IDs and VCF filenames in the project matching the query.
 - `query vcf` submits an asynchronous job and returns a task ID.
@@ -63,9 +63,10 @@ divbase-cli task-history id <JOB_ID>
 divbase-cli task-history user
 ```
 
-## 5. Next reads
+## Read next
 
 - [VCF Dimensions caching](vcf-dimensions.md)
 - [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md)
 - [DivBase VCF query syntax](vcf-query-syntax.md)
 - [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
+- [Tutorial: Running a query on a public dataset](user-guides/tutorial-query-on-public-data.md)

@@ -319,3 +319,8 @@ divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
 - include rows where the `Weight` column is greater than 10, **or** less than or equal to 20, **or** in the range 18–22 (inclusive), **but excludes** any row where Weight is exactly 15.
 
 There are four samples (rows) that fulfill this, and this is what the query results will return: `S1`, `S4`, `S5`, and `S8`.
+
+## Read next
+
+- [DivBase VCF query syntax](vcf-query-syntax.md)
+- [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)

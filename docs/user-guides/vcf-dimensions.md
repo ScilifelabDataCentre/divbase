@@ -136,3 +136,10 @@ Several DivBase CLI commands required that the VCF dimensions cache of the proje
 TODO: describe how these commands use the dimensions and how they behave when the dimensions cache is missing or not up to date with the project's S3 bucket
 
 TODO: add link here to discussion in VCF Query docs on sample set compatibility. E.g.: The VCF dimensions are also used to a-priori estimate whether the sample sets in the VCF files are compatible with the requirements of `bcftools merge` and `bcftools concat`.
+
+## Read next
+
+- [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md)
+- [DivBase VCF query syntax](vcf-query-syntax.md)
+- [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
+- [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)
