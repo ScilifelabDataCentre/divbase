@@ -155,7 +155,7 @@ There are three types of queries in DivBase:
 - Combined sample metadata and VCF data query
 
 !!! note
-    Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries.md) after reading this quick start.
+    Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries-overview.md) after reading this quick start.
 
 ### Running sample metadata queries
 

@@ -1,6 +1,6 @@
 # Sidecar Metadata TSV files: creating and querying sample metadata files
 
-DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project. The user can then send metadata queries to DivBase to find the samples that fulfil the the query, and which VCF files that the files are found in. Metadata queries can be run on their own (as is described in this guide), but can also be used for VCF queries to automate the checkout data related to specific samples from DivBase (described in the guide for [DivBase Query Syntax for VCF data](query-syntax.md)).
+DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project. The user can then send metadata queries to DivBase to find the samples that fulfil the the query, and which VCF files that the files are found in. Metadata queries can be run on their own (as is described in this guide), but can also be used for VCF queries to automate the checkout data related to specific samples from DivBase (described in the guide for [DivBase Query Syntax for VCF data](vcf-query-syntax.md)).
 
 While there are ways for sample metadata to be stored in the VCF itself (see [The Variant Call Format Specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf)), it is not really standardized. Metadata can for instance be specified instance in a global `##SAMPLE` header (once per sample) or in a custom per-variant genotype `FORMAT` field in each variant and sample. The downside of the former is that common tools like `bcftools view` do not filter on the headers; the downside of the latter is that writing the metadata once per variant will result in a lot of repeated data, which in turn leads to elevated file size and processing times as the VCF file scales.
 
@@ -15,7 +15,7 @@ To be able to accomodate metadata needs for any research project that deals with
     divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
     ```
 
-This guide contains sections on how to [Create a sample metadata TSV](#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](query-syntax.md).
+This guide contains sections on how to [Create a sample metadata TSV](#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
 !!! Warning
     All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions index is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
@@ -147,7 +147,7 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 
 ## Query Syntax for sidecar metadata
 
-This section describes how to query on the sample metadata file itself. The same syntax used here will also be used when running combined sample metadata and VCF data queries; how to do that is covered in [DivBase Query Syntax for VCF data](query-syntax.md).
+This section describes how to query on the sample metadata file itself. The same syntax used here will also be used when running combined sample metadata and VCF data queries; how to do that is covered in [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
 ### Overview: querys are applied as filters on columns in the TSV
 

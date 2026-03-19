@@ -77,7 +77,7 @@ TODO - finish writing this section
 
 Run the query on all VCF files in the DivBase project unless specified. There are two ways to specify the files: either as direct input to the `bcftools` command, or by combining the VCF query with a sample metadata query to determine which VCF files to use.
 
-See also [DivBase Query Syntax for VCF data](query-syntax.md), [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md), and [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md).
+See also [DivBase Query Syntax for VCF data](vcf-query-syntax.md), [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md), and [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md).
 
 can be run with or without sample metadata filtering.
 
