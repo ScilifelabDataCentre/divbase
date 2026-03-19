@@ -83,12 +83,12 @@ def sample_metadata_query(
     """
     Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
-
-    TODO: it perhaps be useful to set the default download_dir in the config so that we can
-    look for files there? For now this code just uses file.parent as the download directory.
-    TODO: handle when the name of the sample column is something other than Sample_ID
     """
 
+    # TODO: it perhaps be useful to set the default download_dir in the config so that we can
+    # look for files there? For now this code just uses file.parent as the download directory.
+
+    # TODO: handle when the name of the sample column is something other than Sample_ID
     project_config = resolve_project(project_name=project)
 
     request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
@@ -145,16 +145,15 @@ def vcf_query(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project on success.
-
-    TODO Error handling for subprocess calls.
-    TODO: handle case empty results are returned from tsv_query()
-    TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?
-    TODO what if a job fails and the user wants to re-run it? do we store temp files?
-    TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
-    TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
-    TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
+    Submit a VCF query to run on the DivBase API. A single, merged VCF file with the query results will be added to the project on success.
     """
+
+    # TODO Error handling for subprocess calls.
+    # TODO: handle case empty results are returned from tsv_query()
+    # TODO what if a job fails and the user wants to re-run it? do we store temp files?
+    # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
+    # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
+    # TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
 
     has_tsv_filter = tsv_filter is not None
     has_samples = samples is not None
