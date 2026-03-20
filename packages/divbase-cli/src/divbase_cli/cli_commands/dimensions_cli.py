@@ -388,15 +388,14 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
 
     if not errors and not warnings:
         print(
-            "[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements. The file is ready to be uploaded to your DivBase project with 'divbase-cli files upload'"
+            "[green bold]Validation passed![/green bold] The metadata file meets all DivBase requirements. "
+            f"The file is ready to be uploaded to your DivBase project with the command:\n 'divbase-cli files upload {input_path}'"
         )
     elif errors:
         print("[red bold]Validation failed![/red bold] Please fix the errors above before uploading.")
         raise typer.Exit(code=1)
     else:
         print("[yellow bold]Validation passed with warnings![/yellow bold] Review the warnings above.")
-
-    # TODO: Add information about how to upload the validated metadata file to DivBase
 
 
 def _truncate_sample_names_in_entry(entry: dict, sample_names_limit: int) -> None:
