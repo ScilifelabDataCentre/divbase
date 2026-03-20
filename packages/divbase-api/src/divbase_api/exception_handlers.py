@@ -24,6 +24,7 @@ from divbase_api.exceptions import (
     DownloadedFileChecksumMismatchError,
     ObjectDoesNotExistError,
     ProjectCreationError,
+    ProjectMemberAlreadyExistsError,
     ProjectMemberNotFoundError,
     ProjectNotFoundError,
     ProjectVersionAlreadyExistsError,
@@ -33,6 +34,7 @@ from divbase_api.exceptions import (
     QueueClosedError,
     TaskNotFoundInBackendError,
     TooManyObjectsInRequestError,
+    UserNotFoundError,
     UserRegistrationError,
     VCFDimensionsEntryMissingError,
 )
@@ -196,6 +198,34 @@ async def project_creation_error_handler(request: Request, exc: ProjectCreationE
         )
     else:
         return RedirectResponse(url="/projects", status_code=status.HTTP_302_FOUND)
+
+
+async def project_member_already_exists_error_handler(request: Request, exc: ProjectMemberAlreadyExistsError):
+    logger.debug(
+        f"Project member already exists error for {request.method} {request.url.path}: {exc.message}", exc_info=False
+    )
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "project_member_already_exists_error"},
+            headers=exc.headers,
+        )
+    else:
+        # The expected place for this error to occur is covered in the route itself, this is a fallaback
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
+async def user_not_found_error_handler(request: Request, exc: UserNotFoundError):
+    logger.debug(f"User not found error for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "user_not_found_error"},
+            headers=exc.headers,
+        )
+    else:
+        # The expected place for this error to occur is covered in the route itself, this is a fallaback
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def too_many_objects_in_request_error_handler(request: Request, exc: TooManyObjectsInRequestError):
@@ -405,6 +435,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectNotFoundError, project_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectCreationError, project_creation_error_handler)  # type: ignore
+    app.add_exception_handler(ProjectMemberAlreadyExistsError, project_member_already_exists_error_handler)  # type: ignore
+    app.add_exception_handler(UserNotFoundError, user_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionAlreadyExistsError, project_version_already_exists_error_handler)  # type: ignore
     app.add_exception_handler(TooManyObjectsInRequestError, too_many_objects_in_request_error_handler)  # type: ignore
     app.add_exception_handler(ProjectVersionCreationError, project_version_creation_error_handler)  # type: ignore

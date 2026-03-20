@@ -25,10 +25,9 @@ from divbase_api.crud.projects import (
     remove_project_member,
     update_project_member_role,
 )
-from divbase_api.crud.users import get_user_by_email
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie, get_project_member_from_cookie
-from divbase_api.exceptions import AuthorizationError
+from divbase_api.exceptions import AuthorizationError, ProjectMemberAlreadyExistsError, UserNotFoundError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
@@ -101,6 +100,7 @@ async def get_project_detail_endpoint(
 
 @fr_projects_router.post("/{project_id}/members/add", response_class=HTMLResponse)
 async def add_project_member_endpoint(
+    request: Request,
     project_id: int,
     user_email: str = Form(...),
     role: str = Form(...),
@@ -113,16 +113,41 @@ async def add_project_member_endpoint(
     if not has_required_role(user_role, ProjectRoles.MANAGE):
         raise AuthorizationError("You don't have permission to manage this project.")
 
-    user_to_add = await get_user_by_email(db=db, email=user_email.lower())
-    if not user_to_add:
-        # TODO - custom exception.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with email '{user_email}' not found. Make sure they have an account.",
+    try:
+        await add_project_member(
+            db=db,
+            project_id=project_id,
+            user_email=user_email.lower(),
+            role=ProjectRoles(role),
+        )
+    except (ProjectMemberAlreadyExistsError, UserNotFoundError) as exc:
+        project_response = UserProjectResponse(
+            name=project.name,
+            description=project.description,
+            bucket_name=project.bucket_name,
+            id=project.id,
+            is_active=project.is_active,
+            storage_quota_bytes=project.storage_quota_bytes,
+            storage_used_bytes=project.storage_used_bytes,
+            user_role=user_role,
+        )
+        members_db_model = await get_project_members(db=db, project_id=project_id)
+        members = [project_member_response_from_db(membership) for membership in members_db_model]
+
+        return templates.TemplateResponse(
+            request=request,
+            name="project_pages/detail.html",
+            context={
+                "request": request,
+                "current_user": current_user,
+                "project": project_response,
+                "members": members,
+                "error": exc.message,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    await add_project_member(db=db, project_id=project_id, user_id=user_to_add.id, role=ProjectRoles(role))
-    logger.info(f"User '{user_to_add.email}' added to project {project.name} by user: {current_user.email}")
+    logger.info(f"User '{user_email}' added to project {project.name} by user: {current_user.email}")
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 

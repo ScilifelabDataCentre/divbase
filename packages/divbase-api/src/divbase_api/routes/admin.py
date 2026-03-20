@@ -54,20 +54,20 @@ async def create_project_endpoint(
 
 
 @admin_router.post(
-    "/projects/{project_id}/members/{user_id}",
+    "/projects/{project_id}/members/{user_email}",
     response_model=ProjectMembershipResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def add_project_member_endpoint(
     project_id: int,
-    user_id: int,
+    user_email: str,
     role: ProjectRoles,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
 ):
-    membership = await add_project_member(db=db, project_id=project_id, user_id=user_id, role=role)
+    membership = await add_project_member(db=db, project_id=project_id, user_email=user_email.lower(), role=role)
     logger.info(
-        f"Admin user: {current_admin.email} added user with id: {user_id} to project with id: {project_id} with role: {role}"
+        f"Admin user: {current_admin.email} added user with email: {user_email} to project with id: {project_id} with role: {role}"
     )
 
     return ProjectMembershipResponse(
