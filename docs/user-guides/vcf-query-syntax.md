@@ -1,10 +1,20 @@
 # DivBase VCF query syntax
 
-Users can checkout subsets of their VCF data from their DivBase project using the command `divbase-cli query vcf`. This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a job ID when they submit their query to the task queue, and can view the status of the job with for instance `divbase-cli task-history id <JOB_ID>`.
+Users can checkout subsets of their VCF data from their DivBase project using the command
+
+```bash
+divbase-cli query vcf
+```
+
+This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a job ID when they submit their query to the task queue, and can view the status of the job with the `task-history` commands, such as:
+
+```bash
+divbase-cli task-history id <JOB_ID>
+```
 
 The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the job ID.
 
-Users can query the VCF data in their project with or without combining it to a [sample metadata query](docs/user-guides/sidecar-metadata.md).
+Users can query the VCF data in their project with or without combining it with a [sample metadata query](docs/user-guides/sidecar-metadata.md).
 
 Example of a VCF query that identifies the samples and VCF files to filter on in the project's datastore and then applies a subset based on genomic range:
 
@@ -24,15 +34,13 @@ The outcome of a DivBase VCF query is a single results file with merged/concaten
 !!! Note
     When you submit a query, DivBase will use the state of the VCF Dimensions and the VCF files at that very point in time to produce the query results. It is therefore fine if you or another project member uploads new VCF files to the project while a query is queued or running.
 
-## Prerequisites
+## 1. Prerequisites
 
-Ensure that VCF files and sample metadata TSV file(s) are uploaded to the DivBase project, and that VCF dimensions cache is up-to-date, as described in e.g. the [Running Queries Overview - Prerequisites](running-queries-overview.md#prerequisites).
+Ensure that the files of the DivBase project are prepared according to the instructions in [Running Queries Overview - Prerequisites](running-queries-overview.md#prerequisites). In short, this means that the [VCF files](vcf-files.md) and [sample metadata TSVs](sidecar-metadata.md) are formatted according to DivBase requirements and have been uploaded to the DivBase project's data storage, and that VCF dimensions cache is up-to-date.
 
-DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF data. The DivBase VCF query syntax is based on `bcftools view`, which is described in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view). If you are not familiar with `bcftools view`, you might want to take some time to study the different options. The commands used for DivBase VCF queries are described in more detail in the [Writing the bcftools command argument](#writing-the-bcftools-command-argument) section below.
+DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF data. The DivBase VCF query syntax is based on `bcftools view` as described in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view). If you are not familiar with `bcftools view`, you might want to take some time to study the different options. The commands used for DivBase VCF queries are described in more detail in the [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument) section below.
 
-TODO bcftools rules, should probably go into vcf-files.md
-
-## `divbase-cli query vcf` command structure
+## 2. `divbase-cli query vcf` command structure
 
 ```bash
 divbase-cli query vcf \
@@ -49,15 +57,15 @@ divbase-cli query vcf \
 - Optional: `--metadata-tsv-name` (mainly needed with `--tsv-filter`)
 - Optional: `--project` if user config default exists
 
-Explain mutual exclusivity clearly:
+The following commands are mutually exclusive since they are alternative ways to control which samples to query on.
 
 - `--tsv-filter`, `--samples`, and `--samples-file` are mutually exclusive
 
-## Sample and VCF file selection
+## 3. Sample and VCF file selection
 
-To run a VCF data query, the user needs to input the samples and/or VCF files to perform the query on, as well as the `bcftools view` command(s) (described in [Writing the bcftools command argument](#writing-the-bcftools-command-argument)) below. DivBase supports different ways to input the samples and/or VCF files:
+To run a VCF data query, the user needs to input the samples and/or VCF files to perform the query on, as well as the `bcftools view` command(s) (described in [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument)) below. DivBase supports different ways to input the samples and/or VCF files:
 
-### Metadata-driven sample and VCF file selection (--tsv-filter)
+### 3.1. Metadata-driven sample and VCF file selection (--tsv-filter)
 
 This is a combined sample metadata and VCF data query, that allows users to let the results of the metadata query (samples and VCF files) be automatically used for a VCF data query. The VCF queries in DivBase was designed with this in mind, since it augments regular `bcftools` subsetting with metadata-guides filtering.
 
@@ -76,7 +84,7 @@ For example, the system might find that the samples that fulfill the [sample met
     divbase-cli query tsv "Area:North,West;Weight:>10"
     ```
 
-### Sample selection from direct input (--samples)
+### 3.2. Sample selection from direct input (--samples)
 
 Users can also run VCF data query without metadata queries by defining which samples and/of VCF files to subset on. To get an overview of the VCF files and samples in the project, ensure that the [VCF dimensions cache is up-to-date](running-queries-overview.md#prerequisites) and run the following:
 
@@ -96,7 +104,7 @@ divbase-cli query vcf --samples "S1,S2,S10,S239" --command "view -r 21:15000000-
 
 As long as the samples are present in the DivBase project, the server will automatically find out the VCF files it needs to process for the VCF query, by reading the VCF dimensions cache.
 
-### Sample selection from file (--samples-file)
+### 3.3. Sample selection from file (--samples-file)
 
 An alternative to `--samples` for non-metadata driven VCF queries is to provide a file that contain all the sample names to be used for the query. This can be convienent for queries with a higher number of samples. For example:
 
@@ -116,7 +124,7 @@ S239
 
 TODO ensure that there can be comments in the plain files used for `--samples-file`
 
-### VCF file selection from direct filenames
+### 3.4. VCF file selection from direct filenames
 
 TODO not implemented
 
@@ -128,18 +136,104 @@ divbase-cli query vcf --vcf-files "file1.vcf, file5.vcf" --command "view -r 21:1
 
 if this is combined with `--samples "S1,S2,S10,S239" --vcf-files "file1.vcf, file5.vcf"` there might be many queries without results. Support for this would need to be considered in the future.
 
-### No selection flags (all samples and files)
+### 3.5. No selection flags (all samples and files)
 
 TODO: we might not want to support this, it would be easier for the user to download all the files and merge them themselves.
 
-## Writing the bcftools command argument
+## 4. Writing the bcftools command argument
 
-- DivBase expects bcftools-style command strings
-- Only supports `bcftools view`
-- Several commands can be piped together by separating them by semicolons
-- The backend will apply the commands to each VCF file needed for the query in turn, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
+Filtering and subsetting on the VCF data itself if done with the `--command` argument. It uses the syntax of `bcftools view` since that it is the computational tool that performs the VCF data processing on the DivBase server.
 
-- samples names are autoinjected when the backend builds the `bcftools` commands. By default `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be the first command in the pipe. But users can move that the end.
+Several commands can be piped together by separating them by semicolons, similar to how UNIX pipes are commonly used to stream data between multiple bcftools commands.
+
+Example of piped commands in DivBase VCF queries:
+
+```bash
+divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -g hom; view -i 'MAF>=0.05'"
+```
+
+The DivBase will apply the command(s) specified in `--command` in turn to a copy of each VCF file included in the query, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
+
+!!! Note
+    The [bcftools view manual](https://samtools.github.io/bcftools/bcftools.html#view) has the following recommendation:
+
+    >Also note that one must be careful when sample subsetting and filtering is performed in a single command because the order of internal operations can influence the result. For example, the -i/-e filtering is performed before sample removal, but the -P filtering is performed after, and some are inherently ambiguous, for example allele counts can be taken from the INFO column when present but calculated on the fly when absent. Therefore it is strongly recommended to spell out the required order explicitly by separating such commands into two steps. (Make sure to use the -O u option when piping!)
+
+    In DivBase, this would translate to separating several `view` commands with semicolons, e.g. `"view -r 21:15000000-25000000; view -g hom; view -i 'MAF>=0.05'"`
+
+### 4.1. Automatic handling of samples and VCF file names
+
+Samples and filenames are automatically handled by the DivBase server based on the user input discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) above. This means that users do no need to include `view -s` (sample selection option `-s`) at all. The same goes for the VCF filenames: the user should not include them at all since the system handles that for the user.
+
+By default `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be appended to the first command in the user-defined pipe. For example, a command like
+
+```bash
+divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000"
+```
+
+Will be interpreted by the DivBase server to become:
+
+```bash
+bcftools view -s S1,S2 -r 21:15000000-25000000"
+```
+
+Users can override this to specify where in the pipe the sample subsetting should occur by explicitly including `view -s` in the `--command` string. This can be beneficial for the required runtime for certain pipes (see example use-cases in [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)). For example:
+
+```bash
+divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -s"
+```
+
+Will be interpreted by the DivBase server to become:
+
+```bash
+bcftools view -r 21:15000000-25000000 | bcftools view -s S1,S2
+```
+
+TODO: ensure that this really becomes a unix pipe. also it is not true that it becomes a pipe, since it store temp files.
+
+TODO: ensure that the backend only does `view -s` once. that actually goes for any commands. we should deduplicate identical commands.
+
+TODO: ensure that the system handle the case where the user has included VCF filenames in their commands.
+
+### 4.2. bcftools view commands not supported by DivBase
+
+The `--command` argument will accept many, but not all possible `bcftools view` options. In short, commands that affect `bcftools` I/O settings, and filter input from file cannot be used with DivBase as the system handles this internally already.
+
+The following `view` subcommands are not supported in DivBase:
+
+| `bcftools view` subcommand | Reason why it is not allowed in DivBase |
+|---|---|
+|-h, --header-only | |
+|-l, --compression-level | |
+|-O, --output-type | |
+|-o, --output FILE | |
+|-R, --regions-file file | |
+|-T, --targets-file file | |
+|--threads INT | |
+|--verbosity INT | |
+|-W[FMT], -W[=FMT], --write-index[=FMT] | |
+|-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-list`|
+|-f, --apply-filters LIST | |
+
+TODO: blacklist these in the code and ensure that useful warnings are given to the user
+
+Unsupported subcommands names for `view` commands:
+
+- Among the `view` commands, Sample-file flags inside `--command` (`-S` / `--samples-file`) are not allowed. use the CLI `divbase-cli query vcf --samples-file` instead
+
+Examples:
+
+```bash
+--command "view -s SAMPLES; view -r 21:15000000-25000000"
+```
+
+TODO: now that samples are autoinjected, we need to support no command? a current workaround is to force them to write `view -s`. i.e. how to handle Empty command string
+
+TODO the -s SAMPLES placeholder still lives on in the docs/docstrings
+
+TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
+
+### 4.3. bcftools view commands that are supported by DivBase
 
 Examples of `bcftools view` subcommands that can be used with DivBase
 
@@ -160,33 +254,9 @@ TODO: since we only support `view`, can there be a shortform where we skip `view
 
 There are more examples of `view` commands that are supported. Not every single one might have been tested. As long as it is not among the blacklisted subcommands below, it can be part of a `--command` string.
 
-Blacklisted `view` subcommands (not supported in DivBase)
+## 5. What happens after submitting a VCF query? (Job lifecycle and outputs)
 
-| `bcftools view` subcommand | Reason why it is not allowed in DivBase |
-|---|---|
-|-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-list`|
-
-Add explicit “invalid patterns” subsection:
-
-Unsupported subcommands names for `view` commands:
-
-- Among the `view` commands, Sample-file flags inside `--command` (`-S` / `--samples-file`) are not allowed. use the CLI `divbase-cli query vcf --samples-file` instead
-
-Examples:
-
-```bash
---command "view -s SAMPLES; view -r 21:15000000-25000000"
-```
-
-TODO: now that samples are autoinjected, we need to support no command? a current workaround is to force them to write `view -s`. i.e. how to handle Empty command string
-
-TODO the -s SAMPLES placeholder still lives on in the docs/docstrings
-
-TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
-
-## What happens after submitting a VCF query? (Job lifecycle and outputs)
-
-### What the user can see after submitting the job
+### 5.1. What the user can see after submitting the job
 
 1. CLI returns `Job submitted successfully with task id: <ID>`
 2. User monitors status via task-history commands `divbase-cli task-history`
@@ -200,7 +270,9 @@ divbase-cli task-history id <TASK_ID>
 divbase-cli files ls --project <PROJECT_NAME> --include-results-files
 ```
 
-### How VCF queries affect files in your project
+See also the manual for `bcftools view` [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view).
+
+### 5.2. How VCF queries affect files in your project
 
 - Source VCF files: uploaded by project members to the DivBase project. Read, but not modified by the query jobs. Source VCF files are indexed in the VCF dimensions cache of the project.
 - Sidecar metadata TSV: read-only during queries.
@@ -213,11 +285,29 @@ divbase-cli files ls --project <PROJECT_NAME> --include-results-files
 
 TODO describe cron job for old results files
 
-### How does DivBase process the VCF files (technical implementation)
+### 5.3. How does DivBase process the VCF files (technical implementation)
 
-subset each input file by itself. apply all commands in the pipe to it. save to a temp file. merge and/or concat all tempfiles into a single results file. upload the results files to the DivBase project.
+TODO: this should probably have an diagram showing the "merge-last" strategy
 
-## Common errors and how to fix them
+1. subset each input file by itself.
+2. apply all commands in the pipe to it.
+3. save to a temp file. merge and/or concat all tempfiles into a single results file.
+4. upload the results files to the DivBase project.
+
+## 6. Practical examples
+
+- Region-only query across all samples
+- Metadata + VCF combined query
+- Direct sample list query
+- Multi-step command with semicolon-separated pipeline stages
+
+Each example should include:
+
+- Command
+- What it selects
+- What output file behavior to expect
+
+## 7. Common errors and how to fix them
 
 TODO: Add a short table:
 
@@ -237,20 +327,7 @@ See also:
 - [VCF Dimensions](vcf-dimensions.md)
 - [Sample metadata query](sidecar-metadata-queries.md)
 
-## Practical examples
-
-- Region-only query across all samples
-- Metadata + VCF combined query
-- Direct sample list query
-- Multi-step command with semicolon-separated pipeline stages
-
-Each example should include:
-
-- Command
-- What it selects
-- What output file behavior to expect
-
-## Read next
+## 8. Read next
 
 - [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
 - [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)
