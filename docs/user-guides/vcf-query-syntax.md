@@ -203,29 +203,19 @@ The following `view` subcommands are not supported in DivBase:
 
 | `bcftools view` subcommand | Reason why it is not allowed in DivBase |
 |---|---|
-|-h, --header-only | |
-|-l, --compression-level | |
-|-O, --output-type | |
-|-o, --output FILE | |
-|-R, --regions-file file | |
-|-T, --targets-file file | |
-|--threads INT | |
-|--verbosity INT | |
-|-W[FMT], -W[=FMT], --write-index[=FMT] | |
+|-h, --header-only | Instead use: `divbase-cli files stream <file.vcf.gz> \| zcat \| awk '/^##/ \|\| /^#CHROM/ {print} !/^#/ {exit}'` |
+|-l, --compression-level | Handled by the DivBase server|
+|-O, --output-type | Handled by the DivBase server |
+|-o, --output FILE | Handled by the DivBase server |
+|-R, --regions-file file | External filter files not supported |
+|-T, --targets-file file | External filter files not supported |
+|--threads INT | Handled by the DivBase server |
+|--verbosity INT | Handled by the DivBase server |
+|-W[FMT], -W[=FMT], --write-index[=FMT] | Handled by the DivBase server |
 |-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-list`|
-|-f, --apply-filters LIST | |
+|-f, --apply-filters LIST | External filter files not supported |
 
 TODO: blacklist these in the code and ensure that useful warnings are given to the user
-
-Unsupported subcommands names for `view` commands:
-
-- Among the `view` commands, Sample-file flags inside `--command` (`-S` / `--samples-file`) are not allowed. use the CLI `divbase-cli query vcf --samples-file` instead
-
-Examples:
-
-```bash
---command "view -s SAMPLES; view -r 21:15000000-25000000"
-```
 
 TODO: now that samples are autoinjected, we need to support no command? a current workaround is to force them to write `view -s`. i.e. how to handle Empty command string
 
@@ -233,26 +223,8 @@ TODO the -s SAMPLES placeholder still lives on in the docs/docstrings
 
 TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
 
-### 4.3. bcftools view commands that are supported by DivBase
-
-Examples of `bcftools view` subcommands that can be used with DivBase
-
-TODO improve this
-
-|`bcftools view` subcommand, short form | subcommand, long form| Short explanation |
-|---|---|--|
-|-G | --drop-genotypes| |
-|-r | --regions | |
-|-A | --trim-unseen-alleles| |
-|-a | --trim-alt-alleles| |
-|--force-samples| N/A | |
-|-I |  --no-update| |
-|-s LIST_OF_SAMPLES | --samples LIST_OF_SAMPLES | NOTE! special case in DivBase. Can be used to specify where in a pipe the samples subsetting should occur. Do not specify samples, this is automatically handled by the DivBase server |
-
 TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
 TODO: since we only support `view`, can there be a shortform where we skip `view` and just have the view flags?
-
-There are more examples of `view` commands that are supported. Not every single one might have been tested. As long as it is not among the blacklisted subcommands below, it can be part of a `--command` string.
 
 ## 5. What happens after submitting a VCF query? (Job lifecycle and outputs)
 
@@ -294,7 +266,9 @@ TODO: this should probably have an diagram showing the "merge-last" strategy
 3. save to a temp file. merge and/or concat all tempfiles into a single results file.
 4. upload the results files to the DivBase project.
 
-## 6. Practical examples
+## 6. Examples
+
+TODO add the following examples and ensure that they work with DivBase
 
 - Region-only query across all samples
 - Metadata + VCF combined query
