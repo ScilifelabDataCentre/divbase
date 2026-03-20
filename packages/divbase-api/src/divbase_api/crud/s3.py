@@ -11,7 +11,7 @@ def get_s3_checksums(bucket_name: str, files_to_check: list[str]) -> list[FileCh
     """
     Given a list of object names, return a list of their names and checksums for those that exist in S3.
 
-    TODO: If we have a bucket with a very large number of files, this will result in a lot of calls to S3.
+    NOTE: If we have a bucket with a very large number of files, this will result in a lot of calls to S3.
     But this is batched at blocks of 100 in the route layer, so should be manageable for now.
     If we consider a list_objects_v2 approach we have to think carefully about pagination there,
     other we make a lot of calls to S3 anyway.

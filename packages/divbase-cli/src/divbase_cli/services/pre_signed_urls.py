@@ -10,8 +10,6 @@ Grouped into 4 sections:
 Size thresholds are defined in divbase_lib.divbase_constants and which function to call is determined by the caller.
 
 Retry logic here uses the stamina library.
-
-TODO: Consider adding progress bars
 """
 
 import logging

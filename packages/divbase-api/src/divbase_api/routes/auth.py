@@ -2,10 +2,7 @@
 Authentication endpoints for login and registration.
 
 This is for CLI/API clients to login and get tokens for authenticated requests.
-Frontend routes are located in TODO...
-
-TODO:
-- Currently only id appended to token payload, could add email + is_admin - but this is debated what is best practice.
+Frontend routes are located in frontend_routes/auth.py
 """
 
 import logging
