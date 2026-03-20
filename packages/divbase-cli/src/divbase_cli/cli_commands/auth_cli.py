@@ -82,15 +82,12 @@ def whoami():
     Return information about the currently logged-in user.
     """
     config = load_user_config()
-    logged_in_url = config.logged_in_url
-
-    # TODO - move logged in check to the make_authenticated_request function?
-    if not logged_in_url:
+    if not config.logged_in_url:
         raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
     request = make_authenticated_request(
         method="GET",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=config.logged_in_url,
         api_route="v1/auth/whoami",
     )
 

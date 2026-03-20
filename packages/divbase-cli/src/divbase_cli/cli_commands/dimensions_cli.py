@@ -7,7 +7,7 @@ import yaml
 from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
-from divbase_cli.config_resolver import resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
@@ -87,8 +87,8 @@ def show_dimensions_index(
     Show the dimensions index file for a project.
     When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
     """
-
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     # These two options are mutually exclusive. But due to how typer handles options, this error will only be raised if --sample-names-output has an input value (i.e. path).
     # If the path is missing, it will raise an error about the missing path argument instead...
@@ -99,7 +99,7 @@ def show_dimensions_index(
     if unique_samples:
         response = make_authenticated_request(
             method="GET",
-            divbase_base_url=project_config.divbase_url,
+            divbase_base_url=logged_in_url,
             api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
         )
         unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
@@ -247,15 +247,12 @@ def create_metadata_template_with_project_samples_names(
     """
     Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions areup-to-date.
     """
-
     project_config = resolve_project(project_name=project)
-
-    if output_path is None:
-        output_path = Path.cwd() / f"sample_metadata_{project_config.name}.tsv"
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     response = make_authenticated_request(
         method="GET",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
     unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
@@ -271,7 +268,9 @@ def create_metadata_template_with_project_samples_names(
         print("No samples found for this project. No file written.")
         return
 
-    # Check if file exists and prompt user for confirmation
+    if output_path is None:
+        output_path = Path.cwd() / f"sample_metadata_{project_config.name}.tsv"
+
     if output_path.exists():
         overwrite = typer.confirm(f"File '{output_path}' already exists. Do you want to overwrite it?")
         if not overwrite:
@@ -314,13 +313,14 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     # in the TSV file match the sample names in the dimensions index for the project
 
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     print(f"Validating local metadata file: {input_path}")
     print(f"Project: {project_config.name}\n")
 
     response = make_authenticated_request(
         method="GET",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples
