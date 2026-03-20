@@ -225,10 +225,9 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
     return response
 
 
-def create_users(token: str) -> dict[str, int]:
+def create_users(token: str) -> None:
     print("Creating test users...")
 
-    user_map = {}
     for user_data in USERS_TO_CREATE:
         response = make_authenticated_request(
             "POST",
@@ -246,10 +245,7 @@ def create_users(token: str) -> dict[str, int]:
         )
 
         user = response.json()
-        user_map[user["email"]] = user["id"]
         print(f"Created user: {user['name']} ({user['email']})")
-
-    return user_map
 
 
 def create_projects(token: str) -> dict[str, int]:
@@ -271,7 +267,7 @@ def create_projects(token: str) -> dict[str, int]:
     return project_map
 
 
-def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict[str, int]) -> None:
+def assign_project_roles(token: str, project_map: dict[str, int]) -> None:
     """Assign users to projects with specified roles."""
     print("Assigning users to projects with roles...")
 
@@ -280,17 +276,18 @@ def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict
         print(f"Assigning roles for project: {project_name}")
 
         for user_email, role in assignments:
-            user_id = user_map[user_email]
-
             make_authenticated_request(
-                "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
+                "POST",
+                f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_email}",
+                token,
+                params={"role": role},
             )
             print(f"Assigned {user_email} as {role} to {project_name}")
 
         # assign admin as manager to all projects
-        # Hardcoded user_id=1 as FIRST_ADMIN_USER should have that by being created in local_dev_setup.py
+        admin_email = ADMIN_CREDENTIALS["username"]
         make_authenticated_request(
-            "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/1", token, params={"role": "manage"}
+            "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/{admin_email}", token, params={"role": "manage"}
         )
         print(f"Assigned first admin user as manager to {project_name}")
 
@@ -336,9 +333,9 @@ if __name__ == "__main__":
     setup_minio_buckets()
 
     admin_token = get_admin_access_token()
-    user_map = create_users(admin_token)
+    create_users(admin_token)
     project_map = create_projects(admin_token)
-    assign_project_roles(admin_token, user_map, project_map)
+    assign_project_roles(token=admin_token, project_map=project_map)
 
     create_local_config()
     login_to_divbase()

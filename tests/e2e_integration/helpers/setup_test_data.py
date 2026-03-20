@@ -224,10 +224,9 @@ def make_authenticated_request(method: str, url: str, token: str, **kwargs) -> h
     return response
 
 
-def create_users(token: str) -> dict[str, int]:
-    user_map = {}
+def create_users(token: str) -> None:
     for name, creds in TEST_USERS.items():
-        response = make_authenticated_request(
+        _ = make_authenticated_request(
             "POST",
             f"{BASE_URL}/v1/admin/users/",
             token,
@@ -241,11 +240,6 @@ def create_users(token: str) -> dict[str, int]:
             },
             params={"email_verified": True},
         )
-
-        user = response.json()
-        user_map[user["email"]] = user["id"]
-
-    return user_map
 
 
 def create_projects(token: str) -> dict[str, int]:
@@ -265,16 +259,17 @@ def create_projects(token: str) -> dict[str, int]:
     return project_map
 
 
-def assign_project_roles(token: str, user_map: dict[str, int], project_map: dict[str, int]) -> None:
+def assign_project_roles(token: str, project_map: dict[str, int]) -> None:
     """Assign users to projects with specified roles."""
     for project_name, assignments in ROLE_ASSIGNMENTS.items():
         project_id = project_map[project_name]
 
         for user_email, role in assignments:
-            user_id = user_map[user_email]
-
             make_authenticated_request(
-                "POST", f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_id}", token, params={"role": role}
+                "POST",
+                f"{BASE_URL}/v1/admin/projects/{project_id}/members/{user_email}",
+                token,
+                params={"role": role},
             )
 
 
@@ -289,9 +284,9 @@ def setup_test_data() -> None:
     """Call all setup functions in the correct order to give the testing stack some test data."""
     setup_minio_data()
     admin_token = get_admin_access_token()
-    user_map = create_users(admin_token)
+    create_users(admin_token)
     project_map = create_projects(admin_token)
-    assign_project_roles(admin_token, user_map, project_map)
+    assign_project_roles(token=admin_token, project_map=project_map)
     global _PROJECT_MAP_CACHE
     _PROJECT_MAP_CACHE = project_map
     print("Test users and projects created successfully.")
