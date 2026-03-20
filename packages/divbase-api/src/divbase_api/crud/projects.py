@@ -49,28 +49,37 @@ async def get_user_projects_with_roles(db: AsyncSession, user_id: int) -> list[t
     return [(row[0], ProjectRoles(row[1])) for row in result.all()]
 
 
-async def get_project_with_user_role(db: AsyncSession, project_id: int, user_id: int) -> tuple[ProjectDB, ProjectRoles]:
-    """Get project by ID and the user's role in that project."""
+async def get_project_by_name_or_id_with_user_role(
+    db: AsyncSession,
+    user_id: int,
+    project_id: int | None = None,
+    project_name: str | None = None,
+) -> tuple[ProjectDB, ProjectRoles]:
+    """
+    Get project by project.id or project.name and the user's role in that project.
+    Will raise a ProjectNotFoundError if no project found or user not a member of said project.
+
+    (Both project.name and project.id are unique.)
+    """
+    if not project_id and not project_name:
+        raise ValueError("Either project_id or project_name must be provided")
+
     stmt = (
         select(ProjectDB, ProjectMembershipDB.role)
         .join(ProjectMembershipDB)
-        .where(ProjectDB.id == project_id)
         .where(ProjectMembershipDB.user_id == user_id)
     )
+    if project_id:
+        stmt = stmt.where(ProjectDB.id == project_id)
+    else:
+        stmt = stmt.where(ProjectDB.name == project_name)
+
     result = await db.execute(stmt)
     row = result.first()
 
-    if row:
-        return row[0], ProjectRoles(row[1])
-    raise ProjectNotFoundError("Project not found or the user has no access")
-
-
-async def get_project_id_from_name(db: AsyncSession, project_name: str) -> int | None:
-    """Get a project's ID from its name."""
-    stmt = select(ProjectDB.id).where(ProjectDB.name == project_name)
-    result = await db.execute(stmt)
-    project_id = result.scalar_one_or_none()
-    return project_id
+    if not row:
+        raise ProjectNotFoundError()
+    return row[0], ProjectRoles(row[1])
 
 
 async def add_project_member(

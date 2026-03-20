@@ -161,7 +161,7 @@ async def user_registration_error_handler(request: Request, exc: UserRegistratio
 
 
 async def project_not_found_error_handler(request: Request, exc: ProjectNotFoundError):
-    logger.info(f"Project not found for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    logger.debug(f"Project not found for {request.method} {request.url.path}: {exc.message}", exc_info=False)
     if is_api_request(request):
         return JSONResponse(
             status_code=exc.status_code,
@@ -170,7 +170,7 @@ async def project_not_found_error_handler(request: Request, exc: ProjectNotFound
         )
     else:
         return await render_error_page(
-            request, "Project not found or you don't have access.", status_code=exc.status_code
+            request, message="Project not found or you don't have access.", status_code=exc.status_code
         )
 
 

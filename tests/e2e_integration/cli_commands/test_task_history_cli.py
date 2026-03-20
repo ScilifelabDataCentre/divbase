@@ -287,8 +287,7 @@ def test_edit_user_cannot_see_task_history_for_project_not_member_of(
 
     result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
     assert result_history.exit_code == 1
-    assert "project_not_found_error\nDetails" in str(result_history.exception)
-    assert "Project not found or the user has no access" in str(result_history.exception)
+    assert "project_not_found_error" in str(result_history.exception)
 
 
 def test_manage_user_query_project_only_can_see_all_task_history_for_their_project(
@@ -318,8 +317,7 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
     # Test that user cannot see tasks for a project they do not belong to
     result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
     assert result_history.exit_code == 1
-    assert "project_not_found_error\nDetails" in str(result_history.exception)
-    assert "Project not found or the user has no access" in str(result_history.exception)
+    assert "project_not_found_error" in str(result_history.exception)
 
 
 def test_manage_user_can_get_task_id_from_project_even_when_they_did_not_submit_task(
