@@ -26,13 +26,13 @@ divbase-cli task-history id 123
 
 There are four CLI commands sorted under `divbase-cli dimensions`:
 
-- [update](#dimensions-update)
+- [divbase-cli dimensions update](#dimensions-update)
 
-- [show](#dimensions-show)
+- [divbase-cli dimensions show](#dimensions-show)
 
-- [create-metadata-template](sidecar-metadata.md#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)
+- [divbase-cli dimensions create-metadata-template](sidecar-metadata.md#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)
 
-- [validate-metadata-file](sidecar-metadata.md#validating-a-sidecar-metadata-tsv-with-divbase-cli)
+- [divbase-cli dimensions validate-metadata-file](sidecar-metadata.md#12-validating-a-sidecar-metadata-tsv-with-divbase-cli)
 
 The former two relate generating/updating and viewing the VCF dimensions of a project and will be described on this page. The latter two relate to the user-defined sidecar metadata TSV and are described in the guide on [Sidecar sample metadata TSV queries](sidecar-metadata.md). The commands are sorted under `divbase-cli dimensions` since they rely on calling the VCF dimensions cache of the project. A list of all DivBase CLI commands that require an up-to-date VCF Dimensions cache is found in the section [CLI Commands that rely on that the project's VCF dimensions cache is up to date](#cli-commands-that-rely-on-that-the-projects-vcf-dimensions-cache-is-up-to-date)
 
