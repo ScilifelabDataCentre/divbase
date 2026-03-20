@@ -8,6 +8,10 @@ If subsets based on variant range are included, run then first before any sample
 
 if you want all samples across all files, it will be more efficient to download the files than to run a query
 
+## bcftools command pipe order
+
+For example, it is typically faster to first subset on genomic range (=drop rows in the VCF that do not fullfil the range filter) and then subset on samples than to do the reverse. This is because sample subset will require writes to each row in the VCF; by first reducing the number of rows, there will be fewer write operations and thus a faster operation.
+
 ## Read next
 
 - [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)

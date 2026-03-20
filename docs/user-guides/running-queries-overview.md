@@ -8,11 +8,11 @@ There are three query workflows:
 - Query VCF data only
 - Combine sidecar metadata filtering with a VCF query
 
-All queries depend on an up-to-date VCF dimensions cache.
+All queries depend on that the prerequisites are fulfilled, as described in the next section.
 
 ## Prerequisites
 
-First, ensure that VCF files have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
+First, ensure that the VCF files fulfill the requirements described in [Working with VCF Files in DivBase](vcf-files.md) and have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
 
 ```bash
 # Submit a job to that ensure that the projecs' dimensions cache is up-to-date

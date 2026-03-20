@@ -4,7 +4,8 @@ The DivBase query system is built around the DivBase server having cached key te
 
 This allows the DivBase server to make quick checks against against the project VCF Dimensions cache when users submit a query or validate a sidecar metadata TSV file instead of having to read each VCF file every time a query is submitted. This makes the server-side operations more efficient when it comes to internal transfer and reading of files, and for checking VCF query feasibility against the requirements of `bcftools`. For the user, this will lead to faster feedback, especially when the system needs to send an error or warning message.
 
-**An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries**.
+!!! Note
+    An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries to the DivBase server.
 
 All query commands rely on the dimensions cache to quickly resolve samples, scaffolds, and file compatibility.
 Every time a new VCF files has been added added or and existic VCF version has been replaced with a new version, run:

@@ -9,13 +9,13 @@ DivBase takes a different approach by decoupling the sample metadata from the VC
 To be able to accomodate metadata needs for any research project that deals with VCF files, the sidecar sample metadata TSV and filtering in DivBase has been designed to be very open-ended and user-defined. As long as a few format and filter syntax requirements are followed, the user is free to design their metadata TSV as they like using the format: column names represent metadata categories and rows represent the samples found in the VCF files in the DivBase project. However, this flexibility put the responsibility on the user that spelling and values in columns and rows are correct: if not, the sample metadata filters will return incomplete or unintended results.
 
 !!! Notes
-    There is a CLI command to help check that a user-defined sample metadata TSV file aligns with the requirements described on this page. This validator tool will be [described in its own section below](#validating-a-sidecar-metadata-tsv-with-divbase-cli), but, in short, it can be run with:
+    There is a CLI command to help check that a user-defined sample metadata TSV file aligns with the requirements described on this page. This validator tool will be [described in its own section below](#12-validating-a-sidecar-metadata-tsv-with-divbase-cli), but, in short, it can be run with:
 
     ```bash
     divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
     ```
 
-This guide contains sections on how to [Create a sample metadata TSV](#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
+This guide contains sections on how to [Create a sample metadata TSV](#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#2-query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
 !!! Warning
     All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions index is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
@@ -30,7 +30,7 @@ This guide contains sections on how to [Create a sample metadata TSV](#creating-
     divbase-cli task-history user
     ```
 
-## Creating a sidecar sample metadata TSV for a DivBase project
+## 1. Creating a sidecar sample metadata TSV for a DivBase project
 
 If the dimensions VCF files in the project have been cached in DivBase, a template metadata file with the sample names pre-filled can be created with:
 
@@ -41,11 +41,11 @@ divbase-cli dimensions create-metadata-template
 !!! Note
     There can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag. If not specified, the default `sample_metadata.tsv` will be assumed. It is up to the user if the want to have multiple TSVs in the same project to organise their metadata in a specific way. It is allowed to have duplicate sample names and metadata across multiple TSV files, since only one TSV can be called per query. It is recommended to a have a master TSV that contains all samples from all the VCFs in the project: querying on TSVs that contain subsets of all sample names is possible, but will sample names not included in the TSV used for the query will be disregarded for the query.
 
-### Sidecar TSV format requirements
+### 1.1. Sidecar TSV format requirements
 
 To be able to accommodate a variety of metadata needs, DivBase does not enforce a strict schema for the sidecar sample metadata TSV file since it is designed to contain user-defined columns. Instead, there are a few mandatory requirements and some best-practices for defining columns.
 
-#### Mandatory content
+#### 1.1.1. Mandatory content
 
 1. The first row must be a header row, start with `#`, and the first column must be named `Sample_ID`.
 2. The `Sample_ID` column must contain the exact names of the samples as they are spelled in the VCF files. Sample names need to occur uniqely in the TSV: only one row per sample name in the `Sample_ID` column, no duplicates allowed. This will already be handled if user has run a `divbase-cli dimensions update` job and, after its completion, has generated a pre-filled template with: `divbase-cli dimensions create-metadata-template`
@@ -53,7 +53,7 @@ To be able to accommodate a variety of metadata needs, DivBase does not enforce 
 
 4. Every column need to be tab separated for all rows, including the header.
 
-#### User-defined columns
+#### 1.1.2. User-defined columns
 
 After the `Sample_ID` column has been populated, users can add any columns and values to the TSV. The cells can be either single-value (e.g. `1`, `55.02`, and `North`) or multi-value using bracket array notation (the syntax for Python lists), e.g. `[1,2,3]`, `["North", "Northwest"]`. Bracket array was chosen for DivBase since it is a common notation used in several programming languages, including Python, JSON, and JavaScript to name a few.
 
@@ -64,14 +64,14 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 
 1. The user-defined columns can be **either** numeric **or** string type. A column is classified as numeric only if all values can be parsed as numbers ( including each element in list cells (e.g. `[1, 2, 3]`). See bullet 2 below.). If any value in a column is non-numeric, the entire column is treated as a string column. This means a column with values like `8`, `1a`, `5a` will be treated as string column even though some values look numeric. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
 2. Bracket array notation in TSV cells can be used to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. `[2,4,21]` or `["North", "Northwest"]`). Note that this might make the process of writing queries more complex than if just a single value is used for each cell. The arrays are whitespace-insensitive: `[1,2]`, `[1, 2]`, and `[ 1 , 2 ]` all parse identically in the DivBase backend. We recommend that string elements are enclosed in quotes inside the array `["North", "Northwest"]` or `['North', 'Northwest']`, although it is not stricly necessary, it helps clarify the type to the user. It is also possible to use empty lists `[]` to representing "no values", if so desired.
-3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operator (see details in [Filtering on numerical columns](#filtering-on-numerical-columns)) and will raise warnings. For example, values like `1-2` or `1,2` will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use bracket array notation (e.g., `[1, 2]`). For decimals, use English decimal notation with a period (e.g., `3.14`) and not a comma.
+3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operator (see details in [Filtering on numerical columns](#23-filtering-on-numerical-columns)) and will raise warnings. For example, values like `1-2` or `1,2` will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use bracket array notation (e.g., `[1, 2]`). For decimals, use English decimal notation with a period (e.g., `3.14`) and not a comma.
 4. The only characters with special structural meaning in DivBase sidecar metadata TSV files are `#` (for header comments), `[` and `]` (for multi-value cell separation), and `\t` (tab, for column separation). Other special characters are generally supported in data values, but be aware that Your Mileage May Vary. Some common cases that have been tested and are supported include diacritic unicode characters like `å`, `ä`, `ö`, and hyphens in strings (e.g., `North-West`).
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: `" Sample 1 "` will be processed as `"Sample 1"`.
 
 !!! Note
     Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions indexing (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
 
-#### Example
+#### 1.1.3. Example
 
 This example illustrates how a sidecar sample metadata TSV can look like. The mandatory requirement are fulfilled (heading with `#`, `Sample_ID` column, tab-separated file). The user-defined column contains examples of a numerical column (`Population`) and a string column (`Area`). In some cells, bracket array notation (`[...]`) is used to assign multiple values to the same sample and column.
 
@@ -89,7 +89,7 @@ S8 2 West 19.5
 
 For the sake of the demonstration later in this guide, let's assume that this TSV file have been uploaded to a DivBase project along with two VCF files where samples S1-S4 are found in `file1.vcf.gz` and S5-S8 in `file2.vcf.gz`. Let's also assume that the `divbase-cli dimensions update` has been run after all files have been uploaded so that the system has up-to-date information on which sample is found in which file.
 
-### Validating a sidecar metadata TSV with `divbase-cli`
+### 1.2. Validating a sidecar metadata TSV with `divbase-cli`
 
 Manually checking that a TSV fulfills the DivBase requirement can be tedious. To help users validate their sidecar TSV files, the following CLI command has been implemented:
 
@@ -104,13 +104,13 @@ divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv
 divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv --untruncated
 ```
 
-The validation runs on the user's local computer and not as a job on the DivBase server. It is intended to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#mandatory-content) and [User-defined columns](#user-defined-columns).
+The validation runs on the user's local computer and not as a job on the DivBase server. It is intended to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#111-mandatory-content) and [User-defined columns](#112-user-defined-columns).
 
 The command requires that the project's dimensions index is up-to-date with the VCF files in the project, and that is why it is sorted under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions index is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
 
 The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
 
-#### Errors from TSV content validation
+#### 1.2.1. Errors from TSV content validation
 
 The following will return **Errors**. These must be fixed for the sidecar TSV be used with DivBase queries:
 
@@ -131,7 +131,7 @@ The following will return **Errors**. These must be fixed for the sidecar TSV be
 !!! Note
     The formatting errors listed above are also enforced by the DivBase query engine when loading the metadata file for queries (except checking tab separation which is a validator-specific check). This means that even if the validator is not run before upload, the query engine will analyse the file content and report issues as errors. Detected Errors are different from Warnings in that errors will result in queries not even being run.
 
-#### Warnings from TSV content validation
+#### 1.2.2. Warnings from TSV content validation
 
 The validator will also raise **Warnings**. DivBase queries can still be run with Warnings, but the user should review them, and possible address them if so desired:
 
@@ -145,11 +145,11 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 
 - Semicolons in plain string cells (e.g., `2;4` or `West;South`). Since DivBase uses semicolons to separate key:value filter pairs in query syntax (e.g. `"Area:North;Population:1"`), a TSV cell containing a literal semicolon cannot be matched with the queries. Use bracket array notation instead to store multi-column values (e.g. `[2, 4]` or `["West", "South"]`).
 
-## Query Syntax for sidecar metadata
+## 2. Query Syntax for sidecar metadata
 
 This section describes how to query on the sample metadata file itself. The same syntax used here will also be used when running combined sample metadata and VCF data queries; how to do that is covered in [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
-### Overview: querys are applied as filters on columns in the TSV
+### 2.1. Overview: querys are applied as filters on columns in the TSV
 
 Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user wants to query on need to be entered as a string (i.e. enclosed in quotes, `""`).
 
@@ -165,7 +165,7 @@ For example, if the user wants to query the TSV on column `Area` for all samples
 divbase-cli query tsv "Area:North"
 ```
 
-If this this command is run on the TSV and VCF files used in the above [example](#example) the query would return the following results.
+If this this command is run on the TSV and VCF files used in the above [example](#113-example) the query would return the following results.
 
 ```bash
 The results for the query (Area:North):
@@ -193,12 +193,12 @@ Unique filenames: ['file1.vcf.gz', 'file2.vcf.gz']
 Filtering is inclusive by default. This applies both for the filter values and the cell values:
 
 - If a filter contains multiple values, e.g. `"Area:North,West"`, the row is included if at least one of the filter values matches any value in the cell. I.e. a row with `North`, and a row with `West` will both be returned from this filter.
-- If a cell in the TSV contains multiple values using bracket array notation as explained in [User-defined columns](#user-defined-columns) (e.g., `["North","West"]`), the row is included if any of those values match the filter. Filters with `"Area:North"`, `"Area:West"`, and `"Area:North,West"` will all return the row from the TSV with the cell value `["North","West"]`.
+- If a cell in the TSV contains multiple values using bracket array notation as explained in [User-defined columns](#112-user-defined-columns) (e.g., `["North","West"]`), the row is included if any of those values match the filter. Filters with `"Area:North"`, `"Area:West"`, and `"Area:North,West"` will all return the row from the TSV with the cell value `["North","West"]`.
 
 !!! note
-    To reiterate what was written in the [User-defined columns](#user-defined-columns) section above: it is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
+    To reiterate what was written in the [User-defined columns](#112-user-defined-columns) section above: it is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
 
-### Filtering on string columns
+### 2.2. Filtering on string columns
 
 Queries on string columns are straight-forward in the sense that each element in a cell (single-value or multi-value in a bracket array) in the TSV are treated as discrete values.
 
@@ -229,7 +229,7 @@ Note that when inclusive and exclusive are combined (e.g. `"Area:East,!South"`),
 
     Using double quotes for the outside is NOT supported `"Area:'North, South'"`.
 
-### Filtering on numerical columns
+### 2.3. Filtering on numerical columns
 
 A TSV column is considered as numeric in DivBase only if all cell values — including each individual element within a bracketed array (e.g. `[1,3,5]`) — can be parsed as a number. For example:
 
@@ -268,11 +268,11 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 !!! Tip
     Numeric operations such as inequalities like `>25`, and ranges like `20-40` are fully supported for multi-value cells in numeric columns as long as every element in the bracket array (`[1, 2]`) in every cell in the column is of numerical type. For instance: a `Population` column with values `1`, `[2,4]`, `[1,3,5]`; in this case a query like `divbase-cli query tsv "Population:>3"` will correctly match cells like `[2,4]` and `[1,3,5]`.
 
-### Filtering on Sample names
+### 2.4. Filtering on Sample names
 
-The sidecar metadata filtering is designed to filter on metadata columns and return all samples that fulfil the queries. It is however possible to filter on the `Sample_ID` column directly. This column is a string column by design and thus follows the syntax described in the [Filtering on string columns](#filtering-on-string-columns) section.
+The sidecar metadata filtering is designed to filter on metadata columns and return all samples that fulfil the queries. It is however possible to filter on the `Sample_ID` column directly. This column is a string column by design and thus follows the syntax described in the [Filtering on string columns](#22-filtering-on-string-columns) section.
 
-For example, with the above [example](#example) metadata and data, this query:
+For example, with the above [example](#113-example) metadata and data, this query:
 
 ```bash
 divbase-cli query tsv "Sample_ID:S1"
@@ -286,14 +286,14 @@ Unique Sample IDs: ['S1']
 Unique filenames: ['file1.vcf.gz']
 ```
 
-### Query Warnings: spotting potential issues with the TSV or the query filter
+### 2.5. Query Warnings: spotting potential issues with the TSV or the query filter
 
 When running a sample metadata query in DivBase, the system will check the TSV and the query filter for the constraints and considerations described throughout this guide. If errors are encountered, the query will not run and a message with details on what went wrong will be return to the user. Warnings, however, will not stop queries from running, but indicate that the user should carefully review the results.
 
 Reviewing the Warnings to judge if they are relevant or not is essential to avoid unintended query results. The following are treated as Warnings by DivBase queries (and by the TSV validator).
 
 !!! note
-    Note that the warnings will only occur when query contains a combination of filter and column values that warrants a warning: filtering only on Column A will not check for warnings in Column B. Use the [TSV validator](#validating-a-sidecar-metadata-tsv-with-divbase-cli) if you want to check for issues across all columns.
+    Note that the warnings will only occur when query contains a combination of filter and column values that warrants a warning: filtering only on Column A will not check for warnings in Column B. Use the [TSV validator](#12-validating-a-sidecar-metadata-tsv-with-divbase-cli) if you want to check for issues across all columns.
 
 - **Comparison operators on string/mixed-type columns**: DivBase comparison operators (`>`, `<`, `>=`, `<=`) only work on numeric columns. If you use them on a string or mixed-type column — whether with a numeric operand (e.g., `Population:>5`) or a string operand (e.g., `Area:>North`) — DivBase will warn that comparison operators are not supported on string columns. Use exact string matching instead (e.g., `Area:North` or `Population:8,1a`).
 
@@ -306,9 +306,9 @@ If the filter references a column that does not exist in the TSV, DivBase will w
 - **No matching values**:
 If none of the filter values match any values in the column, DivBase print a warning. This can indicate a typo in the filter value, or just that the specific filter combination filtered away all samples..
 
-### Examples of complex queries
+### 2.6. Examples of complex queries
 
-Assuming that the sidecar metadata TSV file looks like in the [Example](#example) above, a query like will:
+Assuming that the sidecar metadata TSV file looks like in the [Example](#113-example) above, a query like will:
 
 ```bash
 divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
@@ -320,7 +320,7 @@ divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
 
 There are four samples (rows) that fulfill this, and this is what the query results will return: `S1`, `S4`, `S5`, and `S8`.
 
-## Read next
+## 3. Read next
 
 - [DivBase VCF query syntax](vcf-query-syntax.md)
 - [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
