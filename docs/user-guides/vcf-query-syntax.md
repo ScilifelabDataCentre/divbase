@@ -67,7 +67,9 @@ The following commands are mutually exclusive since they are alternative ways to
 
 ## 3. Sample and VCF file selection
 
-To run a VCF data query, the user needs to input the samples and/or VCF files to perform the query on, as well as the `bcftools view` command(s) (described in [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument)) below. DivBase supports different ways to input the samples and/or VCF files:
+To run a VCF data query, the user needs to input the samples to perform the query on, as well as the `bcftools view` command(s) (described in [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument)) below. DivBase will use the VCF Dimensions cache to find the VCF files that these sample are found in, and process only those VCF files. The user thus never should input any VCF filenames in their queries.
+
+DivBase supports different ways to input the samples:
 
 ### 3.1. Metadata-driven sample and VCF file selection (--tsv-filter)
 
@@ -152,25 +154,7 @@ S4;S5
 
 If invalid delimiters are found, `divbase-cli` exits early with a format error before submitting the API request.
 
-### 3.4. VCF file selection from direct filenames
-
-TODO not implemented
-
-could look like:
-
-```bash
-divbase-cli query vcf --vcf-files "file1.vcf, file5.vcf" --command "view -r 21:15000000-25000000"
-```
-
-if this is combined with `--samples "S1,S2,S10,S239" --vcf-files "file1.vcf, file5.vcf"` there might be many queries without results. Support for this would need to be considered in the future.
-
-To see the VCF file names and versions that are currently part of the project's VCF dimensions cache:
-
-```bash
-divbase-cli dimensions show --cached-vcf-files
-```
-
-### 3.5. No selection flags (all samples and files)
+### 3.4. No selection flags (all samples and files)
 
 TODO: we might not want to support this, it would be easier for the user to download all the files and merge them themselves.
 
