@@ -22,6 +22,7 @@ from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
+    validate_user_submitted_bcftools_command,
 )
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -143,6 +144,11 @@ async def create_bcftools_jobs(
                     "by running 'divbase-cli dimensions update --project <project_name>'."
                 ),
             )
+
+    try:
+        validate_user_submitted_bcftools_command(command=bcftools_query_request.command)
+    except TaskUserError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     job_id = await create_task_history_entry(
         user_id=current_user.id,

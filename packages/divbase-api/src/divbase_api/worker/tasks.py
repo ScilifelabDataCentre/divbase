@@ -288,7 +288,9 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
-    _validate_user_submitted_bcftools_command(command)
+    validate_user_submitted_bcftools_command(
+        command
+    )  # Run also here for defensive purposes. API will call the same function and catch the error first for all cases that go through the endpoint (but not all tests do)
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
@@ -703,19 +705,61 @@ def _determine_sample_selection_mode(tsv_filter: str | None, samples: list[str] 
     return VCFQuerySampleSelectionMode.ALL_SAMPLES
 
 
-def _validate_user_submitted_bcftools_command(command: str) -> None:
+def _matches_option(arg: str, short_opt: str, long_opt: str) -> bool:
+    if arg == short_opt:
+        return True
+    if arg.startswith(short_opt) and len(arg) > len(short_opt) and not arg.startswith("--"):
+        return True
+    if arg == long_opt:
+        return True
+    return bool(arg.startswith(f"{long_opt}="))
+
+
+def _blacklisted_view_options_reason_for_argument(arg: str) -> str | None:
+    """Helper function to return the reason why a given bcftools view option is not supported by DivBase."""
+
+    if _matches_option(arg, "-h", "--header-only"):
+        return (
+            "Option '-h/--header-only' is not supported in DivBase queries. "
+            "Instead use: `divbase-cli files stream <file.vcf.gz> | zcat | awk '/^##/ || /^#CHROM/ {print} !/^#/ {exit}'`"
+        )
+    if _matches_option(arg, "-l", "--compression-level"):
+        return "Option '-l/--compression-level' is handled by the DivBase server."
+    if _matches_option(arg, "-O", "--output-type"):
+        return "Option '-O/--output-type' is handled by the DivBase server."
+    if _matches_option(arg, "-o", "--output"):
+        return "Option '-o/--output' is handled by the DivBase server."
+    if _matches_option(arg, "-R", "--regions-file"):
+        return "Option '-R/--regions-file' is not supported in DivBase queries because external filter files are not supported."
+    if _matches_option(arg, "-T", "--targets-file"):
+        return "Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported."
+    if _matches_option(arg, "--threads", "--threads"):
+        return "Option '--threads' is handled by the DivBase server."
+    if _matches_option(arg, "--verbosity", "--verbosity"):
+        return "Option '--verbosity' is handled by the DivBase server."
+    if _matches_option(arg, "-W", "--write-index"):
+        return "Option '-W/--write-index' is handled by the DivBase server."
+    if _matches_option(arg, "-S", "--samples-file"):
+        return (
+            "Option '-S/--samples-file' is not supported in '--command'. "
+            "Use `divbase-cli query vcf --samples-file` instead."
+        )
+    if _matches_option(arg, "-f", "--apply-filters"):
+        return "Option '-f/--apply-filters' is not supported in DivBase queries because external filter files are not supported."
+
+    return None
+
+
+def validate_user_submitted_bcftools_command(command: str) -> None:
     """
     Validate that user-submitted bcftools command(s) are valid for DivBase.
     Intended to be run early in bcftools_pipe_task and make early exits when needed.
+
+    Some bcftools options have both a short and long version (e.g. -h and --header-only).
+    The validation checks for both versions of the option.
     """
     valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
-    sample_file_option_error_message = (
-        "Do not use bcftools sample-file options in '--command' (-S/--samples-file). "
-        "Use DivBase CLI '--samples-file' instead so sample IDs are resolved within the project. "
-        "You may still use bcftools '-s/--samples' in '--command' if you want explicit control where in the bcftools pipe that samples are subsetted."
-        "sample selection happens."
-    )
-    long_sample_file_flag = "--samples-file"
+    unsupported_view_options = []
 
     for position, raw_cmd in enumerate(command.split(";"), start=1):
         cmd = raw_cmd.strip()
@@ -728,22 +772,22 @@ def _validate_user_submitted_bcftools_command(command: str) -> None:
         except ValueError:
             raise TaskUserError(parse_error_message) from None
 
-        if not args:
-            raise TaskUserError(parse_error_message)
-
-        for arg in args:
-            # Short sample-file forms: '-S file.txt' and attached '-Sfile.txt'
-            short_sample_file_flag = arg == "-S" or (len(arg) > 2 and arg[:2] == "-S")
-            long_sample_file_flag_used = arg == long_sample_file_flag or arg.startswith(f"{long_sample_file_flag}=")
-            if short_sample_file_flag or long_sample_file_flag_used:
-                raise TaskUserError(sample_file_option_error_message)
-
         cmd_name = args[0]
         if cmd_name not in valid_commands:
             raise TaskUserError(
                 f"Unsupported bcftools command '{cmd_name}' at position {position}. "
                 f"Only the following commands are supported: {', '.join(valid_commands)}"
             )
+
+        if cmd_name == "view":
+            for arg in args[1:]:
+                reason = _blacklisted_view_options_reason_for_argument(arg)
+                if reason is not None:
+                    unsupported_view_options.append(f"Pipe segment {position}, token '{arg}': {reason}")
+
+    if unsupported_view_options:
+        details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
+        raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
 
 
 def _resolve_inputs_for_sample_metadata_mode(

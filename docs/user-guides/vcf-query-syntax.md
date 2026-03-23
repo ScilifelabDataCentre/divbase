@@ -235,7 +235,19 @@ The following `view` subcommands are not supported in DivBase:
 |-f, --apply-filters LIST | External filter files not supported |
 <!-- markdownlint-enable MD056 -->
 
-TODO: blacklist these in the code and ensure that useful warnings are given to the user
+The DivBase server will check if these are included in the `--command` string before the query job is sent to the job queue. If any of the unsupported `bvftools view` options are included in the string, the job will not be enqued and an error message will be returned to the user.
+
+!!! Note
+    Example of a `--command` with two DivBase-unsupported `bcftools view` options, and the resulting error message:
+
+    ```bash
+
+    divbase-cli query vcf --command "view -r chr2:1-10000; view -T; view -W"
+
+    # Details: Unsupported bcftools view option(s) found in '--command':
+    #  • Pipe segment 2, token '-T': Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported.
+    #  • Pipe segment 3, token '-W': Option '-W/--write-index' is handled by the DivBase server.
+    ```
 
 TODO: now that samples are autoinjected, we need to support no command? a current workaround is to force them to write `view -s`. i.e. how to handle Empty command string
 

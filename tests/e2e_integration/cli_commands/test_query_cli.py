@@ -18,7 +18,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from celery import current_app
-from sqlalchemy import select
+from sqlalchemy import func, select
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -275,16 +275,18 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
 
 
 @pytest.mark.parametrize(
-    "project_name,tsv_filter,command,expected_error",
+    "project_name,tsv_filter,command,expected_error,expected_stage",
     [
         # Malformed tsv filter (missing colon)
-        ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError"),
+        ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError", "task_failure"),
         # bad command
-        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command"),
+        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command", "submission_failure"),
         # empty command string
-        ("DEFAULT", "DEFAULT", "", "Empty"),
+        ("DEFAULT", "DEFAULT", "", "Empty", "task_failure"),
         # sample-file options in --command are rejected early by task guard
-        ("DEFAULT", "DEFAULT", "view -S samples.txt", "Do not use bcftools sample-file options"),
+        ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file", "submission_failure"),
+        # output options in --command are rejected early by API guard
+        ("DEFAULT", "DEFAULT", "view -Oz", "-O/--output-type", "submission_failure"),
     ],
 )
 def test_bcftools_pipe_query_errors(
@@ -295,10 +297,11 @@ def test_bcftools_pipe_query_errors(
     tsv_filter,
     command,
     expected_error,
+    expected_stage,
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
 ):
-    """Test that validation errors cause task FAILURE status."""
+    """Test command and filter validation errors for bcftools queries."""
     if "DEFAULT" in project_name:
         project_name = CONSTANTS["QUERY_PROJECT"]
     if "DEFAULT" in tsv_filter:
@@ -312,6 +315,37 @@ def test_bcftools_pipe_query_errors(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     command_str = f"query vcf --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+
+    if expected_stage == "submission_failure":
+        with SyncSessionLocal() as db:
+            tasks_before = db.execute(
+                select(func.count(TaskHistoryDB.id))
+                .where(TaskHistoryDB.project_id == project_id)
+                .where(TaskHistoryDB.user_id == user_id)
+            ).scalar_one()
+
+        response = runner.invoke(app, command_str)
+        assert response.exit_code == 1
+
+        output = response.stdout
+        if response.exception is not None:
+            output = f"{output}\n{response.exception}"
+        normalized_output = " ".join(output.split())
+        assert expected_error in normalized_output, (
+            f"Expected '{expected_error}' in submission failure output, but got: {normalized_output}"
+        )
+        assert "Job submitted successfully with task id:" not in output
+
+        with SyncSessionLocal() as db:
+            tasks_after = db.execute(
+                select(func.count(TaskHistoryDB.id))
+                .where(TaskHistoryDB.project_id == project_id)
+                .where(TaskHistoryDB.user_id == user_id)
+            ).scalar_one()
+
+        assert tasks_after == tasks_before, "Submission-time command validation should not create a task history entry"
+        return
+
     response = runner.invoke(app, command_str)
 
     assert response.exit_code == 0
