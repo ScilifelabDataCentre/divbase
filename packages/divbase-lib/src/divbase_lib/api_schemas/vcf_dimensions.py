@@ -52,3 +52,16 @@ class DimensionsScaffoldsResult(BaseModel):
     """Result model for showing unique scaffolds across project VCFs."""
 
     unique_scaffolds: list[str]  # Already sorted, by the CRUD function get_unique_scaffolds_by_project_async()
+
+
+class DimensionsVCFFileEntry(BaseModel):
+    """A single VCF file entry in the unique VCF files response."""
+
+    vcf_file_s3_key: str
+    s3_version_id: str
+
+
+class DimensionsVCFFilesResult(BaseModel):
+    """Result model for showing unique VCF file/version entries across project VCFs."""
+
+    unique_vcf_files: list[DimensionsVCFFileEntry]

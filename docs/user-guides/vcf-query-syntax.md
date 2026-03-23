@@ -36,7 +36,11 @@ The outcome of a DivBase VCF query is a single results file with merged/concaten
 
 ## 1. Prerequisites
 
-Ensure that the files of the DivBase project are prepared according to the instructions in [Running Queries Overview - Prerequisites](running-queries-overview.md#prerequisites). In short, this means that the [VCF files](vcf-files.md) and [sample metadata TSVs](sidecar-metadata.md) are formatted according to DivBase requirements and have been uploaded to the DivBase project's data storage, and that VCF dimensions cache is up-to-date.
+Ensure that the files of the DivBase project are prepared according to the instructions in [Running Queries Overview - Prerequisites](running-queries-overview.md#prerequisites). In short, this means that the [VCF files](vcf-files.md) and [sample metadata TSVs](sidecar-metadata.md) are formatted according to DivBase requirements and have been uploaded to the DivBase project's data storage, and that VCF dimensions cache is up-to-date. The latter can be ensured by running the following (and wait for the task to be completed) before submitting any VCF queries:
+
+```bash
+divbase-cli dimensions update
+```
 
 DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF data. The DivBase VCF query syntax is based on `bcftools view` as described in the [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view). If you are not familiar with `bcftools view`, you might want to take some time to study the different options. The commands used for DivBase VCF queries are described in more detail in the [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument) section below.
 
@@ -92,14 +96,10 @@ Users can also run VCF data query without metadata queries by defining which sam
 divbase-cli dimensions show
 ```
 
-To just get all samples that are available for a project, use `divbase-cli dimensions show --unique-samples`
-
-TODO add dimensions show command to get all VCF files
-
-To see all the VCF files in the project's data storage, use:
+To just get all samples that are available for a project, use
 
 ```bash
-divbase-cli files ls --tsv | grep "vcf.gz"
+divbase-cli dimensions show --unique-samples
 ```
 
 To specify the samples on the command line, use the option `--samples`:
@@ -163,6 +163,12 @@ divbase-cli query vcf --vcf-files "file1.vcf, file5.vcf" --command "view -r 21:1
 ```
 
 if this is combined with `--samples "S1,S2,S10,S239" --vcf-files "file1.vcf, file5.vcf"` there might be many queries without results. Support for this would need to be considered in the future.
+
+To see the VCF file names and versions that are currently part of the project's VCF dimensions cache:
+
+```bash
+divbase-cli dimensions show --cached-vcf-files
+```
 
 ### 3.5. No selection flags (all samples and files)
 

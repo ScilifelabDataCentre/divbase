@@ -584,6 +584,42 @@ def test_show_unique_scaffolds_dedicated_endpoint(
     assert numeric_scaffolds == sorted(numeric_scaffolds, key=int), "Numeric scaffolds should be sorted numerically"
 
 
+def test_show_unique_vcf_files_dedicated_endpoint(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions show --cached-vcf-files' command using the dedicated endpoint.
+    This tests both the CRUD function and the CLI integration.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --cached-vcf-files"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    rows = [line for line in cli_result.stdout.splitlines() if line.strip()]
+    assert rows, "Expected TSV output rows for cached VCF files"
+    assert rows[0].split("\t") == ["Filename", "S3 version ID"], f"Unexpected TSV header: {rows[0]}"
+
+    data_rows = [row.split("\t") for row in rows[1:]]
+    assert len(data_rows) > 0, "Expected at least one cached VCF file entry"
+
+    vcf_files = [row[0] for row in data_rows]
+    expected_vcf_files = sorted(
+        [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+    )
+    assert vcf_files == expected_vcf_files, f"Expected {expected_vcf_files}, got {vcf_files}"
+    assert all(row[1] for row in data_rows), "Expected non-empty s3_version_id values"
+
+
 def test_show_dimensions_sample_names_output_writes_file(
     CONSTANTS,
     run_update_dimensions,
@@ -762,6 +798,12 @@ def test_show_dimensions_rejects_output_and_stdout_together(
             ["1", "4", "5", "6", "7", "8", "13", "18", "20", "21", "22", "24"],
             True,  # Should be sorted numerically then alphabetically
         ),
+        (
+            "--cached-vcf-files",
+            None,
+            None,
+            True,  # Should be sorted alphabetically
+        ),
     ],
 )
 def test_show_unique_items_parametrized(
@@ -776,7 +818,7 @@ def test_show_unique_items_parametrized(
     verify_sorting,
 ):
     """
-    Parametrized test for --unique-samples and --unique-scaffolds options.
+    Parametrized test for --unique-samples, --unique-scaffolds, and --cached-vcf-files options.
     Tests both the CRUD functions and CLI integration.
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -790,6 +832,25 @@ def test_show_unique_items_parametrized(
     cli_result = runner.invoke(app, command)
 
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    if option_flag == "--cached-vcf-files":
+        rows = [line for line in cli_result.stdout.splitlines() if line.strip()]
+        assert rows, "Expected TSV output rows for cached VCF files"
+        assert rows[0].split("\t") == ["Filename", "S3 version ID"], f"Unexpected TSV header: {rows[0]}"
+
+        data_rows = [row.split("\t") for row in rows[1:]]
+        assert len(data_rows) > 0, f"Expected at least one item in {option_flag} output"
+
+        expected_vcf_files = sorted(
+            [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+        )
+        item_vcf_files = [row[0] for row in data_rows]
+        assert item_vcf_files == expected_vcf_files, f"Expected {expected_vcf_files}, got {item_vcf_files}"
+        assert all(row[1] for row in data_rows), "Expected non-empty s3_version_id values"
+
+        if verify_sorting:
+            assert item_vcf_files == sorted(item_vcf_files), "VCF filenames should be sorted alphabetically"
+        return
+
     assert "count:" in cli_result.stdout, "Expected count to be displayed in output"
     assert expected_message in cli_result.stdout, f"Expected message '{expected_message}' in output"
     assert "[" in cli_result.stdout and "]" in cli_result.stdout, "Expected list output"
