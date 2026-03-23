@@ -55,37 +55,97 @@ body {
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
+.scilife-nav-btn-signup {
+  color: var(--scilife-dark-grey);
+  background-color: transparent;
+  border: 1.5px solid var(--scilife-dark-grey);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.3rem 1rem;
+}
+.scilife-nav-btn-signup:hover,
+.scilife-nav-btn-signup:focus {
+  background-color: var(--scilife-light-grey);
+  border-color: var(--scilife-dark-grey);
+  color: var(--scilife-dark-grey);
+}
+.scilife-nav-btn-login {
+  color: white;
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.3rem 1rem;
+}
+.scilife-nav-btn-login:hover,
+.scilife-nav-btn-login:focus,
+.scilife-nav-btn-login:active,
+.scilife-nav-btn-login:active:focus {
+  color: white;
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
+}
 
 /* footer control */
-footer {
-  background-color: #ebebeb;
+.scilife-footer {
+  background-color: #2d3464;
+  color: #e0e0e0;
 }
-.scilife-footer-text a {
-  color: var(--scilife-teal);
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.045rem;
+.scilife-footer-brand-logo {
+  height: 1.6rem;
+}
+.scilife-footer-brand-text {
+  font-size: 0.9rem;
+  color: #b0bec5;
+  line-height: 1.5;
+}
+.scilife-footer-social-link {
+  color: #b0bec5;
+  font-size: 1.3rem;
   text-decoration: none;
+  transition: color 0.15s;
 }
-.scilife-footer-titles {
-  color: var(--scilife-dark-grey);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.0625rem;
-  margin-bottom: 0.5rem;
+.scilife-footer-social-link:hover {
+  color: var(--scilife-lime);
+}
+.scilife-footer-nav a {
+  color: #b0bec5;
+  font-size: 1rem;
+  text-decoration: none;
+  display: block;
+  padding: 0.2rem 0;
+  transition: color 0.15s;
+}
+.scilife-footer-nav a:hover {
+  color: var(--scilife-lime);
 }
 .scilife-footer-img {
-  max-width: 150px;
+  max-height: 60px;
+  max-width: 120px;
+  object-fit: contain;
 }
-@media (min-width: 1200px) {
-  .scilife-footer-img {
-    max-width: 140px;
-  }
+.scilife-footer-bottom {
+  background-color: #0d1618;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
-@media (min-width: 1400px) {
-  .scilife-footer-img {
-    max-width: 150px;
-  }
+.scilife-footer-copyright {
+  font-size: 0.85rem;
+  color: #90a4ae;
+}
+.scilife-footer-copyright a {
+  color: #b0bec5;
+  text-decoration: underline;
+}
+.scilife-footer-copyright a:hover {
+  color: var(--scilife-lime);
+}
+.scilife-footer-bottom-link {
+  font-size: 0.9rem;
+  color: #90a4ae;
+  text-decoration: none;
+}
+.scilife-footer-bottom-link:hover {
+  color: var(--scilife-lime);
 }
 
 /* hero control */
@@ -192,6 +252,55 @@ footer {
   }
 }
 
+/* hero call to action button */
+.scilife-hero-cta-btn {
+  color: white;
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+}
+.scilife-hero-cta-btn:hover,
+.scilife-hero-cta-btn:focus,
+.scilife-hero-cta-btn:active,
+.scilife-hero-cta-btn:active:focus {
+  color: white;
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
+}
+.scilife-hero-signup-link {
+  color: white;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.scilife-hero-signup-link:hover {
+  color: var(--scilife-lime-025);
+}
+
+/* home page description paragraph */
+.scilife-home-description {
+  max-width: 700px;
+  font-size: 1.125rem;
+  line-height: 1.7rem;
+}
+
+/* key features section */
+.scilife-feature-icon {
+  font-size: 3rem;
+  color: #5b69ca;
+}
+.scilife-feature-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--scilife-dark-grey);
+}
+.scilife-feature-desc {
+  font-size: 1rem;
+  color: var(--scilife-contrast-okay-grey);
+  line-height: 1.5;
+}
+
 /* profile card control */
 .scilife-profile-card {
   display: flex;
@@ -271,14 +380,12 @@ footer {
 
 /* General text control */
 .scilife-subsection h2 {
-  color: var(--scilife-teal);
   font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.04rem;
 }
 
 .scilife-subsection h3 {
-  color: var(--scilife-teal);
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.04rem;

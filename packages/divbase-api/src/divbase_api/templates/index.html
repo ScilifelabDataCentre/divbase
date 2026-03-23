@@ -20,21 +20,65 @@
                     <h2 class="scilife-hero-subtitle">
                         Secure platform for managing genomic variants and metadata files of non-human species.
                     </h2>
+                    <div class="mt-4">
+                        {% if current_user %}
+                        <a href="/projects" class="btn scilife-hero-cta-btn">
+                            <i class="bi bi-folder me-2"></i>Go to my projects
+                        </a>
+                        {% else %}
+                        <a href="/login" class="btn scilife-hero-cta-btn">Log in to access data</a>
+                        <p class="mt-2 mb-0">
+                            <small>Don't have an account? <a href="/register" class="scilife-hero-signup-link">Sign up</a></small>
+                        </p>
+                        {% endif %}
+                    </div>
                 </div>
             </section>
 
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="scilife-subsection">
-                    <h2><i class="bi bi-database-fill me-2"></i>Welcome to DivBase</h2>
-                    {% if current_user %}
-                    <p>Hello, {{ current_user.email }}!</p>
-                    <p>You're logged in!</p>
-                    {% else %}
-                        <p>Welcome, guest user.</p>
-                        <p>You're not logged in.</p>
-                    {% endif %}
+            <section class="scilife-subsection text-center py-4">
+                <p class="mx-auto scilife-home-description">
+                    DivBase (beta) is a tool that enables life science researchers at Swedish research institutions
+                    and their collaborators to easily manage, explore, and query genomic variants in VCF format,
+                    along with associated sample metadata.
+                </p>
+            </section>
+
+            <section class="scilife-subsection py-4">
+                <h2 class="text-center mb-4">Key features</h2>
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 text-center">
+                    <div class="col">
+                        <i class="bi bi-arrow-left-right scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Share</h3>
+                        <p class="scilife-feature-desc">Import and export VCF and metadata files</p>
+                    </div>
+                    <div class="col">
+                        <i class="bi bi-shield-lock-fill scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Secure</h3>
+                        <p class="scilife-feature-desc">Secure user authentication and authorisation</p>
+                    </div>
+                    <div class="col">
+                        <i class="bi bi-clock-history scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Version</h3>
+                        <p class="scilife-feature-desc">File versioning and rollback</p>
+                    </div>
+                    <div class="col">
+                        <i class="bi bi-folder2-open scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Organise</h3>
+                        <p class="scilife-feature-desc">Files organised into projects</p>
+                    </div>
+                    <div class="col">
+                        <i class="bi bi-people-fill scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Collaborate</h3>
+                        <p class="scilife-feature-desc">Multiple user roles and permission level</p>
+                    </div>
+                    <div class="col">
+                        <i class="bi bi-search scilife-feature-icon"></i>
+                        <h3 class="scilife-feature-title mt-2">Explore</h3>
+                        <p class="scilife-feature-desc">Data query engine to filter and merge datasets</p>
+                    </div>
                 </div>
-            </div>
+            </section>
+
         </div>
     </div>
 </div>

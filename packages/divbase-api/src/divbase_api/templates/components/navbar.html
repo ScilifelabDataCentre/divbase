@@ -14,8 +14,11 @@
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
                     <a class="nav-link scilife-nav-link" href="{{ mkdocs_site_url }}" target="_blank" rel="noopener noreferrer">
-                        <i class="bi bi-book me-1"></i>Documentation
+                        Documentation
                     </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link scilife-nav-link" href="/about">About</a>
                 </li>
                 {% if current_user %}
                 <li class="nav-item">
@@ -49,21 +52,17 @@
                     </ul>
                 </li>
                 {% else %}
-                <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/login">
-                        <i class="bi bi-box-arrow-in-right me-1"></i>Log in
-                    </a>
+                <li class="nav-item ms-1">
+                    <a class="btn scilife-nav-btn-signup" href="/register">Sign up</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/register">
-                        <i class="bi bi-person-plus me-1"></i>Create Account
-                    </a>
+                <li class="nav-item ms-1">
+                    <a class="btn scilife-nav-btn-login" href="/login">Log in</a>
                 </li>
                 {% endif %}
                 {# light/dark theme toggle #}
                 <li class="nav-item dropdown">
                     <button class="btn btn-link nav-link scilife-nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-label="Toggle theme">
-                        <i class="bi bi-circle-half me-1" fill="currentColor"></i>Theme
+                        <i class="bi bi-circle-half me-1" fill="currentColor"></i>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="swap-theme">
                         <li>
