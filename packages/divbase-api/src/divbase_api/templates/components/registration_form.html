@@ -1,78 +1,70 @@
 <div class="row justify-content-center mb-4">
-    <div class="col-md-10 col-lg-9">
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <div class="text-center scilife-subsection mt-2 mb-4">
-                    <h2>Create an account </h2>
-                    <p class="text-muted">DivBase is primarily for researchers in Sweden, but international collaborators are welcome to join projects led by a researcher with Swedish affiliation.</p>
-                </div>
-            </div>
+    <div class="col-md-10 col-lg-8">
+
+        <div class="text-center scilife-subsection mt-4 mb-3">
+            <h1>Register</h1>
+            <p class="text-muted">DivBase is primarily for researchers in Sweden, but international collaborators are welcome to join projects led by a researcher with Swedish affiliation.</p>
+        </div>
+
+        <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <form method="post" action="/register" id="registerForm">
 
                     <div class="mb-3">
-                        <label for="name" class="form-label">Full Name</label>
+                        <label for="name" class="form-label fw-semibold">Full name</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-person"></i>
-                            </span>
-                            <input type="text" 
-                                class="form-control" 
-                                id="name" 
-                                name="name" 
-                                placeholder="Enter your full name"
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text"
+                                class="form-control"
+                                id="name"
+                                name="name"
+                                placeholder="Enter name"
                                 value="{{ name or '' }}"
                                 autocomplete="name"
-                                minlength="3"
-                                maxlength="100"
+                                minlength="1"
+                                maxlength="50"
                                 required>
                         </div>
                         <small class="text-muted">Enter your full name (3-100 characters).</small>
                     </div>
 
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email Address</label>
+                        <label for="email" class="form-label fw-semibold">Email</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-envelope"></i>
-                            </span>
-                            <input type="email" 
-                                class="form-control" 
-                                id="email" 
-                                name="email" 
-                                placeholder="Enter your email address"
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email"
+                                class="form-control"
+                                id="email"
+                                name="email"
+                                placeholder="Enter email address"
                                 value="{{ email or '' }}"
                                 autocomplete="email"
                                 maxlength="50"
                                 required>
                         </div>
-                        <small class="text-muted">Please use your institutional email address if you have one.</small>
+                        <small class="text-muted">Use your institutional email address if possible.</small>
                     </div>
-                    
+
                     {# NOTE: If you're going to make changes to the code here, you probably also want to update the code in edit_profile page #}
                     <div class="mb-3">
-                        <label for="organisation_dropdown" class="form-label">Organisation</label>
+                        <label for="organisation_dropdown" class="form-label fw-semibold">Organisation</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-building"></i>
-                            </span>
+                            <span class="input-group-text"><i class="bi bi-building"></i></span>
                             <select class="form-select" id="organisation_dropdown" name="organisation" required>
-                                <option value=""  disabled {% if not organisation %}selected{% endif %}>Select an organisation...</option>
+                                <option value="" disabled {% if not organisation %}selected{% endif %}>Select an organisation ...</option>
                                 <option value="Other" {% if organisation == 'Other' %}selected{% endif %}>Other</option>
                                 {% for org in swedish_universities %}
                                     <option value="{{ org }}" {% if organisation == org %}selected{% endif %}>{{ org }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <small class="text-muted">Please select "Other" if your organisation is not listed.</small>
+                        <small class="text-muted">Select "Other" if your organisation is not listed.</small>
                     </div>
                     {# This is only displayed if the "Other" option is selected in the organisation dropdown #}
                     <div class="mb-3" id="other_organisation_div" style="display: none;">
-                        <label for="organisation_other" class="form-label">Your organisation</label>
+                        <label for="organisation_other" class="form-label fw-semibold">Your organisation</label>
                         <div class="input-group">
-                             <span class="input-group-text">
-                                <i class="bi bi-building-add"></i>
-                            </span>
+                            <span class="input-group-text"><i class="bi bi-building-add"></i></span>
                             <input type="text"
                                 class="form-control"
                                 id="organisation_other"
@@ -85,28 +77,24 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="role_dropdown" class="form-label">Role</label>
+                        <label for="role_dropdown" class="form-label fw-semibold">Role</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-briefcase"></i>
-                            </span>
+                            <span class="input-group-text"><i class="bi bi-briefcase"></i></span>
                             <select class="form-select" id="role_dropdown" name="role" required>
-                                <option value=""  disabled {% if not role %}selected{% endif %}>Select a role...</option>
+                                <option value="" disabled {% if not role %}selected{% endif %}>Select a role ...</option>
                                 <option value="Other" {% if role == 'Other' %}selected{% endif %}>Other</option>
                                 {% for job_role in known_job_roles %}
                                     <option value="{{ job_role }}" {% if role == job_role %}selected{% endif %}>{{ job_role }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <small class="text-muted">Please select "Other" if your role is not listed.</small>
+                        <small class="text-muted">Select "Other" if your role is not listed.</small>
                     </div>
                     {# This is only displayed if the "Other" option is selected in the role dropdown #}
                     <div class="mb-3" id="role_other_div" style="display: none;">
-                        <label for="role_other" class="form-label">Your Role</label>
+                        <label for="role_other" class="form-label fw-semibold">Your role</label>
                         <div class="input-group">
-                             <span class="input-group-text">
-                                <i class="bi bi-building-add"></i>
-                            </span>
+                            <span class="input-group-text"><i class="bi bi-briefcase"></i></span>
                             <input type="text"
                                 class="form-control"
                                 id="role_other"
@@ -119,65 +107,53 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
+                        <label for="password" class="form-label fw-semibold">Password</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-lock"></i>
-                            </span>
-                            <input type="password" 
-                                class="form-control" 
-                                id="password" 
-                                name="password" 
-                                placeholder="Create a password"
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password"
+                                class="form-control"
+                                id="password"
+                                name="password"
+                                placeholder="Enter a password"
                                 autocomplete="new-password"
                                 minlength="10"
                                 required>
-                            </button>
                         </div>
+                        <small class="text-muted">Password must be at least 10 characters long.</small>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="confirm_password" class="form-label">Confirm Password</label>
+                    <div class="mb-4">
+                        <label for="confirm_password" class="form-label fw-semibold">Confirm password</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-lock"></i>
-                            </span>
-                            <input type="password" 
-                                class="form-control" 
-                                id="confirm_password" 
-                                name="confirm_password" 
-                                placeholder="Confirm your password"
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password"
+                                class="form-control"
+                                id="confirm_password"
+                                name="confirm_password"
+                                placeholder="Confirm password"
                                 autocomplete="new-password"
                                 minlength="10"
                                 required>
-                            </button>
                         </div>
                     </div>
 
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-person-plus me-2"></i>Create Account
-                        </button>
+                    <p class="text-muted small mb-3">
+                        By signing up, you accept the <a href="/terms">Terms</a> and
+                        <a href="/privacy">Privacy policy</a> of this service.
+                    </p>
+                    {# TODO: align these in the center #}
+                    <div class="d-flex gap-2 text-center">
+                        <button type="submit" class="btn scilife-confirm-button">Create an account</button>
+                        <a href="/" class="btn scilife-auth-cancel-btn">Cancel</a>
                     </div>
-                
+
                 </form>
-                <hr class="my-4">
-                <div class="text-center d-flex justify-content-center align-items-center gap-3 flex-wrap">
-                    <div>
-                        <p class="text-muted mb-2">Already have an account?</p>
-                        <a href="/login" class="btn btn-primary btn-lg">
-                            <i class="bi bi-box-arrow-in-right me-2"></i>Login here
-                        </a>
-                    </div>
-
-                    <div>
-                        <p class="text-muted mb-2">Forgot your password?</p>
-                        <a href="/forgot-password" class="btn btn-warning btn-lg">
-                            <i class="bi bi-key me-2"></i>Reset Password
-                        </a>
-                    </div>
-                </div>
             </div>
         </div>
+
+        <p class="text-center mt-3 text-muted">
+            Already have an account? <a href="/login">Log in</a>.
+        </p>
+
     </div>
 </div>

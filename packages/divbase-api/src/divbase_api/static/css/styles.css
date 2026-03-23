@@ -409,16 +409,31 @@ body {
   align-self: flex-end;
   margin-left: auto;
   color: white;
-  background-color: var(--scilife-lime-075);
-  border-color: var(--scilife-lime-075);
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
 }
 .scilife-confirm-button:hover,
 .scilife-confirm-button:focus,
 .scilife-confirm-button:active,
 .scilife-confirm-button:active:focus {
   color: white;
-  background-color: var(--scilife-lime);
-  border-color: var(--scilife-lime);
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
+}
+
+/* auth form cancel button */
+.scilife-auth-cancel-btn {
+  color: var(--scilife-dark-grey);
+  background-color: transparent;
+  border: 1.5px solid var(--scilife-medium-grey);
+  font-size: 1rem;
+  font-weight: 500;
+}
+.scilife-auth-cancel-btn:hover,
+.scilife-auth-cancel-btn:focus {
+  background-color: var(--scilife-light-grey);
+  border-color: var(--scilife-dark-grey);
+  color: var(--scilife-dark-grey);
 }
 
 /* Control the copy to clipboard button */
