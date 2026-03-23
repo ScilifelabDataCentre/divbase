@@ -208,7 +208,7 @@ def test_bcftools_pipe_query_all_samples_mode(
     db_session_sync,
     project_map,
 ):
-    """Test running a bcftools pipe query without --tsv-filter/--samples (all-samples mode)."""
+    """Test running a bcftools pipe query with explicit --all-samples mode."""
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -216,7 +216,7 @@ def test_bcftools_pipe_query_all_samples_mode(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     arg_command = "view -r 21:15000000-25000000"
-    command = f"query vcf --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --all-samples --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -224,6 +224,29 @@ def test_bcftools_pipe_query_all_samples_mode(
     user_task_id = result.stdout.strip().split()[-1]
     task_result = wait_for_task_complete(user_task_id=user_task_id)
     assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+
+
+def test_bcftools_pipe_query_without_selection_mode_fails_on_submission(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test that query vcf without any sample-selection mode fails before job submission."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"query vcf --command 'view -r 21:15000000-25000000' --project {project_name} "
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 1
+    output = result.stdout + (str(result.exception) if result.exception else "")
+    assert "Sample selection is required." in output
+    assert "Job submitted successfully with task id:" not in output
 
 
 def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_runs(

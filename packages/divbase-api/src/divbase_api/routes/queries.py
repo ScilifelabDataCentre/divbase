@@ -146,7 +146,10 @@ async def create_bcftools_jobs(
             )
 
     try:
-        validate_user_submitted_bcftools_command(command=bcftools_query_request.command)
+        validate_user_submitted_bcftools_command(
+            command=bcftools_query_request.command,
+            all_samples=bcftools_query_request.all_samples,
+        )
     except TaskUserError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
@@ -166,6 +169,7 @@ async def create_bcftools_jobs(
         user_id=current_user.id,
         job_id=job_id,
         samples=bcftools_query_request.samples,
+        all_samples=bcftools_query_request.all_samples,
     )
 
     result = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())

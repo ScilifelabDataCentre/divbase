@@ -14,17 +14,21 @@ from divbase_lib.exceptions import TaskUserError
 
 class TestDetermineSampleSelectionMode:
     @pytest.mark.parametrize(
-        "tsv_filter,samples,expected_mode",
+        "tsv_filter,samples,all_samples,expected_mode",
         [
-            ("Area:Northern Portugal", None, VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY),
-            (None, ["S1", "S2"], VCFQuerySampleSelectionMode.CLI_SAMPLES),
-            (None, None, VCFQuerySampleSelectionMode.ALL_SAMPLES),
+            ("Area:Northern Portugal", None, False, VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY),
+            (None, ["S1", "S2"], False, VCFQuerySampleSelectionMode.CLI_SAMPLES),
+            (None, None, True, VCFQuerySampleSelectionMode.ALL_SAMPLES),
         ],
     )
-    def test_determine_sample_selection_mode(self, tsv_filter, samples, expected_mode):
+    def test_determine_sample_selection_mode(self, tsv_filter, samples, all_samples, expected_mode):
         """Test that sample selection mode is determined correctly from tsv_filter/samples inputs."""
-        mode = _determine_sample_selection_mode(tsv_filter=tsv_filter, samples=samples)
+        mode = _determine_sample_selection_mode(tsv_filter=tsv_filter, samples=samples, all_samples=all_samples)
         assert mode == expected_mode
+
+    def test_determine_sample_selection_mode_raises_when_no_selection_mode(self):
+        with pytest.raises(TaskUserError, match="No sample-selection mode was provided"):
+            _determine_sample_selection_mode(tsv_filter=None, samples=None, all_samples=False)
 
 
 class TestValidateUserSubmittedBcftoolsCommand:
@@ -102,6 +106,54 @@ class TestValidateUserSubmittedBcftoolsCommand:
         assert "segment 2" in msg
         assert "-O/--output-type" in msg
         assert "--threads" in msg
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "view",
+        ],
+    )
+    def test_validate_user_submitted_bcftools_command_requires_non_sample_option_for_all_samples(self, command):
+        """Test that user-submitted bcftools command in all-samples mode that does not include at least one non-sample-selection view option raises TaskUserError."""
+        with pytest.raises(TaskUserError, match="When using all-samples mode"):
+            validate_user_submitted_bcftools_command(command, all_samples=True)
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "view -r 21:15000000-25000000",
+            "view --regions=21:15000000-25000000",
+            "view -t 21",
+            "view --targets=21",
+            "view -i 'MAF>0.05'",
+            "view --include='MAF>0.05'",
+            "view -e 'QUAL<20'",
+            "view --exclude='QUAL<20'",
+            "view -g hom",
+            "view --genotype het",
+            "view -q 0.01",
+            "view --max-af=0.9",
+            "view -v snps",
+            "view --exclude-types=indels",
+            "view -A",
+        ],
+    )
+    def test_validate_user_submitted_bcftools_command_accepts_subset_filters_for_all_samples(self, command):
+        """Test that user-submitted bcftools command in all-samples mode that includes at least one non-sample-selection view option passes validation."""
+        result = validate_user_submitted_bcftools_command(command, all_samples=True)
+        assert result is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "view -s S1,S2 -r 21:15000000-25000000",
+            "view -r 21:15000000-25000000; view --samples=S1,S2",
+        ],
+    )
+    def test_validate_user_submitted_bcftools_command_rejects_samples_option_in_all_samples_mode(self, command):
+        """Test that user-submitted bcftools command in all-samples mode that includes -s/--samples option raises TaskUserError."""
+        with pytest.raises(TaskUserError, match="-s/--samples"):
+            validate_user_submitted_bcftools_command(command, all_samples=True)
 
 
 class TestResolveInputsForCliSamplesMode:

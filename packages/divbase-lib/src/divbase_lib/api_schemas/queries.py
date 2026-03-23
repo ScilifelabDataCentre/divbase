@@ -13,10 +13,7 @@ class SharedBaseModel(BaseModel):
     model_config = ConfigDict(
         validate_assignment=True,
         json_schema_extra={
-            "description": (
-                "At most one of tsv_filter or samples may be provided. "
-                "If neither is provided, all project samples/files are used."
-            )
+            "description": ("Exactly one sample-selection mode must be provided: tsv_filter, samples, or all_samples.")
         },
     )
 
@@ -39,14 +36,26 @@ class BcftoolsQueryRequest(SharedBaseModel):
     metadata_tsv_name: str | None = None  # Used for metadata mode only
     command: str  # TODO add field to describe that this is bcftools commands
     samples: list[str] | None = None
+    all_samples: bool = False
 
     @model_validator(mode="after")
     def validate_sample_selection_mode(self) -> Self:
         tsv_filter = self.tsv_filter
         samples = self.samples
+        all_samples = self.all_samples
 
-        if tsv_filter is not None and samples is not None:
-            raise ValueError("Only one of tsv_filter or samples may be provided.")
+        selection_count = 0
+        if tsv_filter is not None:
+            selection_count += 1
+        if samples is not None:
+            selection_count += 1
+        if all_samples:
+            selection_count += 1
+
+        if selection_count > 1:
+            raise ValueError("Only one of tsv_filter, samples, or all_samples may be provided.")
+        if selection_count == 0:
+            raise ValueError("One sample-selection mode must be provided (tsv_filter, samples, or all_samples).")
 
         if tsv_filter is not None and self.metadata_tsv_name is None:
             raise ValueError("metadata_tsv_name must be provided when tsv_filter is used.")
@@ -84,14 +93,30 @@ class BcftoolsQueryKwargs(SharedBaseModel):
     user_id: int
     job_id: int
     samples: list[str] | None = None
+    all_samples: bool = False
 
     @model_validator(mode="after")
     def validate_sample_selection_mode(self) -> Self:
         tsv_filter = self.tsv_filter
         samples = self.samples
+        all_samples = self.all_samples
 
-        if tsv_filter is not None and samples is not None:
-            raise ValueError("Only one of tsv_filter or samples may be provided.")
+        selection_count = 0
+        if tsv_filter is not None:
+            selection_count += 1
+        if samples is not None:
+            selection_count += 1
+        if all_samples:
+            selection_count += 1
+
+        if selection_count > 1:
+            raise ValueError("Only one of tsv_filter, samples, or all_samples may be provided.")
+        if selection_count == 0:
+            # Backward compatibility for historical task kwargs created before all_samples option was implemented.
+            # To ensure that task-history deserizliation does not break for existing tasks.
+            # Could be handled by a backfilling migration instead.
+            self.all_samples = True
+            return self
 
         if tsv_filter is not None and self.metadata_tsv_name is None:
             raise ValueError("metadata_tsv_name must be provided when tsv_filter is used.")

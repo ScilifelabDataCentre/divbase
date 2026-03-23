@@ -51,25 +51,28 @@ divbase-cli query vcf \
   [--tsv-filter "<FILTER>"] \
   [--samples "<ID1,ID2,...>"] \
   [--samples-file path/to/samples.txt] \
+  [--all-samples] \
   --command "<BCFTOOLS_VIEW_PIPE>" \
   [--metadata-tsv-name <FILENAME.tsv>] \
   [--project <PROJECT_NAME>]
 ```
 
 - Required: `--command`
-- Optional: exactly one sample-selection mode (`--tsv-filter` OR `--samples` OR `--samples-file`), or none
+- Required: exactly one sample-selection mode (`--tsv-filter` OR `--samples` OR `--samples-file` OR `--all-samples`)
 - Optional: `--metadata-tsv-name` (mainly needed with `--tsv-filter`)
 - Optional: `--project` if user config default exists
 
-The following commands are mutually exclusive since they are alternative ways to control which samples to query on.
-
-- `--tsv-filter`, `--samples`, and `--samples-file` are mutually exclusive
+The `--tsv-filter`, `--samples`, `--samples-file`, and `--all-samples` are mutually exclusive since they are alternative ways to control which samples to query on.
 
 ## 3. Sample and VCF file selection
 
 To run a VCF data query, the user needs to input the samples to perform the query on, as well as the `bcftools view` command(s) (described in [Writing the bcftools command argument](#4-writing-the-bcftools-command-argument)) below. DivBase will use the VCF Dimensions cache to find the VCF files that these sample are found in, and process only those VCF files. The user thus never should input any VCF filenames in their queries.
 
-DivBase supports different ways to input the samples:
+DivBase supports different ways to input the samples. At least one of the following, mutually exclusive, sample-selecting options must be used in a VCF query:
+
+`--tsv-filter`, `--samples`, `--samples-file`, or `--all-samples`
+
+These are explained in the subsections below.
 
 ### 3.1. Metadata-driven sample and VCF file selection (--tsv-filter)
 
@@ -154,9 +157,21 @@ S4;S5
 
 If invalid delimiters are found, `divbase-cli` exits early with a format error before submitting the API request.
 
-### 3.4. No selection flags (all samples and files)
+### 3.4. Explicit all-samples selection (--all-samples)
 
-TODO: we might not want to support this, it would be easier for the user to download all the files and merge them themselves.
+It is possible to use all samples in a DivBase project for a query, with some constraints. To select all samples, use the explict option `--all-samples`:
+
+```bash
+divbase-cli query vcf --all-samples --command "view -r 21:15000000-25000000"
+```
+
+To avoid accidental full-project runs, `--all-samples` requires at least one [supported](#42-bcftools-view-commands-not-supported-by-divbase) `bcftools view` option in `--command` other than `-s/--samples`. This is to avoid creating queries that take all samples and variant data from all VCF files in the project without subsetting them. For that case it would be more efficient to download the dataset from the project instead with:
+
+```bash
+divbase-cli files download-all.
+```
+
+and then merge them manually to a single file, or so desired.
 
 ## 4. Writing the bcftools command argument
 
@@ -201,13 +216,7 @@ Users can override this to specify where in the pipe the sample subsetting shoul
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -s"
 ```
 
-Will be interpreted by the DivBase server to become:
-
-```bash
-bcftools view -r 21:15000000-25000000 | bcftools view -s S1,S2
-```
-
-TODO: ensure that this really becomes a unix pipe. also it is not true that it becomes a pipe, since it store temp files.
+Will be interpreted by the DivBase server to a small script. It first applies `view -r` to each input file, stores the results in an intermediate file, then applies `view -s` to the intermediate files, stores the results to a new batch of intermediate files, and then finally merges/concatenates them into a single results file. The intermediate files are used instead of classic unix pipes (`|`) to allow for acting on mutliple VCF files seperatelly and combining them to a single results file. For more details on this, see [5.3. How does DivBase process the VCF files?](#53-how-does-divbase-process-the-vcf-files)
 
 TODO: ensure that the backend only does `view -s` once. that actually goes for any commands. we should deduplicate identical commands.
 
@@ -231,8 +240,8 @@ The following `view` subcommands are not supported in DivBase:
 |--threads INT | Handled by the DivBase server |
 |--verbosity INT | Handled by the DivBase server |
 |-W[FMT], -W[=FMT], --write-index[=FMT] | Handled by the DivBase server |
-|-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-list`|
-|-f, --apply-filters LIST | External filter files not supported |
+|-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-file`|
+|-f, --apply-filters LIST | Not supported in DivBase queries |
 <!-- markdownlint-enable MD056 -->
 
 The DivBase server will check if these are included in the `--command` string before the query job is sent to the job queue. If any of the unsupported `bvftools view` options are included in the string, the job will not be enqued and an error message will be returned to the user.
@@ -289,7 +298,7 @@ See also the manual for `bcftools view` [bcftools manual](https://samtools.githu
 
 TODO describe cron job for old results files
 
-### 5.3. How does DivBase process the VCF files (technical implementation)
+### 5.3. How does DivBase process the VCF files?
 
 TODO: this should probably have an diagram showing the "merge-last" strategy
 
@@ -297,6 +306,27 @@ TODO: this should probably have an diagram showing the "merge-last" strategy
 2. apply all commands in the pipe to it.
 3. save to a temp file. merge and/or concat all tempfiles into a single results file.
 4. upload the results files to the DivBase project.
+
+Will be interpreted by the DivBase server to become a small script:
+
+```bash
+divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -s"
+```
+
+```bash
+# Let's assume that the server identified that two VCF files `file1.vcf.gz` and `file2.vcf.gz` are needed for the query
+
+# Process each input file with the first command:
+bcftools view -r 21:15000000-25000000 file1.vcf.gz -Ou temp_1_1.bcf
+bcftools view -r 21:15000000-25000000 file2.vcf.gz -Ou temp_1_2.bcf
+
+# Process each temp file with the second command:
+bcftools view -s S1,S2 temp_2_1.bcf -Ou temp_2_1.bcf
+bcftools view -s S1,S2 temp_2_2.bcf -Ou temp_2_2.bcf
+
+# Assume that the files have no overlapping sample sets, i.e. can be merged (this check happens before the job starts)
+bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<JOB_ID>.vcf.gz
+```
 
 ## 6. Examples
 
@@ -321,7 +351,7 @@ TODO: Add a short table:
 |---|---|---|
 |TODO ADD CLI ERROR HERE | TODO ADD CAUSE| TODO ADD FIX |
 
-- “Use only one of --tsv-filter, --samples, or --samples-file”
+- “Use only one of --tsv-filter, --samples, --samples-file, or --all-samples”
 - Unknown sample IDs
 - Empty/invalid `--samples-file` format
 - Dimensions out of date

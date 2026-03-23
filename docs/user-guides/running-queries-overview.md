@@ -31,7 +31,7 @@ Once the VCF dimensions update job is finished and the dimensions cache of the p
 | What you want to do | Command | Full guide |
 |---|---|---|
 | Find samples/files from metadata TSV | `divbase-cli query tsv "<FILTER>"` | [Sidecar Metadata TSV files](sidecar-metadata.md) |
-| Submit a VCF subset job | `divbase-cli query vcf --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
+| Submit a VCF subset job | `divbase-cli query vcf --all-samples --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
 | Use metadata filter + VCF filter together | `divbase-cli query vcf --tsv-filter "<FILTER>" --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
 
 ## Minimal examples
@@ -40,8 +40,8 @@ Once the VCF dimensions update job is finished and the dimensions cache of the p
 # Metadata query only
 divbase-cli query tsv "Area:North"
 
-# VCF query only
-divbase-cli query vcf --command "view -r 21:15000000-25000000"
+# VCF query only (explicit all-samples mode)
+divbase-cli query vcf --all-samples --command "view -r 21:15000000-25000000"
 
 # Combined metadata + VCF query
 divbase-cli query vcf \

@@ -58,7 +58,7 @@ TSV_FILTER_SYNTAX = (
 TSV_FILTER_HELP_TEXT_VCF = (
     "This option calculates the samples to filter the VCFs on based on a sample metadata query. "
     + TSV_FILTER_SYNTAX
-    + "\n\nMutually exclusive with --samples and --samples-file."
+    + "\n\nMutually exclusive with --samples, --samples-file, and --all-samples."
 )
 
 query_app = typer.Typer(
@@ -127,7 +127,7 @@ def vcf_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT_VCF),
     samples: str | None = typer.Option(
         None,
-        help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter and --samples-file.",
+        help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter, --samples-file, and --all-samples.",
     ),
     samples_file: Path | None = typer.Option(
         None,
@@ -138,7 +138,14 @@ def vcf_query(
         resolve_path=True,
         help=(
             "Path to a UTF-8 text file with one sample ID per line. Blank lines and lines starting with # are ignored. "
-            "Mutually exclusive with --tsv-filter and --samples."
+            "Mutually exclusive with --tsv-filter, --samples, and --all-samples."
+        ),
+    ),
+    all_samples: bool = typer.Option(
+        False,
+        help=(
+            "Use all samples in the project for the query. "
+            "Mutually exclusive with --tsv-filter, --samples, and --samples-file."
         ),
     ),
     command: str = BCFTOOLS_ARGUMENT,
@@ -159,8 +166,14 @@ def vcf_query(
     has_tsv_filter = tsv_filter is not None
     has_samples = samples is not None
     has_samples_file = samples_file is not None
-    if sum([has_tsv_filter, has_samples, has_samples_file]) > 1:
-        raise typer.BadParameter("Use only one of --tsv-filter, --samples, or --samples-file.")
+    has_all_samples = all_samples
+    selection_count = sum([has_tsv_filter, has_samples, has_samples_file, has_all_samples])
+    if selection_count > 1:
+        raise typer.BadParameter("Use only one of --tsv-filter, --samples, --samples-file, or --all-samples.")
+    if selection_count == 0:
+        raise typer.BadParameter(
+            "Sample selection is required. Use one of --tsv-filter, --samples, --samples-file, or --all-samples."
+        )
 
     normalized_samples, sample_input_warnings = _normalize_samples_input(samples=samples, samples_file=samples_file)
     if sample_input_warnings:
@@ -176,6 +189,7 @@ def vcf_query(
         command=command,
         metadata_tsv_name=metadata_tsv_name,
         samples=normalized_samples,
+        all_samples=all_samples,
     )
 
     response = make_authenticated_request(

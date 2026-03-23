@@ -274,6 +274,7 @@ def bcftools_pipe_task(
     user_id: int,
     job_id: int,
     samples: list[str] | None = None,
+    all_samples: bool = False,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -289,7 +290,8 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
     validate_user_submitted_bcftools_command(
-        command
+        command=command,
+        all_samples=all_samples,
     )  # Run also here for defensive purposes. API will call the same function and catch the error first for all cases that go through the endpoint (but not all tests do)
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
@@ -307,7 +309,11 @@ def bcftools_pipe_task(
         project_id=project_id,
     )
 
-    sample_selection_mode = _determine_sample_selection_mode(tsv_filter=tsv_filter, samples=samples)
+    sample_selection_mode = _determine_sample_selection_mode(
+        tsv_filter=tsv_filter,
+        samples=samples,
+        all_samples=all_samples,
+    )
 
     if sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
         resolved_sample_mode_results = _resolve_inputs_for_sample_metadata_mode(
@@ -697,12 +703,18 @@ def _remove_stale_dimensions_db_entries(
     return deleted_dimensions_entries
 
 
-def _determine_sample_selection_mode(tsv_filter: str | None, samples: list[str] | None) -> VCFQuerySampleSelectionMode:
+def _determine_sample_selection_mode(
+    tsv_filter: str | None, samples: list[str] | None, all_samples: bool
+) -> VCFQuerySampleSelectionMode:
     if tsv_filter is not None:
         return VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
     if samples is not None:
         return VCFQuerySampleSelectionMode.CLI_SAMPLES
-    return VCFQuerySampleSelectionMode.ALL_SAMPLES
+    if all_samples:
+        return VCFQuerySampleSelectionMode.ALL_SAMPLES
+    raise TaskUserError(
+        "No sample-selection mode was provided. Use one of --tsv-filter, --samples/--samples-file, or --all-samples."
+    )
 
 
 def _matches_option(arg: str, short_opt: str, long_opt: str) -> bool:
@@ -745,12 +757,12 @@ def _blacklisted_view_options_reason_for_argument(arg: str) -> str | None:
             "Use `divbase-cli query vcf --samples-file` instead."
         )
     if _matches_option(arg, "-f", "--apply-filters"):
-        return "Option '-f/--apply-filters' is not supported in DivBase queries because external filter files are not supported."
+        return "Option '-f/--apply-filters' is not supported in DivBase queries."
 
     return None
 
 
-def validate_user_submitted_bcftools_command(command: str) -> None:
+def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> None:
     """
     Validate that user-submitted bcftools command(s) are valid for DivBase.
     Intended to be run early in bcftools_pipe_task and make early exits when needed.
@@ -760,6 +772,7 @@ def validate_user_submitted_bcftools_command(command: str) -> None:
     """
     valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
     unsupported_view_options = []
+    has_all_samples_non_sample_view_option = False
 
     for position, raw_cmd in enumerate(command.split(";"), start=1):
         cmd = raw_cmd.strip()
@@ -784,10 +797,32 @@ def validate_user_submitted_bcftools_command(command: str) -> None:
                 reason = _blacklisted_view_options_reason_for_argument(arg)
                 if reason is not None:
                     unsupported_view_options.append(f"Pipe segment {position}, token '{arg}': {reason}")
+                if all_samples and _matches_option(arg, "-s", "--samples"):
+                    unsupported_view_options.append(
+                        f"Pipe segment {position}, token '{arg}': "
+                        "Option '-s/--samples' is not supported together with '--all-samples'. "
+                        "Use CLI '--samples' or '--samples-file' mode instead, or remove '-s/--samples' from '--command'."
+                    )
+                if (
+                    all_samples
+                    and reason is None
+                    and arg.startswith("-")
+                    and not _matches_option(arg, "-s", "--samples")
+                ):
+                    has_all_samples_non_sample_view_option = True
 
     if unsupported_view_options:
         details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
         raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
+
+    if all_samples and not has_all_samples_non_sample_view_option:
+        raise TaskUserError(
+            "When using all-samples mode, --command must include at least one supported bcftools view option "
+            "other than '-s/--samples' and none of the options blacklisted by DivBase. "
+            "Examples: -r/--regions, -t/--targets, -i/--include, -e/--exclude, -q/--min-af, -Q/--max-af, -v/--types, -V/--exclude-types, -m/--min-alleles, -M/--max-alleles, -c/--min-ac, -C/--max-ac, -g/--genotype. "
+            "Otherwise the query could potentially return all VCF data as is, and for that case it would be more efficient to download the dataset from the project instead with: divbase-cli files download-all. "
+            "Please revise your command and try again."
+        )
 
 
 def _resolve_inputs_for_sample_metadata_mode(
