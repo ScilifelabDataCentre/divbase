@@ -1,7 +1,5 @@
 """
 E2E tests for the "divbase-cli auth" CLI commands.
-
-NOTE: Without a user config file already created, these tests will fail
 """
 
 import shutil
@@ -25,8 +23,8 @@ def log_in_as_user():
     Not a fixture as want to ensure logged out before and after each test and could be timing issues when
     combined with other fixtures (e.g. ensure_logged_out).
     """
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
-    result = runner.invoke(app, command)
+    command = f"auth login {USER_EMAIL}"
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code == 0
     assert "Logged in successfully" in result.stdout
 
@@ -49,18 +47,33 @@ def make_tokens_expired(access: bool = False, refresh: bool = False):
 
 
 def test_login_command(logged_out_user_with_no_config):
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
+    command = f"auth login {USER_EMAIL}"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code == 0
     assert "Logged in successfully" in result.stdout
     assert USER_EMAIL in result.stdout
 
 
+def test_login_command_with_password_stdin(logged_out_user_with_no_config):
+    command = f"auth login {USER_EMAIL} --password-stdin"
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
+    assert result.exit_code == 0
+    assert "Logged in successfully" in result.stdout
+    assert USER_EMAIL in result.stdout
+
+
+def test_login_command_with_password_stdin_but_no_input(logged_out_user_with_no_config):
+    command = f"auth login {USER_EMAIL} --password-stdin"
+    result = runner.invoke(app=app, args=command, input="")
+    assert result.exit_code != 0
+    assert "--password-stdin" in result.stderr
+    assert "empty password" in result.stderr
+
+
 def test_login_command_with_password_prompted(logged_out_user_with_no_config):
     command = f"auth login {USER_EMAIL}"
-
-    result = runner.invoke(app, command, input=f"{USER_PASSWORD}\n")
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code == 0
     assert "Logged in successfully" in result.stdout
     assert USER_EMAIL in result.stdout
@@ -68,9 +81,9 @@ def test_login_command_with_password_prompted(logged_out_user_with_no_config):
 
 def test_login_command_fails_with_invalid_credentials(logged_out_user_with_no_config):
     """Test login command fails with invalid credentials."""
-    command = f"auth login {USER_EMAIL} --password wrongpassword"
+    command = f"auth login {USER_EMAIL}"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command, input="wrongpassword\n")
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
     assert "Invalid email or password" in str(result.exception)
@@ -78,9 +91,9 @@ def test_login_command_fails_with_invalid_credentials(logged_out_user_with_no_co
 
 def test_login_command_with_invalid_server_url(logged_out_user_with_no_config):
     """Test login command fails with an invalid server URL."""
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD} --divbase-url https://invalid-url"
+    command = f"auth login {USER_EMAIL} --divbase-url https://invalid-url"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIConnectionError)
 
@@ -89,17 +102,17 @@ def test_login_command_already_logged_in(logged_out_user_with_no_config):
     """Test login command when already logged in."""
     log_in_as_user()
 
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
+    command = f"auth login {USER_EMAIL}"
 
     # cancel login, when warned already logged in
-    result = runner.invoke(app, command, input="n\n")
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\nn\n")
     assert result.exit_code == 0
     assert "Already logged in to" in result.stdout
     assert "Do you want to login again?" in result.stdout
     assert "Login cancelled." in result.stdout
 
     # don't cancel login process when warned already logged in
-    result = runner.invoke(app, command, input="y\n")
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\ny\n")
     assert result.exit_code == 0
     assert "Already logged in to" in result.stdout
     assert "Do you want to login again?" in result.stdout
@@ -110,9 +123,9 @@ def test_login_command_already_logged_in(logged_out_user_with_no_config):
 def test_force_login_option(logged_out_user_with_no_config):
     """Should not prompt about logging in again"""
     log_in_as_user()
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD} --force"
+    command = f"auth login {USER_EMAIL} --force"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code == 0
     assert "Logged in successfully" in result.stdout
     assert USER_EMAIL in result.stdout
@@ -122,27 +135,27 @@ def test_logout_command(logged_out_user_with_no_config):
     """Test basic usage of logout and that running multiple times is ok."""
     command = "auth logout"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
     assert result.exit_code == 0
     assert "Logged out successfully" in result.stdout
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
     assert result.exit_code == 0
     assert "Logged out successfully" in result.stdout
 
 
 def test_login_logout_cycle(logged_out_user_with_no_config):
     """Test a few repeated login/logout cycles."""
-    login_command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
+    login_command = f"auth login {USER_EMAIL} --password-stdin"
     logout_command = "auth logout"
 
     for _ in range(3):
-        result = runner.invoke(app, login_command)
+        result = runner.invoke(app=app, args=login_command, input=f"{USER_PASSWORD}\n")
         assert result.exit_code == 0
         assert "Logged in successfully" in result.stdout
         assert USER_EMAIL in result.stdout
 
-        result = runner.invoke(app, logout_command)
+        result = runner.invoke(app=app, args=logout_command)
         assert result.exit_code == 0
         assert "Logged out successfully" in result.stdout
 
@@ -152,7 +165,7 @@ def test_whoami_command(logged_out_user_with_no_config):
     log_in_as_user()
     command = "auth whoami"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
 
@@ -161,7 +174,7 @@ def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_no_config):
     """Test basic usage of whoami command."""
     command = "auth whoami"
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
 
@@ -176,7 +189,7 @@ def test_whoami_command_needing_refresh_token(logged_out_user_with_no_config):
     make_tokens_expired(access=True)
 
     whoami_command = "auth whoami"
-    result = runner.invoke(app, whoami_command)
+    result = runner.invoke(app=app, args=whoami_command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
 
@@ -192,7 +205,7 @@ def test_whoami_with_expired_tokens_fails(logged_in_admin_with_existing_config):
 
     make_tokens_expired(access=True, refresh=True)
 
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
     assert LOGIN_AGAIN_MESSAGE in str(result.exception)
@@ -220,21 +233,21 @@ def test_using_revoked_refresh_token_fails(logged_out_user_with_no_config, tmp_p
     shutil.copy(cli_settings.CONFIG_PATH, tmp_path / "config_backup.yaml")
     shutil.copy(cli_settings.TOKENS_PATH, tmp_path / "tokens_backup.yaml")
 
-    result = runner.invoke(app, logout_command)
+    result = runner.invoke(app=app, args=logout_command)
     assert result.exit_code == 0
 
     shutil.copy(tmp_path / "tokens_backup.yaml", cli_settings.TOKENS_PATH)
     shutil.copy(tmp_path / "config_backup.yaml", cli_settings.CONFIG_PATH)
     make_tokens_expired(access=True)
 
-    result = runner.invoke(app, whoami_command)
+    result = runner.invoke(app=app, args=whoami_command)
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
     assert LOGIN_AGAIN_MESSAGE in str(result.exception)
 
     log_in_as_user()
 
-    result = runner.invoke(app, whoami_command)
+    result = runner.invoke(app=app, args=whoami_command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
 
@@ -243,8 +256,8 @@ def test_login_with_outdated_cli_version_fails(logged_out_user_with_no_config, m
     """Test that login fails if the CLI version is outdated (rejected by the API middleware)"""
     monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
 
-    command = f"auth login {USER_EMAIL} --password {USER_PASSWORD}"
-    result = runner.invoke(app, command)
+    command = f"auth login {USER_EMAIL} --password-stdin"
+    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
@@ -259,7 +272,7 @@ def test_any_command_with_outdated_cli_version_fails(logged_out_user_with_no_con
     monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
 
     command = "auth whoami"
-    result = runner.invoke(app, command)
+    result = runner.invoke(app=app, args=command)
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
