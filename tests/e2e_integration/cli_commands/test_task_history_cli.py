@@ -186,9 +186,10 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
         assert result_history.exit_code == 0
 
         captured_manager = get_manager()
+    if not captured_manager:
+        raise AssertionError("No TaskHistoryDisplayManager was captured")
 
-    # TODO re-enable when user_name is set in display manager
-    # assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
+    assert captured_manager.user_email == CONSTANTS["TEST_USERS"]["edit user"]["email"]
 
     user_emails = {task.submitter_email for task in captured_manager.task_items}
 
@@ -204,9 +205,10 @@ def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_exi
         assert result_history.exit_code == 0
 
         captured_manager = get_manager()
+    if not captured_manager:
+        raise AssertionError("No TaskHistoryDisplayManager was captured")
 
-    # TODO re-enable when user_name is set in display manager
-    # assert captured_manager.user_name == CONSTANTS["ADMIN_CREDENTIALS"]["email"]
+    assert captured_manager.user_email == CONSTANTS["ADMIN_CREDENTIALS"]["email"]
 
     user_emails = {task.submitter_email for task in captured_manager.task_items}
 
@@ -223,6 +225,8 @@ def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in
         assert result_history.exit_code == 0
 
         captured_manager = get_manager()
+    if not captured_manager:
+        raise AssertionError("No TaskHistoryDisplayManager was captured")
 
     assert captured_manager.project_name == project_name
 
@@ -244,9 +248,10 @@ def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
         assert result_history.exit_code == 0
 
         captured_manager = get_manager()
+    if not captured_manager:
+        raise AssertionError("No TaskHistoryDisplayManager was captured")
 
-    # TODO re-enable when user_name is set in display manager
-    # assert captured_manager.user_name == CONSTANTS["TEST_USERS"]["edit user"]["email"]
+    assert captured_manager.user_email == CONSTANTS["TEST_USERS"]["edit user"]["email"]
     assert captured_manager.project_name == project_name
 
     user_emails = {task.submitter_email for task in captured_manager.task_items}
@@ -417,7 +422,7 @@ def test_display_queuing_state_when_queue_full():
 
     manager = TaskHistoryDisplayManager(
         task_items=task_items,
-        user_name="user@example.com",
+        user_email="user@example.com",
         project_name=None,
         mode="user",
         display_limit=10,
