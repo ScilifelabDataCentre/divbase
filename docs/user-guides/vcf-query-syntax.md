@@ -96,6 +96,12 @@ To just get all samples that are available for a project, use `divbase-cli dimen
 
 TODO add dimensions show command to get all VCF files
 
+To see all the VCF files in the project's data storage, use:
+
+```bash
+divbase-cli files ls --tsv | grep "vcf.gz"
+```
+
 To specify the samples on the command line, use the option `--samples`:
 
 ```bash
@@ -106,23 +112,45 @@ As long as the samples are present in the DivBase project, the server will autom
 
 ### 3.3. Sample selection from file (--samples-file)
 
-An alternative to `--samples` for non-metadata driven VCF queries is to provide a file that contain all the sample names to be used for the query. This can be convienent for queries with a higher number of samples. For example:
+An alternative to `--samples` for non-metadata driven VCF queries is to provide a plain UTF-8 text file with all sample IDs to use in the query. This is convenient when you have many samples. For example:
 
 ```bash
 divbase-cli query vcf --samples-file samples_for_my_query.txt --command "view -r 21:15000000-25000000"
 ```
 
-The file needs to be a plain file, such a `.txt` and contain one sample per row. Example:
+Format rules for `--samples-file`:
+
+Allowed:
+
+- One sample ID per non-empty line
+- Blank lines (will be ignored)
+- Comment lines starting with `#`
+
+Not allowed:
+
+- Multiple sample IDs on one line separated by delimiters such as `,`, `;`, tab, or `|`
+- Header-like lines (for example `Sample_ID`) are not recommended and are treated as literal sample IDs unless the line starts with `#`
+
+Valid example:
 
 ```text
 # samples_for_my_query.txt
+# this line is a comment
 S1
 S2
+
 S10
 S239
 ```
 
-TODO ensure that there can be comments in the plain files used for `--samples-file`
+Invalid example:
+
+```text
+S1,S2,S3
+S4;S5
+```
+
+If invalid delimiters are found, `divbase-cli` exits early with a format error before submitting the API request.
 
 ### 3.4. VCF file selection from direct filenames
 
@@ -201,6 +229,7 @@ The `--command` argument will accept many, but not all possible `bcftools view` 
 
 The following `view` subcommands are not supported in DivBase:
 
+<!-- markdownlint-disable MD056 -->
 | `bcftools view` subcommand | Reason why it is not allowed in DivBase |
 |---|---|
 |-h, --header-only | Instead use: `divbase-cli files stream <file.vcf.gz> \| zcat \| awk '/^##/ \|\| /^#CHROM/ {print} !/^#/ {exit}'` |
@@ -214,6 +243,7 @@ The following `view` subcommands are not supported in DivBase:
 |-W[FMT], -W[=FMT], --write-index[=FMT] | Handled by the DivBase server |
 |-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-list`|
 |-f, --apply-filters LIST | External filter files not supported |
+<!-- markdownlint-enable MD056 -->
 
 TODO: blacklist these in the code and ensure that useful warnings are given to the user
 

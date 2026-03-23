@@ -137,7 +137,8 @@ def vcf_query(
         readable=True,
         resolve_path=True,
         help=(
-            "Path to a UTF-8 text file with one sample ID per line. Mutually exclusive with --tsv-filter and --samples."
+            "Path to a UTF-8 text file with one sample ID per line. Blank lines and lines starting with # are ignored. "
+            "Mutually exclusive with --tsv-filter and --samples."
         ),
     ),
     command: str = BCFTOOLS_ARGUMENT,
@@ -161,7 +162,12 @@ def vcf_query(
     if sum([has_tsv_filter, has_samples, has_samples_file]) > 1:
         raise typer.BadParameter("Use only one of --tsv-filter, --samples, or --samples-file.")
 
-    normalized_samples = _normalize_samples_input(samples=samples, samples_file=samples_file)
+    normalized_samples, sample_input_warnings = _normalize_samples_input(samples=samples, samples_file=samples_file)
+    if sample_input_warnings:
+        print("[yellow]Warnings:[/yellow]")
+        for warning in sample_input_warnings:
+            print(f"  • {warning}")
+        print()
 
     project_config = resolve_project(project_name=project)
 
@@ -183,26 +189,83 @@ def vcf_query(
     print(f"Job submitted successfully with task id: {task_id}")
 
 
-def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> list[str] | None:
+def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:
     """
-    Normalize sample selection inputs from CLI options into a single list[str] or None.
+    Normalize sample selection inputs from CLI options.
     """
     if samples is not None:
-        normalized = [sample.strip() for sample in samples.split(",") if sample.strip()]
+        normalized = []
+        for sample in samples.split(","):
+            sample_clean = sample.strip()
+            if sample_clean:
+                normalized.append(sample_clean)
+
         if not normalized:
             raise typer.BadParameter("--samples must contain at least one non-empty sample ID.")
-        return normalized
+        return normalized, []
 
     if samples_file is not None:
-        normalized = [line.strip() for line in samples_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        if not normalized:
-            raise typer.BadParameter(f"Samples file is empty: {samples_file}")
-        invalid_lines = [line for line in normalized if "," in line]
-        if invalid_lines:
-            raise typer.BadParameter(
-                "Invalid --samples-file format: expected one sample ID per line with no commas. "
-                "Use --samples for comma-separated input."
-            )
-        return normalized
+        raw_lines = samples_file.read_text(encoding="utf-8").splitlines()
+        normalized = []
+        warnings = []
+        delimiter_lines = []
+        found_delimiters = set()
+        disallowed_delimiters = (",", ";", "\t", "|")
+        delimiter_display = {
+            ",": "','",
+            ";": "';'",
+            "\t": "'tab'",
+            "|": "'|'",
+        }
 
-    return None
+        for line_number, raw_line in enumerate(raw_lines, start=1):
+            stripped = raw_line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+
+            normalized.append(stripped)
+            line_delimiters = set()
+            for delimiter in disallowed_delimiters:
+                if delimiter in stripped:
+                    line_delimiters.add(delimiter)
+
+            if line_delimiters:
+                delimiter_lines.append((line_number, stripped))
+                found_delimiters.update(line_delimiters)
+
+        if not normalized:
+            raise typer.BadParameter(
+                f"Samples file has no sample IDs after ignoring blank/comment lines: {samples_file}. Please ensure that it contains at least one sample ID."
+            )
+
+        if delimiter_lines:
+            preview_entries = []  # Only preview up to the first 3 lines with delimiters to avoid overwhelming the user with a long list if there are many problematic lines.
+            for line_number, line_value in delimiter_lines[:3]:
+                preview_entries.append(f"line {line_number} ('{line_value}')")
+            preview = ", ".join(preview_entries)
+
+            previewed_line_count = min(len(delimiter_lines), 3)
+            extra_line_count = len(delimiter_lines) - previewed_line_count
+            extra_msg = f", +{extra_line_count} more line(s)" if extra_line_count > 0 else ""
+
+            delimiter_names = []
+            for delimiter in disallowed_delimiters:
+                if delimiter in found_delimiters:
+                    delimiter_names.append(delimiter_display[delimiter])
+            delimiters_found_str = ", ".join(delimiter_names)
+
+            raise typer.BadParameter(
+                "Invalid --samples-file format: expected one sample ID per line with no delimiters. "
+                f"Found delimiter(s) {delimiters_found_str} on {len(delimiter_lines)} line(s): \n{preview}{extra_msg}. "
+                "\nPlease do not use delimiters (',' ';' '\\t' '|') in your samples file."
+            )
+
+        if len(normalized) == 1:
+            warnings.append(
+                "Only one sample ID was found in --samples-file after ignoring blank/comment lines. "
+                "If this was not intended, verify that the file has one sample ID per line."
+            )
+
+        return normalized, warnings
+
+    return None, []
