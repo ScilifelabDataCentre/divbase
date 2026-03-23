@@ -17,7 +17,7 @@ Create an account on [DivBase](https://divbase.scilifelab.se) and make sure to v
 
 If you have an account you can be added to an existing project by a project member with the role manager. Ask them to add you and give them the email address you used to sign up with.
 
-Managers can see this guide here on how to add members to a project here (TODO).
+Managers can see the guide on [Account management](account-management.md) for details on how to add members to a project.
 
 ### Option 2: Create a new project
 
@@ -198,28 +198,31 @@ divbase-cli task-history user
 Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli files download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download merged_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
 ```
 
-Replacing [JOB_ID] with the actual job ID from the task history.
+Replacing <JOB_ID> with the actual job ID from the task history.
 
 ## Next steps
 
-TODO - a selection of links to more detailed user guides
+This quick start guide was hopefully enough to get you started using DivBase. If you want to learn more about the different features of DivBase, we have many detailed guides.
+
+For details on:
+
+- Installing the DivBase client on your computer, see [Installation](installation.md) and [Setup DivBase CLI](setup_divbase_cli.md)
+
+- How to format your VCF files to get the most out of DivBase, see [Working with VCF Files in DivBase](vcf-files.md)
+
+- Everything releated to DivBase queries, we reccomend to start at [Running Queries: Overview](running-queries-overview.md)
+
+- Creating a snapshot the version of the files in a DivBase project at a current time, see [Project versioning](project-versioning.md)
 
 ## Getting help
 
 If you run into issues:
 
 1. **Check the output**: Read the error message
-2. **Consult and search the docs**: [Full documentation](../index.md)
+2. **Consult and search the docs**: Browse the [Full documentation](../index.md) or look at common issues in the [Troubleshooting](troubleshooting.md) page.
 3. **Get help on the command you're running**: `divbase-cli COMMAND --help`
 
-To get assistance from us you can either send us an email (TODO - link) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).
-
-## Common Issues
-
-??? question "Authentication Issues"
-    - Make sure you've verified your email address
-    - Check if you can login to your account on the [DivBase Website](https://divbase.scilifelab.se). If it fails on the website it will also fail on the CLI.
-    - Try logging out and back in: `divbase-cli auth logout` then `divbase-cli auth login`
+To get assistance from us you can either send us an email (<TODO@scilifelab.se>) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).
