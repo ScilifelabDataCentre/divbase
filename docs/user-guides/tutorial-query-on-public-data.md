@@ -27,10 +27,8 @@ divbase-cli files upload mgp.v3.snps.rsIDdbSNPv137.vcf.gz --project <YOUR_DIVBAS
 For the sake of demonstration, we can create a sidecar metadata file for the 18 samples in this dataset so that we can use that for the query. In fact, a file prepared for this demo can be downloaded from the DivBase repo with:
 
 ```bash
-curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/docs-on-queries/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
+curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/main/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
 ```
-
-TODO update the TSV url when it has been merged to main.
 
 And then upload it to the DivBase project with:
 
