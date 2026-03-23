@@ -421,6 +421,17 @@ body {
   border-color: var(--scilife-teal);
 }
 
+/* forgot password icon */
+.scilife-forgot-password-icon {
+  font-size: 3.5rem;
+  color: var(--scilife-aqua);
+  border: 2px solid var(--scilife-aqua);
+  border-radius: 50%;
+  padding: 0.6rem 0.75rem;
+  display: inline-block;
+  line-height: 1;
+}
+
 /* auth form cancel button */
 .scilife-auth-cancel-btn {
   color: var(--scilife-dark-grey);
