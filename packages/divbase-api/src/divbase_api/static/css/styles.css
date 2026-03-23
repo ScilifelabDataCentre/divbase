@@ -421,6 +421,17 @@ body {
   border-color: var(--scilife-teal);
 }
 
+/* verify email icon */
+.scilife-verify-email-icon {
+  font-size: 3.5rem;
+  color: var(--scilife-aqua);
+  border: 2px solid var(--scilife-aqua);
+  border-radius: 50%;
+  padding: 0.6rem 0.75rem;
+  display: inline-block;
+  line-height: 1;
+}
+
 /* forgot password icon */
 .scilife-forgot-password-icon {
   font-size: 3.5rem;
@@ -430,6 +441,16 @@ body {
   padding: 0.6rem 0.75rem;
   display: inline-block;
   line-height: 1;
+}
+
+/* back link */
+.scilife-back-link {
+  color: var(--scilife-contrast-okay-grey);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.scilife-back-link:hover {
+  color: var(--scilife-teal);
 }
 
 /* auth form cancel button */
