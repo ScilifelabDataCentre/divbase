@@ -132,9 +132,14 @@ def create_user_project_responses(
     """Helper to create user project responses from list of (ProjectDB, ProjectRoles) tuples."""
     project_responses = []
     for project, user_role in user_projects:
+        if project.description and len(project.description) > 200:
+            description = project.description[:200] + "..."
+        else:
+            description = project.description
+
         project_response = UserProjectResponse(
             name=project.name,
-            description=project.description,
+            description=description,
             bucket_name=project.bucket_name,
             id=project.id,
             is_active=project.is_active,

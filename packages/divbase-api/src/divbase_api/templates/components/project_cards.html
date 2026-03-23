@@ -24,9 +24,15 @@
                 <h2 class="card-title mb-0">
                     <i class="bi bi-folder2-open me-2"></i>{{ project.name }}
                 </h2>
-                <span class="badge bg-{{ 'success' if project.user_role == 'manage' else 'info' if project.user_role == 'edit' else 'secondary' }}">
-                    {{ project.user_role|title }}
-                </span>
+                <div class="d-flex gap-1 align-items-center flex-shrink-0 ms-2">
+                    <span class="badge scilife-role-badge-{{ 'active' if project.is_active else 'inactive' }}">
+                        <i class="bi bi-{{ 'check-circle' if project.is_active else 'x-circle' }} me-1"></i>
+                        {{ 'Active' if project.is_active else 'Inactive' }}
+                    </span>
+                    <span class="badge scilife-role-badge-{{ project.user_role }}">
+                        {{ project.user_role|title }}
+                    </span>
+                </div>
             </div>
             
             <div class="card-body">
@@ -38,36 +44,21 @@
                 
                 <!-- Storage Info -->
                 <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <small class="text-muted">Storage Used (updated daily)</small>
-                        <small class="text-muted">
-                            {{ project.storage_used }} of {{ project.storage_quota }} 
-                        </small>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted"><i class="bi bi-hdd me-1"></i>Storage used</small>
+                        <small class="text-muted">{{ project.storage_used }} of {{ project.storage_quota }}</small>
                     </div>
-                    <div class="progress" style="height: 20px;">
-                        <div 
-                            class="progress-bar bg-success" 
-                            role="progressbar" 
-                            style="width: {{ project.storage_used_percent }}%" 
-                            aria-valuenow="{{ project.storage_used_percent }}%" 
-                            aria-valuemin="0" 
+                    <div class="progress" style="height: 8px;">
+                        <div
+                            class="progress-bar scilife-storage-bar"
+                            role="progressbar"
+                            style="width: {{ project.storage_used_percent }}%"
+                            aria-valuenow="{{ project.storage_used_percent }}"
+                            aria-valuemin="0"
                             aria-valuemax="100">
                         </div>
                     </div>
-                </div>
-                
-                <!-- Project Stats -->
-                <div class="row text-center">
-                    <div class="col-md-4">
-                        <small class="text-muted d-block">Status</small>
-                        <span class="badge bg-{{ 'success' if project.is_active else 'danger' }}">
-                            {{ 'Active' if project.is_active else 'Inactive' }}
-                        </span>
-                    </div>
-                    <div class="col-md-8">
-                        <small class="text-muted d-block">Assigned Bucket</small>
-                        <small class="font-monospace">{{ project.bucket_name }}</small>
-                    </div>
+                    <small class="text-muted">{{ project.storage_used_percent }}% used</small>
                 </div>
             </div>
             

@@ -17,9 +17,6 @@
                         Documentation
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/about">About</a>
-                </li>
                 {% if current_user %}
                 <li class="nav-item">
                     <a class="nav-link scilife-nav-link" href="/projects">
@@ -52,7 +49,10 @@
                     </ul>
                 </li>
                 {% else %}
-                <li class="nav-item ms-1">
+                <li class="nav-item">
+                    <a class="nav-link scilife-nav-link" href="/about">About</a>
+                </li>
+                <li class="nav-item ms-2">
                     <a class="btn scilife-nav-btn-signup" href="/register">Sign up</a>
                 </li>
                 <li class="nav-item ms-1">
@@ -60,19 +60,19 @@
                 </li>
                 {% endif %}
                 {# light/dark theme toggle #}
-                <li class="nav-item dropdown">
-                    <button class="btn btn-link nav-link scilife-nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-label="Toggle theme">
-                        <i class="bi bi-circle-half me-1" fill="currentColor"></i>
+                <li class="nav-item dropdown ms-2">
+                    <button class="nav-link scilife-nav-link border-0 bg-transparent dropdown-toggle" data-bs-toggle="dropdown" aria-label="Toggle theme">
+                        <i class="bi bi-circle-half" fill="currentColor"></i>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="swap-theme">
                         <li>
                             <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="light">
-                                <i class="bi bi-brightness-high-fill me-1" fill="currentColor"></i>Light
+                                <i class="bi bi-brightness-high-fill me-2" fill="currentColor"></i>Light
                             </button>
                         </li>
                         <li>
                             <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="dark">
-                                <i class="bi bi-moon-stars-fill me-1" fill="currentColor"></i>Dark
+                                <i class="bi bi-moon-stars-fill me-2" fill="currentColor"></i>Dark
                             </button>
                         </li>
                     </ul>

@@ -62,6 +62,7 @@ body {
   font-size: 1.1rem;
   font-weight: 500;
   padding: 0.3rem 1rem;
+  vertical-align: middle;
 }
 .scilife-nav-btn-signup:hover,
 .scilife-nav-btn-signup:focus {
@@ -76,6 +77,7 @@ body {
   font-size: 1.1rem;
   font-weight: 500;
   padding: 0.3rem 1rem;
+  vertical-align: middle;
 }
 .scilife-nav-btn-login:hover,
 .scilife-nav-btn-login:focus,
@@ -124,10 +126,6 @@ body {
   max-width: 120px;
   object-fit: contain;
 }
-.scilife-footer-bottom {
-  background-color: #0d1618;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
 .scilife-footer-copyright {
   font-size: 0.85rem;
   color: #90a4ae;
@@ -139,12 +137,12 @@ body {
 .scilife-footer-copyright a:hover {
   color: var(--scilife-lime);
 }
-.scilife-footer-bottom-link {
+.scilife-footer-link {
   font-size: 0.9rem;
   color: #90a4ae;
   text-decoration: none;
 }
-.scilife-footer-bottom-link:hover {
+.scilife-footer-link:hover {
   color: var(--scilife-lime);
 }
 
@@ -369,6 +367,33 @@ body {
   color: white;
   background-color: var(--scilife-aqua);
   border-color: var(--scilife-aqua);
+}
+
+/* project role + status badges */
+.scilife-role-badge-manage {
+  background-color: var(--scilife-teal);
+  color: white;
+}
+.scilife-role-badge-edit {
+  background-color: var(--scilife-aqua);
+  color: white;
+}
+.scilife-role-badge-read {
+  background-color: var(--scilife-medium-grey);
+  color: white;
+}
+.scilife-role-badge-active {
+  background-color: var(--scilife-lime);
+  color: var(--scilife-dark-grey);
+}
+.scilife-role-badge-inactive {
+  background-color: var(--scilife-medium-grey);
+  color: white;
+}
+
+/* storage progress bar */
+.scilife-storage-bar {
+  background-color: var(--scilife-teal-075);
 }
 
 /* numb project control */

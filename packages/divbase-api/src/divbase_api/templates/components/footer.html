@@ -3,12 +3,16 @@
         <div class="row g-4">
 
             {# Brand + social #}
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-4">
                 <img class="scilife-footer-brand-logo mb-2" src="/static/logos/divbase_logo_white.webp" alt="DivBase logo">
                 <p class="scilife-footer-brand-text">
                     Supporting genomics research in Sweden through data management and collaboration.
                 </p>
-                <p class="scilife-footer-brand-text">DivBase {{ divbase_version }}</p>
+                <p class="scilife-footer-brand-text">DivBase 
+                    <a class="scilife-footer-link" href="https://github.com/ScilifelabDataCentre/divbase/releases/tag/v{{ divbase_version }}" target="_blank" rel="noopener noreferrer">
+                        v{{ divbase_version }}
+                    </a>
+                </p>
                 <div class="d-flex gap-3 mt-2">
                     <a href="/" aria-label="DivBase home" class="scilife-footer-social-link"><i class="bi bi-link-45deg"></i></a>
                     <a href="https://www.linkedin.com/company/scilifelab" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" class="scilife-footer-social-link"><i class="bi bi-linkedin"></i></a>
@@ -38,14 +42,14 @@
             </nav>
 
             {# Funders #}
-            <section class="col-12 col-lg-5">
+            <section class="col-12 col-lg-4">
                 <div class="d-flex flex-wrap align-items-center gap-3">
                     <a href="https://www.scilifelab.se/" target="_blank" rel="noopener noreferrer">
                         <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/scilifelab_logo_white.webp"
                             alt="SciLifeLab Logo">
                     </a>
                     <a href="https://strategiska.se/en" target="_blank" rel="noopener noreferrer">
-                        <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/sfsr_logo.webp"
+                        <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/sfsr_logo_white.webp"
                             alt="Swedish Foundation for Strategic Research Logo">
                     </a>
                     <a href="https://kaw.wallenberg.org/en" target="_blank" rel="noopener noreferrer">
@@ -58,17 +62,16 @@
         </div>
     </div>
 
-    {# Copyright bar #}
-    <div class="scilife-footer-bottom">
-        <div class="container d-flex flex-wrap justify-content-between align-items-center py-2 gap-2">
-            <p class="mb-0 scilife-footer-copyright">
-                Website content under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC-BY 4.0 licence</a>.
-                Website and SciLifeLab DivBase code under <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer">MIT licence</a> and available on <a href="https://github.com/ScilifelabDataCentre/divbase" target="_blank" rel="noopener noreferrer">GitHub</a>.
-            </p>
-            <div class="d-flex gap-3">
-                <a href="/terms" class="scilife-footer-bottom-link">Terms of service</a>
-                <a href="/privacy" class="scilife-footer-bottom-link">Privacy policy</a>
-            </div>
+    <hr>
+    <div class="container d-flex flex-wrap justify-content-between align-items-center py-2 gap-2">
+        <p class="mb-0 scilife-footer-copyright">
+            Website content under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC-BY 4.0 licence</a>.
+            <br>
+            Website and SciLifeLab DivBase code under <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer">MIT licence</a> and available at <a href="https://github.com/ScilifelabDataCentre/divbase" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        </p>
+        <div class="d-flex gap-3">
+            <a href="/terms" class="scilife-footer-link">Terms of service</a>
+            <a href="/privacy" class="scilife-footer-link">Privacy policy</a>
         </div>
     </div>
 </footer>
