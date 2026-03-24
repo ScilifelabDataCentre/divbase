@@ -127,10 +127,5 @@
 </div>
 
 {% if project.user_role == 'manage' %}
-
 <form id="removeMemberForm" method="post" style="display: none;"></form>
-{% block custom_scripts %}
-<script src="/static/js/project_members.js"></script>
-{% endblock %}
-
 {% endif %}

@@ -93,4 +93,8 @@
 
 {% block custom_scripts %}
 <script src="/static/js/copy_to_clipboard.js"></script>
+    {% if project.user_role == 'manage' %}
+    <script src="/static/js/add_user_to_project.js"></script>
+    <script src="/static/js/remove_project_member.js"></script>
+    {% endif %}
 {% endblock %}
