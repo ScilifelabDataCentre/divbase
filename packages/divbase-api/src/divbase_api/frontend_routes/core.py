@@ -54,7 +54,7 @@ def _simple_page(name: str, template: str):
         return templates.TemplateResponse(
             request=request,
             name=template,
-            context={"current_user": current_user},
+            context={"request": request, "current_user": current_user},
         )
 
     handler.__name__ = name

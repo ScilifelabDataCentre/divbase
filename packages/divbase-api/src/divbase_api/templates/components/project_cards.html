@@ -53,7 +53,7 @@
                         <div
                             class="progress-bar scilife-storage-bar"
                             role="progressbar"
-                            style="width: {{ project.storage_used_percent }}%"
+                            style="width: {{ 100 if project.storage_used_percent > 100 else project.storage_used_percent }}%"
                             aria-valuenow="{{ project.storage_used_percent }}"
                             aria-valuemin="0"
                             aria-valuemax="100">
