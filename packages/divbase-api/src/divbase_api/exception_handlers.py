@@ -211,7 +211,7 @@ async def project_member_already_exists_error_handler(request: Request, exc: Pro
             headers=exc.headers,
         )
     else:
-        # The expected place for this error to occur is covered in the route itself, this is a fallaback
+        # The expected place for this error to occur is covered in the route itself, this is a fallback
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
@@ -224,7 +224,7 @@ async def user_not_found_error_handler(request: Request, exc: UserNotFoundError)
             headers=exc.headers,
         )
     else:
-        # The expected place for this error to occur is covered in the route itself, this is a fallaback
+        # The expected place for this error to occur is covered in the route itself, this is a fallback
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
