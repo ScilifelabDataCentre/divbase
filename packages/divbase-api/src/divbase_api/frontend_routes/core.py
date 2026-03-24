@@ -41,3 +41,29 @@ async def get_home_page(
         name="index.html",
         context={"request": request, "current_user": current_user, "announcements": announcements},
     )
+
+
+def _simple_page(name: str, template: str):
+    """Return a simple route handler that renders a basic static template for all core pages that don't require any extra context."""
+
+    async def handler(
+        request: Request,
+        current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+    ):
+        return templates.TemplateResponse(
+            request=request,
+            name=template,
+            context={"current_user": current_user},
+        )
+
+    handler.__name__ = name
+    return handler
+
+
+fr_core_router.get("/about", response_class=HTMLResponse)(_simple_page("get_about", "core_pages/about.html"))
+fr_core_router.get("/about/sv", response_class=HTMLResponse)(_simple_page("get_about_sv", "core_pages/about_sv.html"))
+fr_core_router.get("/citation", response_class=HTMLResponse)(_simple_page("get_citation", "core_pages/citation.html"))
+fr_core_router.get("/contact", response_class=HTMLResponse)(_simple_page("get_contact", "core_pages/contact.html"))
+fr_core_router.get("/faqs", response_class=HTMLResponse)(_simple_page("get_faqs", "core_pages/faqs.html"))
+fr_core_router.get("/terms", response_class=HTMLResponse)(_simple_page("get_terms", "core_pages/terms.html"))
+fr_core_router.get("/privacy", response_class=HTMLResponse)(_simple_page("get_privacy", "core_pages/privacy.html"))

@@ -88,6 +88,39 @@ body {
   border-color: var(--scilife-teal-075);
 }
 
+@media (max-width: 991px) {
+  .scilife-nav-btn-signup,
+  .scilife-nav-btn-login {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Navbar no longer in collapsed mode beyond this point */
+@media (min-width: 992px) and (max-width: 1199px) {
+  .scilife-navbar-logo {
+    height: 1.6rem;
+  }
+  .scilife-nav-link {
+    font-size: 1.1rem;
+  }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .scilife-navbar-logo {
+    height: 2rem;
+  }
+  .scilife-nav-link {
+    font-size: 1.15rem;
+  }
+}
+@media (min-width: 1400px) {
+  .scilife-navbar-logo {
+    height: 2.3rem;
+  }
+  .scilife-nav-link {
+    font-size: 1.25rem;
+  }
+}
+
 /* footer control */
 .scilife-footer {
   background-color: #2d3464;
@@ -486,7 +519,7 @@ body {
   color: var(--scilife-dark-grey);
   background-color: transparent;
   border: 1.5px solid var(--scilife-medium-grey);
-  font-size: 1rem;
+  font-size: 1.2rem;
   font-weight: 500;
 }
 .scilife-auth-cancel-btn:hover,
