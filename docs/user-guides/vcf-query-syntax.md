@@ -300,21 +300,24 @@ TODO describe cron job for old results files
 
 ### 5.3. How does DivBase process the VCF files?
 
-TODO: this should probably have an diagram showing the "merge-last" strategy
+This section is aimed towards the technical user that would like to understand how DivBase uses `bcftools` to process VCF data queries on the files in a project's data storage.
 
-1. subset each input file by itself.
-2. apply all commands in the pipe to it.
-3. save to a temp file. merge and/or concat all tempfiles into a single results file.
-4. upload the results files to the DivBase project.
+Figure 1 below shows a schematic overview of how DivBase processes VCF queries for the general case of _n_ user-defined `bcftools view` commands in `--comands` and _m_ VCF files needed for the given query.
 
-Will be interpreted by the DivBase server to become a small script:
+![VCF query processing](../assets/diagrams/vcf_query_processing_for_user_guide.png)
+
+Figure 1. Schematic overview how the DivBase server will process _n_ `bcftools view` commands for samples that found in _m_ VCF files. The processing occurs in stages per command, meaning that each command _n_ is applied to each VCF file before moving on to the next stage where the next command _n+1_ is applied. Legend: Rounded shapes: VCF files; squares: process steps; gray boxes: stages of the command processing (each command is processed for all VCF files before processing to the next stage).
+
+To give an example, let's say that this CLI command was submitted by a user to their project:
 
 ```bash
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -s"
 ```
 
+Let's assume that the server identified that two VCF files `file1.vcf.gz` and `file2.vcf.gz` are needed to query the two samples `S1` and `S2`. The DivBase server then interpret this information to dynamically create a small script, that in this case would look something like this:
+
 ```bash
-# Let's assume that the server identified that two VCF files `file1.vcf.gz` and `file2.vcf.gz` are needed for the query
+
 
 # Process each input file with the first command:
 bcftools view -r 21:15000000-25000000 file1.vcf.gz -Ou temp_1_1.bcf
