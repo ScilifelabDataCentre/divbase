@@ -1,15 +1,64 @@
 <mjml>
   <mj-head>
-    <mj-title>Your Account is Already Verified</mj-title>
+    <mj-title>Email Already Verified - DivBase</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-text
+        padding="10px 24px"
+        color="#3f3f3f"
+        font-size="15px"
+        line-height="1.6"
+      />
+    </mj-attributes>
   </mj-head>
-  <mj-body>
-    <mj-section>
+
+  <mj-body background-color="#f0f4f4">
+    <!-- Header -->
+    <mj-section background-color="#045c64" padding="20px 24px">
       <mj-column>
-        <mj-text font-size="20px" font-weight="bold">Your Account is Already Verified</mj-text>
-        <mj-text>
-          Hello,<br/><br/>
-          Your email {{ email }} is already verified. You can log in to your DivBase account directly.<br/><br/>
-          If you encounter any issues, please contact us.
+        <mj-text
+          align="left"
+          color="white"
+          font-size="20px"
+          font-weight="bold"
+          padding="0"
+        >
+          SciLifeLab DivBase
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Body -->
+    <mj-section background-color="#ffffff" padding="32px 24px 24px">
+      <mj-column>
+        <mj-text
+          font-size="22px"
+          color="#045c64"
+          font-weight="bold"
+          padding="0 0 16px 0"
+        >
+          Your email is already verified
+        </mj-text>
+        <mj-text padding="0">
+          The email address {{ email }} is already verified. You can log in to
+          your DivBase account directly. If you are having trouble accessing
+          your account, please contact support.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#f0f4f4" padding="16px 24px">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#a6a6a6" padding="0">
+          This is an automated message, please do not reply directly to this
+          email. You can contact us at
+          <a
+            href="mailto:{{ support_email }}"
+            style="color: #045c64; text-decoration: none"
+            >{{ support_email }}</a
+          >
+          if you need assistance.
         </mj-text>
       </mj-column>
     </mj-section>
