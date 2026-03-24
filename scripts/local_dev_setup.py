@@ -305,8 +305,8 @@ def create_local_config():
 
 def login_to_divbase():
     """Log in to DivBase using the local environment."""
-    command = shlex.split(f"divbase-cli auth login admin@divbase.com --password badpassword --divbase-url {BASE_URL}")
-    subprocess.run(command, check=True, env=LOCAL_ENV)
+    command = shlex.split(f"divbase-cli auth login admin@divbase.com --password-stdin --divbase-url {BASE_URL}")
+    subprocess.run(command, input="badpassword\n", check=True, text=True, env=LOCAL_ENV)
 
 
 def upload_files_to_buckets():
