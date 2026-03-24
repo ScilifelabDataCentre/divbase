@@ -43,7 +43,6 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
 
     assert len(cmd_config["output_temp_files"]) == len(example_sidecar_metadata_inputs_outputs["filenames"])
     assert cmd_config["auto_sample_injection"] is True
-    assert cmd_config["pipe_has_explicit_sample_option"] is False
 
 
 @pytest.mark.unit
@@ -100,21 +99,6 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
                         f"Command {i + 1}: {file_key} file {filename} does not match expected pattern"
                     )
         assert cmd_config["auto_sample_injection"] is True
-        assert cmd_config["pipe_has_explicit_sample_option"] is False
-
-
-@pytest.mark.unit
-def test_build_commands_config_detects_explicit_sample_option(
-    bcftools_manager, example_sidecar_metadata_inputs_outputs
-):
-    """Test that explicit -s/--samples in the user command is detected for the whole pipe."""
-
-    commands = "view -r 21:15000000-25000000; view --samples SAMPLE1,SAMPLE2"
-
-    result = bcftools_manager.build_commands_config(commands, example_sidecar_metadata_inputs_outputs)
-
-    assert len(result) == 2
-    assert all(cmd["pipe_has_explicit_sample_option"] is True for cmd in result)
 
 
 @pytest.mark.unit
@@ -131,23 +115,6 @@ def test_build_commands_config_respects_auto_sample_injection_flag(
 
     assert len(result) == 1
     assert result[0]["auto_sample_injection"] is False
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "command,expected",
-    [
-        ("view -s S1,S2", True),
-        ("view --samples S1,S2", True),
-        ("view --samples=S1,S2", True),
-        ("view -sS1,S2", True),
-        ("view -S samples.txt", False),
-        ("view --samples-file samples.txt", False),
-        ("view -r 1:1000-2000", False),
-    ],
-)
-def test_command_has_explicit_sample_option(bcftools_manager, command, expected):
-    assert bcftools_manager._command_has_explicit_sample_option(command) is expected
 
 
 @pytest.mark.unit

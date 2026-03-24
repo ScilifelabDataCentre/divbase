@@ -19,13 +19,16 @@ def validate_command_not_empty(command: str) -> str:
     """
     command_string = command.strip()
     if command_string == "":
-        raise ValueError("The --command option must be a non-empty bcftools view string.")
+        raise ValueError(
+            "The --command option must be a non-empty bcftools view string. "
+            'If you only want to subset based on samples, use --command "view -s" in combination with one of the sample-selection options: --tsv-filter, --samples, --samples-file.'
+        )
 
     segments = command_string.split(";")
     for position, segment in enumerate(segments, start=1):
         if segment.strip() == "":
             raise ValueError(
-                f"The --command option an empty pipeline segment at position {position}. "
+                f"The --command option has an empty pipeline segment at position {position}. "
                 "Use semicolons only between complete bcftools view commands."
             )
 

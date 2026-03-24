@@ -2,6 +2,7 @@
 
 import pytest
 
+from divbase_api.services.queries import BcftoolsQueryManager
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
     _determine_sample_selection_mode,
@@ -36,13 +37,16 @@ class TestValidateUserSubmittedBcftoolsCommand:
         "command",
         [
             "view",
-            "view --samples S1,S2 -r 21:15000000-25000000",
+            "view -r 21:15000000-25000000",
+            "view -s",
+            "view -s -r 21:15000000-25000000",
+            "view --samples -i 'QUAL>20'",
         ],
     )
     def test_validate_user_submitted_bcftools_command_accepts_valid_commands(self, command):
         """Test that valid user-submitted bcftools commands pass command validation."""
         result = validate_user_submitted_bcftools_command(command)
-        assert result is None
+        assert result == command
 
     @pytest.mark.parametrize(
         "command,expected_msg",
@@ -52,6 +56,11 @@ class TestValidateUserSubmittedBcftoolsCommand:
             ("view -Ssamples.txt", "-S/--samples-file"),
             ("view --samples-file samples.txt", "-S/--samples-file"),
             ("view --samples-file=samples.txt", "-S/--samples-file"),
+            ("view -s S1,S2", "Do not provide sample names in '--command'"),
+            ("view -sS1,S2", "Option '-s<LIST>' is not supported"),
+            ("view --samples S1,S2", "Do not provide sample names in '--command'"),
+            ("view --samples=S1,S2", "Option '--samples=<LIST>' is not supported"),
+            ("view --samples=", "Option '--samples=<LIST>' is not supported"),
         ],
     )
     def test_validate_user_submitted_bcftools_command_rejects_invalid_commands(self, command, expected_msg):
@@ -141,11 +150,13 @@ class TestValidateUserSubmittedBcftoolsCommand:
     def test_validate_user_submitted_bcftools_command_accepts_subset_filters_for_all_samples(self, command):
         """Test that user-submitted bcftools command in all-samples mode that includes at least one non-sample-selection view option passes validation."""
         result = validate_user_submitted_bcftools_command(command, all_samples=True)
-        assert result is None
+        assert isinstance(result, str)
 
     @pytest.mark.parametrize(
         "command",
         [
+            "view -s",
+            "view --samples",
             "view -s S1,S2 -r 21:15000000-25000000",
             "view -r 21:15000000-25000000; view --samples=S1,S2",
         ],
@@ -154,6 +165,104 @@ class TestValidateUserSubmittedBcftoolsCommand:
         """Test that user-submitted bcftools command in all-samples mode that includes -s/--samples option raises TaskUserError."""
         with pytest.raises(TaskUserError, match="-s/--samples"):
             validate_user_submitted_bcftools_command(command, all_samples=True)
+
+
+class TestSamplesPlaceholderDetectionAndInjection:
+    def test_command_has_sample_placeholder_detects_placeholder_forms(self):
+        """Test that _command_has_sample_placeholder correctly detects various valid forms of sample placeholders in bcftools view commands."""
+        manager = BcftoolsQueryManager()
+
+        assert manager._command_has_sample_placeholder("view -s")
+        assert manager._command_has_sample_placeholder("view --samples")
+        assert manager._command_has_sample_placeholder("view -s -r 1:1000-2000")
+        assert manager._command_has_sample_placeholder("view --samples -i 'QUAL>20'")
+        assert not manager._command_has_sample_placeholder("view --samples S1,S2")
+        assert not manager._command_has_sample_placeholder("view --samples=S1,S2")
+        assert not manager._command_has_sample_placeholder("view -sS1,S2")
+
+    def test_build_commands_config_marks_pipe_and_segment_placeholder_flags(self):
+        """Test that build_commands_config correctly sets flags indicating presence of sample placeholders in command segments and pipes."""
+        manager = BcftoolsQueryManager()
+        bcftools_inputs = {
+            "filenames": ["file1.vcf.gz"],
+            "sample_and_filename_subset": [
+                {"Sample_ID": "S1", "Filename": "file1.vcf.gz"},
+                {"Sample_ID": "S2", "Filename": "file1.vcf.gz"},
+            ],
+            "auto_sample_injection": True,
+        }
+
+        config = manager.build_commands_config(
+            command="view -r 1:1000-2000; view -s",
+            bcftools_inputs=bcftools_inputs,
+            identifier="job1",
+        )
+
+        assert len(config) == 2
+        assert config[0]["pipe_has_sample_placeholder"] is True
+        assert config[1]["pipe_has_sample_placeholder"] is True
+        assert config[0]["command_has_sample_placeholder"] is False
+        assert config[1]["command_has_sample_placeholder"] is True
+
+    def test_inject_samples_at_placeholder_preserves_position_and_other_flags(self):
+        """Test that _inject_samples_at_placeholder correctly injects sample names at the placeholder position without altering other command flags or structure."""
+        manager = BcftoolsQueryManager()
+
+        injected = manager._inject_samples_at_placeholder(
+            command="view -s -r 1:1000-2000",
+            resolved_samples="S1,S2",
+        )
+        assert injected == "view -s S1,S2 -r 1:1000-2000"
+
+        injected_long = manager._inject_samples_at_placeholder(
+            command="view --samples -i 'QUAL>20'",
+            resolved_samples="S1,S2",
+        )
+        assert injected_long == "view -s S1,S2 -i 'QUAL>20'"
+
+    def test_run_current_command_injects_samples_at_placeholder_position(self, monkeypatch):
+        """Test that run_current_command correctly injects sample names into the bcftools command at the placeholder position when auto_sample_injection is enabled."""
+        manager = BcftoolsQueryManager()
+        manager.ENABLE_SUBPROCESS_MONITORING = False
+        executed_commands = []
+
+        class DummyProc:
+            pid = 12345
+
+            @staticmethod
+            def wait():
+                return 0
+
+            @staticmethod
+            def poll():
+                return 0
+
+        def fake_run_bcftools(command: str):
+            executed_commands.append(command)
+            return DummyProc()
+
+        monkeypatch.setattr(manager, "run_bcftools", fake_run_bcftools)
+        monkeypatch.setattr(manager, "ensure_csi_index", lambda _file_path: None)
+        monkeypatch.setattr(manager, "_log_file_size", lambda _file_path: None)
+
+        cmd_config = {
+            "command": "view -s -r 1:1000-2000",
+            "counter": 1,
+            "input_files": ["file1.vcf.gz"],
+            "sample_subset": [
+                {"Sample_ID": "S1", "Filename": "file1.vcf.gz"},
+                {"Sample_ID": "S2", "Filename": "file1.vcf.gz"},
+            ],
+            "output_temp_files": ["temp_subset_job1_1_0.bcf"],
+            "pipe_has_sample_placeholder": True,
+            "command_has_sample_placeholder": True,
+            "auto_sample_injection": True,
+        }
+
+        output_files, _metrics = manager.run_current_command(cmd_config)
+
+        assert output_files == ["temp_subset_job1_1_0.bcf"]
+        assert executed_commands == ["view -s S1,S2 -r 1:1000-2000 file1.vcf.gz -Ou -o temp_subset_job1_1_0.bcf"]
 
 
 class TestResolveInputsForCliSamplesMode:

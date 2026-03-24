@@ -42,7 +42,8 @@ METADATA_TSV_ARGUMENT = typer.Option(
 BCFTOOLS_ARGUMENT = typer.Option(
     ...,
     help="""
-        String consisting of the bcftools command to run on the files returned by the tsv query.
+        String consisting of the bcftools view command(s) to run. E.g. "view -r 21:15000000-25000000" or "view -s Sample1,Sample2".
+        The string cannot be empty; if you only want to subset on the selected samples, use: --command "view -s"
         """,
 )
 

@@ -289,11 +289,6 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
-    validate_user_submitted_bcftools_command(
-        command=command,
-        all_samples=all_samples,
-    )  # Run also here for defensive purposes. API will call the same function and catch the error first for all cases that go through the endpoint (but not all tests do)
-
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
     with SyncSessionLocal() as db:
@@ -762,13 +757,42 @@ def _blacklisted_view_options_reason_for_argument(arg: str) -> str | None:
     return None
 
 
-def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> None:
+def _samples_option_violation_reason(arg: str, all_samples: bool) -> str | None:
+    """
+    Return violation reason for -s/--samples usage in --command, or None if no violation.
+    """
+    if all_samples:
+        return (
+            "Option '-s/--samples' is not supported together with '--all-samples'. "
+            "Use CLI '--samples' or '--samples-file' mode instead, or remove '-s/--samples' from '--command'."
+        )
+
+    if arg.startswith("--samples="):
+        return (
+            "Option '--samples=<LIST>' is not supported in '--command'. "
+            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
+            "If you only want sample-based subsetting, use '--command \"view -s\"'."
+        )
+
+    if arg.startswith("-s") and arg != "-s" and not arg.startswith("--"):
+        return (
+            "Option '-s<LIST>' is not supported in '--command'. "
+            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
+            "If you only want sample-based subsetting, use '--command \"view -s\"'."
+        )
+
+    return None
+
+
+def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> str:
     """
     Validate that user-submitted bcftools command(s) are valid for DivBase.
     Intended to be run early in bcftools_pipe_task and make early exits when needed.
 
     Some bcftools options have both a short and long version (e.g. -h and --header-only).
     The validation checks for both versions of the option.
+
+    Returns the validated command string.
     """
     valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
     unsupported_view_options = []
@@ -793,23 +817,42 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
             )
 
         if cmd_name == "view":
-            for arg in args[1:]:
+            index = 1
+            while index < len(args):
+                arg = args[index]
                 reason = _blacklisted_view_options_reason_for_argument(arg)
                 if reason is not None:
                     unsupported_view_options.append(f"Pipe segment {position}, token '{arg}': {reason}")
-                if all_samples and _matches_option(arg, "-s", "--samples"):
-                    unsupported_view_options.append(
-                        f"Pipe segment {position}, token '{arg}': "
-                        "Option '-s/--samples' is not supported together with '--all-samples'. "
-                        "Use CLI '--samples' or '--samples-file' mode instead, or remove '-s/--samples' from '--command'."
-                    )
-                if (
-                    all_samples
-                    and reason is None
-                    and arg.startswith("-")
-                    and not _matches_option(arg, "-s", "--samples")
-                ):
+                    index += 1
+                    continue
+
+                if _matches_option(arg, "-s", "--samples"):
+                    sample_option_violation_reason = _samples_option_violation_reason(arg=arg, all_samples=all_samples)
+                    if sample_option_violation_reason is not None:
+                        unsupported_view_options.append(
+                            f"Pipe segment {position}, token '{arg}': {sample_option_violation_reason}"
+                        )
+                        index += 1
+                        continue
+
+                    if arg in ("-s", "--samples"):
+                        next_arg = args[index + 1] if index + 1 < len(args) else None
+                        if next_arg is not None and not next_arg.startswith("-"):
+                            unsupported_view_options.append(
+                                f"Pipe segment {position}, token '{arg}': "
+                                "Do not provide sample names in '--command' via '-s/--samples'. "
+                                "DivBase resolves sample IDs from '--tsv-filter', '--samples', or '--samples-file'. "
+                                "If you only want sample-based subsetting, use '--command \"view -s\"'."
+                            )
+                            index += 2
+                            continue
+                        index += 1
+                        continue
+
+                if all_samples and arg.startswith("-"):
                     has_all_samples_non_sample_view_option = True
+
+                index += 1
 
     if unsupported_view_options:
         details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
@@ -823,6 +866,8 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
             "Otherwise the query could potentially return all VCF data as is, and for that case it would be more efficient to download the dataset from the project instead with: divbase-cli files download-all. "
             "Please revise your command and try again."
         )
+
+    return command
 
 
 def _resolve_inputs_for_sample_metadata_mode(

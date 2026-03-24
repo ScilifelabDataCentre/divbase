@@ -29,10 +29,16 @@ from divbase_lib.exceptions import (
     SidecarMetadataFormatError,
     SidecarNoDataLoadedError,
     SidecarSampleIDError,
+    TaskUserError,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator, ValidationCategory
 
 logger = logging.getLogger(__name__)
+
+
+###
+### Helper functions and data structures for the query managers
+###
 
 
 @dataclass
@@ -98,6 +104,194 @@ def run_sidecar_metadata_query(
         query_message=query_message,
         warnings=warnings,
     )
+
+
+def _check_if_arg_matches_short_or_long_option(arg: str, short_opt: str, long_opt: str) -> bool:
+    """Helper function to check if a given argument matches either the short or long version of a bcftools option."""
+    if arg == short_opt:
+        return True
+    if arg.startswith(short_opt) and len(arg) > len(short_opt) and not arg.startswith("--"):
+        return True
+    if arg == long_opt:
+        return True
+    return bool(arg.startswith(f"{long_opt}="))
+
+
+def _check_if_view_option_is_supported(arg: str) -> str | None:
+    """Helper function to return the reason why a given bcftools view option is not supported by DivBase."""
+
+    if _check_if_arg_matches_short_or_long_option(arg, "-h", "--header-only"):
+        return (
+            "Option '-h/--header-only' is not supported in DivBase queries. "
+            "Instead use: `divbase-cli files stream <file.vcf.gz> | zcat | awk '/^##/ || /^#CHROM/ {print} !/^#/ {exit}'`"
+        )
+    if _check_if_arg_matches_short_or_long_option(arg, "-l", "--compression-level"):
+        return "Option '-l/--compression-level' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "-O", "--output-type"):
+        return "Option '-O/--output-type' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "-o", "--output"):
+        return "Option '-o/--output' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "-R", "--regions-file"):
+        return "Option '-R/--regions-file' is not supported in DivBase queries because external filter files are not supported."
+    if _check_if_arg_matches_short_or_long_option(arg, "-T", "--targets-file"):
+        return "Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported."
+    if _check_if_arg_matches_short_or_long_option(arg, "--threads", "--threads"):
+        return "Option '--threads' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "--verbosity", "--verbosity"):
+        return "Option '--verbosity' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "-W", "--write-index"):
+        return "Option '-W/--write-index' is handled by the DivBase server."
+    if _check_if_arg_matches_short_or_long_option(arg, "-S", "--samples-file"):
+        return (
+            "Option '-S/--samples-file' is not supported in '--command'. "
+            "Use `divbase-cli query vcf --samples-file` instead."
+        )
+    if _check_if_arg_matches_short_or_long_option(arg, "-f", "--apply-filters"):
+        return "Option '-f/--apply-filters' is not supported in DivBase queries."
+
+    return None
+
+
+def _check_if_view_samples_option_violates_constraints(arg: str, all_samples: bool) -> str | None:
+    """
+    Return violation reason for -s/--samples usage in --command, or None if no violation.
+    """
+    if all_samples:
+        return (
+            "Option '-s/--samples' is not supported together with '--all-samples'. "
+            "Use CLI '--samples' or '--samples-file' mode instead, or remove '-s/--samples' from '--command'."
+        )
+
+    if arg.startswith("--samples="):
+        return (
+            "Option '--samples=<LIST>' is not supported in '--command'. "
+            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
+            "If you only want sample-based subsetting, use '--command \"view -s\"'."
+        )
+
+    if arg.startswith("-s") and arg != "-s" and not arg.startswith("--"):
+        return (
+            "Option '-s<LIST>' is not supported in '--command'. "
+            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
+            "If you only want sample-based subsetting, use '--command \"view -s\"'."
+        )
+
+    return None
+
+
+def _analyze_view_samples_option(
+    arg: str,
+    next_arg_lookahead: str | None,
+    position: int,
+    all_samples: bool,
+) -> None:
+    """
+    Analyze a '-s/--samples' argument in a view command.
+
+    Raises TaskUserError for invalid usage.
+    """
+    sample_option_violation_reason = _check_if_view_samples_option_violates_constraints(
+        arg=arg, all_samples=all_samples
+    )
+    if sample_option_violation_reason is not None:
+        raise TaskUserError(f"Pipe segment {position}, argument '{arg}': {sample_option_violation_reason}")
+
+    if arg in ("-s", "--samples"):
+        # Look ahead to the next argument after -s/--samples to check if it is an option (beginning with - or --). Anything else is considered a sample name.
+        # E.g. "view -s S1,S2" is invalid.
+        if next_arg_lookahead is not None and not next_arg_lookahead.startswith("-"):
+            raise TaskUserError(
+                f"Pipe segment {position}, argument '{arg}': "
+                "Do not provide sample names in '--command' via '-s/--samples'. "
+                "DivBase resolves sample IDs from '--tsv-filter', '--samples', or '--samples-file'. "
+                "If you only want sample-based subsetting, use '--command \"view -s\"'."
+            )
+        return
+
+
+def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> str:
+    """
+    Validate that user-submitted bcftools command(s) are valid for DivBase.
+    Intended to be run in the API layer to make early exits when needed.
+
+    Supports two ways that users can submit "complex" bcftools commands:
+    - Using semicolons to separate multiple command segments. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments. bcftools manual reccommends this for more control over data processing/data ingrity.
+    - Using a single command string with multiple bcftools options. E.g. "view -s -r 1:1-100 -G" contains multiple bcftools options. Will result is fewer bcftools subprocesses, but bcftools manual mentions that this **might** lead to unexpected results.
+
+    Validation is done by iterating over each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
+    Some bcftools options have both a short and long version (e.g. -h and --header-only).
+    The validation checks for both versions of the option.
+
+    Returns the validated command string.
+    """
+    valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
+    unsupported_view_options = []
+    has_all_samples_and_at_least_one_view_option_that_is_not_samples = False
+
+    for position, raw_cmd in enumerate(command.split(";"), start=1):
+        # evaluate each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
+        cmd = raw_cmd.strip()
+        if not cmd:
+            # Empty command/empty ';' segments are already rejected by Pydantic (NonEmptyCommand) upstream of this function. This skip is only defensive.
+            continue
+
+        parse_error_message = f"Could not parse --command segment at position {position}: {cmd}"
+        try:
+            args = shlex.split(
+                cmd
+            )  # split the command string into a list of arguments. E.g. "view -s -r 1:1-100" becomes ["view", "-s", "-r", "1:1-100"].
+        except ValueError:
+            raise TaskUserError(parse_error_message) from None
+
+        cmd_name = args[0]
+        if cmd_name not in valid_commands:
+            raise TaskUserError(
+                f"Unsupported bcftools command '{cmd_name}' at position {position}. "
+                f"Only the following commands are supported: {', '.join(valid_commands)}"
+            )
+        if cmd_name == "view":
+            # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
+            for idx, arg in enumerate(args[1:], start=1):
+                reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
+                if reason_for_not_supported is not None:
+                    unsupported_view_options.append(
+                        f"Pipe segment {position}, argument '{arg}': {reason_for_not_supported}"
+                    )
+                    continue
+
+                # Check for unsupported usage of -s/--samples in the command string.
+                if _check_if_arg_matches_short_or_long_option(arg, "-s", "--samples"):
+                    next_arg_lookahead = args[idx + 1] if idx + 1 < len(args) else None
+                    _analyze_view_samples_option(
+                        arg=arg,
+                        next_arg_lookahead=next_arg_lookahead,
+                        position=position,
+                        all_samples=all_samples,
+                    )
+                    continue
+
+                if all_samples and arg.startswith("-"):
+                    has_all_samples_and_at_least_one_view_option_that_is_not_samples = True
+
+    if unsupported_view_options:
+        details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
+        raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
+
+    if all_samples and not has_all_samples_and_at_least_one_view_option_that_is_not_samples:
+        raise TaskUserError(
+            "When using all-samples mode, --command must include at least one supported bcftools view option "
+            "other than '-s/--samples' and none of the options blacklisted by DivBase. "
+            "Examples: -r/--regions, -t/--targets, -i/--include, -e/--exclude, -q/--min-af, -Q/--max-af, -v/--types, -V/--exclude-types, -m/--min-alleles, -M/--max-alleles, -c/--min-ac, -C/--max-ac, -g/--genotype. "
+            "Otherwise the query could potentially return all VCF data as is, and for that case it would be more efficient to download the dataset from the project instead with: divbase-cli files download-all. "
+            "Please revise your command and try again."
+        )
+
+    return command
+
+
+###
+### VCF query manager
+###
 
 
 class BcftoolsQueryManager:
@@ -209,8 +403,8 @@ class BcftoolsQueryManager:
         if not command or command.strip() == ";" or command.strip() == "":
             raise BcftoolsPipeEmptyCommandError()
         command_list = command.split(";")
-        pipe_has_explicit_sample_option = any(
-            self._command_has_explicit_sample_option(cmd.strip()) for cmd in command_list if cmd.strip()
+        pipe_has_sample_placeholder = any(
+            self._command_has_sample_placeholder(cmd.strip()) for cmd in command_list if cmd.strip()
         )
         commands_config_structure = []
         current_inputs = filenames
@@ -238,7 +432,8 @@ class BcftoolsQueryManager:
                 "input_files": current_inputs,
                 "sample_subset": sample_and_filename_subset,
                 "output_temp_files": output_temp_files,
-                "pipe_has_explicit_sample_option": pipe_has_explicit_sample_option,
+                "pipe_has_sample_placeholder": pipe_has_sample_placeholder,
+                "command_has_sample_placeholder": self._command_has_sample_placeholder(cmd),
                 "auto_sample_injection": auto_sample_injection,
             }
 
@@ -305,8 +500,10 @@ class BcftoolsQueryManager:
         For each processed file, a temporary output file is created, which is then used as input for the next command
         in the outer loop. Each temporary output file is indexed with a .csi index file using ensure_csi_index().
 
-        Automatically inserts resolved samples as the first subsetting step if there is no user-submitted view -s option
-        or view --samples in the command.
+        Automatically inserts resolved samples based on one of two policies:
+        1) If the pipe contains a sample-placeholder (view -s / view --samples without sample values),
+           inject at the placeholder position for those command segments.
+        2) Otherwise, inject at the beginning of the first command segment.
 
         For instance, if the user submitted the command: "view -r chr1:1-1000" and the samples S1 and S2 are in the file,
         the command will be automatically converted to "view -s S1,S2 -r chr1:1-1000".
@@ -332,22 +529,23 @@ class BcftoolsQueryManager:
                 if record["Filename"] == file:
                     samples_in_file.append(record["Sample_ID"])
 
-            # Automatically insert resolved samples as the first subsetting step only when there is no explicit sample in the user-submitted command
             cmd_with_samples = command.strip()  # Use user-submitted command as starting point
 
-            # Default behavior: if no user-submitted view -S option, insert a view -S command with the resolved samplesat the beginning of the pipe
-            # If there is a user-submitted view -S option, do not insert the resolved samples at the beginning of the pipe.
-            if (
-                cmd_config["auto_sample_injection"]
-                and cmd_config["counter"] == 0
-                and samples_in_file
-                and not cmd_config["pipe_has_explicit_sample_option"]
-            ):
+            if cmd_config["auto_sample_injection"] and samples_in_file:
                 samples_in_file_bcftools_formatted = ",".join(samples_in_file)
-                if cmd_with_samples == "view":
-                    cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted}"
-                elif cmd_with_samples.startswith("view "):
-                    cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted} {cmd_with_samples[5:]}"
+                if cmd_config["pipe_has_sample_placeholder"]:
+                    if cmd_config["command_has_sample_placeholder"]:
+                        cmd_with_samples = self._inject_samples_at_placeholder(
+                            command=cmd_with_samples,
+                            resolved_samples=samples_in_file_bcftools_formatted,
+                        )
+                # Explicit sample names inside --command are blocked by validate_user_submitted_bcftools_command().
+                # So when no placeholder is present, inject samples at the first segment by default.
+                elif cmd_config["counter"] == 0:
+                    if cmd_with_samples == "view":
+                        cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted}"
+                    elif cmd_with_samples.startswith("view "):
+                        cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted} {cmd_with_samples[5:]}"
 
             # Ensure source VCFs are indexed *before* command execution.
             self.ensure_csi_index(file)
@@ -442,25 +640,49 @@ class BcftoolsQueryManager:
 
         return output_temp_files, metrics
 
-    def _command_has_explicit_sample_option(self, command: str) -> bool:
+    def _command_has_sample_placeholder(self, command: str) -> bool:
         """
-        Check if a single bcftools command contains user-submittedsample selection options.
-        Used by run_current_command() determine if automatic view -S with the resolved samples should be used as the first command in the pipe or not.
+        Detect placeholder sample-option forms in a command segment.
 
-        Note: -S/--samples-file is not supported and blocked earlier in tasks.py.
+        Assumes command has already passed validate_user_submitted_bcftools_command(), meaning that
+        explicit sample-name forms in --command (for example '-s S1,S2', '-sS1,S2', '--samples S1,S2',
+        '--samples=S1,S2') are have already been rejected upstream.
+
+        Placeholder forms are:
+        - view -s
+        - view --samples
+        - view -s <another-flag>
+        - view --samples <another-flag>
         """
         args = shlex.split(command)
-
-        for arg in args:
+        for index, arg in enumerate(args[1:], start=1):
             if arg in ("-s", "--samples"):
-                return True
-            if arg.startswith("--samples="):
-                return True
-            # Support short-option attached forms like '-sS1,S2'
-            if arg.startswith("-s") and arg != "-s" and not arg.startswith("--"):
-                return True
-
+                next_arg = args[index + 1] if index + 1 < len(args) else None
+                if next_arg is None or next_arg.startswith("-"):
+                    return True
         return False
+
+    def _inject_samples_at_placeholder(self, command: str, resolved_samples: str) -> str:
+        """
+        Replace placeholder sample options (-s/--samples without values) with
+        '-s <resolved_samples>' while preserving the rest of the command segment.
+        """
+        args = shlex.split(command)
+        injected_args = []
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg in ("-s", "--samples"):
+                next_arg = args[index + 1] if index + 1 < len(args) else None
+                if next_arg is None or next_arg.startswith("-"):
+                    injected_args.append("-s")
+                    injected_args.append(resolved_samples)
+                    index += 1
+                    continue
+            injected_args.append(arg)
+            index += 1
+
+        return shlex.join(injected_args)
 
     def run_bcftools(self, command: str) -> subprocess.Popen:
         """
@@ -739,6 +961,11 @@ class BcftoolsQueryManager:
             logger.info(f"File '{file_path}' size: {size_gb:.2f} GB, {size_gi:.2f} Gi")
         except Exception as e:
             logger.warning(f"Could not determine size of file '{file_path}': {e}")
+
+
+###
+### Sample metadadata query manager
+###
 
 
 class SidecarQueryManager:

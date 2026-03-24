@@ -243,9 +243,9 @@ def test_bcftools_pipe_query_without_selection_mode_fails_on_submission(
     command = f"query vcf --command 'view -r 21:15000000-25000000' --project {project_name} "
     result = runner.invoke(app, command)
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2  # Typer exits with code 2 for argument validation errors
+    assert isinstance(result.exception, SystemExit)
     output = result.stdout + (str(result.exception) if result.exception else "")
-    assert "Sample selection is required." in output
     assert "Job submitted successfully with task id:" not in output
 
 
@@ -305,7 +305,7 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
         # bad command
         ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command", "submission_failure"),
         # empty command string
-        ("DEFAULT", "DEFAULT", "", "Empty", "task_failure"),
+        ("DEFAULT", "DEFAULT", "", "non-empty bcftools view string", "submission_failure"),
         # sample-file options in --command are rejected early by task guard
         ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file", "submission_failure"),
         # output options in --command are rejected early by API guard

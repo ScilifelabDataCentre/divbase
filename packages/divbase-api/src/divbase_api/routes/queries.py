@@ -19,10 +19,10 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.services.queries import validate_user_submitted_bcftools_command
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
-    validate_user_submitted_bcftools_command,
 )
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -146,7 +146,7 @@ async def create_bcftools_jobs(
             )
 
     try:
-        validate_user_submitted_bcftools_command(
+        validated_bcftools_commands = validate_user_submitted_bcftools_command(
             command=bcftools_query_request.command,
             all_samples=bcftools_query_request.all_samples,
         )
@@ -161,7 +161,7 @@ async def create_bcftools_jobs(
 
     task_kwargs = BcftoolsQueryKwargs(
         tsv_filter=bcftools_query_request.tsv_filter,
-        command=bcftools_query_request.command,
+        command=validated_bcftools_commands,
         metadata_tsv_name=bcftools_query_request.metadata_tsv_name,
         bucket_name=project.bucket_name,
         project_id=project.id,

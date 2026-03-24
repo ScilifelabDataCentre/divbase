@@ -196,27 +196,38 @@ The DivBase will apply the command(s) specified in `--command` in turn to a copy
 
 ### 4.1. Automatic handling of samples and VCF file names
 
-Samples and filenames are automatically handled by the DivBase server based on the user input discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) above. This means that users do no need to include `view -s` (sample selection option `-s`) at all. The same goes for the VCF filenames: the user should not include them at all since the system handles that for the user.
+Samples and filenames are automatically handled by the DivBase server based on the user input discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) above.
 
-By default `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be appended to the first command in the user-defined pipe. For example, a command like
+If there is more one command specified by the user in the `--command` string, the sample filtering command `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be automatically appended by the DivBase server to the first command in the user-defined pipe. This means that the user only need to explicitly include `view -s` in the `--command` straing when that is the only bcftools filtering command in their query.
+
+For example, a command like
 
 ```bash
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000"
 ```
 
-Will be interpreted by the DivBase server to become:
+Will be interpreted by the DivBase server as:
 
 ```bash
-bcftools view -s S1,S2 -r 21:15000000-25000000"
+bcftools view -s S1,S2 -r 21:15000000-25000000
 ```
 
-Users can override this to specify where in the pipe the sample subsetting should occur by explicitly including `view -s` in the `--command` string. This can be beneficial for the required runtime for certain pipes (see example use-cases in [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)). For example:
+By default, DivBase injects sample subsetting (`view -s`) into the first view command.
+
+If you want to control where sample subsetting happens in the pipe, explicitly include `view -s` in your `--command` string. For example:
 
 ```bash
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -s"
 ```
 
-Will be interpreted by the DivBase server to a small script. It first applies `view -r` to each input file, stores the results in an intermediate file, then applies `view -s` to the intermediate files, stores the results to a new batch of intermediate files, and then finally merges/concatenates them into a single results file. The intermediate files are used instead of classic unix pipes (`|`) to allow for acting on mutliple VCF files seperatelly and combining them to a single results file. For more details on this, see [5.3. How does DivBase process the VCF files?](#53-how-does-divbase-process-the-vcf-files)
+In this case, DivBase applies `view -r` first, then injects the resolved samples at `view -s` step, and finally merges/concatenates intermediate results into one output file. (See [5.3. How does DivBase process the VCF files?](#53-how-does-divbase-process-the-vcf-files) below for technical details on how DivBase processes semicolon seprated `bcftools view` commands.)
+
+!!! important
+    Do not provide sample names in the `--command` string!
+
+    For example, these will return an error: `view -s S1,S2` or `view --samples=S1,S2`.
+
+    This is because Sample IDs must be provided to `divbase-cli query vcf` via the `--samples`, `--samples-file`, or `--tsv-filter` options, as discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) .
 
 TODO: ensure that the backend only does `view -s` once. that actually goes for any commands. we should deduplicate identical commands.
 
@@ -241,6 +252,7 @@ The following `view` subcommands are not supported in DivBase:
 |--verbosity INT | Handled by the DivBase server |
 |-W[FMT], -W[=FMT], --write-index[=FMT] | Handled by the DivBase server |
 |-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-file`|
+|-s LIST, --samples LIST, --samples=LIST | Sample IDs must be provided via `--samples` or `--samples-file` (placeholder `view -s` without sample names is allowed) |
 |-f, --apply-filters LIST | Not supported in DivBase queries |
 <!-- markdownlint-enable MD056 -->
 
@@ -357,6 +369,7 @@ TODO: Add a short table:
 - Empty/invalid `--samples-file` format
 - Dimensions out of date
 - Invalid filter syntax / unsupported command
+- ValidationError: 1 validation error for BcftoolsQueryRequest: --command contains empty strings
 
 See also:
 
