@@ -1,7 +1,8 @@
-<nav class="navbar navbar-expand-lg bg-light shadow-sm mb-3 py-2"> 
+<nav class="navbar navbar-expand-lg bg-body-tertiary shadow-sm mb-3 py-2"> 
     <div class="container">
         <a class="navbar-brand" href="/" aria-hidden="true">
             <img class="scilife-navbar-logo" src="/static/logos/divbase_logo.webp"
+                data-light-src="/static/logos/divbase_logo.webp" data-dark-src="/static/logos/divbase_logo_white.webp"
                 alt="DivBase logo">
         </a>
 
@@ -11,10 +12,10 @@
         </button>
         
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto">
+            <ul class="navbar-nav ms-auto align-items-center">
                 <li class="nav-item">
                     <a class="nav-link scilife-nav-link" href="{{ mkdocs_site_url }}" target="_blank" rel="noopener noreferrer">
-                        Documentation
+                        <i class="bi bi-book me-1"></i>Documentation
                     </a>
                 </li>
                 {% if current_user %}
@@ -49,9 +50,6 @@
                     </ul>
                 </li>
                 {% else %}
-                <li class="nav-item">
-                    <a class="nav-link scilife-nav-link" href="/about">About</a>
-                </li>
                 <li class="nav-item ms-2">
                     <a class="btn scilife-nav-btn-signup" href="/register">Sign up</a>
                 </li>
@@ -62,9 +60,9 @@
                 {# light/dark theme toggle #}
                 <li class="nav-item dropdown ms-2">
                     <button class="nav-link scilife-nav-link border-0 bg-transparent dropdown-toggle" data-bs-toggle="dropdown" aria-label="Toggle theme">
-                        <i class="bi bi-circle-half" fill="currentColor"></i>
+                        <i class="bi bi-circle-half me-2" fill="currentColor"></i>Theme
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="swap-theme">
+                    <ul class="dropdown-menu dropdown-menu-end">
                         <li>
                             <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="light">
                                 <i class="bi bi-brightness-high-fill me-2" fill="currentColor"></i>Light

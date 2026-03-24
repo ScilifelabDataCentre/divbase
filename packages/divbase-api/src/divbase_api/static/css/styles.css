@@ -45,7 +45,7 @@ body {
 }
 .scilife-nav-link {
   color: var(--scilife-dark-grey);
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
@@ -375,11 +375,11 @@ body {
   color: white;
 }
 .scilife-role-badge-edit {
-  background-color: var(--scilife-aqua);
+  background-color: var(--scilife-grape);
   color: white;
 }
 .scilife-role-badge-read {
-  background-color: var(--scilife-medium-grey);
+  background-color: var(--scilife-dark-grey);
   color: white;
 }
 .scilife-role-badge-active {
@@ -387,7 +387,7 @@ body {
   color: var(--scilife-dark-grey);
 }
 .scilife-role-badge-inactive {
-  background-color: var(--scilife-medium-grey);
+  background-color: var(--scilife-dark-grey);
   color: white;
 }
 
@@ -401,6 +401,11 @@ body {
   font-size: 1.25rem;
   background-color: var(--scilife-grape-075);
   color: white;
+}
+
+/* This is needed for when clicking the dialog to control project members; otherwise, you have to scroll in the table if there are a low number of members. */
+.project-members-table {
+  min-height: 22rem;
 }
 
 /* General text control */
@@ -431,19 +436,17 @@ body {
 
 .scilife-confirm-button {
   font-size: 1.2rem;
-  align-self: flex-end;
-  margin-left: auto;
   color: white;
-  background-color: var(--scilife-teal-075);
-  border-color: var(--scilife-teal-075);
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
 }
 .scilife-confirm-button:hover,
 .scilife-confirm-button:focus,
 .scilife-confirm-button:active,
 .scilife-confirm-button:active:focus {
   color: white;
-  background-color: var(--scilife-teal);
-  border-color: var(--scilife-teal);
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
 }
 
 /* verify email icon */
@@ -535,4 +538,90 @@ pre {
   border-radius: 10px;
   line-height: 1.5;
   padding: 5px;
+}
+
+/* =============================================
+   Light / Dark theme overrides
+   ============================================= */
+
+[data-bs-theme="dark"] {
+  p a {
+    color: var(--scilife-aqua);
+  }
+  /* Navbar text and buttons */
+  .scilife-nav-link {
+    color: var(--bs-body-color);
+  }
+  .scilife-nav-dropdown-item {
+    color: var(--bs-body-color);
+  }
+  .scilife-nav-btn-signup {
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+  }
+  .scilife-nav-btn-signup:hover,
+  .scilife-nav-btn-signup:focus {
+    background-color: var(--bs-secondary-bg);
+    border-color: var(--bs-body-color);
+    color: var(--bs-body-color);
+  }
+  .scilife-profile-card h2,
+  .scilife-project-card h2 {
+    color: var(--bs-body-color);
+  }
+  .scilife-profile-card h3,
+  .scilife-project-card h3 {
+    color: var(--bs-secondary-color);
+  }
+  .scilife-profile-card,
+  .scilife-project-card {
+    border-color: var(--bs-border-color);
+    box-shadow: 0 0 0.2rem 0.2rem rgba(255, 255, 255, 0.04);
+  }
+
+  .scilife-project-button {
+    background-color: transparent;
+  }
+  .scilife-auth-cancel-btn {
+    color: white;
+  }
+  .scilife-auth-cancel-btn:hover,
+  .scilife-auth-cancel-btn:focus {
+    color: var(--scilife-dark-grey);
+  }
+
+  .scilife-back-link {
+    color: white;
+  }
+  .scilife-back-link:hover {
+    color: var(--scilife-aqua);
+  }
+
+  .scilife-feature-title {
+    color: var(--bs-body-color);
+  }
+  .scilife-feature-desc {
+    color: var(--bs-secondary-color);
+  }
+
+  code {
+    color: var(--bs-body-color);
+    background-color: var(--bs-secondary-bg);
+  }
+  pre {
+    color: var(--bs-body-color);
+    background-color: var(--bs-secondary-bg);
+    border-color: var(--bs-border-color);
+  }
+
+  .breadcrumb-item a {
+    color: var(--bs-body-color);
+  }
+  .breadcrumb-item.active {
+    color: var(--bs-secondary-color);
+  }
+
+  .scilife-footer {
+    background-color: #0d1618;
+  }
 }
