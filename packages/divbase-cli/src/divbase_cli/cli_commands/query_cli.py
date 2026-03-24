@@ -157,12 +157,11 @@ def vcf_query(
     """
 
     # TODO Error handling for subprocess calls.
-    # TODO: handle case empty results are returned from tsv_query()
+    # TODO: handle the case empty results are returned from tsv_query()
     # TODO what if a job fails and the user wants to re-run it? do we store temp files?
-    # TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
-    # TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
-    # TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
 
+    # Note! Pydantic model validator also enforces this on the API side just queries can be submitted directly to the endpoint.
+    # This block here is to catch it on the CLI side with a more user-friendly error message before even making the API call.
     has_tsv_filter = tsv_filter is not None
     has_samples = samples is not None
     has_samples_file = samples_file is not None

@@ -258,8 +258,6 @@ The DivBase server will check if these are included in the `--command` string be
     #  • Pipe segment 3, token '-W': Option '-W/--write-index' is handled by the DivBase server.
     ```
 
-TODO: now that samples are autoinjected, we need to support no command? a current workaround is to force them to write `view -s`. i.e. how to handle Empty command string
-
 TODO the -s SAMPLES placeholder still lives on in the docs/docstrings
 
 TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?

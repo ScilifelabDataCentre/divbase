@@ -2,9 +2,37 @@
 Schemas for query routes.
 """
 
-from typing import Any, Optional, Self
+from typing import Annotated, Any, Optional, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, model_validator
+
+# Shared helper functions and models
+
+
+def validate_command_not_empty(command: str) -> str:
+    """
+    Validator function to ensure that the user-submitted bcftools command string is not empty or just whitespace.
+    If there are multiple segments separated by semicolons, it also validates that none of the segments are empty or whitespace.
+
+    This is shared by the BcftoolsQueryRequest.command field and the BcftoolsQueryKwargs.command fields, and is used instead of @field_validator()
+    to avoid replicating the code.
+    """
+    command_string = command.strip()
+    if command_string == "":
+        raise ValueError("The --command option must be a non-empty bcftools view string.")
+
+    segments = command_string.split(";")
+    for position, segment in enumerate(segments, start=1):
+        if segment.strip() == "":
+            raise ValueError(
+                f"The --command option an empty pipeline segment at position {position}. "
+                "Use semicolons only between complete bcftools view commands."
+            )
+
+    return command
+
+
+NonEmptyCommand = Annotated[str, AfterValidator(validate_command_not_empty)]
 
 
 class SharedBaseModel(BaseModel):
@@ -34,7 +62,7 @@ class BcftoolsQueryRequest(SharedBaseModel):
 
     tsv_filter: str | None = None  # Used for metadata mode only
     metadata_tsv_name: str | None = None  # Used for metadata mode only
-    command: str  # TODO add field to describe that this is bcftools commands
+    command: NonEmptyCommand  # TODO add field to describe that this is bcftools commands
     samples: list[str] | None = None
     all_samples: bool = False
 
@@ -86,7 +114,7 @@ class BcftoolsQueryKwargs(SharedBaseModel):
 
     tsv_filter: str | None = None  # Used for metadata mode only
     metadata_tsv_name: str | None = None  # Used for metadata mode only
-    command: str
+    command: NonEmptyCommand
     bucket_name: str
     project_id: int
     project_name: str
