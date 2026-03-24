@@ -32,8 +32,7 @@ Repository = "https://github.com/ScilifelabDataCentre/divbase"
 Issues = "https://github.com/ScilifelabDataCentre/divbase/issues"
 
 [project.scripts]
-divbase = "divbase_cli.divbase_cli:main"
-divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 
+divbase-cli = "divbase_cli.divbase_cli:main"
 
 [build-system]
 requires = ["hatchling >= 1.26"]
