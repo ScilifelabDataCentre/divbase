@@ -2,8 +2,6 @@
 Test register page functionality using Playwright.
 """
 
-import re
-
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -101,8 +99,5 @@ def test_register_navigation_links(page: Page):
     navigate_to(page, "/register")
 
     # Target main to avoid navbar links for these pages.
-    login_button = page.get_by_role("main").get_by_role("link", name=re.compile("Login"))
+    login_button = page.get_by_role("main").get_by_role("link", name="Log in")
     expect(login_button).to_be_visible()
-
-    forgot_password_button = page.get_by_role("main").get_by_role("link", name=re.compile("Reset Password"))
-    expect(forgot_password_button).to_be_visible()

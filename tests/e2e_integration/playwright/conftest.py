@@ -20,8 +20,8 @@ def navigate_to(page: Page, path: str):
 
 def login_via_login_form(page: Page, email: str, password: str):
     navigate_to(page, "/login")
-    page.get_by_role("textbox", name="Email Address").fill(email)
-    page.get_by_role("textbox", name="Password").fill(password)
+    page.get_by_role("textbox", name="email").fill(email)
+    page.get_by_role("textbox", name="password").fill(password)
     page.get_by_role("button", name=re.compile(r"Sign In", re.IGNORECASE)).click()
 
 
@@ -32,7 +32,13 @@ def logout_via_user_menu(page: Page):
 
 def is_logged_in_as(page: Page, email: str) -> bool:
     """Check if the user is logged in as the specified email."""
-    return page.get_by_role("button", name=f"User menu for {email}").count() > 0
+    try:
+        expect(page.get_by_role("button", name=re.compile(f"User menu for {email}", re.IGNORECASE))).to_be_visible(
+            timeout=5000
+        )
+        return True
+    except AssertionError:
+        return False
 
 
 def register_new_user(
@@ -59,8 +65,8 @@ def register_new_user(
     navigate_to(page, "/register")
     expect(page).to_have_url(f"{FRONTEND_BASE_URL}/register")
 
-    page.get_by_role("textbox", name="Full Name").fill(name)
-    page.get_by_role("textbox", name="Email Address").fill(email)
+    page.get_by_role("textbox", name="Full name").fill(name)
+    page.get_by_role("textbox", name="email").fill(email)
 
     if organisation in SWEDISH_UNIVERSITIES:
         page.get_by_label("Organisation", exact=True).select_option(organisation)
@@ -80,10 +86,10 @@ def register_new_user(
 
     page.get_by_role("textbox", name="Password", exact=True).fill(password)
     page.get_by_role("textbox", name="Confirm Password").fill(password)
-    page.get_by_role("button", name=" Create Account").click()
+    page.get_by_role("button", name="Create an account").click()
 
     if expect_success:
-        expect(page).to_have_title("Registration Successful - DivBase")
+        expect(page).to_have_title("Verify your email - DivBase")
 
 
 @pytest.fixture(scope="session")
