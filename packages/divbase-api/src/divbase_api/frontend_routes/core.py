@@ -26,6 +26,7 @@ templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir.resolve())
 templates.env.globals["mkdocs_site_url"] = settings.api.mkdocs_site_url
 templates.env.globals["divbase_version"] = divbase_version
+templates.env.globals["support_email"] = settings.api.user_support_email
 
 
 @fr_core_router.get("/", response_class=HTMLResponse)
