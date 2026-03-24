@@ -2,13 +2,12 @@
 
 import pytest
 
-from divbase_api.services.queries import BcftoolsQueryManager
+from divbase_api.services.queries import BcftoolsQueryManager, validate_user_submitted_bcftools_command
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
     _determine_sample_selection_mode,
     _resolve_inputs_for_all_samples_mode,
     _resolve_inputs_for_cli_samples_mode,
-    validate_user_submitted_bcftools_command,
 )
 from divbase_lib.exceptions import TaskUserError
 
@@ -36,7 +35,6 @@ class TestValidateUserSubmittedBcftoolsCommand:
     @pytest.mark.parametrize(
         "command",
         [
-            "view",
             "view -r 21:15000000-25000000",
             "view -s",
             "view -s -r 21:15000000-25000000",
@@ -61,11 +59,24 @@ class TestValidateUserSubmittedBcftoolsCommand:
             ("view --samples S1,S2", "Do not provide sample names in '--command'"),
             ("view --samples=S1,S2", "Option '--samples=<LIST>' is not supported"),
             ("view --samples=", "Option '--samples=<LIST>' is not supported"),
+            ("view", "must include at least one bcftools view option flag"),
         ],
     )
     def test_validate_user_submitted_bcftools_command_rejects_invalid_commands(self, command, expected_msg):
         """Test that invalid user-submitted bcftools commands raise TaskUserError with expected message."""
         with pytest.raises(TaskUserError, match=expected_msg):
+            validate_user_submitted_bcftools_command(command)
+
+    def test_validate_user_submitted_bcftools_command_rejects_duplicate_segments(self):
+        """Test that duplicate command segments in the same pipe are rejected."""
+        command = "view -r 1:1-100; view -r 1:1-100"
+        with pytest.raises(TaskUserError, match="Duplicate bcftools command segment"):
+            validate_user_submitted_bcftools_command(command)
+
+    def test_validate_user_submitted_bcftools_command_rejects_duplicate_segments_after_normalization(self):
+        """Test that duplicate command segments are detected even if they differ in superficial whitespace/quoting."""
+        command = "view -r '1:1-100'; view -r 1:1-100"
+        with pytest.raises(TaskUserError, match="Duplicate bcftools command segment"):
             validate_user_submitted_bcftools_command(command)
 
     def test_validate_user_submitted_bcftools_command_rejects_unparseable_segment(self):
@@ -122,9 +133,9 @@ class TestValidateUserSubmittedBcftoolsCommand:
             "view",
         ],
     )
-    def test_validate_user_submitted_bcftools_command_requires_non_sample_option_for_all_samples(self, command):
-        """Test that user-submitted bcftools command in all-samples mode that does not include at least one non-sample-selection view option raises TaskUserError."""
-        with pytest.raises(TaskUserError, match="When using all-samples mode"):
+    def test_validate_user_submitted_bcftools_command_rejects_view_without_flag_in_all_samples_mode(self, command):
+        """Test that bare 'view' is rejected in all-samples mode as well."""
+        with pytest.raises(TaskUserError, match="must include at least one bcftools view option flag"):
             validate_user_submitted_bcftools_command(command, all_samples=True)
 
     @pytest.mark.parametrize(

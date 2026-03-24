@@ -229,8 +229,6 @@ In this case, DivBase applies `view -r` first, then injects the resolved samples
 
     This is because Sample IDs must be provided to `divbase-cli query vcf` via the `--samples`, `--samples-file`, or `--tsv-filter` options, as discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) .
 
-TODO: ensure that the backend only does `view -s` once. that actually goes for any commands. we should deduplicate identical commands.
-
 TODO: ensure that the system handle the case where the user has included VCF filenames in their commands.
 
 ### 4.2. bcftools view commands not supported by DivBase

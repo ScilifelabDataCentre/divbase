@@ -227,6 +227,7 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
     valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
     unsupported_view_options = []
     has_all_samples_and_at_least_one_view_option_that_is_not_samples = False
+    normalized_segments_with_positions: dict[str, list[int]] = {}
 
     for position, raw_cmd in enumerate(command.split(";"), start=1):
         # evaluate each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
@@ -249,7 +250,27 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
                 f"Unsupported bcftools command '{cmd_name}' at position {position}. "
                 f"Only the following commands are supported: {', '.join(valid_commands)}"
             )
+
+        # Duplication tracking.
+        normalized_segment = shlex.join(
+            args
+        )  # join the arguments back into a single string that is aware of quoting and whitespace.
+        if normalized_segment not in normalized_segments_with_positions:
+            normalized_segments_with_positions[normalized_segment] = [position]
+        else:
+            # Track duplicate segments by position.
+            normalized_segments_with_positions[normalized_segment].append(position)
+
         if cmd_name == "view":
+            # Users must explicitly provide at least one view flag.
+            # This guards against autoinject of -s for `--command "view"` when sample selection is used, which could lead to bugs
+            if not any(argument.startswith("-") for argument in args[1:]):
+                raise TaskUserError(
+                    f"Pipe segment {position}: 'view' must include at least one bcftools view option flag "
+                    "(short or long form). "
+                    'If you only want sample-based subsetting, use --command "view -s".'
+                )
+
             # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
             for idx, arg in enumerate(args[1:], start=1):
                 reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
@@ -276,6 +297,20 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
     if unsupported_view_options:
         details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
         raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
+
+    duplicate_segments = {}
+    for segment, positions in normalized_segments_with_positions.items():
+        if len(positions) > 1:
+            duplicate_segments[segment] = positions
+    if duplicate_segments:
+        duplicate_details = []
+        for segment, positions in duplicate_segments.items():
+            position_string = ", ".join(str(position) for position in positions)
+            duplicate_details.append(f"  - Duplicate command segment '{segment}' found at positions: {position_string}")
+        raise TaskUserError(
+            "Duplicate bcftools command segment(s) found in '--command'. "
+            "Please remove duplicate segments:\n" + "\n".join(duplicate_details)
+        )
 
     if all_samples and not has_all_samples_and_at_least_one_view_option_that_is_not_samples:
         raise TaskUserError(
