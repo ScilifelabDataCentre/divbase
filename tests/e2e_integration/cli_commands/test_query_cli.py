@@ -310,6 +310,21 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
         ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file", "submission_failure"),
         # output options in --command are rejected early by API guard
         ("DEFAULT", "DEFAULT", "view -Oz", "-O/--output-type", "submission_failure"),
+        # input VCF filenames in --command are rejected early by API guard
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view file.vcf.gz",
+            "Do not provide VCF/BCF input filenames in '--command'",
+            "submission_failure",
+        ),
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view -r file.vcf.gz",
+            "Do not provide VCF/BCF input filenames in '--command'",
+            "submission_failure",
+        ),
     ],
 )
 def test_bcftools_pipe_query_errors(

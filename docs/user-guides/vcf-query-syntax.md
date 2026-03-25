@@ -229,8 +229,6 @@ In this case, DivBase applies `view -r` first, then injects the resolved samples
 
     This is because Sample IDs must be provided to `divbase-cli query vcf` via the `--samples`, `--samples-file`, or `--tsv-filter` options, as discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) .
 
-TODO: ensure that the system handle the case where the user has included VCF filenames in their commands.
-
 ### 4.2. bcftools view commands not supported by DivBase
 
 The `--command` argument will accept many, but not all possible `bcftools view` options. In short, commands that affect `bcftools` I/O settings, and filter input from file cannot be used with DivBase as the system handles this internally already.
@@ -356,18 +354,19 @@ Each example should include:
 
 ## 7. Common errors and how to fix them
 
-TODO: Add a short table:
-
-| Error | Likely cause| Suggested fix |
+| Error | Likely cause | Suggested fix |
 |---|---|---|
-|TODO ADD CLI ERROR HERE | TODO ADD CAUSE| TODO ADD FIX |
-
-- “Use only one of --tsv-filter, --samples, --samples-file, or --all-samples”
-- Unknown sample IDs
-- Empty/invalid `--samples-file` format
-- Dimensions out of date
-- Invalid filter syntax / unsupported command
-- ValidationError: 1 validation error for BcftoolsQueryRequest: --command contains empty strings
+| `Use only one of --tsv-filter, --samples, --samples-file, or --all-samples` | More than one sample-selection mode was provided in the same query. | Use exactly one of: `--tsv-filter`, `--samples`, `--samples-file`, or `--all-samples`. |
+| `Unknown sample IDs` / `were not found in the project's dimensions index` | One or more sample IDs are not present in current VCF dimensions cache. | Run `divbase-cli dimensions show --unique-samples` to verify names. If needed, update cache with `divbase-cli dimensions update --project <project>`. |
+| `Invalid --samples-file format` (warnings/errors about delimiters or only one parsed sample) | The samples file has comma/semicolon/tab/pipe-separated values, header-like rows, or malformed lines. | Use plain UTF-8 text with one sample ID per line. Keep comments as lines starting with `#`. |
+| `Dimensions not up to date` | Bucket contents changed since dimensions were last indexed. | Run `divbase-cli dimensions update --project <project>` and retry the query. |
+| `Unsupported bcftools command ...` | `--command` used a command other than `view` (for example `merge`). | Use only `bcftools view` syntax in `--command`. |
+| `Unsupported bcftools view option(s) found in '--command'` | `--command` contains DivBase-blocked options such as `-O`, `-o`, `-R`, `-T`, `-W`, `-S`, `--threads`, `--verbosity`, `-f`. | Remove blocked options and keep only supported `view` options. |
+| `Do not provide sample names in '--command' via '-s/--samples'` | Sample IDs were provided inside `--command` (for example `view -s S1,S2` or `view --samples=S1,S2`). | Provide sample IDs via `--samples`, `--samples-file`, or `--tsv-filter`. Use placeholder `view -s` if you want to control where sample subsetting happens in the pipe. |
+| `Do not provide VCF/BCF input filenames in '--command'` | A filename-like token was included in `--command` (for example `view file.vcf.gz`, `view -r file.vcf.gz`, `view sample.bcf`, `view -`). | Remove input filenames/stdin tokens from `--command`. DivBase resolves input files from project dimensions automatically. |
+| `Duplicate bcftools command segment(s) found in '--command'` | The same command segment was repeated in a semicolon-separated pipe. | Remove duplicated segments (for example avoid `view -r 1:1-100; view -r 1:1-100`). |
+| `--command contains empty strings` / `The --command option must be a non-empty bcftools view string` | Empty command string or empty `;` segments were submitted (for example `""`, `";"`, `"view -r 1:1-100;;view -g hom"`). | Provide a non-empty command. If you only want sample-based subsetting, use `--command "view -s"`. |
+| `When using all-samples mode, --command must include at least one supported bcftools view option other than '-s/--samples'` | `--all-samples` was used with no effective subsetting/filtering beyond sample placeholder. | In `--all-samples` mode include at least one supported non-sample `view` option, for example `-r`, `-t`, `-i`, `-e`, `-g`, `-q`, `-Q`, `-v`, `-V`. |
 
 See also:
 

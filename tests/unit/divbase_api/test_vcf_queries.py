@@ -36,6 +36,9 @@ class TestValidateUserSubmittedBcftoolsCommand:
         "command",
         [
             "view -r 21:15000000-25000000",
+            "view -r chr1:1-1000",
+            "view --regions=chr1:1-1000",
+            "view -t chr1",
             "view -s",
             "view -s -r 21:15000000-25000000",
             "view --samples -i 'QUAL>20'",
@@ -59,6 +62,14 @@ class TestValidateUserSubmittedBcftoolsCommand:
             ("view --samples S1,S2", "Do not provide sample names in '--command'"),
             ("view --samples=S1,S2", "Option '--samples=<LIST>' is not supported"),
             ("view --samples=", "Option '--samples=<LIST>' is not supported"),
+            ("view file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view file.vcf", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view file.bcf", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view -", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view -r file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view --regions=file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view -t file.vcf", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view --targets=file.bcf", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view", "must include at least one bcftools view option flag"),
         ],
     )
@@ -126,6 +137,19 @@ class TestValidateUserSubmittedBcftoolsCommand:
         assert "segment 2" in msg
         assert "-O/--output-type" in msg
         assert "--threads" in msg
+
+    def test_validate_user_submitted_bcftools_command_aggregates_filename_operands(self):
+        """Test that user-submitted bcftools command with filename operands in multiple segments aggregates violations."""
+        command = "view -r file.vcf.gz; view sample.bcf"
+
+        with pytest.raises(TaskUserError) as exc_info:
+            validate_user_submitted_bcftools_command(command)
+
+        msg = str(exc_info.value)
+        assert "Unsupported bcftools view option(s) found in '--command'" in msg
+        assert "segment 1" in msg
+        assert "segment 2" in msg
+        assert "Do not provide VCF/BCF input filenames in '--command'" in msg
 
     @pytest.mark.parametrize(
         "command",

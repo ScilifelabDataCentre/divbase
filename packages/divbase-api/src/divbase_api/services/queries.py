@@ -117,6 +117,19 @@ def _check_if_arg_matches_short_or_long_option(arg: str, short_opt: str, long_op
     return bool(arg.startswith(f"{long_opt}="))
 
 
+def _check_if_arg_looks_like_vcf_or_bcf_input_file(arg: str) -> bool:
+    """Helper function to check if a token looks like a VCF/BCF input filename or stdin token."""
+    if arg == "-":
+        return True
+
+    normalized_arg = arg.lower()
+    if normalized_arg.endswith(".vcf.gz"):
+        return True
+    if normalized_arg.endswith(".vcf"):
+        return True
+    return bool(normalized_arg.endswith(".bcf"))
+
+
 def _check_if_view_option_is_supported(arg: str) -> str | None:
     """Helper function to return the reason why a given bcftools view option is not supported by DivBase."""
 
@@ -228,6 +241,9 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
     unsupported_view_options = []
     has_all_samples_and_at_least_one_view_option_that_is_not_samples = False
     normalized_segments_with_positions: dict[str, list[int]] = {}
+    filename_in_command_error_message = (
+        "Do not provide VCF/BCF input filenames in '--command'; DivBase resolves input files from project dimensions."
+    )
 
     for position, raw_cmd in enumerate(command.split(";"), start=1):
         # evaluate each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
@@ -265,6 +281,14 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
             # Users must explicitly provide at least one view flag.
             # This guards against autoinject of -s for `--command "view"` when sample selection is used, which could lead to bugs
             if not any(argument.startswith("-") for argument in args[1:]):
+                for argument in args[1:]:
+                    if _check_if_arg_looks_like_vcf_or_bcf_input_file(argument):
+                        unsupported_view_options.append(
+                            f"Pipe segment {position}, argument '{argument}': {filename_in_command_error_message}"
+                        )
+                if unsupported_view_options:
+                    details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
+                    raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
                 raise TaskUserError(
                     f"Pipe segment {position}: 'view' must include at least one bcftools view option flag "
                     "(short or long form). "
@@ -273,6 +297,13 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
 
             # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
             for idx, arg in enumerate(args[1:], start=1):
+                if arg == "-":
+                    # Do not support bcftools stdin operator '-' for piping files into a bcftools pipe (e.g. 'cat file1.vcf | bcftools view -' or 'cat file1.vcf | bcftools view -r 1:1-10000 -')
+                    unsupported_view_options.append(
+                        f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
+                    )
+                    continue
+
                 reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
                 if reason_for_not_supported is not None:
                     unsupported_view_options.append(
@@ -288,6 +319,12 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
                         next_arg_lookahead=next_arg_lookahead,
                         position=position,
                         all_samples=all_samples,
+                    )
+                    continue
+
+                if _check_if_arg_looks_like_vcf_or_bcf_input_file(arg):
+                    unsupported_view_options.append(
+                        f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
                     )
                     continue
 
