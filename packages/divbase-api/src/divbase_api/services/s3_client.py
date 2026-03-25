@@ -26,7 +26,10 @@ from divbase_lib.api_schemas.s3 import (
     RestoreObjectsResponse,
     SoftDeletedObjectDetails,
 )
-from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_UPLOAD_THRESHOLD
+from divbase_lib.divbase_constants import (
+    S3_MULTIPART_CHUNK_SIZE,
+    S3_MULTIPART_UPLOAD_THRESHOLD,
+)
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
@@ -451,6 +454,25 @@ class S3FileManager:
                         continue
                     expired_objects.add(object_key)
         return expired_objects
+
+    def get_outdated_files(self, bucket_name: str, cutoff: datetime, prefix: str | None = None) -> list[dict[str, str]]:
+        """
+        Identify files that are older than the provided threshold date time.
+
+        Returns a list of objects in the format required by fn hard_delete_specific_object_versions:
+        [{"Key": "result_of_job_9.vcf.gz", "VersionId": "version-id"}, ...]
+        """
+        outdated_files = []
+        paginator = self.s3_client.get_paginator("list_object_versions")
+        args = {"Bucket": bucket_name}
+        if prefix:
+            args["Prefix"] = prefix
+
+        for page in paginator.paginate(**args):
+            for obj in page.get("Versions", []):
+                if obj["LastModified"] < cutoff:
+                    outdated_files.append({"Key": obj["Key"], "VersionId": obj["VersionId"]})
+        return outdated_files
 
     def get_bucket_usage_bytes(self, bucket_name: str) -> int:
         """

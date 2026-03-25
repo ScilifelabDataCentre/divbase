@@ -34,52 +34,70 @@ REVOKED_TOKEN_MAX_AGE_DAYS = 7
 @app.task(name="cron_tasks.cleanup_old_task_history")
 def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
     """
-    Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
+    Periodic task to clean up old task entries:
+    Removes:
+    1. Entries from both TaskHistoryDB, TaskStartedAtDB and CeleryTaskMeta.
+    2. Query result files from S3 that are associated with those tasks (hard delete of the files).
+
     Runs daily to remove entries older than retention_days.
     """
-    try:
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
-        with SyncSessionLocal() as db:
-            old_task_ids = [
-                row[0]
-                for row in db.execute(
-                    text("SELECT task_id FROM task_history WHERE created_at < :cutoff_date"),
-                    {"cutoff_date": cutoff_date},
-                ).fetchall()
-            ]
+    with SyncSessionLocal() as db:
+        # used for deleting from S3
+        stmt = select(ProjectDB.bucket_name).where(ProjectDB.is_active.is_(True))
+        bucket_names = db.execute(stmt).scalars().all()
 
-            deleted_celery_task_meta = db.execute(
-                delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(old_task_ids))
-            ).rowcount
-            deleted_task_history = db.execute(
-                delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(old_task_ids))
-            ).rowcount
-            deleted_started_at = db.execute(
-                delete(TaskStartedAtDB).where(TaskStartedAtDB.task_id.in_(old_task_ids))
-            ).rowcount
+        old_task_ids = [
+            row[0]
+            for row in db.execute(
+                text("SELECT task_id FROM task_history WHERE created_at < :cutoff_date"),
+                {"cutoff_date": cutoff_date},
+            ).fetchall()
+        ]
+        deleted_celery_task_meta = db.execute(
+            delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(old_task_ids))
+        ).rowcount
+        deleted_task_history = db.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(old_task_ids))).rowcount
+        deleted_started_at = db.execute(
+            delete(TaskStartedAtDB).where(TaskStartedAtDB.task_id.in_(old_task_ids))
+        ).rowcount
 
-            db.commit()
+        db.commit()
 
-            logger.info(
-                f"Cleaned up {deleted_celery_task_meta} entries from CeleryTaskMeta, "
-                f"{deleted_task_history} from TaskHistoryDB, and "
-                f"{deleted_started_at} from TaskStartedAtDB older than {retention_days} days "
-                f"(cutoff: {cutoff_date.isoformat()})"
+    # removing query results files from S3
+    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    total_results_files_deleted = 0
+    for bucket in bucket_names:
+        objects_to_delete = s3_file_manager.get_outdated_files(
+            bucket_name=bucket,
+            cutoff=cutoff_date,
+            prefix=QUERY_RESULTS_FILE_PREFIX,
+        )
+        if objects_to_delete:
+            s3_file_manager.hard_delete_specific_object_versions(
+                objects=objects_to_delete,
+                bucket_name=bucket,
             )
+            total_results_files_deleted += len(objects_to_delete)
 
-            return {
-                "status": "completed",
-                "number_of_celery_meta_deleted": deleted_celery_task_meta,
-                "number_of_task_history_deleted": deleted_task_history,
-                "number_of_started_at_deleted": deleted_started_at,
-                "cutoff_date": cutoff_date.isoformat(),
-                "retention_days": retention_days,
-            }
+    logger.info(
+        f"Cleaned up {deleted_celery_task_meta} entries from CeleryTaskMeta, "
+        f"{deleted_task_history} from TaskHistoryDB, and "
+        f"{deleted_started_at} from TaskStartedAtDB older than {retention_days} days "
+        f"Hard deleted {total_results_files_deleted} query result files from {len(bucket_names)} S3 buckets. "
+        f"(cutoff: {cutoff_date.isoformat()})"
+    )
 
-    except Exception as e:
-        logger.error(f"Failed to cleanup old task history: {e}")
-        raise
+    return {
+        "status": "completed",
+        "number_of_celery_meta_deleted": deleted_celery_task_meta,
+        "number_of_task_history_deleted": deleted_task_history,
+        "number_of_started_at_deleted": deleted_started_at,
+        "number_of_result_files_hard_deleted": total_results_files_deleted,
+        "cutoff_date": cutoff_date.isoformat(),
+        "retention_days": retention_days,
+    }
 
 
 @app.task(name="cron_tasks.cleanup_stuck_tasks")
