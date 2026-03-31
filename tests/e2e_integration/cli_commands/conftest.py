@@ -136,8 +136,8 @@ def _create_logged_in_user_fixture(user_type: str):
         else:
             user_creds = CONSTANTS["TEST_USERS"][user_type]
 
-        login_command = f"auth login {user_creds['email']} --password {user_creds['password']}"
-        result = runner.invoke(app, login_command)
+        login_command = f"auth login {user_creds['email']}"
+        result = runner.invoke(app=app, args=login_command, input=f"{user_creds['password']}\n")
         assert result.exit_code == 0, f"Login failed: {result.output}"
 
         yield

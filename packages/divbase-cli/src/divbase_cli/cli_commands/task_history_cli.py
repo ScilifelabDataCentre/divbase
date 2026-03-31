@@ -60,7 +60,7 @@ def list_task_history_for_user(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data,
-        user_name="TODO-GET-FROM-CONFIG-IN-THE-FUTURE",
+        user_email=config.logged_in_email,
         project_name=project,
         mode="user_project" if project else "user",
         display_limit=limit,
@@ -91,10 +91,9 @@ def task_history_by_id(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data,
-        user_name=None,
+        user_email=None,
         project_name=None,
         mode="id",
-        display_limit=None,
     ).print_task_history()
 
 
@@ -126,7 +125,7 @@ def list_task_history_for_project(
 
     TaskHistoryDisplayManager(
         task_items=task_history_data,
-        user_name=None,
+        user_email=None,
         project_name=project,
         mode="project",
         display_limit=limit,

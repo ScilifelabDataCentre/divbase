@@ -23,7 +23,7 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.config_resolver import resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryRequest,
@@ -82,14 +82,14 @@ def sample_metadata_query(
     look for files there? For now this code just uses file.parent as the download directory.
     TODO: handle when the name of the sample column is something other than Sample_ID
     """
-
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
         json=request_data.model_dump(),
         timeout=20,  # This is longer than default (5), as api call response is query result, not a task-id.
@@ -135,12 +135,13 @@ def pipe_query(
     TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
     """
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
         json=request_data.model_dump(),
     )
