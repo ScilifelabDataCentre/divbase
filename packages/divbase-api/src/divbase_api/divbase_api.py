@@ -12,6 +12,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
 from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
 from divbase_api.db import (
@@ -66,7 +67,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
+app = FastAPI(
+    lifespan=lifespan,
+    title="DivBase API",
+    docs_url="/api/v1/docs",
+    version=divbase_version,
+    summary="DivBase API is used by divbase-cli to interact with the DivBase. We do not recommend users to interact directly with the API.",
+    description="""
+    Users are strongly encouraged to use divbase-cli rather than calling the API endpoints directly
+    
+    divbase-cli offers several advantages over direct API usage, including:
+    - Handles authentication logic, including automatic token refresh
+    - Simplifies commands and workflows (e.g. file uploads/downloads require working with presigned URLs).
+    - Better error messages and user experience
+
+    If there is something you cannot do with divbase-cli that you think should be possible, please let us know.
+
+    Visit our docs site for more info on how to use divbase-cli: https://scilifelabdatacentre.github.io/divbase/
+    """,
+)
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(core_router, prefix="/api/v1/core", tags=["core"])

@@ -1,71 +1,56 @@
 <div class="row justify-content-center mb-4">
-    <div class="col-md-10 col-lg-8 col-xl-6">
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <div class="text-center scilife-subsection mt-2 mb-4">
-                    <h2>Log in to your DivBase account</h2>
-                </div>
-            </div>
+    <div class="col-sm-10 col-md-8 col-lg-6 col-xl-5">
+
+        <div class="text-center scilife-subsection mt-4 mb-3">
+            <h1>Log in</h1>
+        </div>
+
+        <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <form method="post" action="/login">
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email Address</label>
+                        <label for="email" class="form-label fw-semibold">Email</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-envelope"></i>
-                            </span>
-                            <input type="email" 
-                                   class="form-control" 
-                                   id="email" 
-                                   name="email" 
-                                   placeholder="Enter your email"
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email"
+                                   class="form-control"
+                                   id="email"
+                                   name="email"
+                                   placeholder="Enter email address"
                                    autocomplete="email"
                                    value="{{ email or '' }}"
                                    required>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
+                    <div class="mb-1">
+                        <label for="password" class="form-label fw-semibold">Password</label>
                         <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-lock"></i>
-                            </span>
-                            <input type="password" 
-                                   class="form-control" 
-                                   id="password" 
-                                   name="password" 
-                                   placeholder="Enter your password"
-                                   autocomplete="current-password" 
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password"
+                                   class="form-control"
+                                   id="password"
+                                   name="password"
+                                   placeholder="Enter password"
+                                   autocomplete="current-password"
                                    required>
                         </div>
                     </div>
 
+                    <div class="text-end mb-4">
+                        <p><a href="/forgot-password" class="small">Forgot your password?</a></p>
+                    </div>
+
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
-                        </button>
+                        <button type="submit" class="btn scilife-confirm-button">Sign in to your account</button>
                     </div>
                 </form>
-
-                <hr class="my-4">
-
-                <div class="text-center d-flex justify-content-center align-items-center gap-3 flex-wrap">
-                    <div>
-                        <p class="text-muted mb-2">Don't have an account?</p>
-                        <a href="/register" class="btn btn-primary btn-lg">
-                            <i class="bi bi-person-plus me-2"></i>Create Account
-                        </a>
-                    </div>
-
-                    <div>
-                        <p class="text-muted mb-2">Forgot your password?</p>
-                        <a href="/forgot-password" class="btn btn-warning btn-lg">
-                            <i class="bi bi-key me-2"></i>Reset Password
-                        </a>
-                    </div>
-                </div>
             </div>
         </div>
+
+        <p class="text-center mt-3 text-muted">
+            Don't have an account? <a href="/register">Sign up</a>.
+        </p>
+
     </div>
 </div>

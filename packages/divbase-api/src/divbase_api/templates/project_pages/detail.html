@@ -7,90 +7,58 @@
     <div class="row">
         <div class="col-12">
             <!-- Header -->
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-start mb-4">
                 <div>
                     <h2><i class="bi bi-folder me-2"></i>{{ project.name }}</h2>
                     {% if project.description %}
-                    <p class="text-muted">{{ project.description }}</p>
+                    <p class="text-muted mb-0">{{ project.description }}</p>
                     {% endif %}
                 </div>
-                <div>
-                    <span class="badge bg-{{ 'success' if project.user_role == 'manage' else 'info' if project.user_role == 'edit' else 'secondary' }} fs-6">
-                        Project Role: {{ project.user_role|title }}
+                <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-3">
+                    <span class="badge scilife-role-badge-{{ 'active' if project.is_active else 'inactive' }} fs-6">
+                        <i class="bi bi-{{ 'check-circle' if project.is_active else 'x-circle' }} me-1"></i>
+                        {{ 'Active' if project.is_active else 'Inactive' }}
+                    </span>
+                    <span class="badge scilife-role-badge-{{ project.user_role }} fs-6">
+                        Your role: {{ project.user_role|title }}
                     </span>
                 </div>
             </div>
 
-            <!-- Project Overview -->
+            <!-- Storage + CLI side by side -->
             <div class="row mb-4">
-                <div class="col-md-8 mb-3">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Project Information</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-sm-6 mb-3">
-                                    <label class="form-label text-muted">Project Name</label>
-                                    <p class="mb-0">{{ project.name }}</p>
-                                </div>
-                                <div class="col-sm-6 mb-3">
-                                    <label class="form-label text-muted">Assigned KTH S3 Bucket</label>
-                                    <p class="mb-0 font-monospace">{{ project.bucket_name }}</p>
-                                </div>
-                                <div class="col-sm-6 mb-3">
-                                    <label class="form-label text-muted">Status</label>
-                                    <p class="mb-0">
-                                        <span class="badge bg-{{ 'success' if project.is_active else 'danger' }}">
-                                            {{ 'Active' if project.is_active else 'Inactive' }}
-                                        </span>
-                                    </p>
-                                </div>
-                                {% if project.description %}
-                                <div class="col-12">
-                                    <label class="form-label text-muted">Description</label>
-                                    <p class="mb-0">{{ project.description }}</p>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4">
-                    <div class="card">
+                <div class="col-md-4 mb-3">
+                    <div class="card shadow-sm h-100">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0"><i class="bi bi-hdd me-2"></i>Storage Usage</h5>
-                            <span class="badge bg-info text-dark" data-bs-toggle="tooltip" title="These values are updated daily.">
+                            <span class="badge scilife-role-badge-read" data-bs-toggle="tooltip" title="These values are updated daily.">
                                 <i class="bi bi-info-circle me-1"></i>Updated daily
                             </span>
                         </div>
                         <div class="card-body">
-                            <div class="text-center mb-3">
-                                <ul class="list-group">
-                                    <li class="list-group-item">Storage used: <strong>{{ project.storage_used }}</strong></li>
-                                    <li class="list-group-item">Storage quota: <strong>{{ project.storage_quota }}</strong></li>
-                                    <li class="list-group-item">Percentage used: <strong>{{ project.storage_used_percent }}%</strong></li>
-                                </ul>
-                            </div>
-                        <div class="progress">
-                            <div 
-                                class="progress-bar bg-success" 
-                                role="progressbar" 
-                                style="width: {{ 100 if project.storage_used_percent > 100 else project.storage_used_percent }}%" 
-                                aria-label="Storage usage"
-                                aria-valuenow="{{ project.storage_used_percent }}" 
-                                aria-valuemin="0" 
-                                aria-valuemax="100">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Used</small>
+                                    <small class="text-muted">{{ project.storage_used }} of {{ project.storage_quota }}</small>
+                                </div>
+                                <div class="progress mt-1" style="height: 8px;">
+                                    <div
+                                        class="progress-bar scilife-storage-bar"
+                                        role="progressbar"
+                                        style="width: {{ 100 if project.storage_used_percent > 100 else project.storage_used_percent }}%"
+                                        aria-label="Storage usage"
+                                        aria-valuenow="{{ project.storage_used_percent }}"
+                                        aria-valuemin="0"
+                                        aria-valuemax="100">
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ project.storage_used_percent }}% used</small>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            {# Copy to clipboard for adding project to CLI config #}
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
+                <div class="col-md-8 mb-3">
+                    <div class="card shadow-sm h-100">
                         <div class="card-header">
                             <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Add this project to your DivBase CLI Configuration file</h5>
                         </div>
@@ -125,4 +93,8 @@
 
 {% block custom_scripts %}
 <script src="/static/js/copy_to_clipboard.js"></script>
+    {% if project.user_role == 'manage' %}
+    <script src="/static/js/add_user_to_project.js"></script>
+    <script src="/static/js/remove_project_member.js"></script>
+    {% endif %}
 {% endblock %}

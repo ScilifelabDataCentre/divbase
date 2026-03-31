@@ -45,7 +45,7 @@ body {
 }
 .scilife-nav-link {
   color: var(--scilife-dark-grey);
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
@@ -55,37 +55,281 @@ body {
   font-weight: 500;
   letter-spacing: 0.045rem;
 }
-
-/* footer control */
-footer {
-  background-color: #ebebeb;
-}
-.scilife-footer-text a {
-  color: var(--scilife-teal);
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.045rem;
-  text-decoration: none;
-}
-.scilife-footer-titles {
+.scilife-nav-btn-signup {
   color: var(--scilife-dark-grey);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.0625rem;
-  margin-bottom: 0.5rem;
+  background-color: transparent;
+  border: 1.5px solid var(--scilife-dark-grey);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.3rem 1rem;
+  vertical-align: middle;
 }
-.scilife-footer-img {
-  max-width: 150px;
+.scilife-nav-btn-signup:hover,
+.scilife-nav-btn-signup:focus {
+  background-color: var(--scilife-light-grey);
+  border-color: var(--scilife-dark-grey);
+  color: var(--scilife-dark-grey);
 }
-@media (min-width: 1200px) {
-  .scilife-footer-img {
-    max-width: 140px;
+.scilife-nav-btn-login {
+  color: white;
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.3rem 1rem;
+  vertical-align: middle;
+}
+.scilife-nav-btn-login:hover,
+.scilife-nav-btn-login:focus,
+.scilife-nav-btn-login:active,
+.scilife-nav-btn-login:active:focus {
+  color: white;
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
+}
+
+@media (max-width: 991px) {
+  .scilife-nav-btn-signup,
+  .scilife-nav-btn-login {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Navbar no longer in collapsed mode beyond this point */
+@media (min-width: 992px) and (max-width: 1199px) {
+  .scilife-navbar-logo {
+    height: 1.6rem;
+  }
+  .scilife-nav-link {
+    font-size: 1.1rem;
+  }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .scilife-navbar-logo {
+    height: 2rem;
+  }
+  .scilife-nav-link {
+    font-size: 1.15rem;
   }
 }
 @media (min-width: 1400px) {
-  .scilife-footer-img {
-    max-width: 150px;
+  .scilife-navbar-logo {
+    height: 2.3rem;
   }
+  .scilife-nav-link {
+    font-size: 1.25rem;
+  }
+}
+
+/* footer control */
+.scilife-footer {
+  background-color: #2d3464;
+  color: #e0e0e0;
+}
+.scilife-footer-brand-logo {
+  height: 1.6rem;
+}
+.scilife-footer-brand-text {
+  font-size: 0.9rem;
+  color: #b0bec5;
+  line-height: 1.5;
+}
+.scilife-footer-social-link {
+  color: #b0bec5;
+  font-size: 1.3rem;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.scilife-footer-social-link:hover {
+  color: var(--scilife-lime);
+}
+.scilife-footer-nav a {
+  color: #b0bec5;
+  font-size: 1rem;
+  text-decoration: none;
+  display: block;
+  padding: 0.2rem 0;
+  transition: color 0.15s;
+}
+.scilife-footer-nav a:hover {
+  color: var(--scilife-lime);
+}
+.scilife-footer-img {
+  max-height: 60px;
+  max-width: 120px;
+  object-fit: contain;
+}
+.scilife-footer-copyright {
+  font-size: 0.85rem;
+  color: #90a4ae;
+}
+.scilife-footer-copyright a {
+  color: #b0bec5;
+  text-decoration: underline;
+}
+.scilife-footer-copyright a:hover {
+  color: var(--scilife-lime);
+}
+.scilife-footer-link {
+  font-size: 0.9rem;
+  color: #90a4ae;
+  text-decoration: none;
+}
+.scilife-footer-link:hover {
+  color: var(--scilife-lime);
+}
+
+/* hero control */
+/* hero control */
+.scilife-hero {
+  --hero-min-height: 60vh;
+  --hero-bg-position: center center;
+
+  position: relative;
+  overflow: hidden;
+  padding: 1.2rem 0;
+  margin-bottom: 1rem;
+  background: url("/static/img/home_hero.webp") no-repeat
+    var(--hero-bg-position);
+  background-size: cover;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--hero-min-height);
+  max-width: 1444px;
+}
+.scilife-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.scilife-hero-content {
+  position: relative;
+  z-index: 1;
+  margin: 2rem;
+  text-align: left;
+}
+.scilife-hero-title {
+  --hero-margin-right: 0;
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin-right: var(--hero-margin-right);
+}
+.scilife-hero-subtitle {
+  --hero-margin-right: 0;
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin-right: var(--hero-margin-right);
+}
+
+@media (max-width: 575px) {
+  .scilife-hero {
+    --hero-min-height: 40vh;
+    --hero-bg-position: 80% center;
+  }
+}
+@media (min-width: 576px) and (max-width: 767px) {
+  .scilife-hero {
+    --hero-min-height: 30vh;
+    --hero-bg-position: 80% center;
+  }
+}
+@media (min-width: 768px) and (max-width: 991px) {
+  .scilife-hero {
+    --hero-min-height: 35vh;
+    --hero-bg-position: 75% center;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 30%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 30%;
+  }
+}
+@media (min-width: 992px) and (max-width: 1199px) {
+  .scilife-hero {
+    --hero-min-height: 30vh;
+    --hero-bg-position: 70% center;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 10%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 30%;
+  }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .scilife-hero {
+    --hero-min-height: 24vh;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 20%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 43%;
+  }
+}
+@media (min-width: 1400px) {
+  .scilife-hero {
+    --hero-min-height: 27vh;
+  }
+  .scilife-hero-title {
+    --hero-margin-right: 20%;
+  }
+  .scilife-hero-subtitle {
+    --hero-margin-right: 47%;
+  }
+}
+
+/* hero call to action button */
+.scilife-hero-cta-btn {
+  color: white;
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+}
+.scilife-hero-cta-btn:hover,
+.scilife-hero-cta-btn:focus,
+.scilife-hero-cta-btn:active,
+.scilife-hero-cta-btn:active:focus {
+  color: white;
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
+}
+.scilife-hero-signup-link {
+  color: white;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.scilife-hero-signup-link:hover {
+  color: var(--scilife-lime-025);
+}
+
+/* home page description paragraph */
+.scilife-home-description {
+  max-width: 700px;
+  font-size: 1.125rem;
+  line-height: 1.7rem;
+}
+
+/* key features section */
+.scilife-feature-icon {
+  font-size: 3rem;
+  color: #5b69ca;
+}
+.scilife-feature-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--scilife-dark-grey);
+}
+.scilife-feature-desc {
+  font-size: 1rem;
+  color: var(--scilife-contrast-okay-grey);
+  line-height: 1.5;
 }
 
 /* profile card control */
@@ -158,6 +402,33 @@ footer {
   border-color: var(--scilife-aqua);
 }
 
+/* project role + status badges */
+.scilife-role-badge-manage {
+  background-color: var(--scilife-teal);
+  color: white;
+}
+.scilife-role-badge-edit {
+  background-color: var(--scilife-grape);
+  color: white;
+}
+.scilife-role-badge-read {
+  background-color: var(--scilife-dark-grey);
+  color: white;
+}
+.scilife-role-badge-active {
+  background-color: var(--scilife-lime);
+  color: var(--scilife-dark-grey);
+}
+.scilife-role-badge-inactive {
+  background-color: var(--scilife-dark-grey);
+  color: white;
+}
+
+/* storage progress bar */
+.scilife-storage-bar {
+  background-color: var(--scilife-teal-075);
+}
+
 /* numb project control */
 .scilife-numb-project-badge {
   font-size: 1.25rem;
@@ -165,16 +436,19 @@ footer {
   color: white;
 }
 
+/* This is needed for when clicking the dialog to control project members; otherwise, you have to scroll in the table if there are a low number of members. */
+.project-members-table {
+  min-height: 22rem;
+}
+
 /* General text control */
 .scilife-subsection h2 {
-  color: var(--scilife-teal);
   font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.04rem;
 }
 
 .scilife-subsection h3 {
-  color: var(--scilife-teal);
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.04rem;
@@ -195,19 +469,64 @@ footer {
 
 .scilife-confirm-button {
   font-size: 1.2rem;
-  align-self: flex-end;
-  margin-left: auto;
   color: white;
-  background-color: var(--scilife-lime-075);
-  border-color: var(--scilife-lime-075);
+  background-color: var(--scilife-teal);
+  border-color: var(--scilife-teal);
 }
 .scilife-confirm-button:hover,
 .scilife-confirm-button:focus,
 .scilife-confirm-button:active,
 .scilife-confirm-button:active:focus {
   color: white;
-  background-color: var(--scilife-lime);
-  border-color: var(--scilife-lime);
+  background-color: var(--scilife-teal-075);
+  border-color: var(--scilife-teal-075);
+}
+
+/* verify email icon */
+.scilife-verify-email-icon {
+  font-size: 3.5rem;
+  color: var(--scilife-aqua);
+  border: 2px solid var(--scilife-aqua);
+  border-radius: 50%;
+  padding: 0.6rem 0.75rem;
+  display: inline-block;
+  line-height: 1;
+}
+
+/* forgot password icon */
+.scilife-forgot-password-icon {
+  font-size: 3.5rem;
+  color: var(--scilife-aqua);
+  border: 2px solid var(--scilife-aqua);
+  border-radius: 50%;
+  padding: 0.6rem 0.75rem;
+  display: inline-block;
+  line-height: 1;
+}
+
+/* back link */
+.scilife-back-link {
+  color: var(--scilife-contrast-okay-grey);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.scilife-back-link:hover {
+  color: var(--scilife-teal);
+}
+
+/* auth form cancel button */
+.scilife-auth-cancel-btn {
+  color: var(--scilife-dark-grey);
+  background-color: transparent;
+  border: 1.5px solid var(--scilife-medium-grey);
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+.scilife-auth-cancel-btn:hover,
+.scilife-auth-cancel-btn:focus {
+  background-color: var(--scilife-light-grey);
+  border-color: var(--scilife-dark-grey);
+  color: var(--scilife-dark-grey);
 }
 
 /* Control the copy to clipboard button */
@@ -252,4 +571,90 @@ pre {
   border-radius: 10px;
   line-height: 1.5;
   padding: 5px;
+}
+
+/* =============================================
+   Light / Dark theme overrides
+   ============================================= */
+
+[data-bs-theme="dark"] {
+  p a {
+    color: var(--scilife-aqua);
+  }
+  /* Navbar text and buttons */
+  .scilife-nav-link {
+    color: var(--bs-body-color);
+  }
+  .scilife-nav-dropdown-item {
+    color: var(--bs-body-color);
+  }
+  .scilife-nav-btn-signup {
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+  }
+  .scilife-nav-btn-signup:hover,
+  .scilife-nav-btn-signup:focus {
+    background-color: var(--bs-secondary-bg);
+    border-color: var(--bs-body-color);
+    color: var(--bs-body-color);
+  }
+  .scilife-profile-card h2,
+  .scilife-project-card h2 {
+    color: var(--bs-body-color);
+  }
+  .scilife-profile-card h3,
+  .scilife-project-card h3 {
+    color: var(--bs-secondary-color);
+  }
+  .scilife-profile-card,
+  .scilife-project-card {
+    border-color: var(--bs-border-color);
+    box-shadow: 0 0 0.2rem 0.2rem rgba(255, 255, 255, 0.04);
+  }
+
+  .scilife-project-button {
+    background-color: transparent;
+  }
+  .scilife-auth-cancel-btn {
+    color: white;
+  }
+  .scilife-auth-cancel-btn:hover,
+  .scilife-auth-cancel-btn:focus {
+    color: var(--scilife-dark-grey);
+  }
+
+  .scilife-back-link {
+    color: white;
+  }
+  .scilife-back-link:hover {
+    color: var(--scilife-aqua);
+  }
+
+  .scilife-feature-title {
+    color: var(--bs-body-color);
+  }
+  .scilife-feature-desc {
+    color: var(--bs-secondary-color);
+  }
+
+  code {
+    color: var(--bs-body-color);
+    background-color: var(--bs-secondary-bg);
+  }
+  pre {
+    color: var(--bs-body-color);
+    background-color: var(--bs-secondary-bg);
+    border-color: var(--bs-border-color);
+  }
+
+  .breadcrumb-item a {
+    color: var(--bs-body-color);
+  }
+  .breadcrumb-item.active {
+    color: var(--bs-secondary-color);
+  }
+
+  .scilife-footer {
+    background-color: #0d1618;
+  }
 }
