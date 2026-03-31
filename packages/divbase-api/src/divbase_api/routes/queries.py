@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
@@ -65,6 +66,7 @@ async def sample_metadata_query(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = SampleMetadataQueryKwargs(
         tsv_filter=sample_metadata_query_request.tsv_filter,
@@ -128,6 +130,7 @@ async def create_bcftools_jobs(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     job_id = await create_task_history_entry(
         user_id=current_user.id,

@@ -84,7 +84,7 @@ def register_middleware(app: FastAPI) -> None:
     """
     Register all middleware to the FastAPI app.
 
-    NOTE: When modyfying/extending this function remember that Middleware order is important.
+    NOTE: When modifying/extending this function remember that Middleware order is important.
 
     So for the request-response cycle:
     request -> last added middleware -> ... -> first added middleware -> route handler

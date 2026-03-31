@@ -162,3 +162,10 @@ class TSVFileNotFoundInProjectError(DivBaseAPIException):
                 "Please check that you have spelled the file name correctly and that the file has been uploaded to the project."
             )
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class QueueClosedError(DivBaseAPIException):
+    """Raised when the queue is closed for new tasks (e.g. before a maintenance window)."""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)

@@ -8,10 +8,11 @@ from divbase_api.models.announcements import AnnouncementDB, AnnouncementTarget
 from divbase_api.models.base import Base, BaseDBModel
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.queue_status import QueueStatus
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
-from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB
+from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 
 __all__ = [
     "Base",
@@ -22,6 +23,8 @@ __all__ = [
     "ProjectMembershipDB",
     "VCFMetadataDB",
     "SkippedVCFDB",
+    "VCFMetadataSamplesDB",
+    "VCFMetadataScaffoldsDB",
     "TaskHistoryDB",
     "TaskStartedAtDB",
     "TokenRevokeReason",
@@ -29,6 +32,5 @@ __all__ = [
     "ProjectVersionDB",
     "AnnouncementDB",
     "AnnouncementTarget",
-    "VCFMetadataSamplesDB",
-    "VCFMetadataScaffoldsDB",
+    "QueueStatus",
 ]
