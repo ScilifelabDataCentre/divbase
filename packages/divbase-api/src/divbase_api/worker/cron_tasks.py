@@ -45,20 +45,23 @@ def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
 
     with SyncSessionLocal() as db:
         # used for deleting from S3
-        stmt = select(ProjectDB.bucket_name).where(ProjectDB.is_active.is_(True))
-        bucket_names = db.execute(stmt).scalars().all()
+        bucket_names = db.execute(select(ProjectDB.bucket_name)).scalars().all()
 
-        old_task_ids = [
-            row[0]
-            for row in db.execute(
-                text("SELECT task_id FROM task_history WHERE created_at < :cutoff_date"),
-                {"cutoff_date": cutoff_date},
-            ).fetchall()
-        ]
+        stmt = select(TaskHistoryDB.task_id).where(TaskHistoryDB.created_at < cutoff_date)
+        old_task_ids = db.execute(stmt).scalars().all()
+
         deleted_celery_task_meta = db.execute(
             delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(old_task_ids))
         ).rowcount
         deleted_task_history = db.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(old_task_ids))).rowcount
+        # to catch case where no task_id added to db entry, as is nullable.
+        deleted_task_history_no_task_id = db.execute(
+            delete(TaskHistoryDB).where(
+                TaskHistoryDB.task_id.is_(None),
+                TaskHistoryDB.created_at < cutoff_date,
+            )
+        ).rowcount
+
         deleted_started_at = db.execute(
             delete(TaskStartedAtDB).where(TaskStartedAtDB.task_id.in_(old_task_ids))
         ).rowcount
@@ -84,6 +87,7 @@ def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
     logger.info(
         f"Cleaned up {deleted_celery_task_meta} entries from CeleryTaskMeta, "
         f"{deleted_task_history} from TaskHistoryDB, and "
+        f"{deleted_task_history_no_task_id} entries with no task_id from TaskHistoryDB, and "
         f"{deleted_started_at} from TaskStartedAtDB older than {retention_days} days "
         f"Hard deleted {total_results_files_deleted} query result files from {len(bucket_names)} S3 buckets. "
         f"(cutoff: {cutoff_date.isoformat()})"
@@ -93,6 +97,7 @@ def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
         "status": "completed",
         "number_of_celery_meta_deleted": deleted_celery_task_meta,
         "number_of_task_history_deleted": deleted_task_history,
+        "number_of_task_history_no_task_id_deleted": deleted_task_history_no_task_id,
         "number_of_started_at_deleted": deleted_started_at,
         "number_of_result_files_hard_deleted": total_results_files_deleted,
         "cutoff_date": cutoff_date.isoformat(),
