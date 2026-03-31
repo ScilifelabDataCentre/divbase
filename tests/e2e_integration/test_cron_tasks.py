@@ -27,6 +27,7 @@ from divbase_api.security import TokenType
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.cron_tasks import (
     SOFT_DELETED_FILES_RETENTION_DAYS,
+    TASK_RETENTION_DAYS,
     cleanup_old_revoked_tokens,
     cleanup_old_task_history_task,
     cleanup_soft_deleted_project_versions,
@@ -34,6 +35,7 @@ from divbase_api.worker.cron_tasks import (
     hard_delete_expired_soft_deleted_objects,
     update_storage_usage_metrics,
 )
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 
 class TaskStatus(StrEnum):
@@ -148,6 +150,7 @@ def s3_file_manager(CONSTANTS) -> S3FileManager:
 def test_cleanup_old_task_history_deletes_entries_older_than_threshold(
     db_session_sync,
     create_task_entry,
+    CONSTANTS,
 ):
     """
     Test that cleanup_old_task_history_task deletes entries older than retention period
@@ -163,7 +166,8 @@ def test_cleanup_old_task_history_deletes_entries_older_than_threshold(
     recent_task_id_10days = create_task_entry(time_old=10, status=TaskStatus.SUCCESS)
     recent_task_id_25days = create_task_entry(time_old=25, status=TaskStatus.SUCCESS)
 
-    result = cleanup_old_task_history_task(retention_days=retention_days)
+    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+        result = cleanup_old_task_history_task(retention_days=retention_days)
 
     assert result["status"] == "completed"
     assert result["number_of_celery_meta_deleted"] == 2
@@ -193,7 +197,7 @@ def test_cleanup_old_task_history_deletes_entries_older_than_threshold(
         assert celery_meta is not None, f"Task {task_id} should have been kept in CeleryTaskMeta"
 
 
-def test_cleanup_old_task_history_with_no_old_entries(db_session_sync, create_task_entry):
+def test_cleanup_old_task_history_with_no_old_entries(create_task_entry, CONSTANTS):
     """
     Test that cleanup task handles the case where there are no old entries gracefully.
     """
@@ -202,14 +206,15 @@ def test_cleanup_old_task_history_with_no_old_entries(db_session_sync, create_ta
     create_task_entry(time_old=5, status=TaskStatus.SUCCESS)
     create_task_entry(time_old=15, status=TaskStatus.SUCCESS)
 
-    result = cleanup_old_task_history_task(retention_days=retention_days)
+    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+        result = cleanup_old_task_history_task(retention_days=retention_days)
 
     assert result["status"] == "completed"
     assert result["number_of_celery_meta_deleted"] == 0
     assert result["number_of_task_history_deleted"] == 0
 
 
-def test_cleanup_old_task_history_with_system_tasks(db_session_sync, create_task_entry):
+def test_cleanup_old_task_history_with_system_tasks(db_session_sync, create_task_entry, CONSTANTS):
     """
     Test that cleanup works correctly for system tasks (project_id=NULL).
     """
@@ -222,7 +227,8 @@ def test_cleanup_old_task_history_with_system_tasks(db_session_sync, create_task
         user_id=2,
     )
 
-    result = cleanup_old_task_history_task(retention_days=retention_days)
+    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+        result = cleanup_old_task_history_task(retention_days=retention_days)
 
     assert result["status"] == "completed"
     assert result["number_of_task_history_deleted"] >= 1
@@ -237,6 +243,70 @@ def test_cleanup_old_task_history_with_system_tasks(db_session_sync, create_task
         select(CeleryTaskMeta).where(CeleryTaskMeta.task_id == system_task_id)
     ).scalar_one_or_none()
     assert celery_meta is None
+
+
+@pytest.mark.parametrize(
+    "days_offset,expect_deleted",
+    [
+        (TASK_RETENTION_DAYS + 1, True),
+        (TASK_RETENTION_DAYS - 1, False),
+    ],
+)
+def test_cleanup_old_task_history_deletes_result_files_from_s3(
+    s3_file_manager: S3FileManager,
+    project_map: dict,
+    CONSTANTS: dict,
+    tmp_path: Path,
+    days_offset: int,
+    expect_deleted: bool,
+):
+    """
+    Test that cleanup_old_task_history_task hard deletes query result files from S3
+    when they are older than the retention period, and leaves them untouched when within it.
+
+    Worker pretends we are days_offset days in the future so the task's cutoff_date shifts
+    accordingly relative to the file's upload timestamp.
+    """
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+
+    # Upload some fake results files.
+    job_ids = [3, 5, 100, 299, 10000]
+
+    to_upload = {}
+    for i in job_ids:
+        result_file = tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}{i}.vcf.gz"
+        result_file.write_text("fake query result content")
+        to_upload[result_file.name] = result_file
+
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload=to_upload)
+
+    # Pretend we are days_offset days in the future so the cutoff shifts forward
+    mocked_now = datetime.now(timezone.utc) + timedelta(days=days_offset)
+    with (
+        patch("divbase_api.worker.cron_tasks.datetime") as mock_datetime_cron,
+        patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]),
+    ):
+        mock_datetime_cron.now.return_value = mocked_now
+        result = cleanup_old_task_history_task(retention_days=TASK_RETENTION_DAYS)
+
+    assert result["status"] == "completed"
+    if expect_deleted:
+        # we could delete results files from prior tests that do not clean up those files, hence the >=
+        assert result["number_of_result_files_hard_deleted"] >= len(job_ids)
+    else:
+        assert result["number_of_result_files_hard_deleted"] == 0
+
+    bucket_status = s3_file_manager.s3_client.list_object_versions(Bucket=bucket_name, Prefix=QUERY_RESULTS_FILE_PREFIX)
+
+    for i in job_ids:
+        result_file_name = f"{QUERY_RESULTS_FILE_PREFIX}{i}.vcf.gz"
+        file_exists = any(v["Key"] == result_file_name for v in bucket_status.get("Versions", []))
+
+        if expect_deleted:
+            assert not file_exists, f"{result_file_name} should have been hard-deleted from S3"
+        else:
+            assert file_exists, f"{result_file_name} should NOT have been deleted from S3"
 
 
 def test_cleanup_stuck_tasks_removes_pending_and_started(db_session_sync, create_task_entry):

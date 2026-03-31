@@ -8,6 +8,7 @@ It also collects fixtures and constants that are needed across multiple test mod
 import logging
 from unittest.mock import patch
 
+import boto3
 import pytest
 from typer.testing import CliRunner
 
@@ -178,3 +179,31 @@ def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project
     for project_id in project_map.values():
         clean_vcf_dimensions(db_session_sync, project_id)
     yield
+
+
+@pytest.fixture(autouse=True)
+def start_with_clean_project(CONSTANTS):
+    """
+    For tests that require a project with a clean bucket, this fixture will
+    ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before and after running the test.
+
+    Caution:
+    If you modify the approach make sure your implementation does not just add delete markers.
+    The files need to be actually deleted.
+    """
+    s3_resource = boto3.resource(
+        "s3",
+        endpoint_url=CONSTANTS["MINIO_URL"],
+        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+    )
+    # pylance does not understand boto3 resource returns types, hence ignore below
+    cleaned_project_bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][CONSTANTS["CLEANED_PROJECT"]]
+
+    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
+    bucket.object_versions.delete()
+
+    yield
+
+    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
+    bucket.object_versions.delete()
