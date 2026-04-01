@@ -302,6 +302,7 @@ def upload_files_command(
         2. Adds checksum to upload request to allow server to verify upload.
     """
     if safe_mode:
+        print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
         # mapping of file name to hex-encoded checksum
         file_checksums_hex = compare_local_to_s3_checksums(
             project_name=project_name,
@@ -396,6 +397,7 @@ def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_
             local_checksums[file.name] = _calc_local_checksum(file_path=file)
             if server_checksums.get(file.name) and server_checksums[file.name] == local_checksums[file.name]:
                 already_uploaded_files[file] = local_checksums[file.name]
+            print(f"MD5 Checksum calculated for file: '{file.name}'")
 
     if already_uploaded_files:
         raise FilesAlreadyInProjectError(existing_files=already_uploaded_files, project_name=project_name)

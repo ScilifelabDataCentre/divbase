@@ -10,6 +10,8 @@ Grouped into 4 sections:
 Size thresholds are defined in divbase_lib.divbase_constants and which function to call is determined by the caller.
 
 Retry logic here uses the stamina library.
+
+For files uploaded/downloaded in parts/chunks, we print a dot for each part to show progress for the user.
 """
 
 import logging
@@ -105,6 +107,7 @@ def download_multiple_pre_signed_urls(
                 )
                 print("[bold green]Success[/bold green]")
             except httpx.HTTPError as err:
+                logger.info(f"Failed to download object '{object_name}' from pre-signed URL., Error: {err}")
                 output_file_path.unlink(missing_ok=True)  # Clean up possible partial file
                 result = FailedDownload(object_name=object_name, file_path=output_file_path, exception=err)
                 print("[bold red]Failed[/bold red]")
@@ -221,6 +224,7 @@ def _download_chunk(client: httpx.Client, url: str, start: int, end: int, output
             f.seek(start)
             for chunk in response.iter_bytes():
                 f.write(chunk)
+    print(".", end="")  # Print a dot for each completed chunk to show progress
 
 
 @dataclass
@@ -296,6 +300,7 @@ def _upload_one_singlepart_pre_signed_url(
             response = httpx_client.put(pre_signed_url, content=file, headers=headers)
             response.raise_for_status()
         except httpx.HTTPError as err:
+            logger.info(f"Failed to upload object '{object_name}' to pre-signed URL., Error: {err}")
             return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
 
     return SuccessfulUpload(file_path=file_path, object_name=object_name)
@@ -374,7 +379,7 @@ def perform_multipart_upload(
                 json=abort_request.model_dump(),
             )
         except (DivBaseAPIConnectionError, DivBaseAPIError):
-            logger.error(f"Failed to abort multipart upload for object '{object_name}' after an upload error.")
+            logger.info(f"Failed to abort multipart upload for object '{object_name}' after an upload error.")
 
         print("[bold red]Failed[/bold red]")
         return FailedUpload(object_name=object_name, file_path=file_path, exception=e)
@@ -429,6 +434,7 @@ def _upload_parts(part_urls: list[PresignedUploadPartUrlResponse], file_path: Pa
         for future in as_completed(future_to_part):
             part_number, etag = future.result()
             completed_parts.append(UploadedPart(part_number=part_number, etag=etag))
+            print(".", end="")  # Print a dot for each completed part to show progress
     return completed_parts
 
 

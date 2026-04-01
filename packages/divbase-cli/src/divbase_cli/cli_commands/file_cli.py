@@ -628,5 +628,5 @@ def _pretty_print_download_results(download_results):
     if download_results.failed:
         print("\n[red bold]ERROR: Failed to download the following files:[/red bold]")
         for failed in download_results.failed:
-            print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
+            print(f"[red]- '{failed.object_name}': [/red] Exception: '{failed.exception}'")
         raise typer.Exit(1)
