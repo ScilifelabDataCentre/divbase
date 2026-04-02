@@ -12,8 +12,7 @@ from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
-from divbase_api.services.s3_client import create_s3_file_manager
-from divbase_api.worker.tasks import app
+from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -199,7 +198,7 @@ def update_storage_usage_metrics():
 
     This task runs daily and calculates the total storage used by each project, including all versions and files.
     """
-    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
+    s3_file_manager = _create_s3_file_manager()
     with SyncSessionLocal() as db:
         stmt = select(ProjectDB.id, ProjectDB.bucket_name).where(ProjectDB.is_active.is_(True))
         projects = db.execute(stmt).all()
@@ -235,7 +234,7 @@ def hard_delete_expired_soft_deleted_objects(
     NOTE: Results files are not handled here, they are handled in a seperate task that also deletes the associated job entries in the db tables.
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
+    s3_file_manager = _create_s3_file_manager()
 
     per_project_delete_count = {}
     # Mapping of protected file versions per project ID, to avoid deleting
