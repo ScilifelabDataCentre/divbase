@@ -186,22 +186,17 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
     """
     Test that the update task raises an error when the bucket has no VCF files.
     """
-    test_minio_url = CONSTANTS["MINIO_URL"]
     project_name = "empty-project"
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
     user_id = 1
-    with patch("divbase_api.worker.tasks.create_s3_file_manager") as mock_create_s3_manager:
-        mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=test_minio_url)
-        with pytest.raises(NoVCFFilesFoundError):
-            update_vcf_dimensions_task(
-                bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
-            )
+    with pytest.raises(NoVCFFilesFoundError):
+        update_vcf_dimensions_task(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
 
 
-@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
-    mock_create_s3_manager,
     CONSTANTS,
     run_update_dimensions,
     db_session_sync,
@@ -215,7 +210,6 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
 
     This should result in the stale DB entries being deleted and a message indicating the files were deleted being sent in the task results.
     """
-    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -238,16 +232,17 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
     mock_empty_s3 = MagicMock()
     mock_empty_s3.list_files.return_value = []
     mock_empty_s3.latest_version_of_all_files.return_value = {}
-    mock_create_s3_manager.side_effect = lambda url=None: mock_empty_s3
-
-    # Regression test: Assert that NoVCFFilesFoundError is not raised when stale index entries exist
-    # (earlier versions of the code raised NoVCFFilesFoundError before cleaning up the index)
-    try:
-        second_result = update_vcf_dimensions_task(
-            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
-        )
-    except NoVCFFilesFoundError as e:
-        raise AssertionError("NoVCFFilesFoundError should not be raised when cleaning up stale index entries") from e
+    with patch("divbase_api.worker.tasks._create_s3_file_manager", return_value=mock_empty_s3):
+        # Regression test: Assert that NoVCFFilesFoundError is not raised when stale index entries exist
+        # (earlier versions of the code raised NoVCFFilesFoundError before cleaning up the index)
+        try:
+            second_result = update_vcf_dimensions_task(
+                bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+            )
+        except NoVCFFilesFoundError as e:
+            raise AssertionError(
+                "NoVCFFilesFoundError should not be raised when cleaning up stale index entries"
+            ) from e
 
     assert second_result["status"] == "completed", f"Expected completed status, got: {second_result}"
     assert second_result["VCF_files_added"] is None, "Expected no new files indexed"
@@ -360,9 +355,7 @@ def test_delete_skipped_vcf_batch(
         assert vcf_file in skipped_after, f"Expected {vcf_file} to remain, but missing"
 
 
-@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_skips_divbase_generated_vcf(
-    mock_create_s3_manager,
     CONSTANTS,
     db_session_sync,
     project_map,
@@ -372,7 +365,6 @@ def test_update_dimensions_skips_divbase_generated_vcf(
     Test that after running a query (which generates a DivBase result VCF),
     update_vcf_dimensions_task skips that file and returns a skip message.
     """
-    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -410,20 +402,15 @@ def test_update_dimensions_skips_divbase_generated_vcf(
     assert result["status"] == "completed"
 
 
-@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
-    mock_create_s3_manager,
     CONSTANTS,
     db_session_sync,
     project_map,
-    tmp_path,
 ):
     """
     Test that after running update_vcf_dimensions_task twice with no new VCF files added in between,
     the task returns a message indicating no new files were found.
     """
-    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
-
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
@@ -963,9 +950,7 @@ def test_validate_metadata_file_nonexistent(
     assert "does not exist" in cli_result.output.lower(), "Expected error message about file not existing"
 
 
-@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_cleans_up_csi_index_files_from_worker(
-    mock_create_s3_manager,
     CONSTANTS,
     project_map,
     tmp_path,
@@ -975,7 +960,6 @@ def test_update_dimensions_cleans_up_csi_index_files_from_worker(
     Test that CSI index files created during dimension calculation are deleted from the worker
     filesystem after update_vcf_dimensions_task completes.
     """
-    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     monkeypatch.chdir(tmp_path)
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -1000,9 +984,7 @@ def test_update_dimensions_cleans_up_csi_index_files_from_worker(
     )
 
 
-@patch("divbase_api.worker.tasks.create_s3_file_manager")
 def test_update_dimensions_indexes_uncompressed_vcf(
-    mock_create_s3_manager,
     CONSTANTS,
     db_session_sync,
     project_map,
@@ -1015,7 +997,6 @@ def test_update_dimensions_indexes_uncompressed_vcf(
     files to a temp .vcf.gz internally before indexing, then cleans up the temp files.
     This tests that the full indexing pipeline works end-to-end for uncompressed VCFs.
     """
-    mock_create_s3_manager.side_effect = lambda url=None: create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]

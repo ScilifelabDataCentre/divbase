@@ -25,9 +25,8 @@ from divbase_api.exceptions import VCFDimensionsEntryMissingError
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.services.queries import BcftoolsQueryManager
-from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
-from divbase_api.worker.tasks import bcftools_pipe_task
+from divbase_api.worker.tasks import _create_s3_file_manager, bcftools_pipe_task
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
@@ -338,12 +337,7 @@ def test_get_task_status_by_task_id(
         ("unindexed", "HOM_20ind_17SNPs_first_10_samples.vcf.gz", 2, True),
     ],
 )
-@patch(
-    "divbase_api.worker.tasks.create_s3_file_manager",
-    side_effect=lambda url=None: create_s3_file_manager(url="http://localhost:9002"),
-)
 def test_query_exits_when_dimensions_are_outdated(
-    mock_create_s3_manager,
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     fixtures_dir,
@@ -371,10 +365,10 @@ def test_query_exits_when_dimensions_are_outdated(
             return filename
         return f"{fixture_dir}/{filename}"
 
-    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name):
         return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
 
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+    def patched_download_vcf_files(files_to_download, bucket_name):
         pass
 
     with (
@@ -866,13 +860,13 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             return filename[len(fixture_dir) :]
         return filename
 
-    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
+    def patched_download_sample_metadata(metadata_tsv_name, bucket_name):
         """
         Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
         """
         return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
 
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+    def patched_download_vcf_files(files_to_download, bucket_name):
         """
         Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
         """
@@ -952,12 +946,12 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         ):
             return original_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier)
 
-    def patched_upload_results_file(output_file, bucket_name, s3_file_manager):
+    def patched_upload_results_file(output_file, bucket_name):
         """
         Use the bucket_name from the test parameterization for uploading the results file
         """
         output_file = Path(ensure_fixture_path(str(output_file)))
-
+        s3_file_manager = _create_s3_file_manager()
         return s3_file_manager.upload_files(
             to_upload={output_file.name: output_file},
             bucket_name=bucket_name,
