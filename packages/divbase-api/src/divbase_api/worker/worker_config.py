@@ -85,13 +85,6 @@ class WorkerSettings:
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
-            if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":
-                raise ValueError(f"A required secret environment variable was not set: {setting_name=}")
-            else:
-                if setting == "NOT_SET":
-                    raise ValueError(f"A required environment variable was not set: {setting_name=}")
-
-        for setting_name, setting in required_fields.items():
             if isinstance(setting, str) and setting == "NOT_SET":
                 raise ValueError(f"A required environment variable was not set: {setting_name=}")
             if isinstance(setting, SecretStr):
