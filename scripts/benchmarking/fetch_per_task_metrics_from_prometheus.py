@@ -3,7 +3,7 @@ Helper script to fetch per-task metrics from Prometheus for specified job IDs an
 
 Assumes that a prometheus server is running locally on port 9090 and has scraped the relevant metrics.
 To scrape per-task metrics, the environment variables ENABLE_WORKER_METRICS and ENABLE_WORKER_METRICS_PER_TASK need
-to have been set to True in the worker at the time the job ran.
+to have been set to '1' in the worker at the time the job ran.
 
 To be able to use this script for a variety of historical jobs in the Prometheus data store, a YAML file is used to specify
 the job IDs and the dates when the jobs ran. The date is used to specify the time range for the Prometheus query.

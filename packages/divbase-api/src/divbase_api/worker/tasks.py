@@ -35,7 +35,6 @@ from divbase_api.worker.crud_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.worker.metrics import (
-    ENABLE_WORKER_METRICS_PER_TASK,
     MemoryMonitor,
     TaskMetrics,
     start_metrics_server,
@@ -45,6 +44,7 @@ from divbase_api.worker.metrics import (
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
+from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -53,12 +53,11 @@ from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFi
 logger = logging.getLogger(__name__)
 
 
-BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
-RESULT_BACKEND = os.environ.get(
-    "CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db"
+app = Celery(
+    "divbase_worker",
+    broker=worker_settings.general.broker_url.get_secret_value(),
+    backend=worker_settings.general.result_backend.get_secret_value(),
 )
-S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
-app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 
 CELERY_TASKMETA_TABLE_NAME = "celery_taskmeta"
@@ -82,15 +81,17 @@ app.conf.update(
 
 
 @worker_process_init.connect
-def init_worker_metrics(**kwargs):
+def validate_settings_and_init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    worker_settings.validate()
+    logger.info("Worker settings validated successfully on worker process init.")
+    if worker_settings.metrics.enabled_per_task:
         start_metrics_server(port=8101)
     else:
-        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK=false)")
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK not set to '1').")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -174,7 +175,7 @@ def sample_metadata_query_task(
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
 
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
 
     try:
         metadata_path = _download_sample_metadata(
@@ -247,7 +248,7 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         task_walltime_start = time.time()
         process = psutil.Process()
         cpu_start = process.cpu_times()
@@ -257,7 +258,7 @@ def bcftools_pipe_task(
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
 
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -304,7 +305,7 @@ def bcftools_pipe_task(
 
     # Measure download operation resources
     # Memory: Capture baseline before download, then measure incremental memory increase (delta)
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         download_cpu_start = process.cpu_times()
         download_mem_baseline = process.memory_info().rss
         download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
@@ -321,7 +322,7 @@ def bcftools_pipe_task(
 
     logger.info("Finished downloading VCF files from S3 to worker")
 
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         download_walltime = time.time() - download_start
         download_memory_stats = download_memory_monitor.stop()
         download_cpu_end = process.cpu_times()
@@ -359,7 +360,7 @@ def bcftools_pipe_task(
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         memory_stats = memory_monitor.stop()
         cpu_end = process.cpu_times()
         python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
@@ -400,7 +401,7 @@ def update_vcf_dimensions_task(
     """
     task_id = update_vcf_dimensions_task.request.id
 
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
 
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]

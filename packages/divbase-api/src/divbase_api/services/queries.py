@@ -142,7 +142,7 @@ class BcftoolsQueryManager:
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
     ENABLE_SUBPROCESS_MONITORING = (
-        os.environ.get("ENABLE_WORKER_METRICS_PER_TASK", "true").lower() == "true"
+        os.environ.get("ENABLE_WORKER_METRICS_PER_TASK", "1").lower() == "1"
     )  # Monitoring bcftools subprocesses is controled with an environment variable. Comes with some overhead, hence optional.
 
     def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> tuple[str, dict[str, float]]:
@@ -467,6 +467,7 @@ class BcftoolsQueryManager:
         if not os.path.exists(index_file):
             index_command = f"index -f {file}"
             proc = self.run_bcftools(command=index_command)
+            # TODO - what if this command fails?
             proc.wait()
 
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
