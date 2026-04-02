@@ -9,6 +9,7 @@ services:
       - internal
   worker-quick:
     environment:
+      - DIVBASE_ENV=test
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
     ports: !override
       - "8111:8101" # metrics server port
@@ -19,6 +20,7 @@ services:
       - internal
   worker-long:
     environment:
+      - DIVBASE_ENV=test
       - S3_ENDPOINT_URL=http://host.docker.internal:9002
     ports: !override
       - "8112:8101" # metrics server port (fixed: container port is 8001, not 8002)

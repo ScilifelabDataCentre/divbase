@@ -22,10 +22,8 @@ class WorkerGeneralSettings:
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     sync_url: SecretStr = SecretStr(os.getenv("SYNC_DATABASE_URL", "NOT_SET"))
-    broker_url: SecretStr = SecretStr(os.getenv("CELERY_BROKER_URL", "pyamqp://guest@localhost//"))
-    result_backend: SecretStr = SecretStr(
-        os.getenv("CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db")
-    )
+    broker_url: SecretStr = SecretStr(os.getenv("CELERY_BROKER_URL", "NOT_SET"))
+    result_backend: SecretStr = SecretStr(os.getenv("CELERY_RESULT_BACKEND", "NOT_SET"))
 
 
 @dataclass
@@ -86,13 +84,33 @@ class WorkerSettings:
     def validate(self) -> None:
         """Validate all required settings are set. Called on worker process startup."""
         required_fields = {
+            "DIVBASE_ENV": self.general.environment,
             "SYNC_DATABASE_URL": self.general.sync_url,
+            "CELERY_BROKER_URL": self.general.broker_url,
+            "CELERY_RESULT_BACKEND": self.general.result_backend,
             "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, SecretStr) and setting.get_secret_value() == "NOT_SET":
+                raise ValueError(f"A required secret environment variable was not set: {setting_name=}")
+            else:
+                if setting == "NOT_SET":
+                    raise ValueError(f"A required environment variable was not set: {setting_name=}")
+
+        for setting_name, setting in required_fields.items():
+            if isinstance(setting, str) and setting == "NOT_SET":
                 raise ValueError(f"A required environment variable was not set: {setting_name=}")
+            if isinstance(setting, SecretStr):
+                if setting.get_secret_value() == "NOT_SET":
+                    raise ValueError(f"A required environment variable was not set: {setting_name=}")
+                if (
+                    self.general.environment not in ["local_dev", "test"]
+                    and setting.get_secret_value() == "badpassword"
+                ):
+                    raise ValueError(
+                        f"A secret environment variable was set to badpassword for a non local environment: {setting_name=}"
+                    )
 
 
 # This instance can be imported and used across the worker codebase to access settings.
