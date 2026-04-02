@@ -7,7 +7,6 @@ Pre-signed url approach not used when the request to s3 can be done in the (user
 """
 
 import logging
-from functools import lru_cache
 from math import ceil
 
 import boto3
@@ -224,9 +223,3 @@ class S3PreSignedService:
                 "Continuing without error."
             )
         return AbortMultipartUploadResponse(name=object_name, upload_id=upload_id)
-
-
-@lru_cache()
-def get_pre_signed_service() -> S3PreSignedService:
-    """Dependency to get pre-signed S3 service. To be used in FastAPI endpoints."""
-    return S3PreSignedService()

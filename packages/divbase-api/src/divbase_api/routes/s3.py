@@ -21,7 +21,7 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.services.pre_signed_urls import S3PreSignedService, get_pre_signed_service
+from divbase_api.services.pre_signed_urls import S3PreSignedService
 from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadRequest,
@@ -50,6 +50,20 @@ logger = logging.getLogger(__name__)
 s3_router = APIRouter()
 
 UPLOAD_AUTHORIZATION_ERROR_MSG = "You don't have permission to upload files to this project."
+
+
+def get_s3_file_manager() -> S3FileManager:
+    """Dependency to get an S3FileManager using the API's S3 credentials."""
+    return S3FileManager(
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
+    )
+
+
+def get_pre_signed_service() -> S3PreSignedService:
+    """Dependency to get pre-signed S3 service. To be used in FastAPI endpoints."""
+    return S3PreSignedService()
 
 
 def check_too_many_objects_in_request(
@@ -96,6 +110,7 @@ async def generate_download_urls(
 async def list_file_details(
     project_name: str,
     list_request: ListObjectsRequest,
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -110,12 +125,6 @@ async def list_file_details(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")
 
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
-
     return await run_in_threadpool(
         s3_file_manager.list_files_detailed,
         bucket_name=project.bucket_name,
@@ -127,6 +136,7 @@ async def list_file_details(
 @s3_router.get("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
 async def list_soft_deleted_files(
     project_name: str,
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -137,12 +147,6 @@ async def list_soft_deleted_files(
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list soft-deleted files in this project.")
 
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
-
     return await run_in_threadpool(s3_file_manager.list_soft_deleted_files, bucket_name=project.bucket_name)
 
 
@@ -150,18 +154,13 @@ async def list_soft_deleted_files(
 async def get_object_info(
     project_name: str,
     object_name: str,
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """Get details about all versions of a specific object/file in the project's store."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")
-
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
 
     return await run_in_threadpool(
         s3_file_manager.get_detailed_object_info,
@@ -307,6 +306,7 @@ async def abort_multipart_upload(
 async def soft_delete_files(
     project_name: str,
     objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -320,12 +320,6 @@ async def soft_delete_files(
 
     check_too_many_objects_in_request(numb_objects=len(objects))
 
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
-
     return await run_in_threadpool(
         s3_file_manager.soft_delete_objects, objects=objects, bucket_name=project.bucket_name
     )
@@ -335,6 +329,7 @@ async def soft_delete_files(
 async def restore_soft_deleted_files(
     project_name: str,
     objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -352,12 +347,6 @@ async def restore_soft_deleted_files(
         raise AuthorizationError("You don't have permission to restore files in this project.")
 
     check_too_many_objects_in_request(numb_objects=len(objects))
-
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
 
     return await run_in_threadpool(s3_file_manager.restore_objects, objects=objects, bucket_name=project.bucket_name)
 
