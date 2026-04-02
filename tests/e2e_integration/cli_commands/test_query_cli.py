@@ -116,7 +116,6 @@ def test_sample_metadata_query(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test running a sample metadata query using the CLI."""
@@ -145,7 +144,6 @@ def test_bcftools_pipe_query(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test running a bcftools pipe query using the CLI."""
@@ -178,7 +176,6 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """
@@ -235,7 +232,6 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
 )
 def test_bcftools_pipe_query_errors(
     run_update_dimensions,
-    db_session_sync,
     project_map,
     project_name,
     tsv_filter,
@@ -283,7 +279,7 @@ def test_bcftools_pipe_query_errors(
 
 
 def test_get_task_status_by_task_id(
-    CONSTANTS, logged_in_edit_user_with_existing_config, db_session_sync, run_update_dimensions, project_map
+    CONSTANTS, logged_in_edit_user_with_existing_config, run_update_dimensions, project_map
 ):
     """
     Get the status of a task by its ID, as in the task ID int that is returned to the users, not the Celery UUID task ID.
@@ -343,7 +339,6 @@ def test_query_exits_when_dimensions_are_outdated(
     fixtures_dir,
     run_update_dimensions,
     project_map,
-    db_session_sync,
     test_scenario,
     vcf_filename,
     job_id,
@@ -413,7 +408,6 @@ class TestSidecarQueryTaskErrorsPropagation:
         self,
         CONSTANTS,
         run_update_dimensions,
-        db_session_sync,
         project_map,
         logged_in_edit_user_with_existing_config,
     ):
@@ -442,8 +436,6 @@ class TestSidecarQueryTaskErrorsPropagation:
     def test_error_in_terminal_for_sample_metadata_query_when_no_dimensions_file(
         self,
         CONSTANTS,
-        db_session_sync,
-        project_map,
         logged_in_edit_user_with_existing_config,
     ):
         """
@@ -463,8 +455,6 @@ class TestSidecarQueryTaskErrorsPropagation:
     def test_error_in_terminal_for_sample_metadata_query_tsv_missing_should_be_raised_before_dimensions_check(
         self,
         CONSTANTS,
-        db_session_sync,
-        project_map,
         logged_in_edit_user_with_existing_config,
     ):
         """
@@ -485,10 +475,8 @@ class TestSidecarQueryTaskErrorsPropagation:
         self,
         CONSTANTS,
         run_update_dimensions,
-        db_session_sync,
         project_map,
         logged_in_edit_user_with_existing_config,
-        tmp_path,
     ):
         """
         Test that SidecarInvalidFilterError is raised and propagated to terminal when filter syntax is invalid.
@@ -516,10 +504,8 @@ class TestSidecarQueryTaskErrorsPropagation:
         self,
         CONSTANTS,
         run_update_dimensions,
-        db_session_sync,
         project_map,
         logged_in_edit_user_with_existing_config,
-        tmp_path,
     ):
         """
         Test that SidecarColumnNotFoundError is raised and propagated to terminal when querying non-existent column.
@@ -553,7 +539,6 @@ class TestSidecarQueryTaskErrorsPropagation:
         self,
         CONSTANTS,
         run_update_dimensions,
-        db_session_sync,
         project_map,
         logged_in_edit_user_with_existing_config,
         tmp_path,
@@ -588,7 +573,6 @@ class TestSidecarQueryTaskErrorsPropagation:
         self,
         CONSTANTS,
         run_update_dimensions,
-        db_session_sync,
         project_map,
         logged_in_edit_user_with_existing_config,
         tmp_path,
@@ -809,7 +793,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     expected_error_msgs,
     run_update_dimensions,
     project_map,
-    db_session_sync,
 ):
     """
     This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
@@ -847,7 +830,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     original_task_always_eager = current_app.conf.task_always_eager
     original_task_eager_propagates = current_app.conf.task_eager_propagates
     original_merge_or_concat_bcftools_temp_files = BcftoolsQueryManager.merge_or_concat_bcftools_temp_files
-    original_boto3_client = boto3.client
 
     def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
         if filename.startswith(fixture_dir):
@@ -972,11 +954,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             except Exception as e:
                 logger.warning(f"Could not delete output file from worker {output_file}: {e}")
 
-    def patched_boto3_client(service_name, **kwargs):
-        if service_name == "s3":
-            kwargs["endpoint_url"] = CONSTANTS["MINIO_URL"]
-        return original_boto3_client(service_name, **kwargs)
-
     def patched_prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
         """Create header file in the fixtures directory where the testing stack workers can find it"""
         header_path = ensure_fixture_path(header_filename)
@@ -993,7 +970,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         )
 
         with (
-            patch("boto3.client", side_effect=patched_boto3_client),
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
             patch("divbase_api.services.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),

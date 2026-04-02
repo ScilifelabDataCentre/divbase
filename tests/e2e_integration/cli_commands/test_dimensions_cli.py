@@ -64,7 +64,6 @@ def _parse_list_from_cli_output(stdout: str) -> list:
 def test_update_vcf_dimensions_task_directly(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """
@@ -88,7 +87,6 @@ def test_update_vcf_dimensions_task_directly(
 def test_show_vcf_dimensions_task(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
 ):
@@ -145,8 +143,6 @@ def test_show_vcf_dimensions_task(
 
 def test_show_vcf_dimensions_task_when_file_missing(
     CONSTANTS,
-    db_session_sync,
-    project_map,
     logged_in_edit_user_with_existing_config,
 ):
     """
@@ -180,7 +176,6 @@ def test_get_dimensions_info_returns_empty(
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
     CONSTANTS,
-    db_session_sync,
     project_map,
 ):
     """
@@ -357,7 +352,6 @@ def test_delete_skipped_vcf_batch(
 
 def test_update_dimensions_skips_divbase_generated_vcf(
     CONSTANTS,
-    db_session_sync,
     project_map,
     tmp_path,
 ):
@@ -404,7 +398,6 @@ def test_update_dimensions_skips_divbase_generated_vcf(
 
 def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     CONSTANTS,
-    db_session_sync,
     project_map,
 ):
     """
@@ -508,7 +501,6 @@ def test_update_dimensions_reindexes_when_child_rows_missing(
 def test_show_unique_samples(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
 ):
@@ -541,7 +533,6 @@ def test_show_unique_samples(
 def test_show_unique_scaffolds_dedicated_endpoint(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
 ):
@@ -740,7 +731,6 @@ def test_show_dimensions_rejects_output_and_stdout_together(
 def test_show_unique_items_parametrized(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
     option_flag,
@@ -785,7 +775,6 @@ def test_show_unique_items_parametrized(
 def test_create_metadata_template(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
     tmp_path,
@@ -823,7 +812,6 @@ def test_create_metadata_template(
 def test_create_metadata_template_with_overwrite_prompt(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
     tmp_path,
@@ -862,7 +850,6 @@ def test_create_metadata_template_with_overwrite_prompt(
 def test_validate_metadata_file_valid(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
 ):
@@ -895,7 +882,6 @@ def test_validate_metadata_file_valid(
 def test_validate_metadata_file_with_errors(
     CONSTANTS,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     logged_in_edit_user_with_existing_config,
 ):
