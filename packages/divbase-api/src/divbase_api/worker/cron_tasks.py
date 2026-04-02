@@ -3,7 +3,6 @@ Definitions of periodic cron tasks for Celery Beat.
 """
 
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 
 from celery.schedules import crontab
@@ -14,25 +13,16 @@ from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.s3_client import create_s3_file_manager
-from divbase_api.worker.tasks import S3_ENDPOINT_URL, app
+from divbase_api.worker.tasks import app
+from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 logger = logging.getLogger(__name__)
 
 
-# TODO decide if these should be defined in the env var or implemented in another way. right now they fallback on the default values
-TASK_RETENTION_DAYS = int(os.environ.get("TASK_RETENTION_DAYS", "30"))
-STUCK_PENDING_STATUS_HOURS = int(os.environ.get("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
-STUCK_STARTED_STATUS_HOURS = int(os.environ.get("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
-
-SOFT_DELETED_FILES_RETENTION_DAYS = 30
-SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS = 30
-REVOKED_TOKEN_MAX_AGE_DAYS = 7
-
-
 @app.task(name="cron_tasks.cleanup_old_task_history")
-def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
+def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days):
     """
     Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
     Runs daily to remove entries older than retention_days.
@@ -84,8 +74,8 @@ def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
 
 @app.task(name="cron_tasks.cleanup_stuck_tasks")
 def cleanup_stuck_tasks_task(
-    stuck_pending_hours: int = STUCK_PENDING_STATUS_HOURS,
-    stuck_started_hours: int = STUCK_STARTED_STATUS_HOURS,
+    stuck_pending_hours: int = worker_settings.cron.stuck_pending_hours,
+    stuck_started_hours: int = worker_settings.cron.stuck_started_hours,
 ):
     """
     Periodic task to clean up tasks stuck in PENDING or STARTED status from
@@ -161,12 +151,12 @@ def cleanup_stuck_tasks_task(
 
 
 @app.task(name="cron_tasks.cleanup_old_revoked_tokens")
-def cleanup_old_revoked_tokens():
+def cleanup_old_revoked_tokens(retention_days: int = worker_settings.cron.revoked_token_retention_days):
     """
     Periodic task to clean up old revoked token entries.
     (These tokens will all have expired by this timepoint anyway.)
     """
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=REVOKED_TOKEN_MAX_AGE_DAYS)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
     stmt = delete(RevokedTokenDB).where(RevokedTokenDB.revoked_at < cutoff_date)
     with SyncSessionLocal() as db:
         deleted_count = db.execute(stmt).rowcount
@@ -175,16 +165,18 @@ def cleanup_old_revoked_tokens():
         "status": "completed",
         "number_of_revoked_tokens_deleted": deleted_count,
         "cutoff_date": cutoff_date.isoformat(),
-        "max_revoked_token_age_days": REVOKED_TOKEN_MAX_AGE_DAYS,
+        "max_revoked_token_age_days": retention_days,
     }
 
 
 @app.task(name="cron_tasks.cleanup_soft_deleted_project_versions")
-def cleanup_soft_deleted_project_versions():
+def cleanup_soft_deleted_project_versions(
+    retention_days: int = worker_settings.cron.soft_deleted_project_version_retention_days,
+):
     """
     Periodic task to hard delete any soft-deleted project versions older than the retention period.
     """
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
     stmt = delete(ProjectVersionDB)
     stmt = stmt.where(ProjectVersionDB.is_deleted == True)  # noqa: E712
     stmt = stmt.where(ProjectVersionDB.date_deleted < cutoff_date)
@@ -196,7 +188,7 @@ def cleanup_soft_deleted_project_versions():
         "status": "completed",
         "number_of_project_versions_hard_deleted": deleted_count,
         "cutoff_date": cutoff_date.isoformat(),
-        "soft_delete_retention_period_days": SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS,
+        "soft_delete_retention_period_days": retention_days,
     }
 
 
@@ -207,7 +199,7 @@ def update_storage_usage_metrics():
 
     This task runs daily and calculates the total storage used by each project, including all versions and files.
     """
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
     with SyncSessionLocal() as db:
         stmt = select(ProjectDB.id, ProjectDB.bucket_name).where(ProjectDB.is_active.is_(True))
         projects = db.execute(stmt).all()
@@ -228,7 +220,9 @@ def update_storage_usage_metrics():
 
 
 @app.task(name="cron_tasks.hard_delete_expired_soft_deleted_objects")
-def hard_delete_expired_soft_deleted_objects():
+def hard_delete_expired_soft_deleted_objects(
+    retention_days: int = worker_settings.cron.soft_deleted_files_retention_days,
+):
     """
     Periodic task to hard delete any soft-deleted objects from each project's S3 bucket after given retention period.
 
@@ -240,8 +234,8 @@ def hard_delete_expired_soft_deleted_objects():
 
     NOTE: Results files are not handled here, they are handled in a seperate task that also deletes the associated job entries in the db tables.
     """
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=SOFT_DELETED_FILES_RETENTION_DAYS)
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    s3_file_manager = create_s3_file_manager(url=worker_settings.s3.endpoint_url)
 
     per_project_delete_count = {}
     # Mapping of protected file versions per project ID, to avoid deleting
@@ -316,7 +310,7 @@ def hard_delete_expired_soft_deleted_objects():
         "status": "completed",
         "objects_hard_deleted_per_project": per_project_delete_count,
         "cutoff_date": cutoff_date.isoformat(),
-        "retention_days": SOFT_DELETED_FILES_RETENTION_DAYS,
+        "retention_days": retention_days,
     }
 
 
@@ -327,15 +321,10 @@ app.conf.beat_schedule = {
     "cleanup-old-tasks-daily": {
         "task": "cron_tasks.cleanup_old_task_history",
         "schedule": crontab(hour=5, minute=0),  # Run daily at 5 AM CET
-        "kwargs": {"retention_days": TASK_RETENTION_DAYS},
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",
         "schedule": crontab(hour=5, minute=15),  # Run daily at 5:15 AM CET
-        "kwargs": {
-            "stuck_pending_hours": STUCK_PENDING_STATUS_HOURS,
-            "stuck_started_hours": STUCK_STARTED_STATUS_HOURS,
-        },
     },
     "cleanup-old-revoked-daily": {
         "task": "cron_tasks.cleanup_old_revoked_tokens",

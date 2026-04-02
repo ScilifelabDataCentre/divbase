@@ -26,7 +26,6 @@ from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskS
 from divbase_api.security import TokenType
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.cron_tasks import (
-    SOFT_DELETED_FILES_RETENTION_DAYS,
     cleanup_old_revoked_tokens,
     cleanup_old_task_history_task,
     cleanup_soft_deleted_project_versions,
@@ -34,6 +33,7 @@ from divbase_api.worker.cron_tasks import (
     hard_delete_expired_soft_deleted_objects,
     update_storage_usage_metrics,
 )
+from divbase_api.worker.worker_config import worker_settings
 
 
 class TaskStatus(StrEnum):
@@ -542,7 +542,7 @@ def test_update_storage_usage_metrics(db_session_sync: Session, CONSTANTS: dict)
     for project in db_session_sync.execute(select(ProjectDB)).scalars().all():
         assert project.storage_used_bytes == 0
 
-    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+    with patch("divbase_api.worker.worker_config.worker_settings.s3.endpoint_url", CONSTANTS["MINIO_URL"]):
         result = update_storage_usage_metrics()
 
     assert result["status"] == "completed"
@@ -558,8 +558,8 @@ def test_update_storage_usage_metrics(db_session_sync: Session, CONSTANTS: dict)
 @pytest.mark.parametrize(
     "days_offset,expect_deleted",
     [
-        (SOFT_DELETED_FILES_RETENTION_DAYS + 1, True),
-        (SOFT_DELETED_FILES_RETENTION_DAYS - 1, False),
+        (worker_settings.cron.soft_deleted_files_retention_days + 1, True),
+        (worker_settings.cron.soft_deleted_files_retention_days - 1, False),
     ],
 )
 def test_hard_delete_expired_soft_deleted_objects(
@@ -617,7 +617,7 @@ def test_hard_delete_expired_soft_deleted_objects(
     with (
         patch("divbase_api.worker.cron_tasks.datetime") as mock_datetime_cron,
         patch("divbase_api.services.s3_client.datetime") as mock_datetime_s3,
-        patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]),
+        patch("divbase_api.worker.worker_config.worker_settings.s3.endpoint_url", CONSTANTS["MINIO_URL"]),
     ):
         mock_datetime_cron.now.return_value = mocked_now
         mock_datetime_s3.now.return_value = mocked_now
