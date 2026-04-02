@@ -47,13 +47,6 @@ class WorkerMetricsSettings:
     # Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
     cache_ttl_minutes: int = int(os.getenv("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
 
-    def __post_init__(self):
-        if self.enabled_per_task and not self.enabled:
-            raise ValueError(
-                "WorkerMetricsSettings: ENABLE_WORKER_METRICS_PER_TASK cannot be set if ENABLE_WORKER_METRICS is not set."
-                "Set both to '1' to enable per-task metrics collection, or set ENABLE_WORKER_METRICS_PER_TASK to '0' to disable per-task metrics collection."
-            )
-
 
 @dataclass
 class WorkerCronSettings:
@@ -111,6 +104,12 @@ class WorkerSettings:
                     raise ValueError(
                         f"A secret environment variable was set to badpassword for a non local environment: {setting_name=}"
                     )
+
+        if self.metrics.enabled_per_task and not self.metrics.enabled:
+            raise ValueError(
+                "ENABLE_WORKER_METRICS_PER_TASK cannot be set if ENABLE_WORKER_METRICS is not set."
+                "Set both to '1' to enable per-task metrics collection, or set ENABLE_WORKER_METRICS_PER_TASK to '0' to disable per-task metrics collection."
+            )
 
 
 # This instance can be imported and used across the worker codebase to access settings.
