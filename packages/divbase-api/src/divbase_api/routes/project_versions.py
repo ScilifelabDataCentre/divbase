@@ -6,11 +6,11 @@ These are user defined points in time (like a checkpoint/commit) that the user c
 """
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import api_settings
 from divbase_api.crud.project_versions import (
     add_project_version,
     get_project_version_details,
@@ -19,6 +19,7 @@ from divbase_api.crud.project_versions import (
     update_project_version,
 )
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.s3 import get_s3_file_manager
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
@@ -45,6 +46,7 @@ project_version_router = APIRouter()
 async def add_version_endpoint(
     project_name: str,
     version_request: AddVersionRequest,
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ):
@@ -56,12 +58,6 @@ async def add_version_endpoint(
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to add a new project version to this project.")
-
-    s3_file_manager = S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
 
     new_version = await add_project_version(
         db=db,

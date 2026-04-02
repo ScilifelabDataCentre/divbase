@@ -1,5 +1,5 @@
 """
-An s3FileManager object that lets you do basic operations with a bucket.
+An S3FileManager object that lets you do basic operations with a bucket.
 
 This class is a wrapper around the boto3 S3 client.
 

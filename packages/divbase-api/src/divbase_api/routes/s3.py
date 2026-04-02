@@ -14,9 +14,8 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
-from divbase_api.crud.s3 import get_s3_checksums
+from divbase_api.crud.s3 import get_pre_signed_service, get_s3_checksums, get_s3_file_manager
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, TooManyObjectsInRequestError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
@@ -50,20 +49,6 @@ logger = logging.getLogger(__name__)
 s3_router = APIRouter()
 
 UPLOAD_AUTHORIZATION_ERROR_MSG = "You don't have permission to upload files to this project."
-
-
-def get_s3_file_manager() -> S3FileManager:
-    """Dependency to get an S3FileManager using the API's S3 credentials."""
-    return S3FileManager(
-        url=api_settings.s3.endpoint_url,
-        access_key=api_settings.s3.access_key.get_secret_value(),
-        secret_key=api_settings.s3.secret_key.get_secret_value(),
-    )
-
-
-def get_pre_signed_service() -> S3PreSignedService:
-    """Dependency to get pre-signed S3 service. To be used in FastAPI endpoints."""
-    return S3PreSignedService()
 
 
 def check_too_many_objects_in_request(
