@@ -17,7 +17,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import SecretStr
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 
@@ -40,10 +40,10 @@ class TokenType(StrEnum):
 
 
 token_expires_delta: dict[TokenType, timedelta] = {
-    TokenType.ACCESS: timedelta(seconds=settings.jwt.access_token_expires_seconds),
-    TokenType.REFRESH: timedelta(seconds=settings.jwt.refresh_token_expires_seconds),
-    TokenType.EMAIL_VERIFICATION: timedelta(seconds=settings.email.email_verify_expires_seconds),
-    TokenType.PASSWORD_RESET: timedelta(seconds=settings.email.password_reset_expires_seconds),
+    TokenType.ACCESS: timedelta(seconds=api_settings.jwt.access_token_expires_seconds),
+    TokenType.REFRESH: timedelta(seconds=api_settings.jwt.refresh_token_expires_seconds),
+    TokenType.EMAIL_VERIFICATION: timedelta(seconds=api_settings.email.email_verify_expires_seconds),
+    TokenType.PASSWORD_RESET: timedelta(seconds=api_settings.email.password_reset_expires_seconds),
 }
 
 
@@ -83,7 +83,9 @@ def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
         "sub": str(subject),
         "type": token_type.value,
     }
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, api_settings.jwt.secret_key.get_secret_value(), algorithm=api_settings.jwt.algorithm
+    )
     return TokenData(token=encoded_jwt, expires_at=int(expire.timestamp()))
 
 
@@ -97,7 +99,7 @@ def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData
     """
     try:
         payload = jwt.decode(
-            jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
+            jwt=token, key=api_settings.jwt.secret_key.get_secret_value(), algorithms=[api_settings.jwt.algorithm]
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None

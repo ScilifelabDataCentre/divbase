@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.crud.project_versions import (
     add_project_version,
     get_project_version_details,
@@ -58,9 +58,9 @@ async def add_version_endpoint(
         raise AuthorizationError("You don't have permission to add a new project version to this project.")
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     new_version = await add_project_version(

@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.s3 import get_s3_checksums
 from divbase_api.deps import get_project_member
@@ -111,9 +111,9 @@ async def list_file_details(
         raise AuthorizationError("You don't have permission to list files in this project.")
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     return await run_in_threadpool(
@@ -138,9 +138,9 @@ async def list_soft_deleted_files(
         raise AuthorizationError("You don't have permission to list soft-deleted files in this project.")
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     return await run_in_threadpool(s3_file_manager.list_soft_deleted_files, bucket_name=project.bucket_name)
@@ -158,9 +158,9 @@ async def get_object_info(
         raise AuthorizationError("You don't have permission to list files in this project.")
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     return await run_in_threadpool(
@@ -321,9 +321,9 @@ async def soft_delete_files(
     check_too_many_objects_in_request(numb_objects=len(objects))
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     return await run_in_threadpool(
@@ -354,9 +354,9 @@ async def restore_soft_deleted_files(
     check_too_many_objects_in_request(numb_objects=len(objects))
 
     s3_file_manager = S3FileManager(
-        url=settings.s3.endpoint_url,
-        access_key=settings.s3.access_key.get_secret_value(),
-        secret_key=settings.s3.secret_key.get_secret_value(),
+        url=api_settings.s3.endpoint_url,
+        access_key=api_settings.s3.access_key.get_secret_value(),
+        secret_key=api_settings.s3.secret_key.get_secret_value(),
     )
 
     return await run_in_threadpool(s3_file_manager.restore_objects, objects=objects, bucket_name=project.bucket_name)

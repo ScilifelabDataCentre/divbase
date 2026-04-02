@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
 from divbase_api.db import (
     check_db_migrations_up_to_date,
     create_first_admin_user,
@@ -36,7 +36,7 @@ from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 
-logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
+logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
     logger.info("Starting up DivBase API...")
 
-    settings.validate_api_settings()
+    api_settings.validate_api_settings()
     logger.info("All API settings are correctly set.")
 
     if not await health_check_db():
@@ -94,7 +94,7 @@ app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
 app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
-if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
+if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
     # not needed in deployed enviroments, so no need to expose it.
     app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 

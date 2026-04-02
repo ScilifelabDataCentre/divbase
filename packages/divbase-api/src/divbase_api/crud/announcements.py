@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementTarget
 from divbase_api.services.validate_cli_versions import cli_update_available
 from divbase_lib.api_schemas.announcements import AnnouncementResponse
@@ -48,9 +48,9 @@ def new_cli_version_announcement(user_cli_version: str) -> AnnouncementResponse 
         heading="A new version of DivBase CLI is available",
         message=(
             f"You are using an outdated version of the DivBase CLI '{user_cli_version}'. "
-            f"Please consider upgrading to the latest version '{settings.api.latest_cli_version}' for new features, bug fixes, and improved security.\n"
+            f"Please consider upgrading to the latest version '{api_settings.general.latest_cli_version}' for new features, bug fixes, and improved security.\n"
             "If you're not sure how to do that, you can find instructions on how to upgrade here: "
-            f"{settings.api.mkdocs_site_url}/user-guides/installation"
+            f"{api_settings.general.mkdocs_site_url}/user-guides/installation"
         ),
         level="info",
     )

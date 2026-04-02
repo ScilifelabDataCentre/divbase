@@ -12,7 +12,7 @@ from alembic.util.exc import DatabaseNotAtHead
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.crud.users import create_user, get_all_users
 from divbase_api.schemas.users import UserCreate
 
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 # NOTE: The creation of the AsyncSessionLocal should only occur once, when the module is loaded.
 # AKA: Do not refactor to have these in functions.
 engine = create_async_engine(
-    url=settings.database.url.get_secret_value(),
-    echo=settings.database.echo_db_output,
+    url=api_settings.database.url.get_secret_value(),
+    echo=api_settings.database.echo_db_output,
     pool_pre_ping=True,
 )
 AsyncSessionLocal = async_sessionmaker(
@@ -90,8 +90,8 @@ async def create_first_admin_user() -> None:
     1. no admin users already exists in the db.
     2. FIRST_ADMIN_EMAIL and FIRST_ADMIN_PASSWORD env vars are set.
     """
-    admin_email = settings.api.first_admin_email
-    admin_password = settings.api.first_admin_password
+    admin_email = api_settings.general.first_admin_email
+    admin_password = api_settings.general.first_admin_password
 
     if admin_email == "NOT_SET" or admin_password.get_secret_value() == "NOT_SET":
         logger.info(
