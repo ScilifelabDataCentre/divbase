@@ -11,6 +11,8 @@ import psutil
 from celery import Celery
 from celery.signals import (
     after_task_publish,
+    beat_init,
+    celeryd_init,
     task_prerun,
     worker_process_init,
 )
@@ -80,15 +82,25 @@ app.conf.update(
 )
 
 
+@celeryd_init.connect
+@beat_init.connect
+def validate_settings(**kwargs):
+    """
+    Validate worker settings on celery daemon startup (celeryd_init) and celery Beat startup (beat_init)
+    Will raise an exception if any required settings are missing or settings misconfigured.
+    """
+    worker_settings.validate()
+    logger.info("Worker settings validated successfully on worker process init.")
+
+
 @worker_process_init.connect
-def validate_settings_and_init_worker_metrics(**kwargs):
+def init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    worker_settings.validate()
-    logger.info("Worker settings validated successfully on worker process init.")
     if worker_settings.metrics.enabled_per_task:
+        logger.info("Starting worker metrics server on port 8101 (ENABLE_WORKER_METRICS_PER_TASK is set to '1').")
         start_metrics_server(port=8101)
     else:
         logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK not set to '1').")
