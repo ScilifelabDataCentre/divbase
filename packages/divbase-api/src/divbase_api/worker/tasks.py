@@ -99,11 +99,11 @@ def init_worker_metrics(**kwargs):
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    if worker_settings.metrics.enabled_per_task:
-        logger.info("Starting worker metrics server on port 8101 (ENABLE_WORKER_METRICS_PER_TASK is set to '1').")
+    if worker_settings.metrics.enabled:
+        logger.info("Starting worker metrics server on port 8101.")
         start_metrics_server(port=8101)
     else:
-        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK not set to '1').")
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS not set to '1').")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):

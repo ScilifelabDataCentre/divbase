@@ -321,9 +321,6 @@ def start_metrics_server(port=8101):
     For k8s deployment, concurrency must be set to 1 (1 worker process per pod). Scaling will be handled by increasing the number of pods.
     Example with concurrency=1: 1 worker process, 1 collection thread, 1 HTTP server.
     """
-    if not worker_settings.metrics.enabled:
-        logger.info("Metrics collection disabled via ENABLE_WORKER_METRICS environment variable")
-        return
     global _metrics_server_started
 
     pid = os.getpid()
