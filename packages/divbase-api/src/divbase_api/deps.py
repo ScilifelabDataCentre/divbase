@@ -10,7 +10,7 @@ Several of the dependencies/functions in this file rely on a logged in user, han
 - get_current_user_from_cookie for frontend based routes.
 
 The dependencies that depend on this can use e.g. get_current_user as a sub-dependency,
-so all checks in the sub-dependancy function are ran when you use this dependency.
+so all checks in the sub-dependency function are ran when you use this dependency.
 (see here: https://fastapi.tiangolo.com/yo/advanced/security/oauth2-scopes/#dependency-tree-and-scopes)
 """
 
@@ -157,7 +157,7 @@ async def get_current_admin_user(current_user: Annotated[UserDB, Depends(get_cur
     Verify current user has admin access.
 
     Note: This function works by using a sub-dependency to get the current user,
-    so all the checks in the sub-dependancy function are ran when you use this dependency.
+    so all the checks in the sub-dependency function are ran when you use this dependency.
     (see here: https://fastapi.tiangolo.com/yo/advanced/security/oauth2-scopes/#dependency-tree-and-scopes)
     """
     if not current_user.is_admin:

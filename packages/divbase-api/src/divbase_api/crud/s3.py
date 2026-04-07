@@ -9,7 +9,7 @@ from divbase_lib.api_schemas.s3 import FileChecksumResponse
 
 
 def get_s3_file_manager() -> S3FileManager:
-    """Dependency to get an S3FileManager instance. Dependancy injected into FastAPI endpoints."""
+    """Dependency to get an S3FileManager instance. Dependency injected into FastAPI endpoints."""
     return S3FileManager(
         url=api_settings.s3.endpoint_url,
         access_key=api_settings.s3.access_key.get_secret_value(),
@@ -18,7 +18,7 @@ def get_s3_file_manager() -> S3FileManager:
 
 
 def get_pre_signed_service() -> S3PreSignedService:
-    """Dependency to get pre-signed S3 service. Dependancy injected into FastAPI endpoints."""
+    """Dependency to get pre-signed S3 service. Dependency injected into FastAPI endpoints."""
     return S3PreSignedService()
 
 
