@@ -174,9 +174,12 @@ def sample_metadata_query_task(
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
+    s3_file_manager = _create_s3_file_manager()
 
     try:
-        metadata_path = _download_sample_metadata(metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name)
+        metadata_path = _download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
     except ObjectDoesNotExistError:
         # If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards.
         # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
@@ -189,7 +192,6 @@ def sample_metadata_query_task(
         # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
         raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
 
-    s3_file_manager = _create_s3_file_manager()
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
@@ -254,6 +256,7 @@ def bcftools_pipe_task(
 
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
+    s3_file_manager = _create_s3_file_manager()
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -261,7 +264,6 @@ def bcftools_pipe_task(
     if not vcf_dimensions_data.get("vcf_files"):
         raise VCFDimensionsEntryMissingError(project_name=project_name)
 
-    s3_file_manager = _create_s3_file_manager()
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
         vcf_dimensions_data=vcf_dimensions_data,
@@ -269,7 +271,11 @@ def bcftools_pipe_task(
         project_id=project_id,
     )
 
-    metadata_path = _download_sample_metadata(metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name)
+    metadata_path = _download_sample_metadata(
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+    )
 
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
@@ -308,7 +314,11 @@ def bcftools_pipe_task(
 
     logger.info("Started downloading VCF files from S3 to worker")
 
-    _ = _download_vcf_files(files_to_download=files_to_download, bucket_name=bucket_name)
+    _ = _download_vcf_files(
+        files_to_download=files_to_download,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+    )
 
     logger.info("Finished downloading VCF files from S3 to worker")
 
@@ -351,7 +361,7 @@ def bcftools_pipe_task(
     bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
     bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
 
-    _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name)
+    _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
     if worker_settings.metrics.enabled_per_task:
@@ -464,7 +474,9 @@ def update_vcf_dimensions_task(
         )
     ]
 
-    _ = _download_vcf_files(files_to_download=non_indexed_vcfs, bucket_name=bucket_name)
+    _ = _download_vcf_files(
+        files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    )
 
     calculator = VCFDimensionCalculator()
     files_indexed_by_this_job = []
@@ -556,12 +568,10 @@ def _create_s3_file_manager() -> S3FileManager:
     )
 
 
-# TODO - add back in the create file manager logic here.
-def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str) -> Path:
+def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
     """
-    s3_file_manager = _create_s3_file_manager()
     return s3_file_manager.download_files(
         objects={metadata_tsv_name: None},
         download_dir=Path.cwd(),
@@ -569,12 +579,11 @@ def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str) -> Path:
     )[0]
 
 
-def _download_vcf_files(files_to_download: list[str], bucket_name: str) -> list[Path]:
+def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
     """
     Fetch input VCF files for bcftools run from the s3 bucket.
     """
     logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
-    s3_file_manager = _create_s3_file_manager()
 
     objects = {file_name: None for file_name in files_to_download}
     downloaded_files = s3_file_manager.download_files(
@@ -587,11 +596,10 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str) -> list[
     return downloaded_files
 
 
-def _upload_results_file(output_file: Path, bucket_name: str) -> None:
+def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
     Upon completion of the task, upload the results file to the specified bucket.
     """
-    s3_file_manager = _create_s3_file_manager()
     _ = s3_file_manager.upload_files(
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
