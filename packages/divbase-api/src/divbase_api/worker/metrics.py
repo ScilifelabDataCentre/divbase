@@ -329,13 +329,13 @@ def start_metrics_server(port=8101):
     pid = os.getpid()
     worker_info.info({"worker_name": WORKER_NAME, "pid": str(pid)})
 
-    # Import here to avoid circular dependency
-    from divbase_api.services.queries import BcftoolsQueryManager
-
     bcftools_monitoring_config.info(
-        {"enabled": str(BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING), "sample_interval": "0.01s"}
+        {"enabled": str(worker_settings.metrics.enabled_per_task), "sample_interval": "0.01s"}
     )
-    logger.info(f"Bcftools subprocess monitoring: {BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING}")
+    if worker_settings.metrics.enabled_per_task:
+        logger.info("Per-task bcftools subprocess monitoring is ENABLED.")
+    else:
+        logger.info("Per-task bcftools subprocess monitoring is DISABLED.")
 
     thread = threading.Thread(target=collect_system_metrics, daemon=True)
     thread.start()

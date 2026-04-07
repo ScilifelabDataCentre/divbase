@@ -338,8 +338,12 @@ def bcftools_pipe_task(
     # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
-
+    manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
+    output_file, bcftools_metrics = manager.execute_pipe(
+        command=command,
+        bcftools_inputs=bcftools_inputs,
+        job_id=job_id,
+    )
     logger.info("Finished bcftools subprocesses")
 
     bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
@@ -552,6 +556,7 @@ def _create_s3_file_manager() -> S3FileManager:
     )
 
 
+# TODO - add back in the create file manager logic here.
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
@@ -762,7 +767,7 @@ def _check_if_samples_can_be_combined_with_bcftools(
 
         file_to_samples[file] = sample_names
 
-    manager = BcftoolsQueryManager()
+    manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
     sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
     logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
 
