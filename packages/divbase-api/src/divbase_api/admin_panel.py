@@ -745,13 +745,13 @@ class PersonalAccessTokenView(ModelView):
         ),
         DateTimeField(
             "expires_at",
-            help_text="Timestamp when the PAT expires. Value can be left empty for no expiration.",
+            help_text="Timestamp when the PAT expires. Value can be left empty for no expiration. Value determined by system, cannot be edited.",
             required=False,
             disabled=True,
         ),
         DateTimeField(
             "last_used_at",
-            help_text="Timestamp when the PAT was last used. Value empty if not yet used.",
+            help_text="Timestamp when the PAT was last used. Value empty if not yet used. Value determined by system, cannot be edited.",
             required=False,
             disabled=True,
         ),
@@ -768,12 +768,25 @@ class PersonalAccessTokenView(ModelView):
     ]
 
     exclude_fields_from_list = ["hashed_token", "permissions", "user_id"]
-    exclude_fields_from_edit = ["hashed_token", "id", "created_at", "updated_at", "user_id"]
+    exclude_fields_from_edit = ["hashed_token", "id", "created_at", "updated_at", "user_id", "user", "permissions"]
     exclude_fields_from_detail = ["hashed_token", "user_id"]
 
     def can_create(self, request: Request) -> bool:
         """Disable manual creation of PATs."""
         return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a users soft deletion status is changed.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
         formatted = _format_cet_datetime(value, field, ["created_at", "updated_at", "expires_at", "last_used_at"])
