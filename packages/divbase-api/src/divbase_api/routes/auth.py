@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.crud.auth import authenticate_user, verify_user_from_refresh_token
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_user
+from divbase_api.deps import require_whoami_scope
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserResponse
@@ -83,6 +83,6 @@ async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depe
 
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def whoami_endpoint(current_user: UserDB = Depends(get_current_user)):
+async def whoami_endpoint(current_user: UserDB = Depends(require_whoami_scope)):
     """Endpoint to return current logged in user's details."""
     return UserResponse.model_validate(current_user)

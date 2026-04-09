@@ -26,6 +26,8 @@ from divbase_api.api_config import api_settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 
+PAT_TOKEN_PREFIX = "divbase_pat_"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
@@ -36,7 +38,7 @@ def get_password_hash(password: SecretStr) -> str:
 
 
 def generate_personal_access_token() -> SecretStr:
-    return SecretStr("divbase_pat_" + secrets.token_urlsafe(nbytes=32))
+    return SecretStr(PAT_TOKEN_PREFIX + secrets.token_urlsafe(nbytes=32))
 
 
 def hash_personal_access_token(raw_token: SecretStr) -> str:
