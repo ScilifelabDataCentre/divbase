@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Token Created – DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+
+            <div class="scilife-subsection mt-3 mb-4">
+                <h2><i class="bi bi-key text-success me-2"></i>Token generated</h2>
+            </div>
+
+            <div class="alert alert-warning" role="alert">
+                <h5 class="alert-heading">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Copy your token now, it will not be shown again.
+                </h5>
+                <p class="mb-0">
+                    Store it securely. If you lose it you will need to revoke this token and generate a new one.
+                </p>
+            </div>
+
+            {# Token display with copy button #}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-key me-2"></i>{{ pat.name }}</h5>
+                </div>
+                <div class="card-body">
+                    {% set to_copy = raw_token %}
+                    {% include "components/copy_to_clipboard.html" %}
+                </div>
+            </div>
+
+            {# Token summary #}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Token details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Name</p>
+                            <p class="mb-0 fw-medium">{{ pat.name }}</p>
+                        </div>
+                        {% if pat.description %}
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Description</p>
+                            <p class="mb-0">{{ pat.description }}</p>
+                        </div>
+                        {% endif %}
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Expires</p>
+                            <p class="mb-0 fw-medium">
+                                {% if pat.expires_at %}
+                                    {{ pat.expires_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                                {% else %}
+                                    Never
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Scopes</p>
+                            <p class="mb-0">
+                                {% if pat.permissions is none %}
+                                    <span class="badge scilife-role-badge-active">Full access</span>
+                                {% else %}
+                                    {% if pat.permissions.task_history %}
+                                        <span class="badge scilife-role-badge-read me-1">task_history</span>
+                                    {% endif %}
+                                    {% if pat.permissions.whoami %}
+                                        <span class="badge scilife-role-badge-read me-1">whoami</span>
+                                    {% endif %}
+                                    {% if not pat.permissions.all_projects %}
+                                        <span class="badge scilife-role-badge-manage">
+                                            <i class="bi bi-folder me-1"></i>{{ pat.permissions.projects | length }} project(s)
+                                        </span>
+                                    {% else %}
+                                        <span class="badge scilife-role-badge-edit me-1">All projects</span>
+                                    {% endif %}
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# Usage hint - TODO link to docs to help user learn how to use it #}
+
+            <div class="d-flex justify-content-center mb-5">
+                <a href="/pats" class="btn scilife-confirm-button">
+                    <i class="bi bi-check-lg me-2"></i>Done
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_scripts %}
+<script src="/static/js/copy_to_clipboard.js"></script>
+{% endblock %}

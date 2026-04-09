@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}New Personal Access Token - DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+
+            <div class="scilife-subsection mt-3 mb-1">
+                <h2><i class="bi bi-key me-2"></i>New Personal Access Token</h2>
+                <p class="text-muted">Create a token for use in automated pipelines and HPC workflows.</p>
+            </div>
+            <a href="/pats" class="scilife-back-link mb-4 d-inline-block">
+                <i class="bi bi-arrow-left me-1"></i>Back to tokens
+            </a>
+
+            <form method="post" action="/pats/new">
+
+                {# Token details #}
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-tag me-2"></i>Token details</h5>
+                    </div>
+                    <div class="card-body p-4">
+
+                        <div class="mb-3">
+                            <label for="name" class="form-label fw-semibold">
+                                Token name <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-tag"></i></span>
+                                <input type="text"
+                                       class="form-control"
+                                       id="name"
+                                       name="name"
+                                       placeholder="e.g. pelle-uppmax"
+                                       value="{{ form_name or '' }}"
+                                       required
+                                       minlength="1"
+                                       maxlength="100">
+                            </div>
+                            <small class="text-muted">A unique name to help you identify this token later (max 100 characters).</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="description" class="form-label fw-semibold">Description</label>
+                            <textarea class="form-control"
+                                      id="description"
+                                      name="description"
+                                      rows="2"
+                                      maxlength="500"
+                                      placeholder="Optional notes about where or how this token is used.">{{ form_description or '' }}</textarea>
+                            <small class="text-muted">Optional. Max 500 characters.</small>
+                        </div>
+
+                        <div class="mb-0">
+                            <label for="expires_in_days" class="form-label fw-semibold">
+                                Expiration <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                                <select class="form-select"
+                                        id="expires_in_days"
+                                        name="expires_in_days"
+                                        required>
+                                    <option value="" disabled {{ 'selected' if not form_expires_in_days }}>Select an expiry...</option>
+                                    <option value="1"   {{ 'selected' if form_expires_in_days == '1'   }}>1 day</option>
+                                    <option value="7"   {{ 'selected' if form_expires_in_days == '7'   }}>7 days</option>
+                                    <option value="30"  {{ 'selected' if form_expires_in_days == '30'  }}>30 days</option>
+                                    <option value="90"  {{ 'selected' if form_expires_in_days == '90'  }}>90 days</option>
+                                    <option value="365" {{ 'selected' if form_expires_in_days == '365' }}>1 year</option>
+                                    <option value="never" {{ 'selected' if form_expires_in_days == 'never' }}>Never</option>
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                
+                {# Project access #}
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-folder me-2"></i>Project access</h5>
+                        <span class="badge scilife-role-badge-read">Optional</span>
+                    </div>
+                    <div class="card-body p-4">
+
+                        <p class="text-muted small mb-3">
+                            Choose which of your projects this token can access. Selecting specific projects
+                            limits the token to only those projects, and limits the access level you define.
+                        </p>
+
+                        <div class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input"
+                                       type="radio"
+                                       name="project_access_mode"
+                                       id="access_all"
+                                       value="all"
+                                       {{ 'checked' if not form_project_access_specific }}
+                                       onchange="toggleProjectTable(this)">
+                                <label class="form-check-label" for="access_all">
+                                    <span class="fw-semibold">All your projects</span>
+                                    <small class="text-muted d-block">
+                                        This token can access all projects you are a member of, using your existing roles.
+                                    </small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input"
+                                       type="radio"
+                                       name="project_access_mode"
+                                       id="access_specific"
+                                       value="specific"
+                                       {{ 'checked' if form_project_access_specific }}
+                                       onchange="toggleProjectTable(this)">
+                                <label class="form-check-label" for="access_specific">
+                                    <span class="fw-semibold">Only specific projects</span>
+                                    <small class="text-muted d-block">
+                                        Select individual projects and limit the access role for each.
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+
+                        {% if projects %}
+                        <div id="projectTable" style="{{ '' if form_project_access_specific else 'display: none;' }}">
+                            <div class="alert alert-info py-2 mb-3" role="alert">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Projects set to <strong>No access</strong> will be blocked for this token.
+                                The token role cannot exceed your own membership role.
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Project</th>
+                                            <th>Your role</th>
+                                            <th>Token role limit</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for project in projects %}
+                                        <tr>
+                                            <td class="fw-medium">{{ project.name }}</td>
+                                            <td>
+                                                <span class="badge scilife-role-badge-{{ project.user_role }}">
+                                                    {{ project.user_role | title }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <select class="form-select form-select-sm"
+                                                        name="project_{{ project.id }}"
+                                                        style="min-width: 130px;">
+                                                    <option value="">No access</option>
+                                                    <option value="read"
+                                                        {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'read' }}>
+                                                        Read
+                                                    </option>
+                                                    <option value="edit"
+                                                        {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'edit' }}>
+                                                        Edit
+                                                    </option>
+                                                    <option value="manage"
+                                                        {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'manage' }}>
+                                                        Manage
+                                                    </option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning py-2 mb-0" role="alert">
+                            <i class="bi bi-info-circle me-2"></i>
+                            You are not a member of any projects, so the project access selection has no effect.
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </div>
+
+                {# API scopes #}
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>API scopes</h5>
+                        <span class="badge scilife-role-badge-read">Optional</span>
+                    </div>
+                    <div class="card-body p-4">
+
+                        <p class="text-muted small mb-3">
+                            Non project specific permissions to allow your PAT to perform specific DivBase operations
+                        </p>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="scope_task_history"
+                                   name="scope_task_history"
+                                   value="on"
+                                   {{ 'checked' if form_scope_task_history is not false }}>
+                            <label class="form-check-label" for="scope_task_history">
+                                <span class="fw-semibold">task_history</span>
+                                <small class="text-muted d-block">
+                                    Get task history for all jobs you have run, not limited by specific jobs
+                                    (<code>divbase-cli task-history user</code> and <code>divbase-cli task-history id [job_id]</code>).
+                                </small>
+                            </label>
+                        </div>
+
+                        <div class="form-check mb-0">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="scope_whoami"
+                                   name="scope_whoami"
+                                   value="on"
+                                   {{ 'checked' if form_scope_whoami is not false }}>
+                            <label class="form-check-label" for="scope_whoami">
+                                <span class="fw-semibold">whoami</span>
+                                <small class="text-muted d-block">
+                                    See the account the token belongs to. 
+                                    (<code>divbase-cli auth whoami</code>).
+                                </small>
+                            </label>
+                        </div>
+
+                    </div>
+                </div>
+
+                
+                <div class="d-flex gap-2 justify-content-center mb-5">
+                    <button type="submit" class="btn scilife-confirm-button">
+                        <i class="bi bi-key me-2"></i>Generate token
+                    </button>
+                    <a href="/pats" class="btn scilife-auth-cancel-btn">Cancel</a>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_scripts %}
+<script src="/static/js/toggle_project_table.js"></script>
+{% endblock %}
