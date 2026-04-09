@@ -38,7 +38,7 @@ class PersonalAccessTokenDB(BaseDBModel):
     hashed_token: Mapped[str] = mapped_column(String(64), index=True, unique=True)  # SHA-256 hex = 64 chars
 
     # Optional project-scoped permissions: {str(project_id): role}
-    # None means no restriction — the user's actual project membership role is used.
+    # None means no restriction, so the user's actual project membership role is used.
     permissions: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
 
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)

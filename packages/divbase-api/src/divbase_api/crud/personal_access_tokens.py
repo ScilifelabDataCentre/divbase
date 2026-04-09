@@ -66,7 +66,7 @@ async def verify_user_from_personal_access_token(
     if not hashed_pat:
         return None
 
-    if not hashed_pat.is_deleted:
+    if hashed_pat.is_deleted:
         logger.info(f"PAT id={hashed_pat.id} rejected, as it is soft deleted.")
         return None
 

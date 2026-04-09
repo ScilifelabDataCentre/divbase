@@ -11,7 +11,7 @@ class PATPermissions(BaseModel):
     """
     Personal Access Token permissions model.
     This is stored in the db as JSONB in the PersonalAccessTokenDB.permissions.
-    Field is nullable — when null, the PAT has same access as underlying user.
+    When null, the PAT has same access as underlying user.
 
     Parsed from the JSONB stored in the PAT DB column via model_validate.
     If the DB column is NULL, the PAT has full, unrestricted access (equivalent to a JWT token).

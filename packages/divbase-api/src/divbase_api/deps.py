@@ -216,24 +216,21 @@ async def get_project_member(
     if user_role not in ProjectRoles:
         raise AuthorizationError("You don't have permission to access this project.")
 
-    if scopes is not None:
-        if scopes.all_projects:
-            # PAT allows access to all the user's projects — no project restriction or role cap.
-            return project, current_user, user_role
+    if scopes is None or scopes.all_projects:
+        # This is either a JWT token or a PAT with no project scoping, so we use the user's actual role.
+        return project, current_user, user_role
 
-        pat_role_str = scopes.projects.get(str(project.id))
-        if pat_role_str is None:
-            raise AuthorizationError("This PAT does not have access to this project.")
+    pat_role_str = scopes.projects.get(str(project.id))
+    if pat_role_str is None:
+        raise AuthorizationError("This personal access token does not have access to this project.")
 
-        try:
-            pat_role = ProjectRoles[pat_role_str.upper()]
-        except KeyError as err:
-            raise AuthorizationError(f"Invalid role '{pat_role_str}' in PAT permissions.") from err
+    try:
+        pat_role = ProjectRoles[pat_role_str.upper()]  # TODO Can I not just do ProjectRoles(pat_role_str)?
+    except KeyError as err:
+        raise AuthorizationError(f"Invalid role '{pat_role_str}' in personal access token permissions.") from err
 
-        effective_role = pat_role if has_required_role(user_role, pat_role) else user_role
-        return project, current_user, effective_role
-
-    return project, current_user, user_role
+    effective_role = pat_role if has_required_role(user_role=user_role, required_role=pat_role) else user_role
+    return project, current_user, effective_role
 
 
 async def require_task_history_scope(
@@ -247,7 +244,7 @@ async def require_task_history_scope(
     """
     current_user, scopes = current_user_and_scopes
     if scopes is not None and not scopes.task_history:
-        raise AuthorizationError("This PAT does not have the 'task_history' scope.")
+        raise AuthorizationError("This personal access token does not have the 'task_history' scope.")
     return current_user
 
 
@@ -262,5 +259,5 @@ async def require_whoami_scope(
     """
     current_user, scopes = current_user_and_scopes
     if scopes is not None and not scopes.whoami:
-        raise AuthorizationError("This PAT does not have the 'whoami' scope.")
+        raise AuthorizationError("This personal access token does not have the 'whoami' scope.")
     return current_user
