@@ -40,7 +40,7 @@ from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.models.queue_status import QueueStatus
+from divbase_api.models.queue_status import QueueStatusDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
@@ -807,5 +807,7 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
     )
-    admin.add_view(QueueStatusView(QueueStatus, icon="fas fa-power-off", label="Queue Status", identity="queue-status"))
+    admin.add_view(
+        QueueStatusView(QueueStatusDB, icon="fas fa-power-off", label="Queue Status", identity="queue-status")
+    )
     admin.mount_to(app)
