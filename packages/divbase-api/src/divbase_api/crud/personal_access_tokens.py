@@ -48,7 +48,7 @@ async def create_personal_access_token(
     return pat, raw_pat
 
 
-async def verify_personal_access_token(
+async def verify_user_from_personal_access_token(
     db: AsyncSession, raw_pat: SecretStr
 ) -> tuple[UserDB, PersonalAccessTokenDB] | None:
     """

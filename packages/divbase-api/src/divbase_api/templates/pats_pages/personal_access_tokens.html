@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Personal Access Tokens - DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="scilife-subsection mt-3">
+            <h2><i class="bi bi-key me-2"></i>Personal Access Tokens</h2>
+            <p class="text-muted">Tokens for use with CLI pipelines and automated workflows. Treat them like passwords — store them securely.</p>
+        </div>
+        <a href="/pats/new" class="btn scilife-confirm-button flex-shrink-0 ms-3">
+            <i class="bi bi-plus-circle me-2"></i>Generate new token
+        </a>
+    </div>
+
+    <a href="/profile" class="scilife-back-link mb-4 d-inline-block">
+        <i class="bi bi-arrow-left me-1"></i>Back to Profile
+    </a>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-list-ul me-2"></i>Your tokens
+                <span class="badge scilife-numb-project-badge ms-2">{{ pats | length }}</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+
+            {% if pats %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Scopes</th>
+                            <th>Expires</th>
+                            <th>Last used</th>
+                            <th>Created</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pat in pats %}
+                        <tr>
+                            <td>
+                                <div class="fw-medium">{{ pat.name }}</div>
+                                {% if pat.description %}
+                                <small class="text-muted">
+                                    {{ pat.description[:80] }}{% if pat.description | length > 80 %}&hellip;{% endif %}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if pat.permissions is none %}
+                                    <span class="badge scilife-role-badge-active">Full access</span>
+                                {% else %}
+                                    {% if pat.permissions.task_history %}
+                                        <span class="badge scilife-role-badge-read me-1">task_history</span>
+                                    {% endif %}
+                                    {% if pat.permissions.whoami %}
+                                        <span class="badge scilife-role-badge-read me-1">whoami</span>
+                                    {% endif %}
+                                    {% if not pat.permissions.all_projects %}
+                                        <span class="badge scilife-role-badge-manage">
+                                            <i class="bi bi-folder me-1"></i>{{ pat.permissions.projects | length }} project(s)
+                                        </span>
+                                    {% else %}
+                                        <span class="badge scilife-role-badge-edit me-1">All projects</span>
+                                    {% endif %}
+                                    {% if not pat.permissions.task_history and not pat.permissions.whoami and pat.permissions.all_projects %}
+                                        <span class="text-muted small">No restrictions</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if pat.expires_at %}
+                                    {% if pat.expires_at < now %}
+                                        <span class="badge scilife-role-badge-inactive">
+                                            <i class="bi bi-x-circle me-1"></i>Expired
+                                        </span>
+                                    {% else %}
+                                        {{ pat.expires_at.strftime('%Y-%m-%d') }}
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Never</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if pat.last_used_at %}
+                                    {{ pat.last_used_at.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    <span class="text-muted">Never</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ pat.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td class="text-center">
+                                <button type="button"
+                                        class="btn btn-outline-danger btn-sm"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#revokeModal_{{ pat.id }}">
+                                    <i class="bi bi-trash me-1"></i>Revoke
+                                </button>
+
+                                {# Confirmation modal per token #}
+                                <div class="modal fade"
+                                     id="revokeModal_{{ pat.id }}"
+                                     tabindex="-1"
+                                     aria-labelledby="revokeModalLabel_{{ pat.id }}"
+                                     aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="revokeModalLabel_{{ pat.id }}">
+                                                    <i class="bi bi-exclamation-triangle me-2 text-warning"></i>Revoke token?
+                                                </h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body text-start">
+                                                <p>Are you sure you want to revoke <strong>{{ pat.name }}</strong>?</p>
+                                                <p class="text-muted small mb-0">
+                                                    This cannot be undone. Any pipelines or scripts currently using this token will lose access immediately.
+                                                </p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn scilife-auth-cancel-btn" data-bs-dismiss="modal">
+                                                    Cancel
+                                                </button>
+                                                <form method="post" action="/pats/{{ pat.id }}/revoke" style="display: inline;">
+                                                    <button type="submit" class="btn btn-danger">
+                                                        <i class="bi bi-trash me-1"></i>Revoke token
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% else %}
+
+            <div class="text-center py-5">
+                <i class="bi bi-key display-4 text-muted d-block mb-3"></i>
+                <p class="text-muted mb-4">You don't have any personal access tokens yet.</p>
+                <a href="/pats/new" class="btn scilife-confirm-button">
+                    <i class="bi bi-plus-circle me-2"></i>Generate your first token
+                </a>
+            </div>
+
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

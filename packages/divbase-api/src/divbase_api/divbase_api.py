@@ -24,6 +24,7 @@ from divbase_api.db import (
 from divbase_api.exception_handlers import register_exception_handlers
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
+from divbase_api.frontend_routes.personal_access_tokens import fr_pat_router
 from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.middleware import register_middleware
@@ -100,6 +101,7 @@ if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
+app.include_router(fr_pat_router, prefix="/pats", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
