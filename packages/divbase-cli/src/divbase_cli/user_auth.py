@@ -4,6 +4,7 @@ Manage user authentication with the DivBase server.
 This includes login/logout and the getting, storing, using, and refreshing of access + refresh tokens
 """
 
+import logging
 import time
 import warnings
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -159,15 +162,12 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
         # We don't want logout to fail if server is unreachable or gives an error
         # JWTs are stateless so local logout is sufficient.
         try:
-            make_authenticated_request(
+            make_unauthenticated_request(
                 method="POST",
                 divbase_base_url=config.logged_in_url,
                 api_route="v1/auth/logout",
                 json=request_data.model_dump(),
             )
-        except AuthenticationError:
-            # Tokens already expired/invalid/revoked etc...
-            pass
         except DivBaseAPIConnectionError as e:
             warnings.warn(
                 f"Could not connect to DivBase server to log out fully: '{e}'.\n\n"
@@ -217,20 +217,25 @@ def make_authenticated_request(
     **kwargs,
 ) -> httpx.Response:
     """Make an authenticated request to the DivBase server, handles refreshing tokens if needed."""
-    token_data = load_user_tokens(token_path=token_path)
-
-    if token_data.is_access_token_expired():
-        if token_data.is_refresh_token_expired():
-            # Prevents user getting warning about being already logged in when they try to log in again
-            config = load_user_config()
-            config.set_login_status(url=None, email=None)
-            raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
-        else:
-            token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
-
     headers = kwargs.get("headers", {})
-    headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
     headers[CLI_VERSION_HEADER_KEY] = cli_version
+
+    if cli_settings.DIVBASE_API_PAT:
+        logger.debug("Using personal access token in request to DivBase API.")
+        headers["Authorization"] = f"Bearer {cli_settings.DIVBASE_API_PAT}"
+    else:
+        logger.debug("Using JWTs in request to DivBase API.")
+        token_data = load_user_tokens(token_path=token_path)
+        if token_data.is_access_token_expired():
+            if token_data.is_refresh_token_expired():
+                # Prevents user getting warning about being already logged in when they try to log in again
+                config = load_user_config()
+                config.set_login_status(url=None, email=None)
+                raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
+            else:
+                token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
+        headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
+
     kwargs["headers"] = headers
 
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
@@ -253,7 +258,6 @@ def make_unauthenticated_request(
     method: str,
     divbase_base_url: str,
     api_route: str,
-    token_path: Path = cli_settings.TOKENS_PATH,
     **kwargs,
 ) -> httpx.Response:
     """

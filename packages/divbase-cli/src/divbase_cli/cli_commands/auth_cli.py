@@ -11,7 +11,8 @@ from pydantic import SecretStr
 from rich import print
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.config_resolver import resolve_url_for_non_project_specific_commands
 from divbase_cli.services.announcements import get_and_display_announcements
 from divbase_cli.user_auth import (
     check_existing_session,
@@ -99,13 +100,11 @@ def whoami():
     """
     Return information about the currently logged-in user.
     """
-    config = load_user_config()
-    if not config.logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    divbase_url = resolve_url_for_non_project_specific_commands()
 
     request = make_authenticated_request(
         method="GET",
-        divbase_base_url=config.logged_in_url,
+        divbase_base_url=divbase_url,
         api_route="v1/auth/whoami",
     )
 

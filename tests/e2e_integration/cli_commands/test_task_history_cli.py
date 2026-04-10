@@ -236,6 +236,21 @@ def test_manage_user_can_see_all_task_history_for_a_project(CONSTANTS, logged_in
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] in user_emails
 
 
+def test_task_history_project_uses_default_project_when_none_specified(
+    CONSTANTS, logged_in_manage_user_with_existing_config
+):
+    """Test that task-history project falls back to the default project from config when --project is omitted."""
+    default_project = CONSTANTS["DEFAULT_PROJECT"]
+
+    with capture_task_history_manager() as get_manager:
+        result_history = runner.invoke(app, "task-history project")
+        assert result_history.exit_code == 0
+
+        captured_manager = get_manager()
+
+    assert captured_manager.project_name == default_project
+
+
 def test_edit_user_can_filter_task_history_by_projects_they_belong_to(
     CONSTANTS, logged_in_edit_user_with_existing_config
 ):
