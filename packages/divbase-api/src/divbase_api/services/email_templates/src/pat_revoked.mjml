@@ -1,0 +1,68 @@
+<mjml>
+  <mj-head>
+    <mj-title>Personal Access Token Revoked - DivBase</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-text
+        padding="10px 24px"
+        color="#3f3f3f"
+        font-size="15px"
+        line-height="1.6"
+      />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f0f4f4">
+    <!-- Header -->
+    <mj-section background-color="#045c64" padding="20px 24px">
+      <mj-column>
+        <mj-text
+          align="left"
+          color="white"
+          font-size="20px"
+          font-weight="bold"
+          padding="0"
+        >
+          SciLifeLab DivBase
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Body -->
+    <mj-section background-color="#ffffff" padding="32px 24px 24px">
+      <mj-column>
+        <mj-text
+          font-size="22px"
+          color="#045c64"
+          font-weight="bold"
+          padding="0 0 16px 0"
+        >
+          Personal access token revoked
+        </mj-text>
+        <mj-text padding="0 0 12px 0">
+          The personal access token named <strong>{{ pat_name }}</strong> has
+          been revoked for your DivBase account. It can no longer be used.
+        </mj-text>
+        <mj-text padding="0">
+          If you did not revoke this token, please contact us immediately.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#f0f4f4" padding="16px 24px">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#a6a6a6" padding="0">
+          This is an automated message, please do not reply directly to this
+          email. You can contact us at
+          <a
+            href="mailto:{{ support_email }}"
+            style="color: #045c64; text-decoration: none"
+            >{{ support_email }}</a
+          >
+          if you need assistance.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
