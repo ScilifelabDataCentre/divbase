@@ -6,8 +6,9 @@ All routes here should rely on get_current_user_from_cookie dependency to ensure
 
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,9 +20,11 @@ from divbase_api.crud.personal_access_tokens import (
 from divbase_api.crud.projects import create_user_project_responses, get_user_projects_with_roles, has_required_role
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie
+from divbase_api.exceptions import PATDuplicateNameError, PATLimitExceededError
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.services.email_sender import send_pat_created_email, send_pat_revoked_email
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
 fr_pat_router = APIRouter()
@@ -74,6 +77,7 @@ async def new_pat_form_endpoint(
 @fr_pat_router.post("/new", response_class=HTMLResponse)
 async def create_pat_endpoint(
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
 ):
@@ -151,21 +155,36 @@ async def create_pat_endpoint(
             projects=form_projects if project_access_mode == "specific" else {},
         )
 
-    pat, raw_token = await create_personal_access_token(
-        db=db,
-        user_id=current_user.id,
-        name=name,
-        description=description,
-        permissions=pat_permissions.model_dump() if pat_permissions else None,
-        expires_at=expires_at_dt,
-    )
+    try:
+        pat, raw_token = await create_personal_access_token(
+            db=db,
+            user_id=current_user.id,
+            name=name,
+            description=description,
+            permissions=pat_permissions.model_dump() if pat_permissions else None,
+            expires_at=expires_at_dt,
+        )
+    except PATLimitExceededError as e:
+        return form_error(e.message)
+    except PATDuplicateNameError as e:
+        return form_error(e.message)
 
+    if expires_at_dt:
+        dt = expires_at_dt.astimezone(ZoneInfo("Europe/Stockholm"))
+        expires_at_cet = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+    else:
+        expires_at_cet = None
+
+    background_tasks.add_task(
+        send_pat_created_email, email_to=current_user.email, pat_name=name, expires_at_cet=expires_at_cet
+    )
     return templates.TemplateResponse(
         request=request,
         name="pats_pages/personal_access_token_created.html",
         context={
             "current_user": current_user,
             "pat": pat,
+            "expires_at_cet": expires_at_cet,
             "raw_token": raw_token.get_secret_value(),
         },
         status_code=status.HTTP_201_CREATED,
@@ -176,17 +195,20 @@ async def create_pat_endpoint(
 async def revoke_pat_endpoint(
     pat_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke (soft-delete) one of the current user's personal access tokens."""
-    revoked = await soft_delete_personal_access_token(db=db, pat_id=pat_id, user_id=current_user.id)
-    if revoked:
+    revoked_pat_name = await soft_delete_personal_access_token(db=db, pat_id=pat_id, user_id=current_user.id)
+    if not revoked_pat_name:
         return RedirectResponse(
-            url="/pats?success=Token+successfully+revoked",
+            url="/pats?error=Token+not+found+or+could+not+be+revoked",
             status_code=status.HTTP_302_FOUND,
         )
+
+    background_tasks.add_task(send_pat_revoked_email, email_to=current_user.email, pat_name=revoked_pat_name)
     return RedirectResponse(
-        url="/pats?error=Token+not+found+or+could+not+be+revoked",
+        url="/pats?success=Token+successfully+revoked",
         status_code=status.HTTP_302_FOUND,
     )

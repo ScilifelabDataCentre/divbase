@@ -11,9 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import user_account_valid
 from divbase_api.crud.users import get_user_by_id
+from divbase_api.exceptions import PATDuplicateNameError, PATLimitExceededError
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import generate_personal_access_token, hash_personal_access_token
+
+PAT_MAX_ACTIVE_TOKENS = 5
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,16 @@ async def create_personal_access_token(
     Stores a hashed version of the token in the database,
     and returns the plaintext token for the user to copy (only available at creation time).
     """
+    stmt = select(PersonalAccessTokenDB.name).where(
+        PersonalAccessTokenDB.user_id == user_id,
+        PersonalAccessTokenDB.is_deleted == False,  # noqa: E712
+    )
+    active_names = list((await db.execute(stmt)).scalars().all())
+    if len(active_names) >= PAT_MAX_ACTIVE_TOKENS:
+        raise PATLimitExceededError()
+    if name in active_names:
+        raise PATDuplicateNameError()
+
     raw_pat = generate_personal_access_token()
     hashed_pat = hash_personal_access_token(raw_pat)
 
@@ -103,13 +116,12 @@ async def get_users_personal_access_tokens(db: AsyncSession, user_id: int) -> li
     return list(result.scalars().all())
 
 
-async def soft_delete_personal_access_token(db: AsyncSession, pat_id: int, user_id: int) -> bool:
+async def soft_delete_personal_access_token(db: AsyncSession, pat_id: int, user_id: int) -> str | None:
     """
     Soft delete a Personal Access Token by ID, scoped to a user (fn to be used in user-facing operations).
     Admins can soft and hard delete any PAT via the admin_panel instead.
 
-    Returns False if the PAT does not exist or does not belong to the user.
-    True if successfully soft deleted.
+    Returns the name of the PAT if successfully soft deleted, or None if no matching PAT found for the user.
     """
     stmt = select(PersonalAccessTokenDB).where(
         PersonalAccessTokenDB.id == pat_id,
@@ -118,11 +130,11 @@ async def soft_delete_personal_access_token(db: AsyncSession, pat_id: int, user_
     result = await db.execute(stmt)
     pat = result.scalar_one_or_none()
     if not pat:
-        return False
+        return None
 
     pat.is_deleted = True
     pat.date_deleted = datetime.now(tz=timezone.utc)
     await db.commit()
     await db.refresh(pat)
-    logger.info(f"PAT id={pat.id} soft deleted for user_id={user_id}.")
-    return True
+    logger.info(f"PAT id={pat.id} name={pat.name} soft deleted for user_id={user_id}.")
+    return pat.name
