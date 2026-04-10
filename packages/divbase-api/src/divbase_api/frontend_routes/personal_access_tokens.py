@@ -137,17 +137,23 @@ async def create_pat_endpoint(
 
     if project_access_mode == "specific":
         user_role_by_project = {str(p.id): p.user_role for p in projects}
+        project_name_by_id = {str(p.id): p.name for p in projects}
         for project_id_str, pat_role_str in form_projects.items():
-            user_membership_role = user_role_by_project.get(project_id_str)
-            if user_membership_role and not has_required_role(user_membership_role, ProjectRoles(pat_role_str)):
-                project_name = next((p.name for p in projects if str(p.id) == project_id_str), project_id_str)
+            user_role = user_role_by_project.get(project_id_str)
+            if user_role and not has_required_role(user_role, ProjectRoles(pat_role_str)):
+                project_name = project_name_by_id.get(project_id_str, project_id_str)
                 return form_error(
-                    f"Token role for '{project_name}' cannot exceed your current role ({user_membership_role})."
+                    f"The token role for '{project_name}' cannot exceed your membership role ({user_role})."
                 )
 
-    # pat_permissions=None means all user permissions.
+    # pat_permissions=None means all user permissions (unrestricted).
     pat_permissions: PATPermissions | None = None
     if scope_task_history or scope_whoami or project_access_mode == "specific":
+        projects = form_projects if project_access_mode == "specific" else None
+
+        if not any([scope_task_history, scope_whoami, project_access_mode == "all", projects]):
+            return form_error("Please select at least one permission scope for the token.")
+
         pat_permissions = PATPermissions(
             task_history=scope_task_history,
             whoami=scope_whoami,
@@ -203,12 +209,12 @@ async def revoke_pat_endpoint(
     revoked_pat_name = await soft_delete_personal_access_token(db=db, pat_id=pat_id, user_id=current_user.id)
     if not revoked_pat_name:
         return RedirectResponse(
-            url="/pats?error=Token+not+found+or+could+not+be+revoked",
+            url="/pats/?error=Token+not+found+or+could+not+be+revoked",
             status_code=status.HTTP_302_FOUND,
         )
 
     background_tasks.add_task(send_pat_revoked_email, email_to=current_user.email, pat_name=revoked_pat_name)
     return RedirectResponse(
-        url="/pats?success=Token+successfully+revoked",
+        url="/pats/?success=Token+successfully+revoked",
         status_code=status.HTTP_302_FOUND,
     )
