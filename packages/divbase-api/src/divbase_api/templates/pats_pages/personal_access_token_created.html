@@ -81,7 +81,19 @@
                 </div>
             </div>
 
-            {# Usage hint - TODO link to docs to help user learn how to use it #}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Using your token</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Set the <code>DIVBASE_API_PAT</code> environment variable to be your token value and <code>divbase-cli</code> will use your token automatically — no login required.</p>
+                    {% set to_copy = 'export DIVBASE_API_PAT=' ~ raw_token %}
+                    {% include "components/copy_to_clipboard.html" %}
+                    <a href="{{ mkdocs_site_url }}/user-guides/using-divbase-programmatically/#use-personal-access-tokens-to-authenticate-programmatically" target="_blank">
+                        See the full usage guide on our documentation site.<i class="bi bi-box-arrow-up-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
 
             <div class="d-flex justify-content-center mb-5">
                 <a href="/pats" class="btn scilife-confirm-button">
