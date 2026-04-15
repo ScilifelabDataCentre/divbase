@@ -237,7 +237,6 @@ async def get_project_member(
         )
         raise AuthorizationError(f"Invalid role '{pat_role_str}' in personal access token permissions.") from None
 
-    pat_role = ProjectRoles(pat_role_str.lower())
     effective_role = pat_role
     if pat_role_above_user_role(pat_role=pat_role, user_role=user_role):
         effective_role = user_role

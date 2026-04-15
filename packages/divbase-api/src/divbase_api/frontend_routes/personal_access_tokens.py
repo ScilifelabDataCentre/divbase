@@ -95,7 +95,6 @@ async def create_pat_endpoint(
     description = str(form.get("description", "")).strip() or None
     expires_in_days = str(form.get("expires_in_days", "")).strip()
     scope_task_history = form.get("scope_task_history") == "on"
-    scope_whoami = form.get("scope_whoami") == "on"
     project_access_mode = str(form.get("project_access_mode", "all"))
 
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
@@ -120,7 +119,6 @@ async def create_pat_endpoint(
                 "form_description": description,
                 "form_expires_in_days": expires_in_days,
                 "form_scope_task_history": scope_task_history,
-                "form_scope_whoami": scope_whoami,
                 "form_project_access_specific": project_access_mode == "specific",
                 "form_projects": form_projects,
             },
@@ -151,16 +149,18 @@ async def create_pat_endpoint(
 
     project_name_by_id = {str(p.id): p.name for p in projects}
 
-    # pat_permissions=None means all user permissions (unrestricted).
+    # pat_permissions=None means full access/same as user when logged in with password.
     pat_permissions: PATPermissions | None = None
-    if scope_task_history or scope_whoami or project_access_mode == "specific":
+    if project_access_mode == "all" and scope_task_history:
+        pat_permissions = None
+    else:
         specific_projects = form_projects if project_access_mode == "specific" else {}
-        if not any([scope_task_history, scope_whoami, project_access_mode == "all", specific_projects]):
+        if project_access_mode == "specific" and not specific_projects and not scope_task_history:
             return form_error("Please select at least one permission scope for the token.")
 
         pat_permissions = PATPermissions(
             task_history=scope_task_history,
-            whoami=scope_whoami,
+            whoami=True,
             all_projects=project_access_mode == "all",
             projects=specific_projects,
         )

@@ -47,7 +47,6 @@ def fill_and_submit_new_pat_form(
     name: str,
     expires_in_days: str = "30",
     task_history: bool = False,
-    whoami: bool = False,
 ) -> None:
     """
     Fill in and submit the new PAT creation form.
@@ -63,11 +62,6 @@ def fill_and_submit_new_pat_form(
         page.locator("#scope_task_history").check()
     else:
         page.locator("#scope_task_history").uncheck()
-
-    if whoami:
-        page.locator("#scope_whoami").check()
-    else:
-        page.locator("#scope_whoami").uncheck()
 
     page.get_by_role("button", name="Generate token").click()
 
@@ -122,19 +116,17 @@ def test_create_pat_with_never_expiry(logged_in_edit_user_pat_page: Page):
     expect(row.get_by_text("Never").first).to_be_visible()
 
 
-def test_create_pat_with_scoped_permissions_shows_scopes(logged_in_edit_user_pat_page: Page):
-    """A PAT created with whoami and task_history scopes shows those badges in the list."""
+def test_create_pat_with_no_task_history_permissions(logged_in_edit_user_pat_page: Page):
+    """A PAT created with no task_history permissions does not show the badge in the list."""
     fill_and_submit_new_pat_form(
         logged_in_edit_user_pat_page,
         name="scoped-token",
-        task_history=True,
-        whoami=True,
+        task_history=False,
     )
     logged_in_edit_user_pat_page.get_by_role("link", name=re.compile("Done")).click()
 
     row = logged_in_edit_user_pat_page.get_by_role("row").filter(has_text="scoped-token")
-    expect(row.get_by_text("task_history")).to_be_visible()
-    expect(row.get_by_text("whoami")).to_be_visible()
+    expect(row.get_by_text("task_history")).not_to_be_visible()
 
 
 def test_revoke_pat_shows_success_message(logged_in_edit_user_pat_page: Page):

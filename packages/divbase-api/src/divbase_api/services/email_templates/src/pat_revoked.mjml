@@ -56,9 +56,9 @@
           This is an automated message, please do not reply directly to this
           email. You can contact us at
           <a
-            href="mailto:{{ support_email }}"
+            href="mailto:{{ user_support_email }}"
             style="color: #045c64; text-decoration: none"
-            >{{ support_email }}</a
+            >{{ user_support_email }}</a
           >
           if you need assistance.
         </mj-text>

@@ -48,7 +48,7 @@
                                 <div class="fw-medium">{{ pat.name }}</div>
                                 {% if pat.description %}
                                 <small class="text-muted">
-                                    {{ pat.description[:80] }}{% if pat.description | length > 80 %}&hellip;{% endif %}
+                                    {{ pat.description[:50] }}{% if pat.description | length > 50 %}&hellip;{% endif %}
                                 </small>
                                 {% endif %}
                             </td>
@@ -58,9 +58,6 @@
                                 {% else %}
                                     {% if pat.permissions.task_history %}
                                         <span class="badge scilife-role-badge-read me-1">task_history</span>
-                                    {% endif %}
-                                    {% if pat.permissions.whoami %}
-                                        <span class="badge scilife-role-badge-read me-1">whoami</span>
                                     {% endif %}
                                     {% if not pat.permissions.all_projects %}
                                         {% for project_id, role in pat.permissions.projects.items() %}
@@ -74,9 +71,6 @@
                                         {% endfor %}
                                     {% else %}
                                         <span class="badge scilife-role-badge-edit me-1">All projects</span>
-                                    {% endif %}
-                                    {% if not pat.permissions.task_history and not pat.permissions.whoami and pat.permissions.all_projects %}
-                                        <span class="text-muted small">No restrictions</span>
                                     {% endif %}
                                 {% endif %}
                             </td>

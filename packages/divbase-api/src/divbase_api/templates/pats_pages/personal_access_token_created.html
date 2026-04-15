@@ -61,9 +61,6 @@
                                     {% if pat.permissions.task_history %}
                                         <span class="badge scilife-role-badge-read me-1">task_history</span>
                                     {% endif %}
-                                    {% if pat.permissions.whoami %}
-                                        <span class="badge scilife-role-badge-read me-1">whoami</span>
-                                    {% endif %}
                                     {% if not pat.permissions.all_projects %}
                                         {% for project_id, role in pat.permissions.projects.items() %}
                                             {% if project_id in project_name_by_id %}

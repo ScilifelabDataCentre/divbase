@@ -196,7 +196,7 @@
                             Non project specific permissions to allow your PAT to perform specific DivBase operations
                         </p>
 
-                        <div class="form-check mb-3">
+                        <div class="form-check mb-0">
                             <input class="form-check-input"
                                    type="checkbox"
                                    id="scope_task_history"
@@ -206,24 +206,10 @@
                             <label class="form-check-label" for="scope_task_history">
                                 <span class="fw-semibold">task_history</span>
                                 <small class="text-muted d-block">
-                                    Get task history for all jobs you have run, not limited by specific jobs
-                                    (<code>divbase-cli task-history user</code> and <code>divbase-cli task-history id [job_id]</code>).
-                                </small>
-                            </label>
-                        </div>
-
-                        <div class="form-check mb-0">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   id="scope_whoami"
-                                   name="scope_whoami"
-                                   value="on"
-                                   {{ 'checked' if form_scope_whoami is not false }}>
-                            <label class="form-check-label" for="scope_whoami">
-                                <span class="fw-semibold">whoami</span>
-                                <small class="text-muted d-block">
-                                    See the account the token belongs to. 
-                                    (<code>divbase-cli auth whoami</code>).
+                                    Get task history for all jobs you have run, not limited to project specific jobs.
+                                    (Without this you cannot run <code>divbase-cli task-history user</code> and <code>divbase-cli task-history id [job_id]</code>).
+                                    But you could run <code>divbase-cli task-history project [project_name]</code> for projects the token has access to, if you give it project access with that scope.)
+                                    You probably want to keep this selected for convienance. 
                                 </small>
                             </label>
                         </div>
