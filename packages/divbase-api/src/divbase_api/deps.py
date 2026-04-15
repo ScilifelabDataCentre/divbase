@@ -23,14 +23,14 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import verify_user_from_access_token, verify_user_from_refresh_token
 from divbase_api.crud.personal_access_tokens import verify_user_from_personal_access_token
 from divbase_api.crud.projects import (
     get_project_by_name_or_id_with_user_role,
-    has_required_role,
+    pat_role_above_user_role,
 )
 from divbase_api.db import get_db
 from divbase_api.exceptions import AuthenticationError, AuthorizationError
@@ -168,8 +168,13 @@ async def get_current_user(
         user, pat = result
         if not pat.permissions:
             return user, None
-
-        scopes = PATPermissions.model_validate(pat.permissions)
+        try:
+            scopes = PATPermissions.model_validate(pat.permissions)
+        except ValidationError as err:
+            logger.error(
+                f"Unexpected error validating PAT permissions for user id={user.id} with permissions dict={pat.permissions}: {err}"
+            )
+            raise AuthorizationError("Invalid permissions in personal access token.") from None
         return user, scopes
 
     # JWT path
@@ -225,11 +230,18 @@ async def get_project_member(
         raise AuthorizationError("This personal access token does not have access to this project.")
 
     try:
-        pat_role = ProjectRoles[pat_role_str.upper()]  # TODO Can I not just do ProjectRoles(pat_role_str)?
-    except KeyError as err:
-        raise AuthorizationError(f"Invalid role '{pat_role_str}' in personal access token permissions.") from err
+        pat_role = ProjectRoles(pat_role_str.lower())
+    except ValueError as err:
+        logger.error(
+            f"Unexpected error validating PAT role for user id={current_user.id} with invalid role='{pat_role_str}' in scopes.projects for project id={project.id}: {err}"
+        )
+        raise AuthorizationError(f"Invalid role '{pat_role_str}' in personal access token permissions.") from None
 
-    effective_role = pat_role if has_required_role(user_role=user_role, required_role=pat_role) else user_role
+    pat_role = ProjectRoles(pat_role_str.lower())
+    effective_role = pat_role
+    if pat_role_above_user_role(pat_role=pat_role, user_role=user_role):
+        effective_role = user_role
+
     return project, current_user, effective_role
 
 

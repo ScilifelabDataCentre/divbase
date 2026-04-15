@@ -181,7 +181,6 @@ class QueueClosedError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
-# TODO - add to exception_handlers?
 class PATLimitExceededError(DivBaseAPIException):
     """Raised when a user has reached the maximum number of active personal access tokens."""
 

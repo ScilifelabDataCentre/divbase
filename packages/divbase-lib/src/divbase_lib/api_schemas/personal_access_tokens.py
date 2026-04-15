@@ -22,7 +22,7 @@ class PATPermissions(BaseModel):
     - task_history / whoami: endpoint/route level scopes as not tied to a specific project.
     """
 
-    all_projects: bool = True
+    all_projects: bool = False
     projects: dict[str, str] = Field(default_factory=dict)
     task_history: bool = False
     whoami: bool = False

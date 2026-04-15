@@ -3,14 +3,14 @@ CRUD operations for Personal Access Tokens (PATs).
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from divbase_api.crud.auth import user_account_valid
-from divbase_api.crud.users import get_user_by_id
 from divbase_api.exceptions import PATDuplicateNameError, PATLimitExceededError
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.users import UserDB
@@ -72,7 +72,11 @@ async def verify_user_from_personal_access_token(
     """
     hashed = hash_personal_access_token(raw_pat)
 
-    stmt = select(PersonalAccessTokenDB).where(PersonalAccessTokenDB.hashed_token == hashed)
+    stmt = (
+        select(PersonalAccessTokenDB)
+        .where(PersonalAccessTokenDB.hashed_token == hashed)
+        .options(selectinload(PersonalAccessTokenDB.user))
+    )
     result = await db.execute(stmt)
     hashed_pat = result.scalar_one_or_none()
 
@@ -87,7 +91,7 @@ async def verify_user_from_personal_access_token(
         logger.info(f"PAT id={hashed_pat.id} rejected, as has expired.")
         return None
 
-    user = await get_user_by_id(db=db, id=hashed_pat.user_id)
+    user = hashed_pat.user
     if not user:
         logger.warning(f"PAT id={hashed_pat.id} rejected, it references a non-existent user id={hashed_pat.user_id}.")
         return None
@@ -96,8 +100,12 @@ async def verify_user_from_personal_access_token(
         logger.info(f"PAT id={hashed_pat.id} rejected, as user account is invalid: {user.email}")
         return None
 
-    hashed_pat.last_used_at = datetime.now(timezone.utc)
-    await db.commit()
+    # avoids spamming db as used in every request
+    # we display in frontend the day it was last used anyway.
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    if hashed_pat.last_used_at is None or hashed_pat.last_used_at < one_hour_ago:
+        hashed_pat.last_used_at = datetime.now(timezone.utc)
+        await db.commit()
 
     return user, hashed_pat
 
@@ -126,6 +134,7 @@ async def soft_delete_personal_access_token(db: AsyncSession, pat_id: int, user_
     stmt = select(PersonalAccessTokenDB).where(
         PersonalAccessTokenDB.id == pat_id,
         PersonalAccessTokenDB.user_id == user_id,
+        PersonalAccessTokenDB.is_deleted == False,  # noqa: E712
     )
     result = await db.execute(stmt)
     pat = result.scalar_one_or_none()
