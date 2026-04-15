@@ -63,9 +63,15 @@
                                         <span class="badge scilife-role-badge-read me-1">whoami</span>
                                     {% endif %}
                                     {% if not pat.permissions.all_projects %}
-                                        <span class="badge scilife-role-badge-manage">
-                                            <i class="bi bi-folder me-1"></i>{{ pat.permissions.projects | length }} project(s)
-                                        </span>
+                                        {% for project_id, role in pat.permissions.projects.items() %}
+                                            {% if project_id in project_name_by_id %}
+                                            <span class="badge scilife-role-badge-{{ role }} me-1">
+                                                <i class="bi bi-folder me-1"></i>{{ project_name_by_id[project_id] }} ({{ role }})
+                                            </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted small">No projects</span>
+                                        {% endfor %}
                                     {% else %}
                                         <span class="badge scilife-role-badge-edit me-1">All projects</span>
                                     {% endif %}

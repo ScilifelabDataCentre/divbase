@@ -42,6 +42,8 @@ async def list_pats_endpoint(
 ):
     """Render the user's personal access tokens list page."""
     pats = await get_users_personal_access_tokens(db=db, user_id=current_user.id)
+    user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
+    project_name_by_id = {str(p.id): p.name for p, _ in user_projects}
     return templates.TemplateResponse(
         request=request,
         name="pats_pages/personal_access_tokens.html",
@@ -51,6 +53,7 @@ async def list_pats_endpoint(
             "now": datetime.now(timezone.utc),
             "success": success,
             "error": error,
+            "project_name_by_id": project_name_by_id,
         },
     )
 
@@ -146,19 +149,20 @@ async def create_pat_endpoint(
                     f"The token role for '{project_name}' cannot exceed your membership role ({user_role})."
                 )
 
+    project_name_by_id = {str(p.id): p.name for p in projects}
+
     # pat_permissions=None means all user permissions (unrestricted).
     pat_permissions: PATPermissions | None = None
     if scope_task_history or scope_whoami or project_access_mode == "specific":
-        projects = form_projects if project_access_mode == "specific" else None
-
-        if not any([scope_task_history, scope_whoami, project_access_mode == "all", projects]):
+        specific_projects = form_projects if project_access_mode == "specific" else {}
+        if not any([scope_task_history, scope_whoami, project_access_mode == "all", specific_projects]):
             return form_error("Please select at least one permission scope for the token.")
 
         pat_permissions = PATPermissions(
             task_history=scope_task_history,
             whoami=scope_whoami,
             all_projects=project_access_mode == "all",
-            projects=form_projects if project_access_mode == "specific" else {},
+            projects=specific_projects,
         )
 
     try:
@@ -192,6 +196,7 @@ async def create_pat_endpoint(
             "pat": pat,
             "expires_at_cet": expires_at_cet,
             "raw_token": raw_token.get_secret_value(),
+            "project_name_by_id": project_name_by_id,
         },
         status_code=status.HTTP_201_CREATED,
     )
