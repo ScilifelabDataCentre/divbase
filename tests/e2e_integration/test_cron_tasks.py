@@ -19,14 +19,15 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
-from divbase_api.security import TokenType
+from divbase_api.security import TokenType, generate_personal_access_token, hash_personal_access_token
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.cron_tasks import (
-    cleanup_old_revoked_tokens,
+    cleanup_old_revoked_jwts_and_pats,
     cleanup_old_task_history_task,
     cleanup_soft_deleted_project_versions,
     cleanup_stuck_tasks_task,
@@ -355,13 +356,13 @@ def test_cleanup_stuck_tasks_deletes_from_both_tables(db_session_sync, create_ta
 
 
 @pytest.fixture
-def create_revoked_token(db_session_sync):
+def create_revoked_jwt(db_session_sync):
     """
-    Fixture to create revoked token entries with backdated timestamps.
+    Fixture to create revoked JWT entries with backdated timestamps.
     """
 
-    def _create_revoked_token(days_old: int) -> int:
-        """Create a revoked token entry with backdated revoked_at timestamp."""
+    def _create_revoked_jwt(days_old: int) -> int:
+        """Create a revoked JWT entry with backdated revoked_at timestamp."""
         revoked_at = datetime.now(timezone.utc) - timedelta(days=days_old)
         revoked_token = RevokedTokenDB(
             token_jti=str(uuid.uuid4()),
@@ -376,52 +377,95 @@ def create_revoked_token(db_session_sync):
         db_session_sync.refresh(revoked_token)
         return revoked_token.id
 
-    return _create_revoked_token
+    return _create_revoked_jwt
 
 
-def test_cleanup_old_revoked_tokens_deletes_old_entries(db_session_sync, create_revoked_token):
+@pytest.fixture
+def create_soft_deleted_pat(db_session_sync):
     """
-    Test that cleanup_old_revoked_tokens deletes tokens older than REVOKED_TOKEN_MAX_AGE_DAYS
-    and keeps recent tokens.
+    Fixture to create soft-deleted PAT entries with backdated timestamps.
     """
-    old_token_10d = create_revoked_token(days_old=10)
-    old_token_15d = create_revoked_token(days_old=15)
 
-    recent_token_3d = create_revoked_token(days_old=3)
-    recent_token_6d = create_revoked_token(days_old=6)
+    def _create_soft_deleted_pat(days_old: int) -> int:
+        """Create a soft-deleted PAT entry with backdated date_deleted timestamp."""
+        date_deleted = datetime.now(timezone.utc) - timedelta(days=days_old)
+        pat = PersonalAccessTokenDB(
+            user_id=1,
+            name="test-pat",
+            hashed_token=hash_personal_access_token(generate_personal_access_token()),
+            is_deleted=True,
+            date_deleted=date_deleted,
+        )
 
-    result = cleanup_old_revoked_tokens()
+        db_session_sync.add(pat)
+        db_session_sync.commit()
+        db_session_sync.refresh(pat)
+        return pat.id
+
+    return _create_soft_deleted_pat
+
+
+def test_cleanup_old_jwts_and_pats_deletes_old_entries(db_session_sync, create_revoked_jwt, create_soft_deleted_pat):
+    """
+    Test that cleanup_old_revoked_jwts_and_pats deletes revoked JWTs and soft-deleted PATs
+    older than the retention threshold, and keeps recent ones.
+    """
+    old_jwt_10d = create_revoked_jwt(days_old=10)
+    old_jwt_15d = create_revoked_jwt(days_old=15)
+    recent_jwt_3d = create_revoked_jwt(days_old=3)
+    recent_jwt_6d = create_revoked_jwt(days_old=6)
+
+    old_pat_10d = create_soft_deleted_pat(days_old=10)
+    old_pat_15d = create_soft_deleted_pat(days_old=15)
+    recent_pat_3d = create_soft_deleted_pat(days_old=3)
+    recent_pat_6d = create_soft_deleted_pat(days_old=6)
+
+    result = cleanup_old_revoked_jwts_and_pats()
 
     assert result["status"] == "completed"
-    assert result["number_of_revoked_tokens_deleted"] == 2
+    assert result["number_of_revoked_jwts_deleted"] == 2
+    assert result["number_of_revoked_pats_deleted"] == 2
     assert result["max_revoked_token_age_days"] == 7
 
-    # Verify old tokens were deleted
-    for token_id in [old_token_10d, old_token_15d]:
+    for token_id in [old_jwt_10d, old_jwt_15d]:
         revoked_token = db_session_sync.execute(
             select(RevokedTokenDB).where(RevokedTokenDB.id == token_id)
         ).scalar_one_or_none()
         assert revoked_token is None
 
-    # Verify recent tokens were kept
-    for token_id in [recent_token_3d, recent_token_6d]:
+    for token_id in [recent_jwt_3d, recent_jwt_6d]:
         revoked_token = db_session_sync.execute(
             select(RevokedTokenDB).where(RevokedTokenDB.id == token_id)
         ).scalar_one_or_none()
         assert revoked_token is not None
 
+    for pat_id in [old_pat_10d, old_pat_15d]:
+        revoked_token = db_session_sync.execute(
+            select(PersonalAccessTokenDB).where(PersonalAccessTokenDB.id == pat_id)
+        ).scalar_one_or_none()
+        assert revoked_token is None
 
-def test_cleanup_old_revoked_tokens_with_no_old_entries(db_session_sync, create_revoked_token):
-    """
-    Test that cleanup handles the case where there are no old revoked tokens gracefully.
-    """
-    create_revoked_token(days_old=2)
-    create_revoked_token(days_old=5)
+    for pat_id in [recent_pat_3d, recent_pat_6d]:
+        revoked_token = db_session_sync.execute(
+            select(PersonalAccessTokenDB).where(PersonalAccessTokenDB.id == pat_id)
+        ).scalar_one_or_none()
+        assert revoked_token is not None
 
-    result = cleanup_old_revoked_tokens()
+
+def test_cleanup_old_jwts_and_pats_with_no_old_entries(db_session_sync, create_revoked_jwt, create_soft_deleted_pat):
+    """
+    Test that cleanup handles the case where there are no old JWTs or PATs gracefully.
+    """
+    create_revoked_jwt(days_old=2)
+    create_revoked_jwt(days_old=5)
+    create_soft_deleted_pat(days_old=2)
+    create_soft_deleted_pat(days_old=5)
+
+    result = cleanup_old_revoked_jwts_and_pats()
 
     assert result["status"] == "completed"
-    assert result["number_of_revoked_tokens_deleted"] == 0
+    assert result["number_of_revoked_jwts_deleted"] == 0
+    assert result["number_of_revoked_pats_deleted"] == 0
 
 
 @pytest.fixture

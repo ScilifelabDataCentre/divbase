@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from celery.schedules import crontab
 from sqlalchemy import delete, select, text, update
 
+from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
@@ -149,20 +150,32 @@ def cleanup_stuck_tasks_task(
         raise
 
 
-@app.task(name="cron_tasks.cleanup_old_revoked_tokens")
-def cleanup_old_revoked_tokens(retention_days: int = worker_settings.cron.revoked_token_retention_days):
+@app.task(name="cron_tasks.cleanup_old_jwts_and_pats")
+def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron.revoked_token_retention_days):
     """
     Periodic task to clean up old revoked token entries.
-    (These tokens will all have expired by this timepoint anyway.)
+
+    This covers both:
+    1. revoked JWTs (which always have an expiry) - so we revoke after they are expired, so harmless.
+    2. revoked PATs - once the user "revokes" - marks as soft deleted in db, they are not usable.
+    PATs are looked up in the db on every use so if it is not in our db it is not useable.
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    stmt = delete(RevokedTokenDB).where(RevokedTokenDB.revoked_at < cutoff_date)
+    jwts_stmt = delete(RevokedTokenDB).where(RevokedTokenDB.revoked_at < cutoff_date)
+
+    pats_stmt = delete(PersonalAccessTokenDB)
+    pats_stmt = pats_stmt.where(PersonalAccessTokenDB.is_deleted == True)  # noqa: E712
+    pats_stmt = pats_stmt.where(PersonalAccessTokenDB.date_deleted < cutoff_date)
+
     with SyncSessionLocal() as db:
-        deleted_count = db.execute(stmt).rowcount
+        deleted_jwts_count = db.execute(jwts_stmt).rowcount
+        deleted_pats_count = db.execute(pats_stmt).rowcount
         db.commit()
+
     return {
         "status": "completed",
-        "number_of_revoked_tokens_deleted": deleted_count,
+        "number_of_revoked_jwts_deleted": deleted_jwts_count,
+        "number_of_revoked_pats_deleted": deleted_pats_count,
         "cutoff_date": cutoff_date.isoformat(),
         "max_revoked_token_age_days": retention_days,
     }
@@ -326,7 +339,7 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=5, minute=15),  # Run daily at 5:15 AM CET
     },
     "cleanup-old-revoked-daily": {
-        "task": "cron_tasks.cleanup_old_revoked_tokens",
+        "task": "cron_tasks.cleanup_old_jwts_and_pats",
         "schedule": crontab(hour=5, minute=20),  # Run daily at 5:20 AM CET
     },
     "cleanup-soft-deleted-project-versions-daily": {
