@@ -21,6 +21,17 @@ runner = CliRunner()
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(autouse=True)
+def no_pat(monkeypatch):
+    """
+    Ensures DIVBASE_API_PAT is never taken from test runner environment (aka dev's token),
+    Could interfere otherwise.
+
+    Specific tests can instead override this fixture if they want to test behavior with a PAT.
+    """
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", None)
+
+
 @pytest.fixture
 def tmp_config_path(tmp_path):
     """

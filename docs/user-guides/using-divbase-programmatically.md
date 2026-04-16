@@ -12,7 +12,10 @@ For scripts, pipelines, and HPC jobs the recommended approach is to use a **Pers
 
 See [Account Management — Personal Access Tokens](./account-management.md#personal-access-tokens) for how to create/and remove PATs.
 
-Once you have a token, set the `DIVBASE_API_PAT` environment variable to it. `divbase-cli` will automatically use it for every request:
+Once you have a token, set the `DIVBASE_API_PAT` environment variable to it. `divbase-cli` will automatically use it in every request.
+
+!!! question "What if I have both an active login session and a Personal Access Token set?"
+    `divbase-cli` prioritises an active login session over a PAT. If you have both, the CLI will use the active session and ignore the PAT. To use the PAT, you would need to run `divbase-cli auth logout` first.
 
 ```bash
 export DIVBASE_API_PAT="divbase_pat_your_token_here"

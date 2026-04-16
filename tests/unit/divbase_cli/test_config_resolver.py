@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecifiedError
 from divbase_cli.config_resolver import (
     ensure_logged_in,
@@ -11,6 +12,15 @@ from divbase_cli.config_resolver import (
     resolve_url_for_non_project_specific_commands,
 )
 from divbase_cli.user_config import ProjectConfig
+
+
+@pytest.fixture(autouse=True)
+def no_pat(monkeypatch):
+    """
+    Ensures DIVBASE_API_PAT is never taken from test runner environment (aka dev's token),
+    this can interfere here.
+    """
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", None)
 
 
 def test_ensure_logged_in_success():
@@ -47,8 +57,14 @@ def test_ensure_logged_in_wrong_url():
 
 
 def test_ensure_logged_in_with_pat_and_desired_url():
-    """ensure_logged_in returns desired_url immediately when DIVBASE_API_PAT is set, skipping the login check."""
-    with patch("divbase_cli.config_resolver.cli_settings") as mock_settings:
+    """ensure_logged_in returns desired_url when no active session and DIVBASE_API_PAT is set."""
+    mock_config = MagicMock()
+    mock_config.logged_in_url = None
+
+    with (
+        patch("divbase_cli.config_resolver.cli_settings") as mock_settings,
+        patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
+    ):
         mock_settings.DIVBASE_API_PAT = "divbase_pat_abc123"
         mock_settings.DIVBASE_API_URL = "https://default.example.com"
 
@@ -58,8 +74,14 @@ def test_ensure_logged_in_with_pat_and_desired_url():
 
 
 def test_ensure_logged_in_with_pat_and_no_desired_url():
-    """ensure_logged_in returns DIVBASE_API_URL when PAT is set but no desired_url is given."""
-    with patch("divbase_cli.config_resolver.cli_settings") as mock_settings:
+    """ensure_logged_in returns DIVBASE_API_URL when no active session and PAT is set but no desired_url given."""
+    mock_config = MagicMock()
+    mock_config.logged_in_url = None
+
+    with (
+        patch("divbase_cli.config_resolver.cli_settings") as mock_settings,
+        patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
+    ):
         mock_settings.DIVBASE_API_PAT = "divbase_pat_abc123"
         mock_settings.DIVBASE_API_URL = "https://default.example.com"
 
@@ -112,8 +134,14 @@ def test_resolve_project_no_project_specified():
 
 
 def test_resolve_url_for_non_project_specific_commands_with_pat():
-    """resolve_url_for_non_project_specific_commands returns DIVBASE_API_URL when PAT is set."""
-    with patch("divbase_cli.config_resolver.cli_settings") as mock_settings:
+    """resolve_url_for_non_project_specific_commands returns DIVBASE_API_URL when no active session and PAT is set."""
+    mock_config = MagicMock()
+    mock_config.logged_in_url = None
+
+    with (
+        patch("divbase_cli.config_resolver.cli_settings") as mock_settings,
+        patch("divbase_cli.config_resolver.load_user_config", return_value=mock_config),
+    ):
         mock_settings.DIVBASE_API_PAT = "divbase_pat_abc123"
         mock_settings.DIVBASE_API_URL = "https://default.example.com"
 

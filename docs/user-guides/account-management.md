@@ -40,7 +40,7 @@ Personal Access Tokens (PATs) let you authenticate with DivBase programmatically
 To create a PAT:
 
 1. Log in to DivBase and navigate to your **Profile** page. From their you'll see a section to manage your Personal Access Tokens.
-2. When adding a new token, you need to give it a name, an optionaldescription and an expiry date.
+2. When adding a new token, you need to give it a name, an optional description and an expiry date.
 3. You can also configure the scope of the PAT (What permissions the token has):
     - **All projects** — the token can access all projects you're a member of, with same role as you have.
     - **Specific projects** — restrict the token to selected projects, each with a maximum role.
