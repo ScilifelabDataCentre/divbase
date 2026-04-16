@@ -33,7 +33,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
-from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, TaskUserError
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -1141,7 +1141,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             ),
         ):
             if not expect_success:
-                with pytest.raises((VCFDimensionsEntryMissingError, ValueError)) as e:
+                with pytest.raises((VCFDimensionsEntryMissingError, TaskUserError)) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
                     assert msg.replace("\n", "") in str(e.value).replace("\n", "")

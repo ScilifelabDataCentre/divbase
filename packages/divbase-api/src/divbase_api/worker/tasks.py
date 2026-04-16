@@ -1033,7 +1033,7 @@ def _check_for_unnecessary_files_for_region_query(
                     files_to_download_updated.append(file)
 
     if not files_to_download_updated:
-        raise ValueError(
+        raise TaskUserError(
             "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, "
             "there are no VCF files in the project that fulfill the query.\n"
             "Please try another -r query with scaffolds/chromosomes that are present in the VCF files.\n"
@@ -1098,11 +1098,11 @@ def _check_if_samples_can_be_combined_with_bcftools(
     file_to_samples = {}
     for file in files_to_download:
         if file not in vcf_lookup:
-            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
 
         sample_names = vcf_lookup[file].get("samples")
         if not sample_names:
-            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
 
         file_to_samples[file] = sample_names
 
@@ -1135,7 +1135,7 @@ def _check_if_samples_can_be_combined_with_bcftools(
             )
         full_msg = "\n\n".join(msg_lines)
         logger.error(full_msg)
-        raise ValueError(full_msg)
+        raise TaskUserError(full_msg)
     else:
         logger.info("No unsupported sample sets found. Proceeding with bcftools pipeline.")
         return

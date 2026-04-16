@@ -8,6 +8,7 @@ from divbase_api.worker.tasks import (
     bcftools_pipe_task,
 )
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.exceptions import TaskUserError
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -183,7 +184,7 @@ def test_check_if_samples_can_be_combined_with_bcftools_param(
     vcf_dimensions_data = dimensions_index
 
     if should_raise_error:
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(TaskUserError) as excinfo:
             _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
         assert expected_message_part in str(excinfo.value)
     else:
