@@ -230,13 +230,6 @@ def sample_metadata_query_task(
         project_id=project_id,
     )
 
-    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
-    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
-        vcf_dimensions_data=vcf_dimensions_data,
-        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
-        project_id=project_id,
-    )
-
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
