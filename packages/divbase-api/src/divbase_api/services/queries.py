@@ -668,12 +668,7 @@ class BcftoolsQueryManager:
                         f"Monitoring loop completed after {loop_iterations} iterations, current_cpu={current_cpu:.6f}s"
                     )
 
-                    # Wait for process to complete and check return code
-                    returncode = proc.wait()
-                    if returncode != 0:
-                        raise BcftoolsCommandError(
-                            command=formatted_cmd, error_details=f"Process exited with code {returncode}"
-                        ) from None
+                    self._wait_proc_and_check_return_code(proc=proc, command=formatted_cmd)
 
                     # Add CPU to total (will be 0.0 if process was too fast to measure)
                     total_cpu_seconds += current_cpu
@@ -682,19 +677,12 @@ class BcftoolsQueryManager:
                     )
 
                 except psutil.NoSuchProcess:
-                    returncode = proc.wait()
-                    if returncode != 0:
-                        raise BcftoolsCommandError(
-                            command=formatted_cmd, error_details=f"Process exited with code {returncode}"
-                        ) from None
+                    self._wait_proc_and_check_return_code(proc=proc, command=formatted_cmd)
                     logger.info("Bcftools process finished too quickly to monitor - caught NoSuchProcess")
             else:
                 # Monitoring disabled, just wait for process to complete
-                returncode = proc.wait()
-                if returncode != 0:
-                    raise BcftoolsCommandError(
-                        command=formatted_cmd, error_details=f"Process exited with code {returncode}"
-                    ) from None
+                self._wait_proc_and_check_return_code(proc=proc, command=formatted_cmd)
+
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             # Ensure temporary output VCFs are indexed *after* command execution.
@@ -822,7 +810,7 @@ class BcftoolsQueryManager:
         if not os.path.exists(index_file):
             index_command = f"index -f {file}"
             proc = self.run_bcftools(command=index_command)
-            proc.wait()
+            self._wait_proc_and_check_return_code(proc=proc, command=index_command)
 
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
         """
@@ -860,7 +848,7 @@ class BcftoolsQueryManager:
                 merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
                 proc = self.run_bcftools(command=merge_command)
-                proc.wait()
+                self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
                 self._log_file_size(unsorted_output_file)
             else:
@@ -875,7 +863,7 @@ class BcftoolsQueryManager:
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
                         concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
                         proc = self.run_bcftools(command=concat_command)
-                        proc.wait()
+                        self._wait_proc_and_check_return_code(proc=proc, command=concat_command)
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
                         self.ensure_csi_index(concat_temp)
@@ -888,7 +876,7 @@ class BcftoolsQueryManager:
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
                     proc = self.run_bcftools(command=merge_command)
-                    proc.wait()
+                    self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                     self._log_file_size(unsorted_output_file)
                 elif len(temp_concat_files) == 1:
@@ -908,12 +896,12 @@ class BcftoolsQueryManager:
             f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
         proc = self.run_bcftools(command=annotate_command)
-        proc.wait()
+        self._wait_proc_and_check_return_code(proc=proc, command=annotate_command)
         self._log_file_size(annotated_unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
         proc = self.run_bcftools(command=sort_command)
-        proc.wait()
+        self._wait_proc_and_check_return_code(proc=proc, command=sort_command)
         self._log_file_size(output_file)
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
@@ -1033,6 +1021,17 @@ class BcftoolsQueryManager:
             logger.info(f"File '{file_path}' size: {size_gb:.2f} GB, {size_gi:.2f} Gi")
         except Exception as e:
             logger.warning(f"Could not determine size of file '{file_path}': {e}")
+
+    def _wait_proc_and_check_return_code(self, proc: subprocess.Popen, command: str) -> None:
+        """
+        Wait for a bcftools subprocess and raise if it failed.
+        """
+        returncode = proc.wait()
+        if returncode != 0:
+            raise BcftoolsCommandError(
+                command=command,
+                error_details=f"Process exited with code {returncode}",
+            ) from None
 
 
 ###
