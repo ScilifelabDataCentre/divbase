@@ -206,14 +206,12 @@ def sample_metadata_query_task(
 
     s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
 
-    try:
-        metadata_path = _download_sample_metadata(
-            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-        )
-    except ObjectDoesNotExistError:
-        # If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards.
-        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
-        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
+    metadata_path = _download_sample_metadata_for_task(
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+        project_name=project_name,
+    )
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -310,6 +308,7 @@ def bcftools_pipe_task(
             s3_file_manager=s3_file_manager,
             tsv_filter=tsv_filter,
             project_id=project_id,
+            project_name=project_name,
             vcf_dimensions_data=vcf_dimensions_data,
         )
     elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
@@ -599,6 +598,24 @@ def update_vcf_dimensions_task(
         return result.model_dump()
 
 
+def _download_sample_metadata_for_task(
+    metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager, project_name: str
+) -> Path:
+    """
+    Wrapper function to download the sample metadata file for the specified task and raise a TaskUserError if the file is not found.
+    If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards so that the celery task is marked as FAILED.
+    """
+    try:
+        metadata_path = _download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
+    except ObjectDoesNotExistError:
+        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
+
+    return metadata_path
+
+
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
@@ -869,6 +886,7 @@ def _resolve_inputs_for_sample_metadata_mode(
     s3_file_manager: S3FileManager,
     tsv_filter: str,
     project_id: int,
+    project_name: str,
     vcf_dimensions_data: dict,
 ) -> SampleModeResult:
     """
@@ -876,9 +894,13 @@ def _resolve_inputs_for_sample_metadata_mode(
     For the mode: VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
     """
 
-    metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+    metadata_path = _download_sample_metadata_for_task(
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+        project_name=project_name,
     )
+
     metadata_result = run_sidecar_metadata_query(
         file=metadata_path,
         filter_string=tsv_filter,
