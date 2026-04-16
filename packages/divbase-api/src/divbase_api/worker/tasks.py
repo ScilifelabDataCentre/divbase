@@ -1023,11 +1023,15 @@ def _check_for_unnecessary_files_for_region_query(
 
 
 def _delete_job_files_from_worker(
-    vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
+    vcf_paths: list[Path] | None = None,
+    metadata_path: Path | None = None,
+    output_file: Path | None = None,
 ) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
     """
+
+    vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
         vcf_path = Path(vcf_path)
         try:
@@ -1042,12 +1046,14 @@ def _delete_job_files_from_worker(
                 logger.info(f"Deleted CSI index {csi_path} from worker.")
             except Exception as e:
                 logger.warning(f"Could not delete CSI index file {csi_path}: {e}")
+
     if metadata_path is not None:
         try:
             os.remove(metadata_path)
             logger.info(f"Deleted {metadata_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
+
     if output_file is not None:
         try:
             os.remove(output_file)
