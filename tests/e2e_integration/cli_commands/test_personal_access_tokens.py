@@ -36,20 +36,17 @@ FULL_ACCESS_PAT_PERMISSIONS = {
     "all_projects": True,
     "projects": {},
     "task_history": True,
-    "whoami": True,
 }
 
-WHOAMI_ONLY_PERMISSIONS = {
+NO_SCOPE_PERMISSIONS = {
     "all_projects": False,
     "projects": {},
     "task_history": False,
-    "whoami": True,
 }
 TASK_HISTORY_ONLY_PERMISSIONS = {
     "all_projects": False,
     "projects": {},
     "task_history": True,
-    "whoami": False,
 }
 
 
@@ -121,10 +118,11 @@ def test_full_access_pat_works_for_all_cmds(CONSTANTS, logged_out_user_with_exis
     assert result.exit_code == 0
 
 
-def test_whoami_only_can_only_run_whoami(CONSTANTS, logged_out_user_with_existing_config, pat_factory, monkeypatch):
+def test_no_scope_pat_can_only_run_whoami(CONSTANTS, logged_out_user_with_existing_config, pat_factory, monkeypatch):
+    """whoami is always accessible to any valid PAT regardless of scopes."""
     raw_token = pat_factory(
         user_email=EDIT_USER_EMAIL,
-        permissions=WHOAMI_ONLY_PERMISSIONS,
+        permissions=NO_SCOPE_PERMISSIONS,
     )
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
 
@@ -156,7 +154,7 @@ def test_task_history_only_can_only_run_task_history(
     assert_403_error(result)
 
     result = runner.invoke(app, "auth whoami")
-    assert_403_error(result)
+    assert result.exit_code == 0  # whoami is always accessible regardless of PAT scopes
 
     result = runner.invoke(app, f"files ls --project {CONSTANTS['DEFAULT_PROJECT']}")
     assert_403_error(result)
@@ -170,7 +168,6 @@ def test_project_scoped_pat(CONSTANTS, logged_out_user_with_existing_config, pat
         "all_projects": False,
         "projects": {str(project_map[included_project]): "edit"},
         "task_history": False,
-        "whoami": False,
     }
     raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
@@ -190,7 +187,6 @@ def test_project_scoped_task_history_included_project_succeeds(
         "all_projects": False,
         "projects": {str(project_map[project]): "manage"},
         "task_history": True,
-        "whoami": False,
     }
     raw_token = pat_factory(user_email=MANAGE_USER_EMAIL, permissions=permissions)
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
@@ -208,7 +204,6 @@ def test_project_scoped_task_history_excluded_project_rejected(
         "all_projects": False,
         "projects": {str(project_map[included_project]): "edit"},
         "task_history": True,
-        "whoami": False,
     }
     raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
@@ -226,7 +221,6 @@ def test_read_role_pat_rejects_edit_level_action(
         "all_projects": False,
         "projects": {str(project_map[project]): "read"},
         "task_history": False,
-        "whoami": False,
     }
     raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
@@ -249,7 +243,6 @@ def test_edit_pat_cant_do_edit_actions_if_user_is_read_only(
         "all_projects": False,
         "projects": {str(project_map[project]): "edit"},
         "task_history": False,
-        "whoami": False,
     }
     raw_token = pat_factory(user_email=READ_USER_EMAIL, permissions=permissions)
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)

@@ -19,7 +19,6 @@ class PATPermissions(BaseModel):
     all_projects: bool = False
     projects: dict[str, str] = Field(default_factory=dict)
     task_history: bool = False
-    whoami: bool = False
 ```
 
 The JSONB is nullable, and a `NULL` column means same access level as the user.
@@ -29,6 +28,12 @@ The JSONB is nullable, and a `NULL` column means same access level as the user.
 | `all_projects` | Access all projects the user is a member of, at their membership role |
 | `projects` | Access specific projects only; each project mapped to a max role (`read`, `edit`, `manage`) |
 | `task_history` | Access the task history endpoints which are not project specific |
-| `whoami` | Always `True` — granted implicitly on all PATs, not user-configurable |
+
+Note that almost all divbase-api routes called by the CLI tool are project scoped. So they rely on the `get_project_member` dependency. The only exceptions to that are:
+
+1. `divbase-cli auth whoami`
+2. `divbase-cli task-history user` and `divbase-cli task-history id [job_id]`
+
+For whoami, decision made that all PATs can call this endpoint so can just rely on `get_current_user` dependency which checks if the token is valid but does not check any scopes/permissions. For the task history endpoints, we have a `require_task_history_scope` dependency that checks if the token has the `task_history` scope is set to True. Note that task history project is dependent on the `projects` scope like all other endpoints.
 
 The effective project role for a scoped PAT is `min(pat_role, user_membership_role)` — the PAT can never escalate beyond the user's actual membership.

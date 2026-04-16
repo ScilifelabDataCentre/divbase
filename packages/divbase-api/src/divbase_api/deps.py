@@ -257,18 +257,3 @@ async def require_task_history_scope(
     if scopes is not None and not scopes.task_history:
         raise AuthorizationError("This personal access token does not have the 'task_history' scope.")
     return current_user
-
-
-async def require_whoami_scope(
-    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
-) -> UserDB:
-    """
-    Verify the bearer token has the 'whoami' scope.
-
-    JWT tokens and PATs with permissions=None (full access) always pass.
-    PATs with explicit scopes must have whoami=True.
-    """
-    current_user, scopes = current_user_and_scopes
-    if scopes is not None and not scopes.whoami:
-        raise AuthorizationError("This personal access token does not have the 'whoami' scope.")
-    return current_user

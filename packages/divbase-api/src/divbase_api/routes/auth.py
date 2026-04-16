@@ -6,6 +6,7 @@ Frontend routes are located in frontend_routes/auth.py
 """
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.crud.auth import authenticate_user, verify_user_from_refresh_token
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout
 from divbase_api.db import get_db
-from divbase_api.deps import require_whoami_scope
+from divbase_api.deps import get_current_user
 from divbase_api.exceptions import AuthenticationError
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserResponse
@@ -25,6 +26,7 @@ from divbase_lib.api_schemas.auth import (
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
+from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,11 @@ async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depe
 
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def whoami_endpoint(current_user: UserDB = Depends(require_whoami_scope)):
+async def whoami_endpoint(
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
+):
     """Endpoint to return current logged in user's details."""
+    # NOTE: this endpoint is not scoped on purpose,
+    # so it works as long as user authenticated either via JWT or (any) PAT
+    current_user, _ = current_user_and_scopes
     return UserResponse.model_validate(current_user)

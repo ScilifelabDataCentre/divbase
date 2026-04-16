@@ -160,7 +160,6 @@ async def create_pat_endpoint(
 
         pat_permissions = PATPermissions(
             task_history=scope_task_history,
-            whoami=True,
             all_projects=project_access_mode == "all",
             projects=specific_projects,
         )

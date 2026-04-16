@@ -17,10 +17,10 @@ class PATPermissions(BaseModel):
     - all_projects: True = access all the user's projects with same role as user
                   False = access only the projects listed in `projects`.
     - projects: {str(project_id): role_string}; only enforced when all_projects=False.
-    - task_history / whoami: endpoint/route level scopes as not tied to a specific project.
+    - task_history: endpoint level scope;. For the 2 task history routes not tied to a specific project.
+        (these are task_history for a specific task id and for the user)
     """
 
     all_projects: bool = False
     projects: dict[str, str] = Field(default_factory=dict)
     task_history: bool = False
-    whoami: bool = False
