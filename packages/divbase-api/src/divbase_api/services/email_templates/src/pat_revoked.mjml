@@ -54,11 +54,11 @@
       <mj-column>
         <mj-text align="center" font-size="12px" color="#a6a6a6" padding="0">
           This is an automated message, please do not reply directly to this
-          email. You can contact us at
+          email. You can contact us at 
           <a
-            href="mailto:{{ user_support_email }}"
+            href="mailto:{{ support_email }}"
             style="color: #045c64; text-decoration: none"
-            >{{ user_support_email }}</a
+            >{{ support_email }}</a
           >
           if you need assistance.
         </mj-text>
