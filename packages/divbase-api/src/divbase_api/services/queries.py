@@ -72,6 +72,17 @@ class BCFToolsCommandConfig:
     auto_sample_injection: bool
 
 
+@dataclass
+class NumericFilterContext:
+    """
+    Context for parsing numeric filter values in SidecarQueryManager.
+    """
+
+    key: str
+    filter_string_values: str
+    is_negated: bool
+
+
 def run_sidecar_metadata_query(
     file: Path,
     filter_string: str = None,
@@ -1293,22 +1304,26 @@ class SidecarQueryManager:
                         filter_values=filter_string_values_list
                     )
 
-                    filter_context = {
-                        "key": key,
-                        "filter_string_values": filter_string_values,
-                        "is_negated": False,
-                    }
+                    positive_filter_context = NumericFilterContext(
+                        key=key,
+                        filter_string_values=filter_string_values,
+                        is_negated=False,
+                    )
 
                     inequality_conditions, range_conditions, discrete_values = self._parse_numeric_filter_values(
                         values_to_process=positive_values,
-                        context=filter_context,
+                        context=positive_filter_context,
                     )
 
-                    filter_context["is_negated"] = True
+                    negated_filter_context = NumericFilterContext(
+                        key=key,
+                        filter_string_values=filter_string_values,
+                        is_negated=True,
+                    )
                     negated_inequality_conditions, negated_range_conditions, negated_discrete_values = (
                         self._parse_numeric_filter_values(
                             values_to_process=negated_values,
-                            context=filter_context,
+                            context=negated_filter_context,
                         )
                     )
 
@@ -1610,19 +1625,19 @@ class SidecarQueryManager:
         return conditions
 
     def _parse_numeric_filter_values(
-        self, values_to_process: list[str], context: dict[str, str | bool]
+        self, values_to_process: list[str], context: NumericFilterContext
     ) -> tuple[list[pd.Series], list[pd.Series], list[float | int]]:
         """
         Helper method for the filtering logic to identify if a numeric filter values is an inequality, range, or discrete value and process it accordingly.
 
-        The context dict is intended to keep the kwargs manageable when passing positive and negative values back-to-back:
+        The context dataclass is intended to keep the kwargs manageable when passing positive and negative values back-to-back:
             - key: Column name being filtered
             - filter_string_values: Original filter string (for error messages)
             - is_negated: Whether these are negated (NOT) conditions
         """
-        key = context["key"]
-        filter_string_values = context["filter_string_values"]
-        is_negated = context["is_negated"]
+        key = context.key
+        filter_string_values = context.filter_string_values
+        is_negated = context.is_negated
 
         inequality_conditions = []
         range_conditions = []
