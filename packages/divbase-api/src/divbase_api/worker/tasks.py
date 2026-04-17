@@ -95,6 +95,17 @@ class SampleModeResult:
     metadata_path: Path | None = None
 
 
+@dataclasses.dataclass
+class SampleSetOverlapResults:
+    """
+    Pairwise overlap classification result for sample sets.
+    """
+
+    identical_elements_different_order: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+    partly_overlapping: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+    non_overlapping: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+
+
 # Celery results backend config
 app.conf.update(
     task_track_started=True,
@@ -1030,25 +1041,22 @@ def _check_if_samples_can_be_combined_with_bcftools(
     sample_set_overlap_results = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
     logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
 
-    if (
-        sample_set_overlap_results["identical elements, different order"]
-        or sample_set_overlap_results["partly overlapping"]
-    ):
+    if sample_set_overlap_results.identical_elements_different_order or sample_set_overlap_results.partly_overlapping:
         msg_lines = []
-        if sample_set_overlap_results["identical elements, different order"]:
+        if sample_set_overlap_results.identical_elements_different_order:
             msg_lines.append(
                 "Sample sets with identical elements but different order:\n"
                 + "\n".join(
                     [
                         f"{pair[0]} vs {pair[1]}"
-                        for pair in sample_set_overlap_results["identical elements, different order"]
+                        for pair in sample_set_overlap_results.identical_elements_different_order
                     ]
                 )
             )
-        if sample_set_overlap_results["partly overlapping"]:
+        if sample_set_overlap_results.partly_overlapping:
             msg_lines.append(
                 "Sample sets that are partly overlapping:\n"
-                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results["partly overlapping"]])
+                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results.partly_overlapping])
             )
         full_msg = "\n\n".join(msg_lines)
         logger.error(full_msg)
@@ -1058,7 +1066,9 @@ def _check_if_samples_can_be_combined_with_bcftools(
         return
 
 
-def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+def _calculate_pairwise_overlap_types_for_sample_sets(
+    sample_sets_dict: dict[tuple, list[str]],
+) -> SampleSetOverlapResults:
     """
     Analyze all pairwise overlap types between sample sets.
     Catches the case where two sets have the same elements but different order.
@@ -1068,22 +1078,20 @@ def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tup
     tuples are used in the input to maintain order within the sample sets, but tuples do not support '&' intersection operations. Thus they need to be converted with set()
 
     """
-    keys = ["identical elements, different order", "partly overlapping", "non-overlapping"]
-    sample_set_overlap_results = {key: [] for key in keys}
+    sample_set_overlap_results = SampleSetOverlapResults()
     sample_sets = list(sample_sets_dict.keys())
     logger.debug(f"Sample sets for overlap analysis: {sample_sets}")
     for set1, set2 in combinations(sample_sets, 2):
         set1_set = set(set1)
         set2_set = set(set2)
         if set1_set == set2_set and set1 != set2:
-            overlap = "identical elements, different order"
+            sample_set_overlap_results.identical_elements_different_order.append((set1, set2))
         elif set1_set & set2_set:
-            overlap = "partly overlapping"
+            sample_set_overlap_results.partly_overlapping.append((set1, set2))
         elif set1_set.isdisjoint(set2_set):
-            overlap = "non-overlapping"
+            sample_set_overlap_results.non_overlapping.append((set1, set2))
         else:
             continue
-        sample_set_overlap_results[overlap].append((set1, set2))
     return sample_set_overlap_results
 
 

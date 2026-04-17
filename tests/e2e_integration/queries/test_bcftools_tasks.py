@@ -111,26 +111,25 @@ def test_calculate_pairwise_overlap_types_for_sample_sets(
 
     print(result)
 
-    assert "identical elements, different order" in result
-    assert "partly overlapping" in result
-    assert "non-overlapping" in result
+    assert isinstance(result.identical_elements_different_order, list)
+    assert isinstance(result.partly_overlapping, list)
+    assert isinstance(result.non_overlapping, list)
 
     for expected in expected_identical_diff_order:
         assert any(
             (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["identical elements, different order"]
+            for pair in result.identical_elements_different_order
         )
 
     for expected in expected_partly:
         assert any(
             (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["partly overlapping"]
+            for pair in result.partly_overlapping
         )
 
     for expected in expected_non_overlap:
         assert any(
-            (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["non-overlapping"]
+            (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair for pair in result.non_overlapping
         )
 
 
