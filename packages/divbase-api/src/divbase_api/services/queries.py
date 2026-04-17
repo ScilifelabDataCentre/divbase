@@ -17,6 +17,7 @@ from typing import Any
 import pandas as pd
 import psutil
 
+from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData
 from divbase_lib.api_schemas.queries import SampleMetadataQueryTaskResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import (
@@ -57,7 +58,7 @@ def run_sidecar_metadata_query(
     file: Path,
     filter_string: str = None,
     project_id: int = None,
-    vcf_dimensions_data: dict = None,
+    vcf_dimensions_data: ProjectVCFDimensionsData | None = None,
 ) -> SampleMetadataQueryTaskResult:
     """
     Run a query on a sidecar metadata TSV file and map samples to VCF files.
@@ -66,9 +67,9 @@ def run_sidecar_metadata_query(
 
     """
     project_samples = set()
-    if vcf_dimensions_data and vcf_dimensions_data.get("vcf_files"):
-        for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
-            sample_names = vcf_entry.get("samples", [])
+    if vcf_dimensions_data and vcf_dimensions_data.vcf_files:
+        for vcf_entry in vcf_dimensions_data.vcf_files:
+            sample_names = vcf_entry.samples
             project_samples.update(sample_names)
 
     sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
@@ -80,7 +81,7 @@ def run_sidecar_metadata_query(
 
     logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
 
-    if not vcf_dimensions_data or not vcf_dimensions_data.get("vcf_files"):
+    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
         error_msg = f"No VCF dimensions data provided for project {project_id}. "
         error_msg += "Please run 'divbase-cli dimensions update' first."
         raise ValueError(error_msg)
@@ -88,9 +89,9 @@ def run_sidecar_metadata_query(
     sample_and_filename_subset = []
     unique_filenames = set()
 
-    for vcf_entry in vcf_dimensions_data.get("vcf_files", []):
-        filename = vcf_entry["vcf_file_s3_key"]
-        sample_names = vcf_entry.get("samples", [])
+    for vcf_entry in vcf_dimensions_data.vcf_files:
+        filename = vcf_entry.vcf_file_s3_key
+        sample_names = vcf_entry.samples
 
         for sample_id in sample_names:
             if sample_id in unique_sample_ids:

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from divbase_api.services.queries import BcftoolsQueryManager, validate_user_submitted_bcftools_command
+from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
     _determine_sample_selection_mode,
@@ -305,12 +306,14 @@ class TestSamplesPlaceholderDetectionAndInjection:
 class TestResolveInputsForCliSamplesMode:
     def test_resolve_inputs_for_cli_samples_mode(self):
         """Test that CLI sample-mode inputs are resolved to files and sample mappings correctly."""
-        vcf_dimensions_data = {
-            "vcf_files": [
-                {"vcf_file_s3_key": "fileA.vcf.gz", "samples": ["S1", "S2"]},
-                {"vcf_file_s3_key": "fileB.vcf.gz", "samples": ["S3"]},
-            ]
-        }
+        vcf_dimensions_data = ProjectVCFDimensionsData(
+            project_id=1,
+            vcf_file_count=2,
+            vcf_files=[
+                ProjectVCFDimensionsEntry(vcf_file_s3_key="fileA.vcf.gz", s3_version_id="v1", samples=["S1", "S2"]),
+                ProjectVCFDimensionsEntry(vcf_file_s3_key="fileB.vcf.gz", s3_version_id="v2", samples=["S3"]),
+            ],
+        )
         result = _resolve_inputs_for_cli_samples_mode(
             samples=["S3", "S1", "S3"], vcf_dimensions_data=vcf_dimensions_data
         )
@@ -325,11 +328,13 @@ class TestResolveInputsForCliSamplesMode:
 
     def test_resolve_inputs_for_cli_samples_mode_missing_samples_raises(self):
         """Test that CLI sample-mode input raises TaskUserError when requested samples are missing."""
-        vcf_dimensions_data = {
-            "vcf_files": [
-                {"vcf_file_s3_key": "fileA.vcf.gz", "samples": ["S1", "S2"]},
-            ]
-        }
+        vcf_dimensions_data = ProjectVCFDimensionsData(
+            project_id=1,
+            vcf_file_count=1,
+            vcf_files=[
+                ProjectVCFDimensionsEntry(vcf_file_s3_key="fileA.vcf.gz", s3_version_id="v1", samples=["S1", "S2"]),
+            ],
+        )
         with pytest.raises(TaskUserError, match="were not found in the project's dimensions index"):
             _resolve_inputs_for_cli_samples_mode(
                 samples=["S1", "DOES_NOT_EXIST"], vcf_dimensions_data=vcf_dimensions_data
@@ -339,12 +344,14 @@ class TestResolveInputsForCliSamplesMode:
 class TestResolveInputsForAllSamplesMode:
     def test_resolve_inputs_for_all_samples_mode(self):
         """Test that all-samples mode resolves all files and sample mappings correctly."""
-        vcf_dimensions_data = {
-            "vcf_files": [
-                {"vcf_file_s3_key": "fileA.vcf.gz", "samples": ["S1", "S2"]},
-                {"vcf_file_s3_key": "fileB.vcf.gz", "samples": ["S3"]},
-            ]
-        }
+        vcf_dimensions_data = ProjectVCFDimensionsData(
+            project_id=1,
+            vcf_file_count=2,
+            vcf_files=[
+                ProjectVCFDimensionsEntry(vcf_file_s3_key="fileA.vcf.gz", s3_version_id="v1", samples=["S1", "S2"]),
+                ProjectVCFDimensionsEntry(vcf_file_s3_key="fileB.vcf.gz", s3_version_id="v2", samples=["S3"]),
+            ],
+        )
         result = _resolve_inputs_for_all_samples_mode(vcf_dimensions_data=vcf_dimensions_data)
 
         assert result.files_to_download == ["fileA.vcf.gz", "fileB.vcf.gz"]

@@ -2,6 +2,7 @@ import pytest
 from celery import current_app
 from kombu.connection import Connection
 
+from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     _calculate_pairwise_overlap_types_for_sample_sets,
     _check_if_samples_can_be_combined_with_bcftools,
@@ -181,7 +182,18 @@ def test_check_if_samples_can_be_combined_with_bcftools_param(
     expected_message_part,
     caplog,
 ):
-    vcf_dimensions_data = dimensions_index
+    vcf_dimensions_data = ProjectVCFDimensionsData(
+        project_id=1,
+        vcf_file_count=len(dimensions_index["vcf_files"]),
+        vcf_files=[
+            ProjectVCFDimensionsEntry(
+                vcf_file_s3_key=entry["vcf_file_s3_key"],
+                s3_version_id=None,
+                samples=entry.get("samples", []),
+            )
+            for entry in dimensions_index["vcf_files"]
+        ],
+    )
 
     if should_raise_error:
         with pytest.raises(TaskUserError) as excinfo:

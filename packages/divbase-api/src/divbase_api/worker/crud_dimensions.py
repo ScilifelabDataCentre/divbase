@@ -6,7 +6,7 @@ packages/divbase-api/src/divbase_api/crud/vcf_dimensions.py
 
 import dataclasses
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 from sqlalchemy import delete, select
@@ -39,7 +39,25 @@ class SkippedVCFData:
     skip_reason: str
 
 
-def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
+@dataclass
+class ProjectVCFDimensionsEntry:
+    vcf_file_s3_key: str
+    s3_version_id: str | None
+    samples: list[str] = field(default_factory=list)
+    scaffolds: list[str] = field(default_factory=list)
+    variant_count: int = 0
+    sample_count: int = 0
+    file_size_bytes: int = 0
+
+
+@dataclass
+class ProjectVCFDimensionsData:
+    project_id: int
+    vcf_file_count: int
+    vcf_files: list[ProjectVCFDimensionsEntry] = field(default_factory=list)
+
+
+def get_vcf_metadata_by_project(db: Session, project_id: int) -> ProjectVCFDimensionsData:
     """
     FOR CELERY WORKERS, not for user interactions with API.
 
@@ -50,30 +68,24 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> dict:
         .where(VCFMetadataDB.project_id == project_id)
         .options(selectinload(VCFMetadataDB.samples), selectinload(VCFMetadataDB.scaffolds))
     )
-    db_result = db.execute(stmt)
+    entries = sorted(db.execute(stmt).scalars().all(), key=lambda entry: entry.vcf_file_s3_key)
 
-    entries = list(db_result.scalars().all())
-
-    result = {
-        "project_id": project_id,
-        "vcf_file_count": len(entries),
-        "vcf_files": [
-            {
-                "vcf_file_s3_key": entry.vcf_file_s3_key,
-                "s3_version_id": entry.s3_version_id,
-                "samples": [s.sample_name for s in entry.samples],
-                "scaffolds": [s.scaffold_name for s in entry.scaffolds],
-                "variant_count": entry.variant_count,
-                "sample_count": entry.sample_count,
-                "file_size_bytes": entry.file_size_bytes,
-                "created_at": entry.created_at.isoformat(),
-                "updated_at": entry.updated_at.isoformat(),
-            }
+    return ProjectVCFDimensionsData(
+        project_id=project_id,
+        vcf_file_count=len(entries),
+        vcf_files=[
+            ProjectVCFDimensionsEntry(
+                vcf_file_s3_key=entry.vcf_file_s3_key,
+                s3_version_id=entry.s3_version_id,
+                samples=sorted(s.sample_name for s in entry.samples),
+                scaffolds=sorted(s.scaffold_name for s in entry.scaffolds),
+                variant_count=entry.variant_count or 0,
+                sample_count=entry.sample_count or 0,
+                file_size_bytes=entry.file_size_bytes or 0,
+            )
             for entry in entries
         ],
-    }
-
-    return result
+    )
 
 
 def get_skipped_vcfs_by_project_worker(db: Session, project_id: int) -> dict[str, str]:

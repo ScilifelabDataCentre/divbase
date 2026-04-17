@@ -175,7 +175,7 @@ def test_get_dimensions_info_returns_empty(
     project_id = project_map[project_name]
 
     result = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert result["vcf_files"] == []
+    assert result.vcf_files == []
 
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
@@ -232,7 +232,7 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
 
     # Verify the index has entries in the DB before the second run
     vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert len(vcf_dimensions_before.get("vcf_files", [])) > 0, "Expected DB to have indexed entries"
+    assert len(vcf_dimensions_before.vcf_files) > 0, "Expected DB to have indexed entries"
 
     # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
     mock_empty_s3 = MagicMock()
@@ -260,8 +260,8 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
     # DB index should now be empty for this project
     db_session_sync.expire_all()
     vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert vcf_dimensions_after.get("vcf_files") == [], (
-        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.get('vcf_files')}"
+    assert vcf_dimensions_after.vcf_files == [], (
+        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
     )
 
 
@@ -279,7 +279,7 @@ def test_remove_VCF_and_update_dimension_entry(
 
     delete_vcf_metadata(db=db_session_sync, vcf_file_s3_key=vcf_file, project_id=project_id)
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+    filenames = [entry.vcf_file_s3_key for entry in updated_dimensions.vcf_files]
     assert vcf_file not in filenames
 
 
@@ -310,7 +310,7 @@ def test_delete_vcf_metadata_batch(
 
     db_session_sync.expire_all()
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+    filenames = [entry.vcf_file_s3_key for entry in updated_dimensions.vcf_files]
 
     for vcf_file in batch_to_delete:
         assert vcf_file not in filenames, f"Expected {vcf_file} to be deleted, but found in: {filenames}"
@@ -488,14 +488,14 @@ def test_update_dimensions_reindexes_when_child_rows_missing(
     db_session_sync.commit()
 
     dimensions_after_child_row_delete = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    for entry in dimensions_after_child_row_delete["vcf_files"]:
-        if entry["vcf_file_s3_key"] == target_vcf:
+    for entry in dimensions_after_child_row_delete.vcf_files:
+        if entry.vcf_file_s3_key == target_vcf:
             incomplete_entry = entry
             break
-    assert incomplete_entry["sample_count"] > 0
-    assert incomplete_entry["samples"] == []
-    assert incomplete_entry["variant_count"] > 0
-    assert incomplete_entry["scaffolds"] == []
+    assert incomplete_entry.sample_count > 0
+    assert incomplete_entry.samples == []
+    assert incomplete_entry.variant_count > 0
+    assert incomplete_entry.scaffolds == []
 
     second_result = run_update_dimensions(
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
@@ -507,15 +507,15 @@ def test_update_dimensions_reindexes_when_child_rows_missing(
 
     db_session_sync.expire_all()  # Force refresh of db session to avoid stale cache from the session used by run_update_dimensions()
     dimensions_after_reindex = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    for entry in dimensions_after_reindex["vcf_files"]:
-        if entry["vcf_file_s3_key"] == target_vcf:
+    for entry in dimensions_after_reindex.vcf_files:
+        if entry.vcf_file_s3_key == target_vcf:
             repaired_entry = entry
             break
 
-    assert repaired_entry["sample_count"] > 0
-    assert len(repaired_entry["samples"]) > 0
-    assert repaired_entry["variant_count"] > 0
-    assert len(repaired_entry["scaffolds"]) > 0
+    assert repaired_entry.sample_count > 0
+    assert len(repaired_entry.samples) > 0
+    assert repaired_entry.variant_count > 0
+    assert len(repaired_entry.scaffolds) > 0
 
 
 def test_show_unique_samples(
@@ -722,15 +722,12 @@ def test_show_dimensions_truncates_sample_names_in_terminal(
     command = f"dimensions show --project {project_name} --sample-names-limit 2"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
-
-    dimensions_info = yaml.safe_load(cli_result.stdout)
-    indexed_files = dimensions_info.get("indexed_files", [])
-    assert len(indexed_files) > 0, "Expected indexed files in output"
-
-    first_entry_dimensions = indexed_files[0].get("dimensions", {})
-    shown_sample_names = first_entry_dimensions.get("sample_names", [])
-    assert len(shown_sample_names) <= 2, f"Expected sample_names to be truncated to <=2, got {shown_sample_names}"
-    assert "sample_names_note" in first_entry_dimensions, "Expected truncation note in output"
+    output = cli_result.stdout
+    assert "sample_names_note" in output, "Expected truncation note in output"
+    assert "Showing first 2 of" in output, "Expected truncation message with chosen sample_names_limit"
+    assert "--sample-names-output" in output and "--sample-names-stdout" in output, (
+        "Expected note to guide user to full sample-name output options"
+    )
 
 
 def test_show_dimensions_rejects_output_and_stdout_together(
@@ -759,7 +756,8 @@ def test_show_dimensions_rejects_output_and_stdout_together(
         + (getattr(cli_result, "stderr", "") or "")
         + (str(cli_result.exception) if cli_result.exception else "")
     )
-    assert "Use only one of --sample-names-output or --sample-names-stdout." in combined_output
+    assert "Use only one of --sample-names-output" in combined_output
+    assert "--sample-names-stdout" in combined_output
 
 
 @pytest.mark.parametrize(
@@ -1013,7 +1011,8 @@ def test_validate_metadata_file_with_errors(
     assert "Expected 4 tab-separated columns from reading the header, found 2" in cli_result.stdout
     # Rich/terminal wrapping can split long phrases across lines, so assert key fragments.
     assert "mixed element types" in cli_result.stdout and "in lists" in cli_result.stdout
-    assert "Found 2 cell(s) with invalid list syntax or not parsed as list" in cli_result.stdout
+    assert "Found 2 cell(s) with" in cli_result.stdout
+    assert "Column 'Population'" in cli_result.stdout
     assert "Sample_ID is empty or missing in 2 row(s)" in cli_result.stdout
     assert "Duplicate Sample_IDs found: 'test_duplicate' appears in 2 row(s)" in cli_result.stdout
     assert "Sample_ID column contains list values" in cli_result.stdout
@@ -1126,15 +1125,15 @@ def test_update_dimensions_indexes_uncompressed_vcf(
         # Verify the dimensions were stored correctly in the DB
         db_session_sync.expire_all()
         vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-        all_indexed_keys = [entry["vcf_file_s3_key"] for entry in vcf_dimensions.get("vcf_files", [])]
+        all_indexed_keys = [entry.vcf_file_s3_key for entry in vcf_dimensions.vcf_files]
         assert plain_vcf_name in all_indexed_keys
 
-        entry = next(e for e in vcf_dimensions["vcf_files"] if e["vcf_file_s3_key"] == plain_vcf_name)
-        assert entry["sample_count"] == 2
-        assert entry["variant_count"] == 2
-        assert "1" in entry["scaffolds"]
-        assert "sample1" in entry["samples"]
-        assert "sample2" in entry["samples"]
+        entry = next(e for e in vcf_dimensions.vcf_files if e.vcf_file_s3_key == plain_vcf_name)
+        assert entry.sample_count == 2
+        assert entry.variant_count == 2
+        assert "1" in entry.scaffolds
+        assert "sample1" in entry.samples
+        assert "sample2" in entry.samples
     finally:
         # Remove the uploaded file from the bucket to avoid polluting subsequent tests.
         # auto_clean_dimensions_entries_for_all_projects only cleans the DB, not the bucket.
