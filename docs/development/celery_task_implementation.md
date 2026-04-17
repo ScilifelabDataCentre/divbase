@@ -303,7 +303,7 @@ def vcf_query(
 
     # Using the pattern described in Section 2.3, the API returns the DivBase task ID, which can be displayed to the user in their terminal like such:
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}")
 ```
 
 ### 2.5. Task History deserialization

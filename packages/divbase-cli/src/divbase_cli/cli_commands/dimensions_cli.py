@@ -43,7 +43,9 @@ def update_dimensions_index(
     )
 
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(
+        f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
+    )
 
 
 @dimensions_app.command("show")

@@ -200,7 +200,9 @@ def vcf_query(
     )
 
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(
+        f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
+    )
 
 
 def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:
