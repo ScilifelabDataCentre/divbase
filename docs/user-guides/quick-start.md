@@ -198,7 +198,7 @@ divbase-cli task-history user
 Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli files download merged_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download result_of_job_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
 ```
 
 Replacing <JOB_ID> with the actual job ID from the task history.
