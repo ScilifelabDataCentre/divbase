@@ -83,6 +83,170 @@ class NumericFilterContext:
     is_negated: bool
 
 
+@dataclass
+class ParsedCommandSegment:
+    """
+    Parsed representation of one semicolon-separated bcftools command segment.
+    """
+
+    position: int
+    cmd: str
+    args: list[str]
+    cmd_name: str
+    normalized_segment: str
+
+
+@dataclass
+class ParsedViewRegionsOption:
+    """
+    Parsed representation of a single bcftools view regions argument.
+    """
+
+    is_regions_option: bool
+    regions_value: str | None
+    violation_reason: str | None
+    next_index: int
+
+
+def _parse_command_segments(command: str) -> list[ParsedCommandSegment]:
+    """
+    Parse a semicolon-separated bcftools command string into normalized segments.
+
+    Raises TaskUserError on malformed quoting/syntax so callers can surface a user-friendly error.
+    """
+    segments: list[ParsedCommandSegment] = []
+
+    for position, raw_cmd in enumerate(command.split(";"), start=1):
+        cmd = raw_cmd.strip()
+        if not cmd:
+            # Defensive skip only. Empty segments are rejected by schema validation upstream.
+            continue
+
+        parse_error_message = f"Could not parse --command segment at position {position}: {cmd}"
+        try:
+            args = shlex.split(cmd)
+        except ValueError:
+            # shlex.split can raise ValueError for malformed quoting. We catch that and raise a TaskUserError with the position of the malformed segment.
+            raise TaskUserError(parse_error_message) from None
+
+        if not args:
+            continue
+
+        segments.append(
+            ParsedCommandSegment(
+                position=position,
+                cmd=cmd,
+                args=args,
+                cmd_name=args[0],
+                normalized_segment=shlex.join(args),
+            )
+        )
+
+    return segments
+
+
+def _parse_view_regions_option_argument(args: list[str], idx: int) -> ParsedViewRegionsOption:
+    """
+    Parse -r/--regions option forms at a given argument index in a bcftools view command.
+    """
+    arg = args[idx]
+
+    def _build_result(
+        *,
+        is_regions_option: bool,
+        regions_value: str | None = None,
+        violation_reason: str | None = None,
+        advance: int = 1,
+    ) -> ParsedViewRegionsOption:
+        return ParsedViewRegionsOption(
+            is_regions_option=is_regions_option,
+            regions_value=regions_value,
+            violation_reason=violation_reason,
+            next_index=idx + advance,
+        )
+
+    if arg in ("-r", "--regions"):
+        next_arg = args[idx + 1] if idx + 1 < len(args) else None
+        if next_arg is None or next_arg.startswith("-"):
+            return _build_result(
+                is_regions_option=True,
+                violation_reason=(
+                    "Option '-r/--regions' requires a non-empty region selector. "
+                    "Use a value like '-r chr1:1-1000' or '--regions chr1:1-1000'."
+                ),
+            )
+        return _build_result(
+            is_regions_option=True,
+            regions_value=next_arg,
+            advance=2,
+        )
+
+    if arg.startswith("--regions="):
+        regions_value = arg.split("=", 1)[1].strip()
+        if not regions_value:
+            return _build_result(
+                is_regions_option=True,
+                violation_reason=(
+                    "Option '--regions=' requires a non-empty value. Use a value like '--regions=chr1:1-1000'."
+                ),
+            )
+        return _build_result(
+            is_regions_option=True,
+            regions_value=regions_value,
+        )
+
+    if arg.startswith("-r") and len(arg) > 2 and not arg.startswith("--"):
+        regions_value = arg[2:].strip()
+        if not regions_value or regions_value.startswith("-"):
+            return _build_result(
+                is_regions_option=True,
+                violation_reason=(
+                    "Option '-r<REGIONS>' requires a non-empty region selector. "
+                    "Use a value like '-rchr1:1-1000' or '-r chr1:1-1000'."
+                ),
+            )
+        return _build_result(
+            is_regions_option=True,
+            regions_value=regions_value,
+        )
+
+    return _build_result(is_regions_option=False)
+
+
+def extract_region_scaffolds_from_command(command: str) -> list[str]:
+    """
+    Extract scaffold/chromosome names from -r/--regions selectors in bcftools view command segments.
+
+    Supported forms:
+    - -r chr1:1-1000
+    - -rchr1:1-1000
+    - --regions chr1:1-1000
+    - --regions=chr1:1-1000
+    """
+    scaffolds: list[str] = []
+
+    for segment in _parse_command_segments(command):
+        if segment.cmd_name != "view":
+            continue
+
+        args = segment.args
+        idx = 1
+        while idx < len(args):
+            parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
+            idx = parsed_region_option.next_index
+
+            if parsed_region_option.regions_value:
+                for region in parsed_region_option.regions_value.split(","):
+                    region = region.strip()
+                    if not region:
+                        continue
+                    scaffold_name = region.split(":")[0].strip()
+                    if scaffold_name:
+                        scaffolds.append(scaffold_name)
+
+    return scaffolds
+
+
 def run_sidecar_metadata_query(
     file: Path,
     filter_string: str = None,
@@ -151,7 +315,7 @@ def _check_if_arg_matches_short_or_long_option(arg: str, short_opt: str, long_op
 
 
 def _check_if_arg_looks_like_vcf_or_bcf_input_file(arg: str) -> bool:
-    """Helper function to check if a token looks like a VCF/BCF input filename or stdin token."""
+    """Helper function to check if a arg looks like a VCF/BCF input filename or stdin arg."""
     if arg == "-":
         return True
 
@@ -278,22 +442,17 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
         "Do not provide VCF/BCF input filenames in '--command'; DivBase resolves input files from project dimensions."
     )
 
-    for position, raw_cmd in enumerate(command.split(";"), start=1):
+    for segment in _parse_command_segments(command):
         # evaluate each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
-        cmd = raw_cmd.strip()
+        position = segment.position
+        cmd = segment.cmd
+        args = segment.args
+        cmd_name = segment.cmd_name
+
         if not cmd:
             # Empty command/empty ';' segments are already rejected by Pydantic (NonEmptyCommand) upstream of this function. This skip is only defensive.
             continue
 
-        parse_error_message = f"Could not parse --command segment at position {position}: {cmd}"
-        try:
-            args = shlex.split(
-                cmd
-            )  # split the command string into a list of arguments. E.g. "view -s -r 1:1-100" becomes ["view", "-s", "-r", "1:1-100"].
-        except ValueError:
-            raise TaskUserError(parse_error_message) from None
-
-        cmd_name = args[0]
         if cmd_name not in valid_commands:
             raise TaskUserError(
                 f"Unsupported bcftools command '{cmd_name}' at position {position}. "
@@ -301,9 +460,7 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
             )
 
         # Duplication tracking.
-        normalized_segment = shlex.join(
-            args
-        )  # join the arguments back into a single string that is aware of quoting and whitespace.
+        normalized_segment = segment.normalized_segment  # quoting/whitespace normalized by shlex.join
         if normalized_segment not in normalized_segments_with_positions:
             normalized_segments_with_positions[normalized_segment] = [position]
         else:
@@ -335,12 +492,17 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
                 )
 
             # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
-            for idx, arg in enumerate(args[1:], start=1):
+            idx = 1
+            while idx < len(args):
+                arg = args[idx]
+                next_idx = idx + 1
+
                 if arg == "-":
                     # Do not support bcftools stdin operator '-' for piping files into a bcftools pipe (e.g. 'cat file1.vcf | bcftools view -' or 'cat file1.vcf | bcftools view -r 1:1-10000 -')
                     unsupported_view_options.append(
                         f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
                     )
+                    idx = next_idx
                     continue
 
                 reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
@@ -348,6 +510,7 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
                     unsupported_view_options.append(
                         f"Pipe segment {position}, argument '{arg}': {reason_for_not_supported}"
                     )
+                    idx = next_idx
                     continue
 
                 # Check for unsupported usage of -s/--samples in the command string.
@@ -359,16 +522,41 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
                         position=position,
                         all_samples=all_samples,
                     )
+                    idx = next_idx
                     continue
+
+                parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
+                next_idx = parsed_region_option.next_index
+                if parsed_region_option.is_regions_option and parsed_region_option.violation_reason:
+                    unsupported_view_options.append(
+                        f"Pipe segment {position}, argument '{arg}': {parsed_region_option.violation_reason}"
+                    )
 
                 if _check_if_arg_looks_like_vcf_or_bcf_input_file(arg):
                     unsupported_view_options.append(
                         f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
                     )
+                    idx = next_idx
+                    continue
+
+                # For '-r/--regions <value>' forms, also validate that the value is not a filename-like (sub)string.
+                # Keep this explicit so behavior remains user-friendly for commands like: view -r file.vcf.gz
+                if (
+                    parsed_region_option.is_regions_option
+                    and parsed_region_option.regions_value is not None
+                    and _check_if_arg_looks_like_vcf_or_bcf_input_file(parsed_region_option.regions_value)
+                ):
+                    if arg in ("-r", "--regions"):
+                        unsupported_view_options.append(
+                            f"Pipe segment {position}, argument '{parsed_region_option.regions_value}': {filename_in_command_error_message}"
+                        )
+                    idx = next_idx
                     continue
 
                 if all_samples and arg.startswith("-"):
                     has_all_samples_and_at_least_one_view_option_that_is_not_samples = True
+
+                idx = next_idx
 
     if unsupported_view_options:
         details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)

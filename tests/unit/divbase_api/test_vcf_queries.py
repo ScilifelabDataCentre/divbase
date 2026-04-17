@@ -9,6 +9,7 @@ from divbase_api.services.queries import (
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
+    extract_region_scaffolds_from_command,
     validate_user_submitted_bcftools_command,
 )
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
@@ -80,6 +81,9 @@ class TestValidateUserSubmittedBcftoolsCommand:
             ("view -t file.vcf", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view --targets=file.bcf", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view", "must include at least one bcftools view option flag"),
+            ("view -r", "requires a non-empty region selector"),
+            ("view --regions", "requires a non-empty region selector"),
+            ("view --regions=", "requires a non-empty value"),
         ],
     )
     def test_validate_user_submitted_bcftools_command_rejects_invalid_commands(self, command, expected_msg):
@@ -209,6 +213,32 @@ class TestValidateUserSubmittedBcftoolsCommand:
         """Test that user-submitted bcftools command in all-samples mode that includes -s/--samples option raises TaskUserError."""
         with pytest.raises(TaskUserError, match="-s/--samples"):
             validate_user_submitted_bcftools_command(command, all_samples=True)
+
+
+class TestExtractRegionScaffoldsFromCommand:
+    @pytest.mark.parametrize(
+        "command,expected_scaffolds",
+        [
+            ("view -r chr1:1-1000", ["chr1"]),
+            ("view -rchr1:1-1000", ["chr1"]),
+            ("view --regions chr1:1-1000", ["chr1"]),
+            ("view --regions=chr1:1-1000", ["chr1"]),
+            ("view -s -r 1,4,6,21,24", ["1", "4", "6", "21", "24"]),
+            ("view -i 'QUAL>20'; view --regions chr2:1-10,chr3:4-5", ["chr2", "chr3"]),
+            ("view -R regions.txt", []),
+            ("view -t chr1", []),
+            ("view -r; view -r chr2:1-1000", ["chr2"]),
+        ],
+    )
+    def test_extract_region_scaffolds_from_command(self, command, expected_scaffolds):
+        """Test that region scaffolds are extracted from supported -r/--regions command forms."""
+        assert extract_region_scaffolds_from_command(command) == expected_scaffolds
+
+    def test_extract_region_scaffolds_from_command_raises_on_malformed_segment(self):
+        """Test that malformed command segments raise TaskUserError with a clear message."""
+        command = 'view -r "chr1:1-1000; view -r chr2:1-1000'
+        with pytest.raises(TaskUserError, match="Could not parse --command segment at position 1"):
+            extract_region_scaffolds_from_command(command)
 
 
 class TestSamplesPlaceholderDetectionAndInjection:

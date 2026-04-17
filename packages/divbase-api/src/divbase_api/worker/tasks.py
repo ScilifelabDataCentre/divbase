@@ -1,7 +1,6 @@
 import dataclasses
 import logging
 import os
-import re
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -27,7 +26,9 @@ from divbase_api.services.queries import (
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
+    extract_region_scaffolds_from_command,
     run_sidecar_metadata_query,
+    validate_user_submitted_bcftools_command,
 )
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -338,9 +339,13 @@ def bcftools_pipe_task(
     sample_and_filename_subset = resolved_sample_mode_results.sample_and_filename_subset
     metadata_path = resolved_sample_mode_results.metadata_path
 
-    if "view -r" in command:
+    # Defensive validation in worker: API route validates before queueing, but task execution can also be invoked directly in tests/internal paths.
+    command = validate_user_submitted_bcftools_command(command=command, all_samples=all_samples)
+
+    region_scaffolds = extract_region_scaffolds_from_command(command=command)
+    if region_scaffolds:
         files_to_download = _check_for_unnecessary_files_for_region_query(
-            command=command,
+            scaffolds=region_scaffolds,
             files_to_download=files_to_download,
             vcf_dimensions_data=vcf_dimensions_data,
         )
@@ -733,78 +738,6 @@ def _determine_sample_selection_mode(
     )
 
 
-def _matches_option(arg: str, short_opt: str, long_opt: str) -> bool:
-    if arg == short_opt:
-        return True
-    if arg.startswith(short_opt) and len(arg) > len(short_opt) and not arg.startswith("--"):
-        return True
-    if arg == long_opt:
-        return True
-    return bool(arg.startswith(f"{long_opt}="))
-
-
-def _blacklisted_view_options_reason_for_argument(arg: str) -> str | None:
-    """Helper function to return the reason why a given bcftools view option is not supported by DivBase."""
-
-    if _matches_option(arg, "-h", "--header-only"):
-        return (
-            "Option '-h/--header-only' is not supported in DivBase queries. "
-            "Instead use: `divbase-cli files stream <file.vcf.gz> | zcat | awk '/^##/ || /^#CHROM/ {print} !/^#/ {exit}'`"
-        )
-    if _matches_option(arg, "-l", "--compression-level"):
-        return "Option '-l/--compression-level' is handled by the DivBase server."
-    if _matches_option(arg, "-O", "--output-type"):
-        return "Option '-O/--output-type' is handled by the DivBase server."
-    if _matches_option(arg, "-o", "--output"):
-        return "Option '-o/--output' is handled by the DivBase server."
-    if _matches_option(arg, "-R", "--regions-file"):
-        return "Option '-R/--regions-file' is not supported in DivBase queries because external filter files are not supported."
-    if _matches_option(arg, "-T", "--targets-file"):
-        return "Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported."
-    if _matches_option(arg, "--threads", "--threads"):
-        return "Option '--threads' is handled by the DivBase server."
-    if _matches_option(arg, "--verbosity", "--verbosity"):
-        return "Option '--verbosity' is handled by the DivBase server."
-    if _matches_option(arg, "-W", "--write-index"):
-        return "Option '-W/--write-index' is handled by the DivBase server."
-    if _matches_option(arg, "-S", "--samples-file"):
-        return (
-            "Option '-S/--samples-file' is not supported in '--command'. "
-            "Use `divbase-cli query vcf --samples-file` instead."
-        )
-    if _matches_option(arg, "-f", "--apply-filters"):
-        return "Option '-f/--apply-filters' is not supported in DivBase queries."
-
-    return None
-
-
-def _samples_option_violation_reason(arg: str, all_samples: bool) -> str | None:
-    """
-    Return violation reason for -s/--samples usage in --command, or None if no violation.
-    """
-    if all_samples:
-        return (
-            "Option '-s/--samples' is not supported together with '--all-samples'. "
-            "Use CLI '--samples' or '--samples-file' mode instead, or remove '-s/--samples' from '--command'."
-        )
-
-    if arg.startswith("--samples="):
-        return (
-            "Option '--samples=<LIST>' is not supported in '--command'. "
-            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
-            "If you only want sample-based subsetting, use '--command \"view -s\"'."
-        )
-
-    if arg.startswith("-s") and arg != "-s" and not arg.startswith("--"):
-        return (
-            "Option '-s<LIST>' is not supported in '--command'. "
-            "Set samples via DivBase CLI '--samples' or '--samples-file'. "
-            "If you only want sample-based subsetting, use '--command \"view -s\"'."
-        )
-
-    return None
-
-
 def _resolve_inputs_for_sample_metadata_mode(
     metadata_tsv_name: str,
     bucket_name: str,
@@ -913,12 +846,12 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
 
 
 def _check_for_unnecessary_files_for_region_query(
-    command: str,
+    scaffolds: list[str],
     files_to_download: list[str],
     vcf_dimensions_data: ProjectVCFDimensionsData,
 ) -> list[str]:
     """
-    If the 'view -r' query is present, read the .vcf_dimensions.yaml file and check if the specified scaffolds are available in the VCF files.
+    Given parsed scaffold names from region selectors, check if those scaffolds are available in the VCF files.
     If a file in files_to_download (as identified by sidecar sample metadata query) does not contain any of the specified scaffolds, it will be skipped.
     This will save time and resources by avoiding unnecessary transfer of irrelevant files between the bucket and the worker.
 
@@ -932,18 +865,9 @@ def _check_for_unnecessary_files_for_region_query(
         )
         return files_to_download
 
-    scaffolds = []
     files_to_download_updated = []
-
-    matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
-    if not matches:
+    if not scaffolds:
         return files_to_download
-
-    for match in matches:
-        regions = [region.strip() for region in match.split(",") if region.strip()]
-        for region in regions:
-            scaffold_name = region.split(":")[0]
-            scaffolds.append(scaffold_name)
 
     vcf_lookup = {entry.vcf_file_s3_key: entry for entry in vcf_dimensions_data.vcf_files}
 
