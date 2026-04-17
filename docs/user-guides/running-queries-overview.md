@@ -15,7 +15,7 @@ All queries depend on that the prerequisites are fulfilled, as described in the 
 First, ensure that the VCF files fulfill the requirements described in [Working with VCF Files in DivBase](vcf-files.md) and have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
 
 ```bash
-# Submit a job to that ensure that the projecs' dimensions cache is up-to-date
+# Submit a job to that ensure that the project's dimensions cache is up-to-date
 divbase-cli dimensions update --project <PROJECT_NAME>
 
 # To check the progress of the dimensions update job, use
@@ -71,4 +71,4 @@ divbase-cli task-history user
 - [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md)
 - [DivBase VCF query syntax](vcf-query-syntax.md)
 - [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
-- [Tutorial: Running a query on a public dataset](user-guides/tutorial-query-on-public-data.md)
+- [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)

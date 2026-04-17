@@ -168,7 +168,7 @@ divbase-cli query vcf --all-samples --command "view -r 21:15000000-25000000"
 To avoid accidental full-project runs, `--all-samples` requires at least one [supported](#42-bcftools-view-commands-not-supported-by-divbase) `bcftools view` option in `--command` other than `-s/--samples`. This is to avoid creating queries that take all samples and variant data from all VCF files in the project without subsetting them. For that case it would be more efficient to download the dataset from the project instead with:
 
 ```bash
-divbase-cli files download-all.
+divbase-cli files download-all
 ```
 
 and then merge them manually to a single file, or so desired.
@@ -252,7 +252,7 @@ The following `view` subcommands are not supported in DivBase:
 |-f, --apply-filters LIST | Not supported in DivBase queries |
 <!-- markdownlint-enable MD056 -->
 
-The DivBase server will check if these are included in the `--command` string before the query job is sent to the job queue. If any of the unsupported `bvftools view` options are included in the string, the job will not be enqued and an error message will be returned to the user.
+The DivBase server will check if these are included in the `--command` string before the query job is sent to the job queue. If any of the unsupported `bcftools view` options are included in the string, the job will not be enqued and an error message will be returned to the user.
 
 !!! Note
     Example of a `--command` with two DivBase-unsupported `bcftools view` options, and the resulting error message:
@@ -265,13 +265,6 @@ The DivBase server will check if these are included in the `--command` string be
     #  • Pipe segment 2, token '-T': Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported.
     #  • Pipe segment 3, token '-W': Option '-W/--write-index' is handled by the DivBase server.
     ```
-
-TODO the -s SAMPLES placeholder still lives on in the docs/docstrings
-
-TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
-
-TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
-TODO: since we only support `view`, can there be a shortform where we skip `view` and just have the view flags?
 
 ## 5. What happens after submitting a VCF query? (Job lifecycle and outputs)
 

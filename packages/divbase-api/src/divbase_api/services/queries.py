@@ -287,6 +287,12 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
             # Track duplicate segments by position.
             normalized_segments_with_positions[normalized_segment].append(position)
 
+        # TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
+
+        # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
+
+        # TODO: since we only support `view`, can there be a shortform where we skip `view` and just have the view flags?
+
         if cmd_name == "view":
             # Users must explicitly provide at least one view flag.
             # This guards against autoinject of -s for `--command "view"` when sample selection is used, which could lead to bugs

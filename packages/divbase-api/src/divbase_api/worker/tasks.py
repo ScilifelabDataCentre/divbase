@@ -1007,7 +1007,7 @@ def _check_if_samples_can_be_combined_with_bcftools(
 ) -> None:
     """
     Check if samples in VCF files can be combined with bcftools merge/concat.
-    Raises ValueError if samples have incompatible overlaps.
+    Raises TaskUserError if samples have incompatible overlaps.
     """
 
     vcf_lookup = {entry.vcf_file_s3_key: entry for entry in vcf_dimensions_data.vcf_files}

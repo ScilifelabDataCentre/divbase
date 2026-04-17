@@ -178,10 +178,16 @@ For instance, to subset all VCF files in the project on a chromosomal region in 
 divbase-cli query vcf --command "view -r 21:15000000-25000000"
 ```
 
-The VCF queries can be combined with sidecar sample metadata queries with `--tsv-filter` and the fixed expression `view -s SAMPLES` (where `SAMPLES` tells DivBase to use the results from the sidecar filtering as input for `bcftools view -s`). In this way, only the VCF files that fulfil the sample metadata query will be used in the `bcftools` subset commands. An example:
+The VCF queries can be combined with sidecar sample metadata queries using `--tsv-filter`. DivBase will first resolve which samples match the metadata filter, then automatically inject those sample IDs into the `bcftools` command. Only VCF files that contain at least one of the matching samples will be processed. An example:
 
 ```bash
-divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -r 21:15000000-25000000"
+```
+
+By default, sample IDs are injected at the first command segment (e.g. the above becomes `view -s S1,S2 -r 21:15000000-25000000`). If you are using a multi-segment pipe and want explicit control over which segment receives the sample injection, you can use `view -s` (without sample values) as a placeholder in that position:
+
+```bash
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s; view -r 21:15000000-25000000"
 ```
 
 !!! note
