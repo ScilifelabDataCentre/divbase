@@ -70,7 +70,7 @@ query_app = typer.Typer(
 
 @query_app.command("tsv")
 def sample_metadata_query(
-    filter: str = typer.Argument(
+    tsv_filter: str = typer.Argument(
         ...,
         help=TSV_FILTER_SYNTAX,
     ),
@@ -92,7 +92,7 @@ def sample_metadata_query(
     # TODO: handle when the name of the sample column is something other than Sample_ID
     project_config = resolve_project(project_name=project)
 
-    request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
+    request_data = SampleMetadataQueryRequest(tsv_filter=tsv_filter, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
