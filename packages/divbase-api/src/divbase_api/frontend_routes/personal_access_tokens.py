@@ -31,6 +31,15 @@ fr_pat_router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
+PAT_EXPIRE_OPTIONS = {
+    "1": "1 day",
+    "7": "7 days",
+    "30": "30 days",
+    "90": "90 days",
+    "365": "365 days",
+    "never": "Never",
+}
+
 
 @fr_pat_router.get("/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def list_pats_endpoint(
@@ -73,6 +82,7 @@ async def new_pat_form_endpoint(
         context={
             "current_user": current_user,
             "projects": projects,
+            "expire_options": PAT_EXPIRE_OPTIONS,
         },
     )
 
@@ -115,6 +125,7 @@ async def create_pat_endpoint(
                 "error": message,
                 "current_user": current_user,
                 "projects": projects,
+                "expire_options": PAT_EXPIRE_OPTIONS,
                 "form_name": name,
                 "form_description": description,
                 "form_expires_in_days": expires_in_days,
@@ -129,8 +140,8 @@ async def create_pat_endpoint(
         return form_error("Token name is required.")
     if len(name) > 100:
         return form_error("Token name must be 100 characters or fewer.")
-    if not expires_in_days:
-        return form_error("Please select an expiration period.")
+    if expires_in_days not in PAT_EXPIRE_OPTIONS:
+        return form_error("Please select a valid expiration period.")
 
     expires_at_dt: datetime | None = None
     if expires_in_days != "never":
