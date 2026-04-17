@@ -332,18 +332,39 @@ bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<JOB_ID>.vcf.gz
 
 ## 6. Examples
 
-TODO add the following examples and ensure that they work with DivBase
+Below are a few example of VCF queries. For all these examples, DivBase determines which files (e.g. `file1.vcf.gz`, `file2.vcf.gz`) that contain matching records and processes only those files.
 
-- Region-only query across all samples
-- Metadata + VCF combined query
-- Direct sample list query
-- Multi-step command with semicolon-separated pipeline stages
+### 6.1 Region-only query across all samples
 
-Each example should include:
+```bash
+divbase-cli query vcf --all-samples --command "view -r 1:1000-2000"
+```
 
-- Command
-- What it selects
-- What output file behavior to expect
+Result VCF file will contain all samples in the project and variants in region 1:1000-2000.
+
+### 6.2 Combined metadata + VCF query
+
+```bash
+divbase-cli query vcf --tsv-filter "Area:North;Sex:F" --metadata-tsv-name sample_metadata.tsv --command "view -r 2:50000-90000"
+```
+
+Result VCF file will contain samples matching metadata filter (Area:North AND Sex:F) and variants in region 2:50000-90000.
+
+### 6.3 Direct sample list query
+
+```bash
+divbase-cli query vcf --samples "S1,S2,S10" --command "view -r 3:1-500000"
+```
+
+Result VCF file will contain samples S1, S2, S10 and variants from region 3:1-500000.
+
+### 6.4 Multi-step command with semicolon-separated pipeline stages
+
+```bash
+divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -g hom; view -i 'QUAL>=30'"
+```
+
+Result VCF file will contain samples S1,S2. The input VCF files needed for this query are first subset by region, then by genotype class (-g hom), then by quality filter (QUAL>=30).
 
 ## 7. Common errors and how to fix them
 
