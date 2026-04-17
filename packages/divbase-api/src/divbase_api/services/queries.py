@@ -498,7 +498,11 @@ class BcftoolsQueryManager:
                 logger.warning(f"Skipping empty command at position {c_counter + 1} in command pipeline")
                 continue
 
-            cmd_name = cmd.split()[0] if cmd and " " in cmd else cmd
+            try:
+                cmd_name = shlex.split(cmd)[0]
+            except ValueError:
+                # shlex.split can raise ValueError for malformed quoting. If so, fallback on the raw cmd, which will raise BcftoolsPipeUnsupportedCommandError for the malformed cmd instead.
+                cmd_name = cmd
             if cmd_name not in self.VALID_BCFTOOLS_COMMANDS:
                 raise BcftoolsPipeUnsupportedCommandError(
                     command=cmd_name, position=c_counter + 1, valid_commands=self.VALID_BCFTOOLS_COMMANDS
