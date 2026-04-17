@@ -2,7 +2,7 @@
 Schemas for query routes.
 """
 
-from typing import Annotated, Any, Optional, Self
+from typing import Annotated, Optional, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, model_validator
 
@@ -158,10 +158,15 @@ class BcftoolsQueryKwargs(SharedBaseModel):
         return self
 
 
+class SampleFileMappingResult(BaseModel):
+    sample_id: str
+    filename: str
+
+
 class SampleMetadataQueryTaskResult(BaseModel):
     """Metadata query task result details. Based on the return of tasks.sample_metadata_query."""
 
-    sample_and_filename_subset: list[dict[str, Any]]
+    sample_and_filename_subset: list[SampleFileMappingResult]
     unique_sample_ids: list[str]
     unique_filenames: list[str]
     query_message: str

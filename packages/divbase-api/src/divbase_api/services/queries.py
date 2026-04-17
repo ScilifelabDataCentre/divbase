@@ -18,7 +18,7 @@ import pandas as pd
 import psutil
 
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData
-from divbase_lib.api_schemas.queries import SampleMetadataQueryTaskResult
+from divbase_lib.api_schemas.queries import SampleFileMappingResult, SampleMetadataQueryTaskResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
@@ -48,10 +48,16 @@ class BCFToolsInput:
     Contains the inputs required to run a bcftools query.
     """
 
-    sample_and_filename_subset: list[dict[str, str]]
+    sample_and_filename_subset: list["SampleFileMapping"]
     sampleIDs: list[str]
     filenames: list[str]
     auto_sample_injection: bool = True
+
+
+@dataclass
+class SampleFileMapping:
+    sample_id: str
+    filename: str
 
 
 def run_sidecar_metadata_query(
@@ -86,7 +92,7 @@ def run_sidecar_metadata_query(
         error_msg += "Please run 'divbase-cli dimensions update' first."
         raise ValueError(error_msg)
 
-    sample_and_filename_subset = []
+    sample_and_filename_subset: list[SampleFileMapping] = []
     unique_filenames = set()
 
     for vcf_entry in vcf_dimensions_data.vcf_files:
@@ -95,11 +101,14 @@ def run_sidecar_metadata_query(
 
         for sample_id in sample_names:
             if sample_id in unique_sample_ids:
-                sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
                 unique_filenames.add(filename)
 
     return SampleMetadataQueryTaskResult(
-        sample_and_filename_subset=sample_and_filename_subset,
+        sample_and_filename_subset=[
+            SampleFileMappingResult(sample_id=entry.sample_id, filename=entry.filename)
+            for entry in sample_and_filename_subset
+        ],
         unique_sample_ids=list(unique_sample_ids),
         unique_filenames=list(unique_filenames),
         query_message=query_message,
@@ -414,7 +423,7 @@ class BcftoolsQueryManager:
         os.environ.get("ENABLE_WORKER_METRICS_PER_TASK", "true").lower() == "true"
     )  # Monitoring bcftools subprocesses is controled with an environment variable. Comes with some overhead, hence optional.
 
-    def execute_pipe(self, command: str, bcftools_inputs: dict, job_id: int) -> tuple[str, dict[str, float]]:
+    def execute_pipe(self, command: str, bcftools_inputs: BCFToolsInput, job_id: int) -> tuple[str, dict[str, float]]:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
@@ -459,7 +468,7 @@ class BcftoolsQueryManager:
                 self.cleanup_temp_files(self.temp_files)
 
     def build_commands_config(
-        self, command: str, bcftools_inputs: dict[str, Any], identifier: str = None
+        self, command: str, bcftools_inputs: BCFToolsInput, identifier: str = None
     ) -> list[dict[str, Any]]:
         """
         Method that builds a configuration structure for the bcftools commands based on the provided command string and inputs.
@@ -469,9 +478,9 @@ class BcftoolsQueryManager:
         where each dictionary represents a command configuration with the bcftools command, input files and temporary
         output files.
         """
-        filenames = bcftools_inputs.get("filenames")
-        sample_and_filename_subset = bcftools_inputs.get("sample_and_filename_subset")
-        auto_sample_injection = bcftools_inputs.get("auto_sample_injection", True)
+        filenames = bcftools_inputs.filenames
+        sample_and_filename_subset = bcftools_inputs.sample_and_filename_subset or []
+        auto_sample_injection = bcftools_inputs.auto_sample_injection
 
         if not command or command.strip() == ";" or command.strip() == "":
             raise BcftoolsPipeEmptyCommandError()
@@ -599,8 +608,8 @@ class BcftoolsQueryManager:
 
             samples_in_file = []
             for record in sample_subset:
-                if record["Filename"] == file:
-                    samples_in_file.append(record["Sample_ID"])
+                if record.filename == file:
+                    samples_in_file.append(record.sample_id)
 
             cmd_with_samples = command.strip()  # Use user-submitted command as starting point
 

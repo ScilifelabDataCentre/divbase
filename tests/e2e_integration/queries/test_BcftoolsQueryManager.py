@@ -16,7 +16,8 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
     """Test that build_commands_config correctly structures a configuration for a single command."""
     command = "view -r 21:15000000-25000000"
 
-    result = bcftools_manager.build_commands_config(command, example_sidecar_metadata_inputs_outputs)
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
+    result = bcftools_manager.build_commands_config(command, bcftools_inputs)
 
     assert isinstance(result, list)
     assert len(result) == 1, "Should create exactly one command configuration"
@@ -26,8 +27,8 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
     expected_values = {
         "command": command,
         "counter": 0,
-        "input_files": example_sidecar_metadata_inputs_outputs["filenames"],
-        "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
+        "input_files": bcftools_inputs.filenames,
+        "sample_subset": bcftools_inputs.sample_and_filename_subset,
         "output_temp_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
     }
 
@@ -41,7 +42,7 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
                 f"Expected {key} to be {expected_value}, but got {cmd_config[key]}"
             )
 
-    assert len(cmd_config["output_temp_files"]) == len(example_sidecar_metadata_inputs_outputs["filenames"])
+    assert len(cmd_config["output_temp_files"]) == len(bcftools_inputs.filenames)
     assert cmd_config["auto_sample_injection"] is True
 
 
@@ -50,7 +51,8 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
     """Test that build_commands_config correctly structures a configuration for two commands."""
     commands = "view -r 21:15000000-25000000; view -G"
 
-    result = bcftools_manager.build_commands_config(commands, example_sidecar_metadata_inputs_outputs)
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
+    result = bcftools_manager.build_commands_config(commands, bcftools_inputs)
 
     assert isinstance(result, list)
     assert len(result) == 2, "Should create two command configurations"
@@ -59,16 +61,16 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
         {
             "command": "view -r 21:15000000-25000000",
             "counter": 0,
-            "input_files": example_sidecar_metadata_inputs_outputs["filenames"],
-            "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
+            "input_files": bcftools_inputs.filenames,
+            "sample_subset": bcftools_inputs.sample_and_filename_subset,
             "output_temp_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
-            "output_files_count": len(example_sidecar_metadata_inputs_outputs["filenames"]),
+            "output_files_count": len(bcftools_inputs.filenames),
         },
         {
             "command": "view -G",
             "counter": 1,
             "input_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
-            "sample_subset": example_sidecar_metadata_inputs_outputs["sample_and_filename_subset"],
+            "sample_subset": bcftools_inputs.sample_and_filename_subset,
             "output_temp_files": [
                 f"temp_subset_1_{i}.bcf"
                 for i in range(len(example_sidecar_metadata_inputs_outputs["output_temp_files"]))
@@ -107,10 +109,13 @@ def test_build_commands_config_respects_auto_sample_injection_flag(
 ):
     """Test that auto sample injection can be disabled (all-samples mode behavior)."""
 
-    bcftools_inputs = {
-        **example_sidecar_metadata_inputs_outputs,
-        "auto_sample_injection": False,
-    }
+    original_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
+    bcftools_inputs = type(original_inputs)(
+        filenames=original_inputs.filenames,
+        sample_and_filename_subset=original_inputs.sample_and_filename_subset,
+        sampleIDs=original_inputs.sampleIDs,
+        auto_sample_injection=False,
+    )
     result = bcftools_manager.build_commands_config("view -r 21:15000000-25000000", bcftools_inputs)
 
     assert len(result) == 1
@@ -120,10 +125,11 @@ def test_build_commands_config_respects_auto_sample_injection_flag(
 @pytest.mark.unit
 def test_build_commands_config_special_characters(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config handles edge cases correctly with valid bcftools commands."""
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
 
     # Case 1: Command with special characters
     special_char_cmd = "view -r 1:1000-2000; view --min-af 0.05 --max-af 0.95; view -i 'GT=\"het\"'"
-    result = bcftools_manager.build_commands_config(special_char_cmd, example_sidecar_metadata_inputs_outputs)
+    result = bcftools_manager.build_commands_config(special_char_cmd, bcftools_inputs)
 
     assert len(result) == 3, "Should create three command configurations"
     assert result[0]["command"] == "view -r 1:1000-2000"
@@ -132,14 +138,14 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
 
     # Case 2: Empty command in the middle that should be skipped
     empty_middle_cmd = "view -r 1:1000-2000;; view -i 'INFO/DP>10'"
-    result = bcftools_manager.build_commands_config(empty_middle_cmd, example_sidecar_metadata_inputs_outputs)
+    result = bcftools_manager.build_commands_config(empty_middle_cmd, bcftools_inputs)
     assert len(result) == 2, "Should create two command configurations (empty one is skipped)"
     assert result[0]["command"] == "view -r 1:1000-2000"
     assert result[1]["command"] == "view -i 'INFO/DP>10'"
 
     # Case 3: Commands with extra whitespace
     whitespace_cmd = "  view -r 1:1000-2000  ;  view -G  "
-    result = bcftools_manager.build_commands_config(whitespace_cmd, example_sidecar_metadata_inputs_outputs)
+    result = bcftools_manager.build_commands_config(whitespace_cmd, bcftools_inputs)
 
     assert len(result) == 2, "Should create two command configurations"
     assert result[0]["command"] == "view -r 1:1000-2000", "Leading/trailing spaces should be stripped"
@@ -147,7 +153,7 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
 
     # Case 4: Command with quotation marks and complex filtering
     quoted_cmd = "view -r \"1:1000-2000\"; view -r 2:1000-2000; view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
-    result = bcftools_manager.build_commands_config(quoted_cmd, example_sidecar_metadata_inputs_outputs)
+    result = bcftools_manager.build_commands_config(quoted_cmd, bcftools_inputs)
 
     assert len(result) == 3, "Should create three command configurations"
     assert result[0]["command"] == 'view -r "1:1000-2000"', "Quotes should be preserved"
@@ -156,7 +162,7 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
 
     # Case 5: Command with multiple consecutive semicolons
     multi_semicolon_cmd = "view -r 1:1000-2000;;;view -m2 -M2 -v snps"
-    result = bcftools_manager.build_commands_config(multi_semicolon_cmd, example_sidecar_metadata_inputs_outputs)
+    result = bcftools_manager.build_commands_config(multi_semicolon_cmd, bcftools_inputs)
     assert len(result) == 2, "Should create two command configurations (empty ones are skipped)"
     assert result[0]["command"] == "view -r 1:1000-2000"
     assert result[1]["command"] == "view -m2 -M2 -v snps", "Should select biallelic SNPs"
@@ -185,11 +191,12 @@ def test_bcftools_pipe_unsupported_command_error(bcftools_manager):
 @pytest.mark.unit
 def test_build_commands_config_invalid_commands(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that build_commands_config rejects unsupported bcftools commands."""
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
 
     merge_command = "view -r 1:1000-2000; merge -m none; view -i 'GT=\"het\"'"
 
     with pytest.raises(BcftoolsPipeUnsupportedCommandError) as exc_info:
-        bcftools_manager.build_commands_config(merge_command, example_sidecar_metadata_inputs_outputs)
+        bcftools_manager.build_commands_config(merge_command, bcftools_inputs)
 
     error_msg = str(exc_info.value)
     assert "Unsupported bcftools command 'merge'" in error_msg
@@ -199,7 +206,7 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
     multiple_invalid_cmd = "norm --fasta-ref ref.fa; annotate --annotations file.vcf"
 
     with pytest.raises(BcftoolsPipeUnsupportedCommandError) as exc_info:
-        bcftools_manager.build_commands_config(multiple_invalid_cmd, example_sidecar_metadata_inputs_outputs)
+        bcftools_manager.build_commands_config(multiple_invalid_cmd, bcftools_inputs)
 
     error_msg = str(exc_info.value)
     assert "Unsupported bcftools command 'norm'" in error_msg
@@ -209,17 +216,18 @@ def test_build_commands_config_invalid_commands(bcftools_manager, example_sideca
 @pytest.mark.unit
 def test_build_commands_config_empty_command(bcftools_manager, example_sidecar_metadata_inputs_outputs):
     """Test that fails on various variations of when user inputs empty --command to divbase-cli query vcf command in the CLI."""
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
 
     with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
-        bcftools_manager.build_commands_config("", example_sidecar_metadata_inputs_outputs)
+        bcftools_manager.build_commands_config("", bcftools_inputs)
     assert "Empty command provided" in str(exc_info.value)
 
     with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
-        bcftools_manager.build_commands_config(";", example_sidecar_metadata_inputs_outputs)
+        bcftools_manager.build_commands_config(";", bcftools_inputs)
     assert "Empty command provided" in str(exc_info.value)
 
     with pytest.raises(BcftoolsPipeEmptyCommandError) as exc_info:
-        bcftools_manager.build_commands_config("  ;  ", example_sidecar_metadata_inputs_outputs)
+        bcftools_manager.build_commands_config("  ;  ", bcftools_inputs)
     assert "Empty command provided" in str(exc_info.value)
 
 
@@ -231,8 +239,9 @@ def test_execute_pipe_empty_command_raises_before_processing(
     """
     Test that if execute_pipe gets an empty command string, it should fail immediately.
     """
+    bcftools_inputs = example_sidecar_metadata_inputs_outputs["bcftools_inputs"]
     with pytest.raises(BcftoolsPipeEmptyCommandError):
-        bcftools_manager.execute_pipe("", example_sidecar_metadata_inputs_outputs, job_id=1)
+        bcftools_manager.execute_pipe("", bcftools_inputs, job_id=1)
 
 
 @pytest.mark.unit

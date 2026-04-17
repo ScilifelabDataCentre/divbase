@@ -4,7 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from divbase_api.services.queries import BcftoolsQueryManager, validate_user_submitted_bcftools_command
+from divbase_api.services.queries import (
+    BCFToolsInput,
+    BcftoolsQueryManager,
+    SampleFileMapping,
+    validate_user_submitted_bcftools_command,
+)
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
@@ -221,14 +226,15 @@ class TestSamplesPlaceholderDetectionAndInjection:
     def test_build_commands_config_marks_pipe_and_segment_placeholder_flags(self):
         """Test that build_commands_config correctly sets flags indicating presence of sample placeholders in command segments and pipes."""
         manager = BcftoolsQueryManager()
-        bcftools_inputs = {
-            "filenames": ["file1.vcf.gz"],
-            "sample_and_filename_subset": [
-                {"Sample_ID": "S1", "Filename": "file1.vcf.gz"},
-                {"Sample_ID": "S2", "Filename": "file1.vcf.gz"},
+        bcftools_inputs = BCFToolsInput(
+            filenames=["file1.vcf.gz"],
+            sample_and_filename_subset=[
+                SampleFileMapping(sample_id="S1", filename="file1.vcf.gz"),
+                SampleFileMapping(sample_id="S2", filename="file1.vcf.gz"),
             ],
-            "auto_sample_injection": True,
-        }
+            sampleIDs=["S1", "S2"],
+            auto_sample_injection=True,
+        )
 
         config = manager.build_commands_config(
             command="view -r 1:1000-2000; view -s",
@@ -288,8 +294,8 @@ class TestSamplesPlaceholderDetectionAndInjection:
             "counter": 1,
             "input_files": ["file1.vcf.gz"],
             "sample_subset": [
-                {"Sample_ID": "S1", "Filename": "file1.vcf.gz"},
-                {"Sample_ID": "S2", "Filename": "file1.vcf.gz"},
+                SampleFileMapping(sample_id="S1", filename="file1.vcf.gz"),
+                SampleFileMapping(sample_id="S2", filename="file1.vcf.gz"),
             ],
             "output_temp_files": ["temp_subset_job1_1_0.bcf"],
             "pipe_has_sample_placeholder": True,
@@ -320,8 +326,8 @@ class TestResolveInputsForCliSamplesMode:
 
         assert result.files_to_download == ["fileA.vcf.gz", "fileB.vcf.gz"]
         assert result.sample_and_filename_subset == [
-            {"Sample_ID": "S1", "Filename": "fileA.vcf.gz"},
-            {"Sample_ID": "S3", "Filename": "fileB.vcf.gz"},
+            SampleFileMapping(sample_id="S1", filename="fileA.vcf.gz"),
+            SampleFileMapping(sample_id="S3", filename="fileB.vcf.gz"),
         ]
         assert result.unique_sample_ids == ["S3", "S1"]
         assert result.metadata_path is None
@@ -356,9 +362,9 @@ class TestResolveInputsForAllSamplesMode:
 
         assert result.files_to_download == ["fileA.vcf.gz", "fileB.vcf.gz"]
         assert result.sample_and_filename_subset == [
-            {"Sample_ID": "S1", "Filename": "fileA.vcf.gz"},
-            {"Sample_ID": "S2", "Filename": "fileA.vcf.gz"},
-            {"Sample_ID": "S3", "Filename": "fileB.vcf.gz"},
+            SampleFileMapping(sample_id="S1", filename="fileA.vcf.gz"),
+            SampleFileMapping(sample_id="S2", filename="fileA.vcf.gz"),
+            SampleFileMapping(sample_id="S3", filename="fileB.vcf.gz"),
         ]
         assert set(result.unique_sample_ids) == {"S1", "S2", "S3"}
         assert result.metadata_path is None

@@ -26,6 +26,7 @@ from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import (
     BCFToolsInput,
     BcftoolsQueryManager,
+    SampleFileMapping,
     run_sidecar_metadata_query,
 )
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
@@ -89,7 +90,7 @@ class SampleModeResult:
     """
 
     files_to_download: list[str]
-    sample_and_filename_subset: list[dict]
+    sample_and_filename_subset: list[SampleFileMapping]
     unique_sample_ids: list[str]
     metadata_path: Path | None = None
 
@@ -332,7 +333,7 @@ def bcftools_pipe_task(
             vcf_dimensions_data=vcf_dimensions_data,
         )
         sample_and_filename_subset = [
-            entry for entry in sample_and_filename_subset if entry["Filename"] in files_to_download
+            entry for entry in sample_and_filename_subset if entry.filename in files_to_download
         ]
 
     _check_if_samples_can_be_combined_with_bcftools(
@@ -372,14 +373,12 @@ def bcftools_pipe_task(
             f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
         )
 
-    bcftools_inputs = dataclasses.asdict(
-        BCFToolsInput(
-            sample_and_filename_subset=sample_and_filename_subset,
-            sampleIDs=resolved_sample_mode_results.unique_sample_ids,
-            filenames=files_to_download,
-            # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
-            auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
-        )
+    bcftools_inputs = BCFToolsInput(
+        sample_and_filename_subset=sample_and_filename_subset,
+        sampleIDs=resolved_sample_mode_results.unique_sample_ids,
+        filenames=files_to_download,
+        # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
+        auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
     )
 
     logger.info("Started bcftools subprocesses")
@@ -823,7 +822,10 @@ def _resolve_inputs_for_sample_metadata_mode(
     )
     return SampleModeResult(
         files_to_download=metadata_result.unique_filenames,
-        sample_and_filename_subset=metadata_result.sample_and_filename_subset,
+        sample_and_filename_subset=[
+            SampleFileMapping(sample_id=row.sample_id, filename=row.filename)
+            for row in metadata_result.sample_and_filename_subset
+        ],
         unique_sample_ids=metadata_result.unique_sample_ids,
         metadata_path=metadata_path,
     )
@@ -841,14 +843,14 @@ def _resolve_inputs_for_cli_samples_mode(
     requested_samples = list(dict.fromkeys(samples))
     requested_set = set(requested_samples)
     files_to_download: list[str] = []
-    sample_and_filename_subset: list[dict[str, str]] = []
+    sample_and_filename_subset: list[SampleFileMapping] = []
     matched_samples: set[str] = set()
 
     for vcf_entry in vcf_dimensions_data.vcf_files:
         filename = vcf_entry.vcf_file_s3_key
         for sample_id in vcf_entry.samples:
             if sample_id in requested_set:
-                sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
                 matched_samples.add(sample_id)
                 if filename not in files_to_download:
                     files_to_download.append(filename)
@@ -861,7 +863,7 @@ def _resolve_inputs_for_cli_samples_mode(
         )
 
     matched_sample_ids = []
-    matched_sample_ids_set = {entry["Sample_ID"] for entry in sample_and_filename_subset}
+    matched_sample_ids_set = {entry.sample_id for entry in sample_and_filename_subset}
     for sample_id in samples:
         if sample_id in matched_sample_ids_set and sample_id not in matched_sample_ids:
             matched_sample_ids.append(sample_id)
@@ -879,7 +881,7 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
     Resolve sample and file inputs for the bcftools pipeline when all samples in the project should be included.
     For the mode: VCFQuerySampleSelectionMode.ALL_SAMPLES
     """
-    sample_and_filename_subset = []
+    sample_and_filename_subset: list[SampleFileMapping] = []
     files_to_download = []
     unique_sample_ids = set()
 
@@ -887,7 +889,7 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
         filename = vcf_entry.vcf_file_s3_key
         files_to_download.append(filename)
         for sample_id in vcf_entry.samples:
-            sample_and_filename_subset.append({"Sample_ID": sample_id, "Filename": filename})
+            sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
             unique_sample_ids.add(sample_id)
 
     return SampleModeResult(

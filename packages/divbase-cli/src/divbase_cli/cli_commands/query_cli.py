@@ -113,7 +113,7 @@ def sample_metadata_query(
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
         for sample in results.sample_and_filename_subset:
-            print(f"Sample ID: '{sample['Sample_ID']}', Filename: '{sample['Filename']}'")
+            print(f"Sample ID: '{sample.sample_id}', Filename: '{sample.filename}'")
 
     print(f"The results for the query ([bright_blue]{results.query_message}[/bright_blue]):")
 
