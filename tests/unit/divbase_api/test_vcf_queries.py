@@ -1,5 +1,7 @@
 """Unit tests for VCF queries modes in tasks.py"""
 
+from unittest.mock import patch
+
 import pytest
 
 from divbase_api.services.queries import BcftoolsQueryManager, validate_user_submitted_bcftools_command
@@ -9,7 +11,7 @@ from divbase_api.worker.tasks import (
     _resolve_inputs_for_all_samples_mode,
     _resolve_inputs_for_cli_samples_mode,
 )
-from divbase_lib.exceptions import TaskUserError
+from divbase_lib.exceptions import BcftoolsCommandError, TaskUserError
 
 
 class TestDetermineSampleSelectionMode:
@@ -353,3 +355,106 @@ class TestResolveInputsForAllSamplesMode:
         ]
         assert set(result.unique_sample_ids) == {"S1", "S2", "S3"}
         assert result.metadata_path is None
+
+
+class TestBcftoolsReturnCodeHandling:
+    class DummyProc:
+        """Dummy process class to simulate subprocess.Popen return value for testing return code handling."""
+
+        def __init__(self, returncode: int):
+            self._returncode = returncode
+
+        def wait(self) -> int:
+            return self._returncode
+
+    def test_wait_proc_and_check_return_code_raises_on_non_zero(self):
+        """Test that _wait_proc_and_check_return_code raises BcftoolsCommandError with appropriate message when process returns non-zero exit code."""
+        manager = BcftoolsQueryManager()
+
+        with pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info:
+            manager._wait_proc_and_check_return_code(
+                proc=self.DummyProc(returncode=1),
+                command="view -h file.vcf.gz",
+            )
+
+        assert "view -h file.vcf.gz" in str(exc_info.value)
+
+    def test_wait_proc_and_check_return_code_accepts_zero(self):
+        """Test that _wait_proc_and_check_return_code does not raise an error when process returns zero exit code."""
+        manager = BcftoolsQueryManager()
+        manager._wait_proc_and_check_return_code(
+            proc=self.DummyProc(returncode=0),
+            command="view -h file.vcf.gz",
+        )
+
+    def test_ensure_csi_index_raises_on_non_zero_return_code(self):
+        """Test that ensure_csi_index raises BcftoolsCommandError with appropriate message when bcftools index command returns non-zero exit code."""
+        manager = BcftoolsQueryManager()
+        with (
+            patch(
+                "divbase_api.services.queries.os.path.exists", return_value=False
+            ),  # Simulate missing index file to trigger indexing
+            patch.object(manager, "run_bcftools", return_value=self.DummyProc(returncode=1)),
+            pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
+        ):
+            manager.ensure_csi_index("input.vcf.gz")
+
+        assert "index -f input.vcf.gz" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "sample_names_map,non_overlapping,identifier,failing_prefix",
+        [
+            (
+                {"file1.bcf": ["S1"], "file2.bcf": ["S2"]},
+                True,
+                "job1",
+                "merge --force-samples",
+            ),
+            (
+                {"file1.bcf": ["S1"], "file2.bcf": ["S1"]},
+                False,
+                "job2",
+                "concat -Ou -o",
+            ),
+            (
+                {"file1.bcf": ["S1"]},
+                True,
+                "job3",
+                "annotate -h",
+            ),
+        ],
+    )
+    def test_merge_or_concat_raises_on_step_failure(
+        self,
+        sample_names_map,
+        non_overlapping,
+        identifier,
+        failing_prefix,
+    ):
+        """Test that merge_or_concat_bcftools_temp_files raises BcftoolsCommandError when concat/annotate steps return non-zero exit code."""
+        manager = BcftoolsQueryManager()
+        manager.temp_files = []
+
+        with (
+            patch.object(manager, "_get_all_sample_names_from_vcf_files", return_value=sample_names_map),
+            patch.object(manager, "_check_non_overlapping_sample_names", return_value=non_overlapping),
+            patch.object(manager, "_prepare_txt_with_divbase_header_for_vcf", return_value=None),
+            patch.object(
+                manager, "_log_file_size", return_value=None
+            ),  # Patch a None return to skip actual file size logging for this test
+            patch("divbase_api.services.queries.os.rename", return_value=None),
+            patch.object(
+                manager,
+                "run_bcftools",
+                side_effect=lambda command: (
+                    self.DummyProc(1)
+                    if command.startswith(failing_prefix)
+                    and (len(command) == len(failing_prefix) or command[len(failing_prefix)] == " ")
+                    else self.DummyProc(0)
+                ),
+            ),
+            pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
+        ):
+            manager.merge_or_concat_bcftools_temp_files(list(sample_names_map.keys()), identifier=identifier)
+
+        assert failing_prefix in str(exc_info.value)
