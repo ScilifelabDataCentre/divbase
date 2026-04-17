@@ -19,7 +19,7 @@ class PersonalAccessTokenDB(BaseDBModel):
     """
     DB Model for Personal Access Tokens (PATs).
 
-    PATs allow users to authenticate programmatically (e.g., in HPC job submssions/pipeline environments)
+    PATs allow users to authenticate programmatically (e.g., in HPC job submissions/pipeline environments)
     without storing their password. PAT used as a Bearer token.
 
     permissions: Optional JSONB mapping of {str(project_id): role} scopes for this PAT.

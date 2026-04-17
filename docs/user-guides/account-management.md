@@ -35,7 +35,7 @@ You can also change your password at any time from your **Profile** page once lo
 Personal Access Tokens (PATs) let you authenticate with DivBase programmatically without having to store your password on the device. This could be useful in pipelines, or HPC jobs that need to interact with DivBase. You can manage your personal access tokens from the **Profile** → **Personal Access Tokens** page.
 
 !!! Info
-    To learn more about how to use a PAT in scripts/pipelines and/or HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md##use-personal-access-tokens-to-authenticate-programmatically).
+    To learn more about how to use a PAT in scripts/pipelines and/or HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).
 
 To create a PAT:
 
@@ -49,4 +49,4 @@ To create a PAT:
 
 You can have up to **5 active tokens** at a time. To revoke a token, click **Revoke** next to it on the Personal Access Tokens page.
 
-For how to use a PAT in scripts and HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md#using-a-personal-access-token).
+For how to use a PAT in scripts and HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).

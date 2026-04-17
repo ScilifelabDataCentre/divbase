@@ -2,7 +2,7 @@
 
 Personal Access Tokens (PATs) provide an alternative authentication mechanism to password and JSON web tokens (JWTs) for users who need to make use of DivBase programmatically. For example, from HPC job scripts or pipelines.
 
-A user never logs in with a PAT, they instead create a PAT via the frontend and pass the PAT in each API call. PATs can be configured to expire or not expire. On every API call, a db lookup is made in the `personal_access_tokens` table to verify the token and check its permissions - and get the corresponding user. This means that PATs can be revoked immediately by deleting/soft-deleting them from the db.
+A user never logs in with a PAT, they instead create a PAT via the frontend and pass the PAT in each API call. PATs can be configured to expire or not expire. On every API call, a db lookup is made in the `personal_access_token` table to verify the token and check its permissions - and get the corresponding user. This means that PATs can be revoked immediately by deleting/soft-deleting them from the db.
 
 ## PATs vs JWTs
 
@@ -12,7 +12,7 @@ PATs have no refresh cycle and no concept of login. A PAT is much closed to an A
 
 ## Permissions model
 
-Permissions are stored in the `permissions` column of the `personal_access_tokens` table as a **JSONB**, validated against the `PATPermissions` Pydantic model (defined in `divbase-lib`):
+Permissions are stored in the `permissions` column of the `personal_access_token` table as a **JSONB**, validated against the `PATPermissions` Pydantic model (defined in `divbase-lib`):
 
 ```python
 class PATPermissions(BaseModel):
