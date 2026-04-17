@@ -164,11 +164,15 @@ async def create_pat_endpoint(
     if project_access_mode == "specific" and not specific_projects and not scope_task_history:
         return form_error("Please select at least one permission scope for the token.")
 
-    pat_permissions = PATPermissions(
-        task_history=scope_task_history,
-        all_projects=project_access_mode == "all",
-        projects=specific_projects,
-    )
+    try:
+        pat_permissions = PATPermissions(
+            task_history=scope_task_history,
+            all_projects=project_access_mode == "all",
+            projects=specific_projects,
+        )
+    except ValueError as e:
+        logger.error(f"Unexpected, invalid PAT permissions configuration creation attempt, error: {e}")
+        return form_error("Invalid permissions configuration")
 
     try:
         pat, raw_token = await create_personal_access_token(

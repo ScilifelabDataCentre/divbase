@@ -2,7 +2,12 @@
 Schemas for personal access token related endpoints.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing_extensions import Self
+
+# This needs to stay in sync with ProjectRoles in divbase-api.
+# Redefined here to avoid a circular dependency on divbase-api.
+ALLOWED_PROJECT_ROLES = ["read", "edit", "manage"]
 
 
 class PATPermissions(BaseModel):
@@ -23,5 +28,15 @@ class PATPermissions(BaseModel):
     projects: dict[str, str] = Field(default_factory=dict)
     task_history: bool = False
 
-    # TODO - model validate, can't have projects and all_projects True at the same time,
-    # and role strings must be valid ProjectRoles enum values.
+    @model_validator(mode="after")
+    def no_project_scope_if_all_projects_true(self) -> Self:
+        if self.all_projects and self.projects:
+            raise ValueError("cannot specify project scope if 'all_projects' is True")
+        return self
+
+    @model_validator(mode="after")
+    def validate_project_roles(self) -> Self:
+        for project_id, role_str in self.projects.items():
+            if role_str not in ALLOWED_PROJECT_ROLES:
+                raise ValueError(f"invalid role '{role_str}' for project {project_id}")
+        return self
