@@ -121,6 +121,8 @@ def sample_metadata_query(
     unique_filenames = results.unique_filenames or []
     print(f"Unique Sample IDs: {unique_sample_ids}")
     print(f"Unique filenames: {unique_filenames}\n")
+    if not unique_sample_ids:
+        print("[yellow]No samples match your query filters.[/yellow]\n")
 
 
 @query_app.command("vcf")

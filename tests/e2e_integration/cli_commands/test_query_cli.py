@@ -142,6 +142,30 @@ def test_sample_metadata_query(
         assert filename in result.stdout
 
 
+def test_sample_metadata_query_prints_explicit_message_when_no_samples_match(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test that query tsv prints an explicit message when filters match zero samples."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    query_string = "Area:ValueThatDoesNotExistInFixtures"
+    command = f"query tsv '{query_string}' --project {project_name}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Unique Sample IDs: []" in result.stdout
+    assert "Unique filenames: []" in result.stdout
+    assert "No samples match your query filters." in result.stdout
+
+
 def test_bcftools_pipe_query(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
