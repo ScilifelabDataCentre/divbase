@@ -755,7 +755,7 @@ class PersonalAccessTokenView(ModelView):
             required=False,
             disabled=True,
         ),
-        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
+        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the PAT as deleted or not."),
         DateTimeField(
             "date_deleted",
             help_text="Timestamp when the PAT was soft deleted (else None). Value determined by system, cannot be edited.",

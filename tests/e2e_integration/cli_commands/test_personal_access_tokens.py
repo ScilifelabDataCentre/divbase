@@ -5,7 +5,7 @@ All tests use the `pat_factory` fixture to create a single PAT directly in the D
 and `monkeypatch` to set DIVBASE_API_PAT on cli_settings without touching the JWT-based test setup.
 
 ### Why only a subset of commands?
-Almost all API endpoints are scoped based on project level permissions which is handled by the dependancy:
+Almost all API endpoints are scoped based on project level permissions which is handled by the dependency:
 get_project_member in deps.py. Other more special cases like auth whoami and task-history user have their logic.
 
 So below we cover a representative cmd for project scope (files ls) and then the special cases.

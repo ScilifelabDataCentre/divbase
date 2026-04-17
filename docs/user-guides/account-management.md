@@ -5,7 +5,7 @@
 !!! Warning
     DivBase is under active development and not in production yet. We are shortly planning to create a number of projects for some pilot users. If you would like to be involved in this pilot testing phase, please let us know!
 
-Projects in DivBase are created by the DivBase team. To request a new project, you need to contact us. Please include a very short description of what the project would be for and who you plan to give access too. Please email us with your university affliated email address. please make sure you have already registered for a DivBase account and verified your email before contacting us about creating a project.
+Projects in DivBase are created by the DivBase team. To request a new project, you need to contact us. Please include a very short description of what the project would be for and who you plan to give access too. Please email us with your university affiliated email address. please make sure you have already registered for a DivBase account and verified your email before contacting us about creating a project.
 
 Once your project is created, you will be added as a member with the **Manage** role, which allows you to add and remove other members.
 
@@ -39,7 +39,7 @@ Personal Access Tokens (PATs) let you authenticate with DivBase programmatically
 
 To create a PAT:
 
-1. Log in to DivBase and navigate to your **Profile** page. From their you'll see a section to manage your Personal Access Tokens.
+1. Log in to DivBase and navigate to your **Profile** page. From there you'll see a section to manage your Personal Access Tokens.
 2. When adding a new token, you need to give it a name, an optional description and an expiry date.
 3. You can also configure the scope of the PAT (What permissions the token has):
     - **All projects** — the token can access all projects you're a member of, with same role as you have.

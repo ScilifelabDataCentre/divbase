@@ -8,7 +8,7 @@ A user never logs in with a PAT, they instead create a PAT via the frontend and 
 
 JWTs: When an interactive user logs in via the CLI or the frontend, the server issues a short-lived **JWT access token** and a longer-lived **JWT refresh token**. The CLI auto-refreshes the access token when needed using the refresh token.
 
-PATs have no refresh cycle and no concept of login. A PAT is much closed to an API key. A user creates a PAT via the frontend, copies the plaintext token to their device (probably making it an environment variable) and each API call to DivBase will use the PAT as a `Bearer` token in the `Authorization` header. The `get_current_user` in `deps.py` is responsible for handling the two diff auth mechanisms in the API (JWTs or PATs). All PATs are prefixed with `divbase_pat_` followed by a long random string. The token is only shown to the user at creation time and a hash of it is stored in the db.
+PATs have no refresh cycle and no concept of login. A PAT is much closer to an API key. A user creates a PAT via the frontend, copies the plaintext token to their device (probably making it an environment variable) and each API call to DivBase will use the PAT as a `Bearer` token in the `Authorization` header. The `get_current_user` in `deps.py` is responsible for handling the two diff auth mechanisms in the API (JWTs or PATs). All PATs are prefixed with `divbase_pat_` followed by a long random string. The token is only shown to the user at creation time and a hash of it is stored in the db.
 
 ## Permissions model
 
@@ -20,8 +20,6 @@ class PATPermissions(BaseModel):
     projects: dict[str, str] = Field(default_factory=dict)
     task_history: bool = False
 ```
-
-The JSONB is nullable, and a `NULL` column means same access level as the user.
 
 | Scope | Meaning |
 |---|---|
