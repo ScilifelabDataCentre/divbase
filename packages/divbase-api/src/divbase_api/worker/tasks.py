@@ -287,7 +287,8 @@ def bcftools_pipe_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
     if not vcf_dimensions_data.vcf_files:
-        raise VCFDimensionsEntryMissingError(project_name=project_name)
+        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
