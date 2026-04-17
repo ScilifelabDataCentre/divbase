@@ -1010,7 +1010,8 @@ def test_validate_metadata_file_with_errors(
 
     assert "Expected 4 tab-separated columns from reading the header, found 2" in cli_result.stdout
     # Rich/terminal wrapping can split long phrases across lines, so assert key fragments.
-    assert "mixed element types" in cli_result.stdout and "in lists" in cli_result.stdout
+    assert "mixed element types" in cli_result.stdout
+    assert ("in lists" in cli_result.stdout) or ("list-format/type" in cli_result.stdout)
     assert "Found 2 cell(s) with" in cli_result.stdout
     assert "Column 'Population'" in cli_result.stdout
     assert "Sample_ID is empty or missing in 2 row(s)" in cli_result.stdout

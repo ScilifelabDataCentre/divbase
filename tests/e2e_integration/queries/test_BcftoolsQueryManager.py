@@ -24,26 +24,15 @@ def test_build_commands_config_single_command(bcftools_manager, example_sidecar_
 
     cmd_config = result[0]
 
-    expected_values = {
-        "command": command,
-        "counter": 0,
-        "input_files": bcftools_inputs.filenames,
-        "sample_subset": bcftools_inputs.sample_and_filename_subset,
-        "output_temp_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
-    }
-
-    for key, expected_value in expected_values.items():
-        if key == "output_temp_files":
-            assert len(cmd_config[key]) == len(expected_value)
-            for filename in cmd_config[key]:
-                assert filename.startswith("temp_subset_") and filename.endswith(".bcf")
-        else:
-            assert cmd_config[key] == expected_value, (
-                f"Expected {key} to be {expected_value}, but got {cmd_config[key]}"
-            )
-
-    assert len(cmd_config["output_temp_files"]) == len(bcftools_inputs.filenames)
-    assert cmd_config["auto_sample_injection"] is True
+    assert cmd_config.command == command
+    assert cmd_config.counter == 0
+    assert cmd_config.input_files == bcftools_inputs.filenames
+    assert cmd_config.sample_subset == bcftools_inputs.sample_and_filename_subset
+    assert len(cmd_config.output_temp_files) == len(example_sidecar_metadata_inputs_outputs["output_temp_files"])
+    for filename in cmd_config.output_temp_files:
+        assert filename.startswith("temp_subset_") and filename.endswith(".bcf")
+    assert len(cmd_config.output_temp_files) == len(bcftools_inputs.filenames)
+    assert cmd_config.auto_sample_injection is True
 
 
 @pytest.mark.unit
@@ -57,50 +46,25 @@ def test_build_commands_config_two_commands(bcftools_manager, example_sidecar_me
     assert isinstance(result, list)
     assert len(result) == 2, "Should create two command configurations"
 
-    expected_configs = [
-        {
-            "command": "view -r 21:15000000-25000000",
-            "counter": 0,
-            "input_files": bcftools_inputs.filenames,
-            "sample_subset": bcftools_inputs.sample_and_filename_subset,
-            "output_temp_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
-            "output_files_count": len(bcftools_inputs.filenames),
-        },
-        {
-            "command": "view -G",
-            "counter": 1,
-            "input_files": example_sidecar_metadata_inputs_outputs["output_temp_files"],
-            "sample_subset": bcftools_inputs.sample_and_filename_subset,
-            "output_temp_files": [
-                f"temp_subset_1_{i}.bcf"
-                for i in range(len(example_sidecar_metadata_inputs_outputs["output_temp_files"]))
-            ],
-            "output_files_count": len(example_sidecar_metadata_inputs_outputs["output_temp_files"]),
-        },
-    ]
+    cmd1 = result[0]
+    assert cmd1.command == "view -r 21:15000000-25000000"
+    assert cmd1.counter == 0
+    assert cmd1.sample_subset == bcftools_inputs.sample_and_filename_subset
+    assert cmd1.input_files == bcftools_inputs.filenames
+    assert len(cmd1.output_temp_files) == len(example_sidecar_metadata_inputs_outputs["output_temp_files"])
+    for filename in cmd1.output_temp_files:
+        assert filename.startswith("temp_subset_") and filename.endswith(".bcf")
+    assert cmd1.auto_sample_injection is True
 
-    for i, cmd_config in enumerate(result):
-        expected = expected_configs[i]
-
-        for key in ["command", "counter", "sample_subset"]:
-            assert cmd_config[key] == expected[key], (
-                f"Command {i + 1}: Expected {key} to be {expected[key]}, but got {cmd_config[key]}"
-            )
-
-        for file_key in ["input_files", "output_temp_files"]:
-            assert len(cmd_config[file_key]) == len(expected[file_key]), (
-                f"Command {i + 1}: Expected {file_key} length to be {len(expected[file_key])}, but got {len(cmd_config[file_key])}"
-            )
-            for filename, expected_filename in zip(cmd_config[file_key], expected[file_key], strict=False):
-                if i == 0 and file_key == "input_files":
-                    assert filename == expected_filename, (
-                        f"Command {i + 1}: {file_key} file {filename} does not match expected {expected_filename}"
-                    )
-                else:
-                    assert filename.startswith("temp_subset_") and filename.endswith(".bcf"), (
-                        f"Command {i + 1}: {file_key} file {filename} does not match expected pattern"
-                    )
-        assert cmd_config["auto_sample_injection"] is True
+    cmd2 = result[1]
+    assert cmd2.command == "view -G"
+    assert cmd2.counter == 1
+    assert cmd2.sample_subset == bcftools_inputs.sample_and_filename_subset
+    assert cmd2.input_files == cmd1.output_temp_files
+    assert len(cmd2.output_temp_files) == len(example_sidecar_metadata_inputs_outputs["output_temp_files"])
+    for filename in cmd2.output_temp_files:
+        assert filename.startswith("temp_subset_") and filename.endswith(".bcf")
+    assert cmd2.auto_sample_injection is True
 
 
 @pytest.mark.unit
@@ -119,7 +83,7 @@ def test_build_commands_config_respects_auto_sample_injection_flag(
     result = bcftools_manager.build_commands_config("view -r 21:15000000-25000000", bcftools_inputs)
 
     assert len(result) == 1
-    assert result[0]["auto_sample_injection"] is False
+    assert result[0].auto_sample_injection is False
 
 
 @pytest.mark.unit
@@ -132,40 +96,40 @@ def test_build_commands_config_special_characters(bcftools_manager, example_side
     result = bcftools_manager.build_commands_config(special_char_cmd, bcftools_inputs)
 
     assert len(result) == 3, "Should create three command configurations"
-    assert result[0]["command"] == "view -r 1:1000-2000"
-    assert result[1]["command"] == "view --min-af 0.05 --max-af 0.95"
-    assert result[2]["command"] == "view -i 'GT=\"het\"'"
+    assert result[0].command == "view -r 1:1000-2000"
+    assert result[1].command == "view --min-af 0.05 --max-af 0.95"
+    assert result[2].command == "view -i 'GT=\"het\"'"
 
     # Case 2: Empty command in the middle that should be skipped
     empty_middle_cmd = "view -r 1:1000-2000;; view -i 'INFO/DP>10'"
     result = bcftools_manager.build_commands_config(empty_middle_cmd, bcftools_inputs)
     assert len(result) == 2, "Should create two command configurations (empty one is skipped)"
-    assert result[0]["command"] == "view -r 1:1000-2000"
-    assert result[1]["command"] == "view -i 'INFO/DP>10'"
+    assert result[0].command == "view -r 1:1000-2000"
+    assert result[1].command == "view -i 'INFO/DP>10'"
 
     # Case 3: Commands with extra whitespace
     whitespace_cmd = "  view -r 1:1000-2000  ;  view -G  "
     result = bcftools_manager.build_commands_config(whitespace_cmd, bcftools_inputs)
 
     assert len(result) == 2, "Should create two command configurations"
-    assert result[0]["command"] == "view -r 1:1000-2000", "Leading/trailing spaces should be stripped"
-    assert result[1]["command"] == "view -G", "Leading/trailing spaces should be stripped"
+    assert result[0].command == "view -r 1:1000-2000", "Leading/trailing spaces should be stripped"
+    assert result[1].command == "view -G", "Leading/trailing spaces should be stripped"
 
     # Case 4: Command with quotation marks and complex filtering
     quoted_cmd = "view -r \"1:1000-2000\"; view -r 2:1000-2000; view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
     result = bcftools_manager.build_commands_config(quoted_cmd, bcftools_inputs)
 
     assert len(result) == 3, "Should create three command configurations"
-    assert result[0]["command"] == 'view -r "1:1000-2000"', "Quotes should be preserved"
-    assert result[1]["command"] == "view -r 2:1000-2000"
-    assert result[2]["command"] == "view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
+    assert result[0].command == 'view -r "1:1000-2000"', "Quotes should be preserved"
+    assert result[1].command == "view -r 2:1000-2000"
+    assert result[2].command == "view -i 'F_MISSING < 0.1 && MAF[0] > 0.01'"
 
     # Case 5: Command with multiple consecutive semicolons
     multi_semicolon_cmd = "view -r 1:1000-2000;;;view -m2 -M2 -v snps"
     result = bcftools_manager.build_commands_config(multi_semicolon_cmd, bcftools_inputs)
     assert len(result) == 2, "Should create two command configurations (empty ones are skipped)"
-    assert result[0]["command"] == "view -r 1:1000-2000"
-    assert result[1]["command"] == "view -m2 -M2 -v snps", "Should select biallelic SNPs"
+    assert result[0].command == "view -r 1:1000-2000"
+    assert result[1].command == "view -m2 -M2 -v snps", "Should select biallelic SNPs"
 
 
 @pytest.mark.unit

@@ -60,6 +60,18 @@ class SampleFileMapping:
     filename: str
 
 
+@dataclass
+class BCFToolsCommandConfig:
+    command: str
+    counter: int
+    input_files: list[str]
+    sample_subset: list[SampleFileMapping]
+    output_temp_files: list[str]
+    pipe_has_sample_placeholder: bool
+    command_has_sample_placeholder: bool
+    auto_sample_injection: bool
+
+
 def run_sidecar_metadata_query(
     file: Path,
     filter_string: str = None,
@@ -475,7 +487,7 @@ class BcftoolsQueryManager:
 
     def build_commands_config(
         self, command: str, bcftools_inputs: BCFToolsInput, identifier: str = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[BCFToolsCommandConfig]:
         """
         Method that builds a configuration structure for the bcftools commands based on the provided command string and inputs.
         The command string is expected to be a semicolon-separated list of bcftools commands.
@@ -494,7 +506,7 @@ class BcftoolsQueryManager:
         pipe_has_sample_placeholder = any(
             self._command_has_sample_placeholder(cmd.strip()) for cmd in command_list if cmd.strip()
         )
-        commands_config_structure = []
+        commands_config_structure: list[BCFToolsCommandConfig] = []
         current_inputs = filenames
 
         for c_counter, cmd in enumerate(command_list):
@@ -518,16 +530,16 @@ class BcftoolsQueryManager:
                 f"temp_subset_{identifier}_{c_counter}_{f_counter}.bcf" for f_counter, _ in enumerate(current_inputs)
             ]
 
-            command_details = {
-                "command": cmd,
-                "counter": c_counter,
-                "input_files": current_inputs,
-                "sample_subset": sample_and_filename_subset,
-                "output_temp_files": output_temp_files,
-                "pipe_has_sample_placeholder": pipe_has_sample_placeholder,
-                "command_has_sample_placeholder": self._command_has_sample_placeholder(cmd),
-                "auto_sample_injection": auto_sample_injection,
-            }
+            command_details = BCFToolsCommandConfig(
+                command=cmd,
+                counter=c_counter,
+                input_files=current_inputs,
+                sample_subset=sample_and_filename_subset,
+                output_temp_files=output_temp_files,
+                pipe_has_sample_placeholder=pipe_has_sample_placeholder,
+                command_has_sample_placeholder=self._command_has_sample_placeholder(cmd),
+                auto_sample_injection=auto_sample_injection,
+            )
 
             commands_config_structure.append(command_details)
 
@@ -539,7 +551,7 @@ class BcftoolsQueryManager:
         return commands_config_structure
 
     def process_bcftools_commands(
-        self, commands_config: list[dict[str, Any]], identifier: str
+        self, commands_config: list[BCFToolsCommandConfig], identifier: str
     ) -> tuple[str, dict[str, float]]:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
@@ -561,7 +573,7 @@ class BcftoolsQueryManager:
             all_memory_samples = []
 
             for cmd_config in commands_config:
-                logger.info(f"Processing command #{cmd_config['counter'] + 1}: {cmd_config['command']}")
+                logger.info(f"Processing command #{cmd_config.counter + 1}: {cmd_config.command}")
                 output_temp_files, cmd_metrics = self.run_current_command(cmd_config)
                 temp_file_manager.temp_files.extend(output_temp_files)
                 final_output_temp_files = output_temp_files
@@ -585,7 +597,7 @@ class BcftoolsQueryManager:
 
             return output_file, metrics
 
-    def run_current_command(self, cmd_config: dict[str, Any]) -> tuple[list[str], dict[str, float]]:
+    def run_current_command(self, cmd_config: BCFToolsCommandConfig) -> tuple[list[str], dict[str, float]]:
         """
         Method that handles the inner loop of the merge-last strategy: for each command pass from the outer loop,
         it processes all given input VCF files individually by running the command on each file using run_bcftools().
@@ -603,10 +615,10 @@ class BcftoolsQueryManager:
         Returns a tuple of (output_temp_files, metrics) where metrics contains accumulated CPU and memory stats
         for all bcftools subprocesses executed in this command.
         """
-        command = cmd_config["command"]
-        input_files = cmd_config["input_files"]
-        output_temp_files = cmd_config["output_temp_files"]
-        sample_subset = cmd_config["sample_subset"]
+        command = cmd_config.command
+        input_files = cmd_config.input_files
+        output_temp_files = cmd_config.output_temp_files
+        sample_subset = cmd_config.sample_subset
 
         # Accumulate metrics across all bcftools subprocess calls
         total_cpu_seconds = 0.0
@@ -623,17 +635,17 @@ class BcftoolsQueryManager:
 
             cmd_with_samples = command.strip()  # Use user-submitted command as starting point
 
-            if cmd_config["auto_sample_injection"] and samples_in_file:
+            if cmd_config.auto_sample_injection and samples_in_file:
                 samples_in_file_bcftools_formatted = ",".join(samples_in_file)
-                if cmd_config["pipe_has_sample_placeholder"]:
-                    if cmd_config["command_has_sample_placeholder"]:
+                if cmd_config.pipe_has_sample_placeholder:
+                    if cmd_config.command_has_sample_placeholder:
                         cmd_with_samples = self._inject_samples_at_placeholder(
                             command=cmd_with_samples,
                             resolved_samples=samples_in_file_bcftools_formatted,
                         )
                 # Explicit sample names inside --command are blocked by validate_user_submitted_bcftools_command().
                 # So when no placeholder is present, inject samples at the first segment by default.
-                elif cmd_config["counter"] == 0:
+                elif cmd_config.counter == 0:
                     if cmd_with_samples == "view":
                         cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted}"
                     elif cmd_with_samples.startswith("view "):

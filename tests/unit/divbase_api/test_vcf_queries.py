@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from divbase_api.services.queries import (
+    BCFToolsCommandConfig,
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
@@ -243,10 +244,10 @@ class TestSamplesPlaceholderDetectionAndInjection:
         )
 
         assert len(config) == 2
-        assert config[0]["pipe_has_sample_placeholder"] is True
-        assert config[1]["pipe_has_sample_placeholder"] is True
-        assert config[0]["command_has_sample_placeholder"] is False
-        assert config[1]["command_has_sample_placeholder"] is True
+        assert config[0].pipe_has_sample_placeholder is True
+        assert config[1].pipe_has_sample_placeholder is True
+        assert config[0].command_has_sample_placeholder is False
+        assert config[1].command_has_sample_placeholder is True
 
     def test_inject_samples_at_placeholder_preserves_position_and_other_flags(self):
         """Test that _inject_samples_at_placeholder correctly injects sample names at the placeholder position without altering other command flags or structure."""
@@ -289,19 +290,19 @@ class TestSamplesPlaceholderDetectionAndInjection:
         monkeypatch.setattr(manager, "ensure_csi_index", lambda _file_path: None)
         monkeypatch.setattr(manager, "_log_file_size", lambda _file_path: None)
 
-        cmd_config = {
-            "command": "view -s -r 1:1000-2000",
-            "counter": 1,
-            "input_files": ["file1.vcf.gz"],
-            "sample_subset": [
+        cmd_config = BCFToolsCommandConfig(
+            command="view -s -r 1:1000-2000",
+            counter=1,
+            input_files=["file1.vcf.gz"],
+            sample_subset=[
                 SampleFileMapping(sample_id="S1", filename="file1.vcf.gz"),
                 SampleFileMapping(sample_id="S2", filename="file1.vcf.gz"),
             ],
-            "output_temp_files": ["temp_subset_job1_1_0.bcf"],
-            "pipe_has_sample_placeholder": True,
-            "command_has_sample_placeholder": True,
-            "auto_sample_injection": True,
-        }
+            output_temp_files=["temp_subset_job1_1_0.bcf"],
+            pipe_has_sample_placeholder=True,
+            command_has_sample_placeholder=True,
+            auto_sample_injection=True,
+        )
 
         output_files, _metrics = manager.run_current_command(cmd_config)
 
