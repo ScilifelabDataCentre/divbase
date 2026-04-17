@@ -54,7 +54,7 @@ query_router = APIRouter()
     status_code=status.HTTP_200_OK,
     response_model=SampleMetadataQueryTaskResult,
 )
-async def sample_metadata_query(
+async def submit_sample_metadata_query_job_endpoint(
     sample_metadata_query_request: SampleMetadataQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -116,15 +116,15 @@ async def sample_metadata_query(
     return SampleMetadataQueryTaskResult(**result_dict)
 
 
-@query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
-async def create_bcftools_jobs(
+@query_router.post("/vcf/projects/{project_name}", status_code=status.HTTP_201_CREATED)
+async def submit_vcf_query_job_endpoint(
     bcftools_query_request: BcftoolsQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> int:
     """
-    Create a new bcftools query job for the specified project.
+    Submit a vcf query job for the specified project.
     """
     project, current_user, role = project_and_user_and_role
 

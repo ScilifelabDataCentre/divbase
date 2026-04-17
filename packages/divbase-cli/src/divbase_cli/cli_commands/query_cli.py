@@ -197,7 +197,7 @@ def vcf_query(
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
+        api_route=f"v1/query/vcf/projects/{project_config.name}",
         json=request_data.model_dump(),
     )
 

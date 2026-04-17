@@ -194,7 +194,7 @@ Example of an API endpoint. This pattern can more or less be used as boilerplate
 
 ```python
 @query_router.post("/vcf/projects/{project_name}", status_code=status.HTTP_201_CREATED)
-async def create_bcftools_jobs(
+async def submit_vcf_query_job_endpoint(
     bcftools_query_request: BcftoolsQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
