@@ -415,10 +415,6 @@ body {
   background-color: var(--scilife-dark-grey);
   color: white;
 }
-.scilife-role-badge-active {
-  background-color: var(--scilife-lime);
-  color: var(--scilife-dark-grey);
-}
 .scilife-role-badge-inactive {
   background-color: var(--scilife-dark-grey);
   color: white;

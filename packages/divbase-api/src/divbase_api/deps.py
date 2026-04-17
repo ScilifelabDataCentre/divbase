@@ -41,6 +41,10 @@ from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
 logger = logging.getLogger(__name__)
 
+# Returned for JWT tokens and PATs which are not scoped.
+# Effectively means the token has whatever permissions the user has.
+PAT_NOT_SCOPED = PATPermissions(all_projects=True, task_history=True)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
@@ -147,13 +151,13 @@ async def get_project_member_from_cookie(
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)], db: AsyncSession = Depends(get_db)
-) -> tuple[UserDB, PATPermissions | None]:
+) -> tuple[UserDB, PATPermissions]:
     """
-    Authenticate from a bearer token (JWT access token or PAT) and return the user plus a scopes dict.
+    Authenticate from a bearer token (JWT access token or PAT) and return the user plus their scopes.
 
-    The scopes dict is:
-    - None for JWT tokens or PATs with no permission restrictions (full access).
-    - The PAT's permissions dict (PATPermissions TypedDict) for PATs with defined scopes.
+    The scopes are always a PATPermissions instance:
+    - PAT_NOT_SCOPED for JWT tokens (no PAT restrictions apply).
+    - The PAT's own PATPermissions for scoped PATs.
 
     If wondering why no refresh token handling here like in the frontend:
     - The CLI can send the refresh token to "auth/refresh" endpoint instead to get a new access token.
@@ -166,8 +170,6 @@ async def get_current_user(
             raise AuthenticationError("Invalid or expired personal access token")
 
         user, pat = result
-        if not pat.permissions:
-            return user, None
         try:
             scopes = PATPermissions.model_validate(pat.permissions)
         except ValidationError as err:
@@ -181,11 +183,11 @@ async def get_current_user(
     user = await verify_user_from_access_token(db=db, token=token)
     if user is None:
         raise AuthenticationError("Invalid or expired access token")
-    return user, None
+    return user, PAT_NOT_SCOPED
 
 
 async def get_current_admin_user(
-    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
 ) -> UserDB:
     """
     Verify current user has admin access.
@@ -202,7 +204,7 @@ async def get_current_admin_user(
 
 async def get_project_member(
     project_name: str,
-    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ) -> tuple[ProjectDB, UserDB, ProjectRoles]:
     """
@@ -221,8 +223,8 @@ async def get_project_member(
     if user_role not in ProjectRoles:
         raise AuthorizationError("You don't have permission to access this project.")
 
-    if scopes is None or scopes.all_projects:
-        # This is either a JWT token or a PAT with no project scoping, so we use the user's actual role.
+    if scopes.all_projects:
+        # JWT token or a PAT with no project scoping — use the user's actual role.
         return project, current_user, user_role
 
     pat_role_str = scopes.projects.get(str(project.id))
@@ -245,15 +247,15 @@ async def get_project_member(
 
 
 async def require_task_history_scope(
-    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
 ) -> UserDB:
     """
     Verify the bearer token has the 'task_history' scope.
 
-    JWT tokens and PATs with permissions=None (full access) always pass.
-    PATs with explicit scopes must have task_history=True.
+    JWT tokens (represented by PAT_NOT_SCOPED) always pass.
+    Scoped PATs must have task_history=True.
     """
     current_user, scopes = current_user_and_scopes
-    if scopes is not None and not scopes.task_history:
+    if not scopes.task_history:
         raise AuthorizationError("This personal access token does not have the 'task_history' scope.")
     return current_user

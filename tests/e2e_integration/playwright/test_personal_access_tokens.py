@@ -161,6 +161,7 @@ def test_create_pat_limit_exceeded_shows_error(logged_in_edit_user_pat_page: Pag
             user_id=user.id,
             name=f"pre-filled-pat-{i}",
             hashed_token=hash_personal_access_token(generate_personal_access_token()),
+            permissions={"all_projects": True, "projects": {}, "task_history": True},
         )
         db_session_sync.add(pat)
     db_session_sync.commit()

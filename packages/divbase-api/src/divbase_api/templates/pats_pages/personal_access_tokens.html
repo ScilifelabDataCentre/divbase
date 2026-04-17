@@ -55,10 +55,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if pat.permissions is none %}
-                                    <span class="badge scilife-role-badge-active">Full access</span>
-                                {% else %}
-                                    {% if pat.permissions.task_history %}
+                                {% if pat.permissions.task_history %}
                                         <span class="badge scilife-role-badge-read me-1">task_history</span>
                                     {% endif %}
                                     {% if not pat.permissions.all_projects %}
@@ -74,7 +71,6 @@
                                     {% else %}
                                         <span class="badge scilife-role-badge-edit me-1">All projects</span>
                                     {% endif %}
-                                {% endif %}
                             </td>
                             <td>
                                 {% if pat.expires_at %}

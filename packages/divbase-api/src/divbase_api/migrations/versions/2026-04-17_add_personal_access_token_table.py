@@ -1,8 +1,8 @@
-"""add_pat_table
+"""add_personal_access_token_table
 
-Revision ID: 18530b8a3e93
+Revision ID: 427a022ebccf
 Revises: 755a240de0ab
-Create Date: 2026-04-09 08:52:58.432434
+Create Date: 2026-04-17 08:59:36.700396
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "18530b8a3e93"
+revision: str = "427a022ebccf"
 down_revision: Union[str, Sequence[str], None] = "755a240de0ab"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
         sa.Column("hashed_token", sa.String(length=64), nullable=False),
-        sa.Column("permissions", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("permissions", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("is_deleted", sa.Boolean(), nullable=False),

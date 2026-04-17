@@ -160,20 +160,15 @@ async def create_pat_endpoint(
 
     project_name_by_id = {str(p.id): p.name for p in projects}
 
-    # pat_permissions=None means full access/same as user when logged in with password.
-    pat_permissions: PATPermissions | None = None
-    if project_access_mode == "all" and scope_task_history:
-        pat_permissions = None
-    else:
-        specific_projects = form_projects if project_access_mode == "specific" else {}
-        if project_access_mode == "specific" and not specific_projects and not scope_task_history:
-            return form_error("Please select at least one permission scope for the token.")
+    specific_projects = form_projects if project_access_mode == "specific" else {}
+    if project_access_mode == "specific" and not specific_projects and not scope_task_history:
+        return form_error("Please select at least one permission scope for the token.")
 
-        pat_permissions = PATPermissions(
-            task_history=scope_task_history,
-            all_projects=project_access_mode == "all",
-            projects=specific_projects,
-        )
+    pat_permissions = PATPermissions(
+        task_history=scope_task_history,
+        all_projects=project_access_mode == "all",
+        projects=specific_projects,
+    )
 
     try:
         pat, raw_token = await create_personal_access_token(
@@ -181,7 +176,7 @@ async def create_pat_endpoint(
             user_id=current_user.id,
             name=name,
             description=description,
-            permissions=pat_permissions.model_dump() if pat_permissions else None,
+            permissions=pat_permissions.model_dump(),
             expires_at=expires_at_dt,
         )
     except PATLimitExceededError as e:

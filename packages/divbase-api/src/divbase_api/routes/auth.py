@@ -86,7 +86,7 @@ async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depe
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
 async def whoami_endpoint(
-    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions | None], Depends(get_current_user)],
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
 ):
     """Endpoint to return current logged in user's details."""
     # NOTE: this endpoint is not scoped on purpose,

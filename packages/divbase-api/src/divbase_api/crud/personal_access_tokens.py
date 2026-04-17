@@ -25,8 +25,8 @@ async def create_personal_access_token(
     db: AsyncSession,
     user_id: int,
     name: str,
+    permissions: dict,
     description: str | None = None,
-    permissions: dict | None = None,
     expires_at: datetime | None = None,
 ) -> tuple[PersonalAccessTokenDB, SecretStr]:
     """

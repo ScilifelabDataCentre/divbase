@@ -55,10 +55,7 @@
                         <div class="col-sm-6">
                             <p class="text-muted small fw-semibold mb-1">Scopes</p>
                             <p class="mb-0">
-                                {% if pat.permissions is none %}
-                                    <span class="badge scilife-role-badge-active">Full access</span>
-                                {% else %}
-                                    {% if pat.permissions.task_history %}
+                                {% if pat.permissions.task_history %}
                                         <span class="badge scilife-role-badge-read me-1">task_history</span>
                                     {% endif %}
                                     {% if not pat.permissions.all_projects %}
@@ -74,7 +71,6 @@
                                     {% else %}
                                         <span class="badge scilife-role-badge-edit me-1">All projects</span>
                                     {% endif %}
-                                {% endif %}
                             </p>
                         </div>
                     </div>

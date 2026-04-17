@@ -22,10 +22,8 @@ class PersonalAccessTokenDB(BaseDBModel):
     PATs allow users to authenticate programmatically (e.g., in HPC job submissions/pipeline environments)
     without storing their password. PAT used as a Bearer token.
 
-    permissions: Optional JSONB mapping of {str(project_id): role} scopes for this PAT.
-        - If None: the user's actual project membership role applies.
-        - If set: Permissions limited by the PAT (and user's current permissions in db)
-            If project not included in permissions, reject.
+    permissions: JSONB describing the scopes/permissions of the PAT.
+        Structure of JSONB defined by PATPermissions pydantic model in divbase-lib
 
     id, created_at and updated_at are inherited from BaseDBModel.
     """
@@ -36,10 +34,7 @@ class PersonalAccessTokenDB(BaseDBModel):
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     hashed_token: Mapped[str] = mapped_column(String(64), index=True, unique=True)  # SHA-256 hex = 64 chars
-
-    # Optional project-scoped permissions: {str(project_id): role}
-    # None means no restriction, so the user's actual project membership role is used.
-    permissions: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
+    permissions: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)

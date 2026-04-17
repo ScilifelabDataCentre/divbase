@@ -393,6 +393,7 @@ def create_soft_deleted_pat(db_session_sync):
             user_id=1,
             name="test-pat",
             hashed_token=hash_personal_access_token(generate_personal_access_token()),
+            permissions={"all_projects": True, "projects": {}, "task_history": True},
             is_deleted=True,
             date_deleted=date_deleted,
         )

@@ -71,7 +71,7 @@ def pat_factory(db_session_sync):
     """Creates a single PAT directly in the DB and deletes it after the test."""
     pat_id: int | None = None
 
-    def create_pat(user_email, permissions=None, expires_at=None):
+    def create_pat(user_email, permissions=FULL_ACCESS_PAT_PERMISSIONS, expires_at=None):
         nonlocal pat_id
         user = db_session_sync.execute(select(UserDB).where(UserDB.email == user_email)).scalar_one()
         raw = generate_personal_access_token()
