@@ -2,7 +2,6 @@ import dataclasses
 import logging
 import os
 import re
-import shlex
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -792,92 +791,6 @@ def _samples_option_violation_reason(arg: str, all_samples: bool) -> str | None:
         )
 
     return None
-
-
-def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> str:
-    """
-    Validate that user-submitted bcftools command(s) are valid for DivBase.
-    Intended to be run early in bcftools_pipe_task and make early exits when needed.
-
-    Some bcftools options have both a short and long version (e.g. -h and --header-only).
-    The validation checks for both versions of the option.
-
-    Returns the validated command string.
-    """
-    valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
-    unsupported_view_options = []
-    has_all_samples_non_sample_view_option = False
-
-    for position, raw_cmd in enumerate(command.split(";"), start=1):
-        cmd = raw_cmd.strip()
-        if not cmd:
-            continue
-
-        parse_error_message = f"Could not parse --command segment at position {position}: {cmd}"
-        try:
-            args = shlex.split(cmd)
-        except ValueError:
-            raise TaskUserError(parse_error_message) from None
-
-        cmd_name = args[0]
-        if cmd_name not in valid_commands:
-            raise TaskUserError(
-                f"Unsupported bcftools command '{cmd_name}' at position {position}. "
-                f"Only the following commands are supported: {', '.join(valid_commands)}"
-            )
-
-        if cmd_name == "view":
-            index = 1
-            while index < len(args):
-                arg = args[index]
-                reason = _blacklisted_view_options_reason_for_argument(arg)
-                if reason is not None:
-                    unsupported_view_options.append(f"Pipe segment {position}, token '{arg}': {reason}")
-                    index += 1
-                    continue
-
-                if _matches_option(arg, "-s", "--samples"):
-                    sample_option_violation_reason = _samples_option_violation_reason(arg=arg, all_samples=all_samples)
-                    if sample_option_violation_reason is not None:
-                        unsupported_view_options.append(
-                            f"Pipe segment {position}, token '{arg}': {sample_option_violation_reason}"
-                        )
-                        index += 1
-                        continue
-
-                    if arg in ("-s", "--samples"):
-                        next_arg = args[index + 1] if index + 1 < len(args) else None
-                        if next_arg is not None and not next_arg.startswith("-"):
-                            unsupported_view_options.append(
-                                f"Pipe segment {position}, token '{arg}': "
-                                "Do not provide sample names in '--command' via '-s/--samples'. "
-                                "DivBase resolves sample IDs from '--tsv-filter', '--samples', or '--samples-file'. "
-                                "If you only want sample-based subsetting, use '--command \"view -s\"'."
-                            )
-                            index += 2
-                            continue
-                        index += 1
-                        continue
-
-                if all_samples and arg.startswith("-"):
-                    has_all_samples_non_sample_view_option = True
-
-                index += 1
-
-    if unsupported_view_options:
-        details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
-        raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
-
-    if all_samples and not has_all_samples_non_sample_view_option:
-        raise TaskUserError(
-            "When using all-samples mode, --command must include at least one supported bcftools view option "
-            "other than '-s/--samples' and none of the options blacklisted by DivBase. "
-            "Examples: -r/--regions, -t/--targets, -i/--include, -e/--exclude, -q/--min-af, -Q/--max-af, -v/--types, -V/--exclude-types, -m/--min-alleles, -M/--max-alleles, -c/--min-ac, -C/--max-ac, -g/--genotype. "
-            "Otherwise the query could potentially return all VCF data as is, and for that case it would be more efficient to download the dataset from the project instead with: divbase-cli files download-all. "
-            "Please revise your command and try again."
-        )
-
-    return command
 
 
 def _resolve_inputs_for_sample_metadata_mode(
