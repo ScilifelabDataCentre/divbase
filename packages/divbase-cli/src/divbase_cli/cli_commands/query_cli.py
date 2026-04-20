@@ -62,6 +62,14 @@ TSV_FILTER_HELP_TEXT_VCF = (
     + "\n\nMutually exclusive with --samples, --samples-file, and --all-samples."
 )
 
+SAMPLE_SELECTION_HELP_PANEL = "Sample Selection (Required: Include Exactly One)"
+VCF_QUERY_HELP_TEXT = (
+    "Submit a VCF query to run on the DivBase API. "
+    "A single, merged VCF file with the query results will be added to the project on success.\n\n"
+    "Exactly one sample-selection mode is required: "
+    "--tsv-filter | --samples | --samples-file | --all-samples."
+)
+
 query_app = typer.Typer(
     help="Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase API",
     no_args_is_help=True,
@@ -125,12 +133,15 @@ def sample_metadata_query(
         print("[yellow]No samples match your query filters.[/yellow]\n")
 
 
-@query_app.command("vcf")
+@query_app.command("vcf", help=VCF_QUERY_HELP_TEXT)
 def vcf_query(
-    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT_VCF),
+    tsv_filter: str | None = typer.Option(
+        None, help=TSV_FILTER_HELP_TEXT_VCF, rich_help_panel=SAMPLE_SELECTION_HELP_PANEL
+    ),
     samples: str | None = typer.Option(
         None,
         help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter, --samples-file, and --all-samples.",
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
     ),
     samples_file: Path | None = typer.Option(
         None,
@@ -143,13 +154,16 @@ def vcf_query(
             "Path to a UTF-8 text file with one sample ID per line. Blank lines and lines starting with # are ignored. "
             "Mutually exclusive with --tsv-filter, --samples, and --all-samples."
         ),
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
     ),
     all_samples: bool = typer.Option(
         False,
+        "--all-samples",
         help=(
             "Use all samples in the project for the query. "
             "Mutually exclusive with --tsv-filter, --samples, and --samples-file."
         ),
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
     ),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
