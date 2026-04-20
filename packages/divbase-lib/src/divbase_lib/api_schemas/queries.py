@@ -162,6 +162,26 @@ class SampleFileMappingResult(BaseModel):
     sample_id: str
     filename: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def map_legacy_task_history_keys(cls, data):
+        """
+        Support historical task-history payloads that stored uppercase keys.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        if "sample_id" not in normalized:
+            if "Sample_ID" in normalized:
+                normalized["sample_id"] = normalized["Sample_ID"]
+            elif "#Sample_ID" in normalized:
+                normalized["sample_id"] = normalized["#Sample_ID"]
+        if "filename" not in normalized and "Filename" in normalized:
+            normalized["filename"] = normalized["Filename"]
+
+        return normalized
+
 
 class SampleMetadataQueryTaskResult(BaseModel):
     """Metadata query task result details. Based on the return of tasks.sample_metadata_query."""
