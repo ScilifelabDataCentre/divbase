@@ -136,14 +136,15 @@ async def submit_vcf_query_job_endpoint(
 
     if bcftools_query_request.samples is not None:
         project_samples = set(await get_unique_samples_by_project_async(db=db, project_id=project.id))
-        missmatched_samples = sorted(set(bcftools_query_request.samples) - project_samples)
-        if missmatched_samples:
+        mismatched_samples = sorted(set(bcftools_query_request.samples) - project_samples)
+        if mismatched_samples:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     "The following sample IDs were not found in the project's dimensions index: "
-                    f"{', '.join(missmatched_samples)}. "
-                    "Please verify that sample name are correctly spelled. If the sample name are correct, please make sure the dimensions index is up to date"
+                    f"{', '.join(mismatched_samples)}. "
+                    "Please verify that the sample names are correctly spelled. "
+                    "If the sample names are correct, please make sure the dimensions index is up to date "
                     "by running 'divbase-cli dimensions update --project <project_name>'."
                 ),
             )

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This page collects issues that users might encounted when using DivBase.
+This page collects issues that users might encounter when using DivBase.
 
 TODO section on getting help. contact the DivBase staff at <TODO@scilifelab.se>
 
