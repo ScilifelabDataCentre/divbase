@@ -179,3 +179,20 @@ class QueueClosedError(DivBaseAPIException):
 
     def __init__(self, message: str):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class PATLimitExceededError(DivBaseAPIException):
+    """Raised when a user has reached the maximum number of active personal access tokens."""
+
+    def __init__(
+        self,
+        message: str = "You have reached the maximum of 5 active tokens. Please revoke one before creating a new one.",
+    ):
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
+
+
+class PATDuplicateNameError(DivBaseAPIException):
+    """Raised when a user already has an active (not soft-deleted) personal access token with the same name."""
+
+    def __init__(self, message: str = "You already have an active token with this name."):
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)

@@ -2,10 +2,15 @@
 Security utilities for handling passwords and JSON Web Tokens (JWTs).
 
 FastAPI recommend using pwdlib and argon2 for password hashing (https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
+Personal Access Tokens (PATs) are hashed using SHA-256 since:
+    1. We need to verify them on every request, so should be relatively fast
+    2. They are random strings, so brute forcing not a concern unlike passwords.
 
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 
+import hashlib
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,6 +26,8 @@ from divbase_api.api_config import api_settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 
+PAT_TOKEN_PREFIX = "divbase_pat_"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
@@ -28,6 +35,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: SecretStr) -> str:
     return password_hash.hash(password.get_secret_value())
+
+
+def generate_personal_access_token() -> SecretStr:
+    return SecretStr(PAT_TOKEN_PREFIX + secrets.token_urlsafe(nbytes=32))
+
+
+def hash_personal_access_token(raw_token: SecretStr) -> str:
+    return hashlib.sha256(raw_token.get_secret_value().encode()).hexdigest()
 
 
 class TokenType(StrEnum):

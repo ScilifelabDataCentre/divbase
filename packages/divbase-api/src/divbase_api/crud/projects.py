@@ -205,17 +205,29 @@ async def remove_project_member(db: AsyncSession, project_id: int, user_id: int)
     await db.commit()
 
 
+ROLE_HIERARCHY = {
+    ProjectRoles.READ: 1,
+    ProjectRoles.EDIT: 2,
+    ProjectRoles.MANAGE: 3,
+}
+
+
 def has_required_role(user_role: ProjectRoles, required_role: ProjectRoles) -> bool:
     """
     Check if a user's role meets or exceeds the required role.
-    (If you EDIT access, you also have READ access, etc.)
+    (If you have EDIT access, you also have READ access, etc.)
     """
-    role_hierarchy = {
-        ProjectRoles.READ: 1,
-        ProjectRoles.EDIT: 2,
-        ProjectRoles.MANAGE: 3,
-    }
-    return role_hierarchy[user_role] >= role_hierarchy[required_role]
+    return ROLE_HIERARCHY[user_role] >= ROLE_HIERARCHY[required_role]
+
+
+def pat_role_above_user_role(pat_role: ProjectRoles, user_role: ProjectRoles) -> bool:
+    """
+    Check if a personal access token's (PAT) defined role exceeds the user's own role.
+
+    E.g. if you have EDIT access to a project you should not be able to do manage access things,
+    even if your PAT says you have manage access (could happen if user downgraded after creating the PAT)
+    """
+    return ROLE_HIERARCHY[pat_role] > ROLE_HIERARCHY[user_role]
 
 
 async def _validate_project_create(db: AsyncSession, name: str, bucket_name: str) -> None:

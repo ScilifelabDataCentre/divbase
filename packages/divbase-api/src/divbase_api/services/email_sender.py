@@ -147,3 +147,29 @@ def send_password_has_been_reset_email(email_to: str) -> None:
         context={"email": email_to},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_pat_created_email(email_to: str, pat_name: str, expires_at_cet: str | None) -> None:
+    """
+    Send a security notification email when a new personal access token is created.
+    """
+    subject = "DivBase - New personal access token created"
+    pats_url = f"{api_settings.general.frontend_base_url}/pats"
+    html_content = render_email_template(
+        template_name="pat_created.html",
+        context={"pat_name": pat_name, "pats_url": pats_url, "expires_at_cet": expires_at_cet},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_pat_revoked_email(email_to: str, pat_name: str) -> None:
+    """
+    Send a security notification email when a personal access token is revoked.
+    """
+    subject = "DivBase - Personal access token revoked"
+    pats_url = f"{api_settings.general.frontend_base_url}/pats"
+    html_content = render_email_template(
+        template_name="pat_revoked.html",
+        context={"pat_name": pat_name, "pats_url": pats_url},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)

@@ -55,22 +55,6 @@ def test_login_command(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_login_command_with_password_stdin(logged_out_user_with_no_config):
-    command = f"auth login {USER_EMAIL} --password-stdin"
-    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
-    assert result.exit_code == 0
-    assert "Logged in successfully" in result.stdout
-    assert USER_EMAIL in result.stdout
-
-
-def test_login_command_with_password_stdin_but_no_input(logged_out_user_with_no_config):
-    command = f"auth login {USER_EMAIL} --password-stdin"
-    result = runner.invoke(app=app, args=command, input="")
-    assert result.exit_code != 0
-    assert "--password-stdin" in result.stderr
-    assert "empty password" in result.stderr
-
-
 def test_login_command_with_password_prompted(logged_out_user_with_no_config):
     command = f"auth login {USER_EMAIL}"
     result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
@@ -146,7 +130,7 @@ def test_logout_command(logged_out_user_with_no_config):
 
 def test_login_logout_cycle(logged_out_user_with_no_config):
     """Test a few repeated login/logout cycles."""
-    login_command = f"auth login {USER_EMAIL} --password-stdin"
+    login_command = f"auth login {USER_EMAIL} --force"
     logout_command = "auth logout"
 
     for _ in range(3):
@@ -256,7 +240,7 @@ def test_login_with_outdated_cli_version_fails(logged_out_user_with_no_config, m
     """Test that login fails if the CLI version is outdated (rejected by the API middleware)"""
     monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
 
-    command = f"auth login {USER_EMAIL} --password-stdin"
+    command = f"auth login {USER_EMAIL} --force"
     result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
 
     assert result.exit_code != 0

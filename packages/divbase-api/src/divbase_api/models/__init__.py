@@ -6,9 +6,10 @@ They are imported in dependency order to avoid circular import issues.
 
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementTarget
 from divbase_api.models.base import Base, BaseDBModel
+from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.models.queue_status import QueueStatus
+from divbase_api.models.queue_status import QueueStatusDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
@@ -32,5 +33,6 @@ __all__ = [
     "ProjectVersionDB",
     "AnnouncementDB",
     "AnnouncementTarget",
-    "QueueStatus",
+    "QueueStatusDB",
+    "PersonalAccessTokenDB",
 ]

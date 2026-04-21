@@ -38,9 +38,10 @@ from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
+from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.models.queue_status import QueueStatus
+from divbase_api.models.queue_status import QueueStatusDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
@@ -631,7 +632,7 @@ class AnnouncementView(ModelView):
 
 class QueueStatusView(ModelView):
     """
-    Custom admin panel View for the QueueStatus model.
+    Custom admin panel View for the QueueStatusDB model.
 
     This is a singleton table (only 1 row allowed).
     Deletion and creation are disabled - only editing the existing row is allowed.
@@ -724,6 +725,76 @@ class QueueStatusView(ModelView):
     # as does not work well when modifying the timestamp in edit view, easier to just display as UTC
 
 
+class PersonalAccessTokenView(ModelView):
+    """
+    Custom admin panel View for the PersonalAccessTokenDB model.
+    As with passwords, the hashed_token is never displayed in the admin panel on purpose.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", label="ID", disabled=True),
+        StringField("name", label="Name", required=True),
+        TextAreaField("description", required=False, label="Description"),
+        JSONField(
+            "permissions",
+            required=False,
+            label="Permissions",
+            help_text="Permissions associated with the PAT.",
+            disabled=True,
+        ),
+        DateTimeField(
+            "expires_at",
+            help_text="Timestamp when the PAT expires. Value can be left empty for no expiration. Value determined by system, cannot be edited.",
+            required=False,
+            disabled=True,
+        ),
+        DateTimeField(
+            "last_used_at",
+            help_text="Timestamp when the PAT was last used. Value empty if not yet used. Value determined by system, cannot be edited.",
+            required=False,
+            disabled=True,
+        ),
+        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the PAT as deleted or not."),
+        DateTimeField(
+            "date_deleted",
+            help_text="Timestamp when the PAT was soft deleted (else None). Value determined by system, cannot be edited.",
+            disabled=True,
+        ),
+        IntegerField("user_id", label="User ID", required=False),
+        HasOne("user", identity="user", label="User"),
+        DateTimeField("created_at", label="Created At", disabled=True),
+        DateTimeField("updated_at", label="Updated At", disabled=True),
+    ]
+
+    exclude_fields_from_list = ["hashed_token", "permissions", "user_id"]
+    exclude_fields_from_edit = ["hashed_token", "id", "created_at", "updated_at", "user_id", "user", "permissions"]
+    exclude_fields_from_detail = ["hashed_token", "user_id"]
+
+    def can_create(self, request: Request) -> bool:
+        """Disable manual creation of PATs."""
+        return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a users soft deletion status is changed.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
+
+    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at", "expires_at", "last_used_at"])
+        if formatted is not None:
+            return formatted
+        return await super().serialize_field_value(value, field, action, request)
+
+
 class DivBaseAuthProvider(AuthProvider):
     """
     This class enables starlette-admin to make use of DivBase's pre-existing auth system.
@@ -807,5 +878,12 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
     )
-    admin.add_view(QueueStatusView(QueueStatus, icon="fas fa-power-off", label="Queue Status", identity="queue-status"))
+    admin.add_view(
+        QueueStatusView(QueueStatusDB, icon="fas fa-power-off", label="Queue Status", identity="queue-status")
+    )
+    admin.add_view(
+        PersonalAccessTokenView(
+            PersonalAccessTokenDB, icon="fas fa-key", label="Personal Access Tokens", identity="personal-access-token"
+        )
+    )
     admin.mount_to(app)

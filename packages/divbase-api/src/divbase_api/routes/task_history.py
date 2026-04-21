@@ -11,7 +11,7 @@ from typing_extensions import Annotated
 from divbase_api.crud.projects import check_if_user_is_not_only_read_user_in_all_their_projects, has_required_role
 from divbase_api.crud.task_history import get_tasks_pg
 from divbase_api.db import get_db
-from divbase_api.deps import get_current_user, get_project_member
+from divbase_api.deps import get_project_member, require_task_history_scope
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
@@ -29,7 +29,7 @@ READ_USER_ERROR_MSG = "You do not have access view to task history from any proj
 
 @task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult])
 async def get_all_tasks_for_user(
-    current_user: Annotated[UserDB, Depends(get_current_user)],
+    current_user: Annotated[UserDB, Depends(require_task_history_scope)],
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
@@ -114,7 +114,7 @@ async def get_project_tasks(
 )
 async def get_task_by_id(
     user_task_id: int,
-    current_user: Annotated[UserDB, Depends(get_current_user)],
+    current_user: Annotated[UserDB, Depends(require_task_history_scope)],
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """

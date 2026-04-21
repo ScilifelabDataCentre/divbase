@@ -8,6 +8,7 @@ Based on provided user input and their config file.
 
 from pathlib import Path
 
+from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecifiedError
 from divbase_cli.user_config import ProjectConfig, load_user_config
 
@@ -17,17 +18,40 @@ def ensure_logged_in(desired_url: str | None = None) -> str:
     Ensure the user is logged in by checking the logged_in_url value in the user config.
 
     Optionally checks the logged_in_url matches the desired_url (e.g. for project-specific commands) if provided.
-
-    Returns the logged_in_url if valid, otherwise raises an AuthenticationError.
     """
     config = load_user_config()
-    if not config.logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
-    if desired_url and config.logged_in_url != desired_url:
-        raise AuthenticationError(
-            f"You are not logged in to the correct DivBase URL: {desired_url}. Please log in again."
-        )
-    return config.logged_in_url
+    if config.logged_in_url:
+        if desired_url and config.logged_in_url != desired_url:
+            raise AuthenticationError(
+                f"You are not logged in to the correct DivBase URL: {desired_url}. Please log in again."
+            )
+        return config.logged_in_url
+
+    if cli_settings.DIVBASE_API_PAT:
+        return desired_url or cli_settings.DIVBASE_API_URL
+
+    raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+
+
+def resolve_url_for_non_project_specific_commands() -> str:
+    """
+    Resolve the DivBase API URL to use for CLI commands that are not project-specific.
+
+    Returns the url the user is either logged into or in the case of a user using a personal access token (PAT),
+    the default API URL, since PATs don't require login to be used.
+    Current examples: auth whoami and some task-history commands that are not project-specific.
+
+    Priority mirrors make_authenticated_request: active session first, PAT as fallback.
+    """
+    config = load_user_config()
+    if config.logged_in_url:
+        return config.logged_in_url
+
+    # No active session — fall back to PAT if available.
+    if cli_settings.DIVBASE_API_PAT:
+        return cli_settings.DIVBASE_API_URL
+
+    raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
 
 def resolve_project(project_name: str | None) -> ProjectConfig:
@@ -44,28 +68,6 @@ def resolve_project(project_name: str | None) -> ProjectConfig:
     if not project_name:
         raise ProjectNameNotSpecifiedError()
     return config.project_info(project_name)
-
-
-def resolve_divbase_api_url(url: str | None) -> str:
-    """
-    Helper function to resolve the DivBase API URL to use for a CLI command.
-
-    If not provided by the user, it will take the default project's API URL from the user config.
-    Otherwise raise an error.
-    """
-    if url:
-        return url
-
-    config = load_user_config()
-
-    if not config.default_project:
-        raise ValueError(
-            "No default project is set in your user config. "
-            "Please set a default project or specify the API URL using the --url option."
-        )
-
-    project_config = config.project_info(name=config.default_project)
-    return project_config.divbase_url
 
 
 def resolve_download_dir(download_dir: str | None) -> Path:

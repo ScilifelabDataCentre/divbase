@@ -215,10 +215,12 @@ def main():
 
     local_dev_setup.create_local_config()
 
-    # Login non-interactively by providing the password to the prompt, using credentials from local_dev_setup
     admin_email = local_dev_setup.ADMIN_CREDENTIALS["username"]
     admin_password = local_dev_setup.ADMIN_CREDENTIALS["password"]
-    cmd = shlex.split(f"divbase-cli auth login {admin_email} --password-stdin")
+    cmd = shlex.split(f"divbase-cli auth login {admin_email} --force")
+    print("################################")
+    print("You're about to be prompted for the password, it is: badpassword")
+    print("################################")
     subprocess.run(cmd, input=f"{admin_password}\n", text=True, check=True, env=LOCAL_ENV)
 
     ensure_required_files_in_bucket(project_name=project_name, filename=filename, mock_metadata=mock_metadata, url=url)

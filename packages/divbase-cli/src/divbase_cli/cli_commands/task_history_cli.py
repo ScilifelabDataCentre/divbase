@@ -9,7 +9,7 @@ import logging
 
 import typer
 
-from divbase_cli.cli_exceptions import AuthenticationError
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project, resolve_url_for_non_project_specific_commands
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
@@ -34,30 +34,25 @@ def list_task_history_for_user(
     """
     Check status of all tasks submitted by the user. Displays the latest 10 tasks by default, unless --limit is specified. Can be filtered by project name.
     """
-
     # TODO add option to sort ASC/DESC by task timestamp
-
-    config = load_user_config()
-    logged_in_url = config.logged_in_url
-
-    if not logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    divbase_url = resolve_url_for_non_project_specific_commands()
 
     if project:
         task_history_response = make_authenticated_request(
             method="GET",
-            divbase_base_url=logged_in_url,
+            divbase_base_url=divbase_url,
             api_route=f"v1/task-history/tasks/user/projects/{project}",
         )
     else:
         task_history_response = make_authenticated_request(
             method="GET",
-            divbase_base_url=logged_in_url,
+            divbase_base_url=divbase_url,
             api_route="v1/task-history/tasks/user",
         )
 
     task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
+    config = load_user_config()
     TaskHistoryDisplayManager(
         task_items=task_history_data,
         user_email=config.logged_in_email,
@@ -74,19 +69,13 @@ def task_history_by_id(
     """
     Check status of a specific task submitted by the user by its task ID.
     """
-
-    config = load_user_config()
-    logged_in_url = config.logged_in_url
-
-    if not logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    divbase_url = resolve_url_for_non_project_specific_commands()
 
     task_history_response = make_authenticated_request(
         method="GET",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=divbase_url,
         api_route=f"v1/task-history/tasks/{task_id}",
     )
-
     task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
     TaskHistoryDisplayManager(
@@ -99,26 +88,23 @@ def task_history_by_id(
 
 @task_history_app.command("project")
 def list_task_history_for_project(
+    project: str = typer.Argument(
+        None,
+        help="Project name to check the task history for. Leave blank to use the default project set in your config.",
+    ),
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
-    project: str = typer.Argument(..., help="Project name to check the task history for."),
 ):
     """
     Check status of all tasks submitted for a project. Requires a manager role in the project. Displays the latest 10 tasks by default, unless --limit is specified.
     """
-
     # TODO add option to sort ASC/DESC by task timestamp
-    # TODO use default project from config if not --project specified
-
-    config = load_user_config()
-    logged_in_url = config.logged_in_url
-
-    if not logged_in_url:
-        raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     task_history_response = make_authenticated_request(
         method="GET",
         divbase_base_url=logged_in_url,
-        api_route=f"v1/task-history/projects/{project}",
+        api_route=f"v1/task-history/projects/{project_config.name}",
     )
 
     task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
@@ -126,7 +112,7 @@ def list_task_history_for_project(
     TaskHistoryDisplayManager(
         task_items=task_history_data,
         user_email=None,
-        project_name=project,
+        project_name=project_config.name,
         mode="project",
         display_limit=limit,
     ).print_task_history()

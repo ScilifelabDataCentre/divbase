@@ -6,6 +6,50 @@ If you have any tips or suggestions to add to this page or any desired features,
 
 TODO: E.G. how to wait for a query to be complete, and download the query results programmatically.
 
+## Use Personal Access Tokens to Authenticate programmatically
+
+For scripts, pipelines, and HPC jobs the recommended approach is to use a **Personal Access Token (PAT)**. A PAT is a static bearer token that you create once via the website and pass to `divbase-cli` via an environment variable. When using a PAT, there is no login step and no password storage required.
+
+See [Account Management — Personal Access Tokens](./account-management.md#personal-access-tokens) for how to create/and remove PATs.
+
+Once you have a token, set the `DIVBASE_API_PAT` environment variable to it. `divbase-cli` will automatically use it in every request.
+
+!!! question "What if I have both an active login session and a Personal Access Token set?"
+    `divbase-cli` prioritises an active login session over a PAT. If you have both, the CLI will use the active session and ignore the PAT. To use the PAT, you would need to run `divbase-cli auth logout` first.
+
+```bash
+export DIVBASE_API_PAT="divbase_pat_your_token_here"
+divbase-cli files ls
+```
+
+When `DIVBASE_API_PAT` is set, `divbase-cli` does not need you to be logged in.
+
+### Example: Slurm job script
+
+The cleanest way to use a PAT in a SLURM job is to store the token in a restricted file and load it at job start:
+
+```bash
+echo "divbase_pat_your_token_here" > ~/.divbase_pat
+chmod 600 ~/.divbase_pat  # only readable/writeable by the owner
+```
+
+Then in your SLURM script:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=my_divbase_job
+#SBATCH --time=24:00:00
+# ....
+
+export DIVBASE_API_PAT=$(cat ~/.divbase_pat)
+
+# Download the files you need
+divbase-cli files download my_data.vcf.gz
+```
+
+!!! tip "Scope your token to what the job needs and when you need it for"
+    When creating the PAT, restrict it to the specific project(s) you need it for. Consider also setting an appropriate expiry date for the token. You can always revoke the token immediately if needed from the divbase website.
+
 ## Parse divbase-cli files ls/info output programmatically
 
 1. You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands in TSV format for easier parsing. Use the `--tsv` flag:
@@ -34,30 +78,3 @@ TODO: E.G. how to wait for a query to be complete, and download the query result
         ```bash
         divbase-cli files stream my_file.vcf.gz | bcftools view -h -
         ```
-
-## Login programmatically
-
-If you want to use DivBase in a script/job that may take **longer than 1 week** to complete from the time of submission, you can login to DivBase programmatically in the script itself. For security reasons (not having to store your password) it is preferable to instead log in interactively before submitting the script, which will keep you logged in for 1 week.
-
-To login programmatically, use the `--password-stdin` (or `-p`) flag to provide your password via standard input (STDIN) when logging into DivBase with the `divbase-cli auth login` command. Using STDIN prevents the password from ending up in the shell's history, or log-files.
-
-If you use a password manager that allows you to output your password to standard output, you can pipe the password directly into the `divbase-cli auth login` command. For example, if you use `pass` as your password manager, you could do:
-
-```bash
-pass show my_divbase_password | divbase-cli auth login EMAIL_ADDRESS --password-stdin
-```
-
-An alternative (but less secure) way to do this is to store your password in a plain text file (make sure to set the appropriate permissions on the file to help make it more secure) and then read the password from the file and pipe it into the `divbase-cli auth login` command. For example:
-
-```bash
-chmod 600 ~/my_password.txt  # only readable/writeable by the owner
-cat ~/my_password.txt | divbase-cli auth login EMAIL_ADDRESS --password-stdin
-```
-
-Another less secure alternative is to use environment variables to store your password and then echo the password from the environment variable and pipe it into the `divbase-cli auth login` command. For example:
-
-```bash
-echo $DIVBASE_PASSWORD | divbase-cli auth login EMAIL_ADDRESS --password-stdin
-```
-
-Where `DIVBASE_PASSWORD` is an environment variable that contains your password.

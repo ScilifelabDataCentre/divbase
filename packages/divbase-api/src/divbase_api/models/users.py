@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from divbase_api.models.base import BaseDBModel
 
 if TYPE_CHECKING:
+    from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
     from divbase_api.models.projects import ProjectMembershipDB
     from divbase_api.models.revoked_tokens import RevokedTokenDB
     from divbase_api.models.task_history import TaskHistoryDB
@@ -45,6 +46,9 @@ class UserDB(BaseDBModel):
     )
     task_history: Mapped[list["TaskHistoryDB"]] = relationship("TaskHistoryDB", back_populates="user")
     revoked_tokens: Mapped[list["RevokedTokenDB"]] = relationship("RevokedTokenDB", back_populates="user")
+    personal_access_tokens: Mapped[list["PersonalAccessTokenDB"]] = relationship(
+        "PersonalAccessTokenDB", back_populates="user"
+    )
 
     def __repr__(self) -> str:
         return f"<UserDB id={self.id}, name={self.name}, email={self.email}, is_admin={self.is_admin}>"

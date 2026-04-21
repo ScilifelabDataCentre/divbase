@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 from typer.testing import CliRunner
 
-from divbase_api.models.queue_status import QueueStatus
+from divbase_api.models.queue_status import QueueStatusDB
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 
@@ -30,7 +30,7 @@ def queue_closed(db_session_sync):
     """
     Set the queue to closed before the test, restore it to open after.
     """
-    result = db_session_sync.execute(select(QueueStatus).filter_by(id=1))
+    result = db_session_sync.execute(select(QueueStatusDB).filter_by(id=1))
     queue_status = result.scalar_one()
     queue_status.is_closed = True
     queue_status.scheduled_start = None
@@ -48,7 +48,7 @@ def queue_not_yet_closed(db_session_sync):
     """
     Set the queue to be closed in the future, jobs should still be able to be submitted.
     """
-    result = db_session_sync.execute(select(QueueStatus).filter_by(id=1))
+    result = db_session_sync.execute(select(QueueStatusDB).filter_by(id=1))
     queue_status = result.scalar_one()
     queue_status.is_closed = True
     queue_status.scheduled_start = datetime.now(tz=timezone.utc) + timedelta(days=1)

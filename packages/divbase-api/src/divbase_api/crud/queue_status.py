@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.exceptions import QueueClosedError
-from divbase_api.models.queue_status import QueueStatus
+from divbase_api.models.queue_status import QueueStatusDB
 
 
 async def check_queue_closed_for_new_tasks(db: AsyncSession, is_admin: bool) -> None:
@@ -25,7 +25,7 @@ async def check_queue_closed_for_new_tasks(db: AsyncSession, is_admin: bool) -> 
         # admins can always submit new tasks to allow for testing and validation during maintenance periods
         return
 
-    result = await db.execute(select(QueueStatus).filter_by(id=1))
+    result = await db.execute(select(QueueStatusDB).filter_by(id=1))
     status = result.scalar_one_or_none()
 
     if not status or not status.is_closed:

@@ -4,6 +4,7 @@ Manage user authentication with the DivBase server.
 This includes login/logout and the getting, storing, using, and refreshing of access + refresh tokens
 """
 
+import logging
 import time
 import warnings
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -69,13 +72,8 @@ def check_existing_session(divbase_url: str, config) -> int | None:
     if not config.logged_in_url or config.logged_in_url != divbase_url:
         return None
 
-    try:
-        token_data = load_user_tokens()
-    except (AuthenticationError, KeyError):
-        # e.g. if user manually deleted or modded token file
-        return None
-
-    if token_data.is_refresh_token_expired():
+    token_data = load_user_tokens()
+    if not token_data or token_data.is_refresh_token_expired():
         return None
 
     return token_data.refresh_token_expires_at
@@ -154,20 +152,21 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     # the "if" avoids raising an error on a non logged in user trying to logout
     if config.logged_in_url:
         token_data = load_user_tokens(token_path=token_path)
-        request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
+        if not token_data:
+            token_path.unlink(missing_ok=True)
+            config.set_login_status(url=None, email=None)
+            return None
 
+        request_data = LogoutRequest(refresh_token=token_data.refresh_token.get_secret_value())
         # We don't want logout to fail if server is unreachable or gives an error
         # JWTs are stateless so local logout is sufficient.
         try:
-            make_authenticated_request(
+            make_unauthenticated_request(
                 method="POST",
                 divbase_base_url=config.logged_in_url,
                 api_route="v1/auth/logout",
                 json=request_data.model_dump(),
             )
-        except AuthenticationError:
-            # Tokens already expired/invalid/revoked etc...
-            pass
         except DivBaseAPIConnectionError as e:
             warnings.warn(
                 f"Could not connect to DivBase server to log out fully: '{e}'.\n\n"
@@ -190,22 +189,25 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     config.set_login_status(url=None, email=None)
 
 
-def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData:
-    """Load user tokens from the specified path."""
+def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData | None:
+    """Load user tokens from the specified path, return None if no tokens file found"""
     if not token_path.exists():
-        raise AuthenticationError(
-            f"Your access tokens were not found at {token_path}. Please check you are logged in first."
-        )
+        return None
 
     with open(token_path, "r") as file:
         token_dict = yaml.safe_load(file)
 
-    return TokenData(
-        access_token=SecretStr(token_dict["access_token"]),
-        refresh_token=SecretStr(token_dict["refresh_token"]),
-        access_token_expires_at=token_dict["access_token_expires_at"],
-        refresh_token_expires_at=token_dict["refresh_token_expires_at"],
-    )
+    try:
+        token_data = TokenData(
+            access_token=SecretStr(token_dict["access_token"]),
+            refresh_token=SecretStr(token_dict["refresh_token"]),
+            access_token_expires_at=token_dict["access_token_expires_at"],
+            refresh_token_expires_at=token_dict["refresh_token_expires_at"],
+        )
+    except KeyError as e:
+        logger.debug(f"User tokens file at {token_path} appears to be malformed: {e}")
+        return None
+    return token_data
 
 
 @stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
@@ -217,22 +219,27 @@ def make_authenticated_request(
     **kwargs,
 ) -> httpx.Response:
     """Make an authenticated request to the DivBase server, handles refreshing tokens if needed."""
-    token_data = load_user_tokens(token_path=token_path)
-
-    if token_data.is_access_token_expired():
-        if token_data.is_refresh_token_expired():
-            # Prevents user getting warning about being already logged in when they try to log in again
-            config = load_user_config()
-            config.set_login_status(url=None, email=None)
-            raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
-        else:
-            token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
-
     headers = kwargs.get("headers", {})
-    headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
     headers[CLI_VERSION_HEADER_KEY] = cli_version
-    kwargs["headers"] = headers
 
+    token_data = load_user_tokens(token_path=token_path)
+    if not token_data:
+        if not cli_settings.DIVBASE_API_PAT:
+            raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
+        logger.info("Using personal access token in request to DivBase API.")
+        headers["Authorization"] = f"Bearer {cli_settings.DIVBASE_API_PAT}"
+    else:
+        if token_data.is_access_token_expired():
+            if token_data.is_refresh_token_expired():
+                # Prevents user getting warning about being already logged in when they try to log in again
+                config = load_user_config()
+                config.set_login_status(url=None, email=None)
+                raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
+            else:
+                token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
+        headers["Authorization"] = f"Bearer {token_data.access_token.get_secret_value()}"
+
+    kwargs["headers"] = headers
     url = f"{divbase_base_url}/{api_route.lstrip('/')}"
 
     try:
@@ -253,7 +260,6 @@ def make_unauthenticated_request(
     method: str,
     divbase_base_url: str,
     api_route: str,
-    token_path: Path = cli_settings.TOKENS_PATH,
     **kwargs,
 ) -> httpx.Response:
     """

@@ -6,6 +6,7 @@ Frontend routes are located in frontend_routes/auth.py
 """
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -25,6 +26,7 @@ from divbase_lib.api_schemas.auth import (
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
+from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,11 @@ async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depe
 
 
 @auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def whoami_endpoint(current_user: UserDB = Depends(get_current_user)):
+async def whoami_endpoint(
+    current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
+):
     """Endpoint to return current logged in user's details."""
+    # NOTE: this endpoint is not scoped on purpose,
+    # so it works as long as user authenticated either via JWT or (any) PAT
+    current_user, _ = current_user_and_scopes
     return UserResponse.model_validate(current_user)
