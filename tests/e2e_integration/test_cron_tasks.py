@@ -5,24 +5,34 @@ Tests the actual cleanup logic by creating database entries with backdated times
 and verifying that the cleanup tasks correctly delete old entries.
 """
 
+import contextlib
 import random
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from divbase_api.models.project_versions import ProjectVersionDB
+from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.security import TokenType
+from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
 from divbase_api.worker.cron_tasks import (
+    SOFT_DELETED_FILES_RETENTION_DAYS,
     cleanup_old_revoked_tokens,
     cleanup_old_task_history_task,
     cleanup_soft_deleted_project_versions,
     cleanup_stuck_tasks_task,
+    hard_delete_expired_soft_deleted_objects,
+    update_storage_usage_metrics,
 )
 
 
@@ -127,6 +137,12 @@ def create_task_entry(db_session_sync, project_map):
         return task_id
 
     return _create_entry
+
+
+@pytest.fixture(scope="module")
+def s3_file_manager(CONSTANTS) -> S3FileManager:
+    """Provides an S3FileManager instance configured for the test environment."""
+    return create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
 
 
 def test_cleanup_old_task_history_deletes_entries_older_than_threshold(
@@ -421,7 +437,10 @@ def create_soft_deleted_project_version(db_session_sync):
         project_version = ProjectVersionDB(
             project_id=1,
             name=name,
-            files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
+            files={
+                "file1.tsv": {"version_id": "v1somehash", "etag": "etag1", "size": 1024},
+                "file2.tsv": {"version_id": "v2somehash", "etag": "etag2", "size": 2048},
+            },
             is_deleted=True,
             date_deleted=date_deleted,
         )
@@ -477,7 +496,10 @@ def test_cleanup_soft_deleted_project_versions_only_affects_soft_deleted(
     active_version = ProjectVersionDB(
         project_id=1,
         name="v1.0.active",
-        files={"file1.tsv": "v1somehash", "file2.tsv": "v2somehash"},
+        files={
+            "file1.tsv": {"version_id": "v1somehash", "etag": "etag1", "size": 1024},
+            "file2.tsv": {"version_id": "v2somehash", "etag": "etag2", "size": 2048},
+        },
     )
     db_session_sync.add(active_version)
     db_session_sync.commit()
@@ -514,3 +536,120 @@ def test_cleanup_soft_deleted_project_versions_with_no_old_entries(
 
     assert result["status"] == "completed"
     assert result["number_of_project_versions_hard_deleted"] == 0
+
+
+def test_update_storage_usage_metrics(db_session_sync: Session, CONSTANTS: dict):
+    for project in db_session_sync.execute(select(ProjectDB)).scalars().all():
+        assert project.storage_used_bytes == 0
+
+    with patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]):
+        result = update_storage_usage_metrics()
+
+    assert result["status"] == "completed"
+    assert result["number_of_projects_updated"] == len(CONSTANTS["PROJECT_TO_BUCKET_MAP"])
+
+    for project in db_session_sync.execute(select(ProjectDB)).scalars().all():
+        if project.name in ["empty-project", "cleaned-project"]:
+            assert project.storage_used_bytes == 0
+        if project.name in ["project1", "project2"]:
+            assert project.storage_used_bytes > 0
+
+
+@pytest.mark.parametrize(
+    "days_offset,expect_deleted",
+    [
+        (SOFT_DELETED_FILES_RETENTION_DAYS + 1, True),
+        (SOFT_DELETED_FILES_RETENTION_DAYS - 1, False),
+    ],
+)
+def test_hard_delete_expired_soft_deleted_objects(
+    db_session_sync: Session,
+    s3_file_manager: S3FileManager,
+    project_map: dict,
+    CONSTANTS: dict,
+    tmp_path: Path,
+    days_offset: int,
+    expect_deleted: bool,
+):
+    """
+    Test that hard_delete_expired_soft_deleted_objects:
+    1. Hard deletes expired soft-deleted objects (delete marker older than cutoff).
+    2. Keeps versions that are protected by ProjectVersionDB.
+    3. Re-adds delete markers if some versions of an expired object were kept.
+    """
+    project_id = list(project_map.values())[0]
+    project_name = [n for n, i in project_map.items() if i == project_id][0]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+
+    # 2 objects with 2 versions each, soft‑delete them and protect the
+    # first version of one of the objects.
+    # Return the key names plus the protected version id.
+    file_to_purge = tmp_path / "test_purge_full.txt"
+    file_to_purge.write_text("delete me v1")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_purge.name: file_to_purge})
+    file_to_purge.write_text("delete me v2")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_purge.name: file_to_purge})
+
+    file_to_keep = tmp_path / "test_purge_protected.txt"
+    file_to_keep.write_text("in a project version, so kept")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_keep.name: file_to_keep})
+    v1_details = s3_file_manager.state_of_latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
+
+    file_to_keep.write_text("will be deleted but prior version will be kept")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={file_to_keep.name: file_to_keep})
+    v2_details = s3_file_manager.state_of_latest_version_of_all_files(bucket_name=bucket_name)[file_to_keep.name]
+
+    s3_file_manager.soft_delete_objects(objects=[file_to_keep.name, file_to_purge.name], bucket_name=bucket_name)
+
+    # Protect v1 of file_to_keep in ProjectVersionDB
+    project_version = ProjectVersionDB(
+        project_id=project_id,
+        name="test_protection_version",
+        files={file_to_keep.name: v1_details},
+    )
+    db_session_sync.add(project_version)
+    with contextlib.suppress(IntegrityError):
+        # already exists from prior run, okay.
+        db_session_sync.commit()
+
+    # Run the cronjob but pretend we are far enough in future for files to be deleted.
+    mocked_now = datetime.now(timezone.utc) + timedelta(days=days_offset)
+    with (
+        patch("divbase_api.worker.cron_tasks.datetime") as mock_datetime_cron,
+        patch("divbase_api.services.s3_client.datetime") as mock_datetime_s3,
+        patch("divbase_api.worker.cron_tasks.S3_ENDPOINT_URL", CONSTANTS["MINIO_URL"]),
+    ):
+        mock_datetime_cron.now.return_value = mocked_now
+        mock_datetime_s3.now.return_value = mocked_now
+        result = hard_delete_expired_soft_deleted_objects()
+
+    assert result["status"] == "completed"
+    versions_purge = s3_file_manager.s3_client.list_object_versions(Bucket=bucket_name, Prefix=file_to_purge.name)
+    versions_keep = s3_file_manager.s3_client.list_object_versions(Bucket=bucket_name, Prefix=file_to_keep.name)
+
+    if expect_deleted:
+        # file_to_purge_name should be completely gone
+        # file_to_keep should have v1_id, but NOT v2_id, and should have a LATEST delete marker
+        assert "Versions" not in versions_purge or not [
+            v for v in versions_purge["Versions"] if v["Key"] == file_to_purge.name
+        ]
+        assert "DeleteMarkers" not in versions_purge or not [
+            m for m in versions_purge["DeleteMarkers"] if m["Key"] == file_to_purge.name
+        ]
+
+        version_ids = [v["VersionId"] for v in versions_keep.get("Versions", []) if v["Key"] == file_to_keep.name]
+        assert v1_details["version_id"] in version_ids
+        assert v2_details["version_id"] not in version_ids
+
+        delete_markers = versions_keep.get("DeleteMarkers", [])
+        # The file should have a latest version that is a delete marker
+        latest_is_marker = any(m["IsLatest"] for m in delete_markers if m["Key"] == file_to_keep.name)
+        assert latest_is_marker is True
+
+    else:
+        # no files should have been touched by this operation
+        ids = [v["VersionId"] for v in versions_keep.get("Versions", []) if v["Key"] == file_to_keep.name]
+        assert v1_details["version_id"] in ids
+        assert v2_details["version_id"] in ids
+        assert any(v["Key"] == file_to_purge.name for v in versions_purge.get("Versions", []))
+        assert any(m["Key"] == file_to_purge.name for m in versions_purge.get("DeleteMarkers", []))

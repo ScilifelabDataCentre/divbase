@@ -186,7 +186,8 @@ def test_versioning_and_hard_delete(s3_client: S3FileManager, CONSTANTS):
     assert v1_id != v2_id
 
     # Hard delete the original version and verify it no longer exists
-    s3_client.hard_delete_specific_object_versions(versioned_objects={object_name: v1_id}, bucket_name=bucket_name)
+    delete_object = [{"Key": object_name, "VersionId": v1_id}]
+    s3_client.hard_delete_specific_object_versions(objects=delete_object, bucket_name=bucket_name)
     with pytest.raises(ObjectDoesNotExistError):
         s3_client.download_files(
             bucket_name=bucket_name,

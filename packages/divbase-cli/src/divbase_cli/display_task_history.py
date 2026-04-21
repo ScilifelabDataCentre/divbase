@@ -36,13 +36,13 @@ class TaskHistoryDisplayManager:
     def __init__(
         self,
         task_items: list[TaskHistoryResult],
-        user_name: str | None,
+        user_email: str | None,
         project_name: str | None,
         mode: str,
-        display_limit: int,
+        display_limit: int = 10,
     ):
         self.task_items = task_items
-        self.user_name = user_name
+        self.user_email = user_email
         self.project_name = project_name
         self.mode = mode
         self.display_limit = display_limit
@@ -51,7 +51,7 @@ class TaskHistoryDisplayManager:
         """Display the task history fetched from the results backend in a formatted table."""
 
         sorted_tasks = sorted(self.task_items, key=lambda x: x.created_at or "", reverse=True)
-        display_limit = self.display_limit or 10
+        display_limit = self.display_limit
         limited_tasks = sorted_tasks[:display_limit]
 
         table = self._create_task_history_table()
@@ -87,10 +87,10 @@ class TaskHistoryDisplayManager:
         """
         title_prefix = "DivBase Task History"
         if self.mode == "user":
-            title = f"{title_prefix} for User: {self.user_name or 'Unknown'}"
+            title = f"{title_prefix} for User: {self.user_email or 'Unknown'}"
         elif self.mode == "user_project":
             title = (
-                f"{title_prefix} for User: {self.user_name or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
+                f"{title_prefix} for User: {self.user_email or 'Unknown'} and Project: {self.project_name or 'Unknown'}"
             )
         elif self.mode == "id":
             title = f"{title_prefix} for Task ID: {self.task_items[0].id if self.task_items else 'Unknown'}"

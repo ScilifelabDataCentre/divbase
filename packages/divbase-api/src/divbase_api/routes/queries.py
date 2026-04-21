@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.api_config import settings
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
 from divbase_api.crud.vcf_dimensions import get_unique_samples_by_project_async
 from divbase_api.db import get_db
@@ -67,6 +68,7 @@ async def submit_sample_metadata_query_job_endpoint(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = SampleMetadataQueryKwargs(
         tsv_filter=sample_metadata_query_request.tsv_filter,
@@ -130,6 +132,7 @@ async def submit_vcf_query_job_endpoint(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     if bcftools_query_request.samples is not None:
         project_samples = set(await get_unique_samples_by_project_async(db=db, project_id=project.id))

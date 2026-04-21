@@ -15,15 +15,23 @@ playwright install
 ## To run all tests
 
 ```bash
-pytest # you may want to append the -s flag to print standard output.
+pytest -s
 ```
+
+!!! question "Why the `-s` flag?"
+    Some tests that rely on typer's CliRunner (which is essentially Click's CliRunner) will fail without the `-s` flag because they rely on the output of the CLI commands to be printed to a terminal. By default, pytest captures the output of tests and only shows it if a test fails. The `-s` flag tells pytest to not capture the output and instead print it directly to the terminal, which is necessary for these tests to work.
+
+    You can achieve the same effect as `-s` using:
+    ```bash
+    FORCE_TERMINAL=1 COLUMNS=1000 pytest --run-slow
+    ```
 
 To run only unit, e2e_integration or migration tests:
 
 ```bash
-pytest tests/unit
-pytest tests/e2e_integration
-pytest tests/migration
+pytest -s tests/unit
+pytest -s tests/e2e_integration
+pytest -s tests/migration
 ```
 
 **The e2e_integration tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker compose building steps.**

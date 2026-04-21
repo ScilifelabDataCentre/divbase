@@ -12,8 +12,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.api_config import settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
 from divbase_api.db import (
     check_db_migrations_up_to_date,
     create_first_admin_user,
@@ -66,16 +67,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan, title="DivBase API", docs_url="/api/v1/docs")
+app = FastAPI(
+    lifespan=lifespan,
+    title="DivBase API",
+    docs_url="/api/v1/docs",
+    version=divbase_version,
+    summary="DivBase API is used by divbase-cli to interact with the DivBase. We do not recommend users to interact directly with the API.",
+    description="""
+    Users are strongly encouraged to use divbase-cli rather than calling the API endpoints directly
+    
+    divbase-cli offers several advantages over direct API usage, including:
+    - Handles authentication logic, including automatic token refresh
+    - Simplifies commands and workflows (e.g. file uploads/downloads require working with presigned URLs).
+    - Better error messages and user experience
+
+    If there is something you cannot do with divbase-cli that you think should be possible, please let us know.
+
+    Visit our docs site for more info on how to use divbase-cli: https://scilifelabdatacentre.github.io/divbase/
+    """,
+)
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(core_router, prefix="/api/v1/core", tags=["core"])
 app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
 app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
 app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
+if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
+    # not needed in deployed enviroments, so no need to expose it.
+    app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)

@@ -1,8 +1,5 @@
 """
 Pydantic schemas for user-related operations.
-
-TODOs:
-- Add proper password strength validation here.
 """
 
 from datetime import datetime

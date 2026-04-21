@@ -40,6 +40,7 @@ from divbase_api.frontend_routes.auth import get_login, post_logout
 from divbase_api.models.announcements import AnnouncementDB, AnnouncementLevel, AnnouncementTarget
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
+from divbase_api.models.queue_status import QueueStatus
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
@@ -126,21 +127,23 @@ class UserView(ModelView):
         "updated_at",
     ]
     exclude_fields_from_create = [
+        "id",
+        "created_at",
+        "updated_at",
         "project_memberships",
         "is_deleted",
         "is_active",
         "last_password_change",
         "date_deleted",
-        "created_at",
-        "updated_at",
     ]
     exclude_fields_from_edit = [
+        "id",
+        "created_at",
+        "updated_at",
         "project_memberships",
         "password",
         "hashed_password",  # hashed_password wont be defined yet but needs to be included here.
         "last_password_change",
-        "created_at",
-        "updated_at",
     ]
     exclude_fields_from_detail = ["hashed_password", "password"]
 
@@ -242,8 +245,8 @@ class ProjectView(ModelView):
     ]
 
     exclude_fields_from_list = ["description", "storage_used_bytes"]
-    exclude_fields_from_create = ["storage_used_bytes", "is_active"]
-    exclude_fields_from_edit = ["storage_used_bytes"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "storage_used_bytes", "is_active"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "storage_used_bytes"]
     exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
@@ -303,7 +306,7 @@ class ProjectMembershipView(ModelView):
 
     exclude_fields_from_list = []
     exclude_fields_from_create = ["id", "created_at", "updated_at"]
-    exclude_fields_from_edit = ["id", "user_id", "project_id", "created_at", "updated_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "project_id"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
@@ -408,8 +411,8 @@ class RevokedTokenView(ModelView):
     ]
 
     exclude_fields_from_list = ["user_id"]
-    exclude_fields_from_create = ["id", "user_id", "created_at", "updated_at", "revoked_at"]
-    exclude_fields_from_edit = ["id", "user_id", "created_at", "updated_at", "revoked_reason"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "user_id", "revoked_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "revoked_at", "revoked_reason"]
     exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
@@ -422,7 +425,14 @@ class RevokedTokenView(ModelView):
             raise FormValidationError(errors={"token_type": str(exc)})
 
         if isinstance(exc, IntegrityError):
-            raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+            orig_message = str(exc.orig).lower() if exc.orig else str(exc).lower()
+
+            if "token_jti" in orig_message and "unique constraint" in orig_message:
+                raise FormValidationError(errors={"token_jti": "A revoked token with this token_jti already exists."})
+            else:
+                raise FormValidationError(
+                    errors={"token_jti": f"Unexpected integrity error: {orig_message} " + orig_message}
+                )
 
         return super().handle_exception(exc)
 
@@ -619,6 +629,101 @@ class AnnouncementView(ModelView):
     exclude_fields_from_detail = []
 
 
+class QueueStatusView(ModelView):
+    """
+    Custom admin panel View for the QueueStatus model.
+
+    This is a singleton table (only 1 row allowed).
+    Deletion and creation are disabled - only editing the existing row is allowed.
+    """
+
+    page_size_options = PAGINATION_DEFAULTS
+    fields = [
+        IntegerField("id", disabled=True),
+        BooleanField(
+            "is_closed",
+            help_text=(
+                "Is the queue closed for new tasks? "
+                "If the scheduled start time is in the past or not set, the queue is closed. "
+                "If scheduled start time is in the future, queue will be closed at that time."
+            ),
+        ),
+        DateTimeField(
+            "scheduled_start",
+            label="Scheduled closure start time (UTC time)",
+            help_text=(
+                "(THIS IS UTC TIME) Optional: When should the queue closure set above take effect? "
+                "Leave empty for queue to be closed immediatialy "
+                "If the queue is open and you set this field, it will do nothing."
+            ),
+        ),
+        TextAreaField(
+            "reason_for_users",
+            help_text=(
+                "Message shown to users when the queue is closed (max 500 characters). "
+                "You could write: "
+                "The queuing system is currently closed for new tasks due to planned upcoming maintenance. Please try again later."
+            ),
+        ),
+        DateTimeField(
+            "created_at",
+            label="Created At (UTC time)",
+            help_text="Timestamp when the entry was created. Value determined by system.",
+            disabled=True,
+        ),
+        DateTimeField(
+            "updated_at",
+            label="Updated At (UTC time)",
+            help_text="Timestamp when the entry was last updated. Value determined by system.",
+            disabled=True,
+        ),
+    ]
+
+    exclude_fields_from_list = []
+    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_detail = []
+
+    def can_delete(self, request: Request) -> bool:
+        """Disable deletion - this is a singleton table."""
+        return False
+
+    def can_create(self, request: Request) -> bool:
+        """Disable creation - this is a singleton table with only 1 row."""
+        # 1st row created by the alembic migration
+        return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `scheduled_start` field is set to None
+        if `is_closed` is set to False.
+        """
+        if not data.get("is_closed"):
+            data["scheduled_start"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
+
+    async def validate(self, request: Request, data: dict[str, Any]) -> None:
+        errors: dict[str, str] = {}
+
+        if data.get("scheduled_start") and not data.get("is_closed"):
+            errors["scheduled_start"] = "Cannot have a scheduled start time without the queue being closed."
+
+        reason = data.get("reason_for_users") or ""
+        if data.get("is_closed") and not reason.strip():
+            errors["reason_for_users"] = "Reason for users is required when the queue is closed."
+
+        if len(reason) > 500:
+            errors["reason_for_users"] = "Message must be 500 characters or less."
+
+        if errors:
+            raise FormValidationError(errors=errors)
+
+        return await super().validate(request=request, data=data)
+
+    # NOTE, no serialize_field_value/_format_cet_datetime override on purpose here
+    # as does not work well when modifying the timestamp in edit view, easier to just display as UTC
+
+
 class DivBaseAuthProvider(AuthProvider):
     """
     This class enables starlette-admin to make use of DivBase's pre-existing auth system.
@@ -702,4 +807,5 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
     admin.add_view(
         AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
     )
+    admin.add_view(QueueStatusView(QueueStatus, icon="fas fa-power-off", label="Queue Status", identity="queue-status"))
     admin.mount_to(app)

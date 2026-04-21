@@ -6,8 +6,14 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from divbase_api.crud.users import get_user_by_id
-from divbase_api.exceptions import ProjectCreationError, ProjectMemberNotFoundError, ProjectNotFoundError
+from divbase_api.crud.users import get_user_by_email
+from divbase_api.exceptions import (
+    ProjectCreationError,
+    ProjectMemberAlreadyExistsError,
+    ProjectMemberNotFoundError,
+    ProjectNotFoundError,
+    UserNotFoundError,
+)
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, UserProjectResponse
@@ -49,49 +55,59 @@ async def get_user_projects_with_roles(db: AsyncSession, user_id: int) -> list[t
     return [(row[0], ProjectRoles(row[1])) for row in result.all()]
 
 
-async def get_project_with_user_role(db: AsyncSession, project_id: int, user_id: int) -> tuple[ProjectDB, ProjectRoles]:
-    """Get project by ID and the user's role in that project."""
+async def get_project_by_name_or_id_with_user_role(
+    db: AsyncSession,
+    user_id: int,
+    project_id: int | None = None,
+    project_name: str | None = None,
+) -> tuple[ProjectDB, ProjectRoles]:
+    """
+    Get project by project.id or project.name and the user's role in that project.
+    Will raise a ProjectNotFoundError if no project found or user not a member of said project.
+
+    (Both project.name and project.id are unique.)
+    """
+    if not project_id and not project_name:
+        raise ValueError("Either project_id or project_name must be provided")
+
     stmt = (
         select(ProjectDB, ProjectMembershipDB.role)
         .join(ProjectMembershipDB)
-        .where(ProjectDB.id == project_id)
         .where(ProjectMembershipDB.user_id == user_id)
     )
+    if project_id:
+        stmt = stmt.where(ProjectDB.id == project_id)
+    else:
+        stmt = stmt.where(ProjectDB.name == project_name)
+
     result = await db.execute(stmt)
     row = result.first()
 
-    if row:
-        return row[0], ProjectRoles(row[1])
-    raise ProjectNotFoundError("Project not found or the user has no access")
-
-
-async def get_project_id_from_name(db: AsyncSession, project_name: str) -> int | None:
-    """Get a project's ID from its name."""
-    stmt = select(ProjectDB.id).where(ProjectDB.name == project_name)
-    result = await db.execute(stmt)
-    project_id = result.scalar_one_or_none()
-    return project_id
+    if not row:
+        raise ProjectNotFoundError()
+    return row[0], ProjectRoles(row[1])
 
 
 async def add_project_member(
-    db: AsyncSession, project_id: int, user_id: int, role: ProjectRoles
+    db: AsyncSession, project_id: int, user_email: str, role: ProjectRoles
 ) -> ProjectMembershipDB:
     """Add a user to a project with a defined ProjectRole."""
-    # TODO - custom exception for these valueerrors.
 
     project = await get_project_by_id(db=db, id=project_id)
     if not project:
         raise ProjectNotFoundError()
 
-    user = await get_user_by_id(db=db, id=user_id)
+    user = await get_user_by_email(db=db, email=user_email)
     if not user:
-        raise ValueError("User not found")
+        raise UserNotFoundError(
+            f"No user with email '{user_email}' is registered in our system. Please double check the email address or ask them to create an account first."
+        )
 
-    already_member = await is_user_member_of_project(db=db, project_id=project_id, user_id=user_id)
+    already_member = await is_user_member_of_project(db=db, project_id=project_id, user_id=user.id)
     if already_member:
-        raise ValueError("User is already a member of this project")
+        raise ProjectMemberAlreadyExistsError(f"User with email '{user_email}' is already a member of this project")
 
-    membership = ProjectMembershipDB(project_id=project_id, user_id=user_id, role=role)
+    membership = ProjectMembershipDB(project_id=project_id, user_id=user.id, role=role)
 
     db.add(membership)
     await db.commit()
@@ -116,9 +132,14 @@ def create_user_project_responses(
     """Helper to create user project responses from list of (ProjectDB, ProjectRoles) tuples."""
     project_responses = []
     for project, user_role in user_projects:
+        if project.description and len(project.description) > 200:
+            description = project.description[:200] + "..."
+        else:
+            description = project.description
+
         project_response = UserProjectResponse(
             name=project.name,
-            description=project.description,
+            description=description,
             bucket_name=project.bucket_name,
             id=project.id,
             is_active=project.is_active,

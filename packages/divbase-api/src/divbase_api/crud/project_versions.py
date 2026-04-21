@@ -46,7 +46,9 @@ async def add_project_version(
     s3_file_manager: S3FileManager,
 ) -> AddVersionResponse:
     """Add a new project version entry into the database."""
-    files = await run_in_threadpool(s3_file_manager.latest_version_of_all_files, bucket_name=project.bucket_name)
+    files = await run_in_threadpool(
+        s3_file_manager.state_of_latest_version_of_all_files, bucket_name=project.bucket_name
+    )
 
     if not files:
         raise ProjectVersionCreationError(

@@ -8,6 +8,8 @@ import typer
 
 PROJECT_NAME_OPTION = typer.Option(
     None,
+    "--project",
+    "-p",
     help="Name of the DivBase project, if not provided uses the default in your DivBase config file",
     show_default=False,
 )
@@ -16,5 +18,6 @@ PROJECT_NAME_OPTION = typer.Option(
 FORMAT_AS_TSV_OPTION = typer.Option(
     False,
     "--tsv",
+    "-t",
     help="If set, will print the output in .TSV format for easier programmatic parsing.",
 )

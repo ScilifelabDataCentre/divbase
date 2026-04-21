@@ -40,10 +40,10 @@ def test_navigation_links_present(page: Page):
     navigate_to(page, "/login")
 
     # Target main to avoid navbar links for these pages.
-    register_button = page.get_by_role("main").get_by_role("link", name=re.compile("Create Account"))
+    register_button = page.get_by_role("main").get_by_role("link", name=re.compile("Sign up"))
     expect(register_button).to_be_visible()
 
-    forgot_password_button = page.get_by_role("main").get_by_role("link", name=re.compile("Reset Password"))
+    forgot_password_button = page.get_by_role("main").get_by_role("link", name=re.compile("Forgot your password?"))
     expect(forgot_password_button).to_be_visible()
 
 

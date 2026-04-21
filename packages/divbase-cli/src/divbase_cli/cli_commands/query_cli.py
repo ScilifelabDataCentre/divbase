@@ -24,7 +24,7 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.config_resolver import resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryRequest,
@@ -93,18 +93,14 @@ def sample_metadata_query(
     Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
     """
-
-    # TODO: it perhaps be useful to set the default download_dir in the config so that we can
-    # look for files there? For now this code just uses file.parent as the download directory.
-
-    # TODO: handle when the name of the sample column is something other than Sample_ID
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     request_data = SampleMetadataQueryRequest(tsv_filter=tsv_filter, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
         json=request_data.model_dump(),
         timeout=20,  # This is longer than default (5), as api call response is query result, not a task-id.
@@ -199,6 +195,7 @@ def vcf_query(
         print()
 
     project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     request_data = BcftoolsQueryRequest(
         tsv_filter=tsv_filter,
@@ -210,7 +207,7 @@ def vcf_query(
 
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=project_config.divbase_url,
+        divbase_base_url=logged_in_url,
         api_route=f"v1/query/vcf/projects/{project_config.name}",
         json=request_data.model_dump(),
     )

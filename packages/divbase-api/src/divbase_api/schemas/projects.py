@@ -5,6 +5,7 @@ Pydantic schemas for project-related operations.
 from pydantic import BaseModel, ConfigDict, Field
 
 from divbase_api.models.projects import ProjectRoles
+from divbase_lib.utils import format_file_size
 
 
 class ProjectBase(BaseModel):
@@ -31,18 +32,28 @@ class ProjectResponse(ProjectBase):
 
     id: int
     is_active: bool
-    storage_quota_bytes: int  # TODO - more friendly format?
+    storage_quota_bytes: int
     storage_used_bytes: int
 
     @property
-    def storage_used_gb(self) -> float:
-        """Convert storage used from bytes to GB."""
-        return self.storage_used_bytes / (1024 * 1024 * 1024)
+    def storage_used(self) -> str:
+        """Convert storage used from bytes to a sensible value with units included."""
+        return format_file_size(size_bytes=int(self.storage_used_bytes), decimals=1)
 
     @property
-    def storage_quota_gb(self) -> float:
-        """Convert storage quota from bytes to GB."""
-        return self.storage_quota_bytes / (1024 * 1024 * 1024)
+    def storage_quota(self) -> str:
+        """Convert storage quota from bytes to a sensible value with units included."""
+        return format_file_size(size_bytes=int(self.storage_quota_bytes), decimals=1)
+
+    @property
+    def storage_used_percent(self) -> int:
+        """Calculate the percentage of storage used to nearest whole number."""
+        if self.storage_quota_bytes == 0:
+            return 0
+        percent_used = round((self.storage_used_bytes / self.storage_quota_bytes) * 100)
+        if percent_used == 0 and self.storage_used_bytes > 0:
+            return 1  # avoid showing 0% when there is some storage used
+        return percent_used
 
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 

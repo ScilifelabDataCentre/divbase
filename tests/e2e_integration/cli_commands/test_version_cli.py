@@ -294,7 +294,7 @@ def test_get_version_info(logged_in_edit_user_with_existing_config, CONSTANTS):
     assert f"{default_project}" in result.stdout
 
     for file in files_in_project:
-        assert f"- '{file}' :" in result.stdout
+        assert file in result.stdout
 
 
 def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -355,19 +355,19 @@ def test_get_version_updates_hashes_on_new_upload(logged_in_edit_user_with_exist
     result = runner.invoke(app, f"version add {VERSION_2_NAME}")
     assert result.exit_code == 0
 
-    info_result_1 = runner.invoke(app, f"version info {VERSION_1_NAME}")
+    info_result_1 = runner.invoke(app, f"version info {VERSION_1_NAME} --tsv")
     assert info_result_1.exit_code == 0
-    info_result_2 = runner.invoke(app, f"version info {VERSION_2_NAME}")
+    info_result_2 = runner.invoke(app, f"version info {VERSION_2_NAME} --tsv")
     assert info_result_2.exit_code == 0
 
     hash_v1, hash_v2 = "", ""
     for line in info_result_1.stdout.splitlines():
         if test_file_name in line:
-            hash_v1 = line.split(f"- '{test_file_name}' : ")[1].strip()
+            hash_v1 = line.split("\t")[1].strip()  # tsv output means hash is 2nd column
             break
     for line in info_result_2.stdout.splitlines():
         if test_file_name in line:
-            hash_v2 = line.split(f"- '{test_file_name}' : ")[1].strip()
+            hash_v2 = line.split("\t")[1].strip()
             break
 
     assert hash_v1 != "", "Hash for version 1 not found"

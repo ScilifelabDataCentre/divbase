@@ -30,7 +30,7 @@ PASSWORD_RESET_ALERT_MESSAGE = "Your password has been reset successfully, you c
 def reset_password_flow(page: Page, mailpit_page: Page, user_email: str, new_password: str):
     """Complete password reset flow steps starting from the reset password page"""
     page.get_by_placeholder("Enter your email address").fill(user_email)
-    page.get_by_role("button", name=re.compile("Send Reset Link")).click()
+    page.get_by_role("button", name=re.compile("Send reset link")).click()
     reset_alert = page.get_by_role("alert")
     expect(reset_alert).to_have_text(PASSWORD_RESET_LINK_SENT_ALERT_MESSAGE)
 
@@ -68,7 +68,7 @@ def test_password_reset_flow(page: Page, mailpit_page: Page, EXISTING_ACCOUNTS):
     new_password = "badpassword123"
 
     navigate_to(page, "/login")
-    page.get_by_role("link", name=re.compile("Reset Password")).click()
+    page.get_by_role("link", name="Forgot your password?").click()
 
     reset_password_flow(
         page=page,
@@ -95,9 +95,9 @@ def test_password_reset_for_non_existent_user(page: Page, mailpit_page: Page):
     navigate_to(page, "/login")
     false_user_email = "non-existent-user@example.com"
 
-    page.get_by_role("link", name=re.compile("Reset Password")).click()
+    page.get_by_role("link", name="Forgot your password?").click()
     page.get_by_placeholder("Enter your email address").fill(false_user_email)
-    page.get_by_role("button", name=re.compile("Send Reset Link")).click()
+    page.get_by_role("button", name=re.compile("Send reset link")).click()
     reset_alert = page.get_by_role("alert")
     expect(reset_alert).to_have_text(PASSWORD_RESET_LINK_SENT_ALERT_MESSAGE)
 
@@ -119,7 +119,7 @@ def test_password_reset_as_logged_in_user(page: Page, mailpit_page: Page, EXISTI
     login_via_login_form(page=page, email=user_email, password=current_password)
 
     navigate_to(page, "/profile")
-    page.get_by_role("link", name="Request Password Reset Email").click()
+    page.get_by_role("link", name=re.compile("Reset Password")).click()
 
     reset_password_flow(
         page=page,
@@ -129,7 +129,9 @@ def test_password_reset_as_logged_in_user(page: Page, mailpit_page: Page, EXISTI
     )
     navigate_to(page, "/")
     page.reload()
-    expect(page.get_by_role("link", name=re.compile("Log in"))).to_be_visible()
+    # target main to avoid navbar links for these pages.
+    login_button = page.get_by_role("main").get_by_role("link", name="Log in")
+    expect(login_button).to_be_visible()
 
 
 def test_password_reset_token_cannot_be_reused(page: Page, mailpit_page: Page, EXISTING_ACCOUNTS):
@@ -141,7 +143,7 @@ def test_password_reset_token_cannot_be_reused(page: Page, mailpit_page: Page, E
     new_password = "badpassword123"
 
     navigate_to(page, "/login")
-    page.get_by_role("link", name=re.compile("Reset Password")).click()
+    page.get_by_role("link", name="Forgot your password?").click()
 
     reset_password_flow(
         page=page,

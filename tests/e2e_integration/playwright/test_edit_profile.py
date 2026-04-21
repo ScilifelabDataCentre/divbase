@@ -45,7 +45,7 @@ def _edit_profile(
         expect(other_role_input).to_be_visible()
         other_role_input.fill(new_role)
 
-    page.get_by_role("button", name="Update Profile").click()
+    page.get_by_role("button", name="Save Changes").click()
     expect(page).to_have_url(f"{FRONTEND_BASE_URL}/profile/")
 
     expect(page.get_by_text(new_name)).to_be_visible()

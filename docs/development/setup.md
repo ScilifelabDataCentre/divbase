@@ -70,6 +70,13 @@ You can read [the user guides](../user-guides/index.md) for more information on 
 
 For convenience, we provide a local development setup script, but in order to run this you need the docker compose stack running (see next section).
 
+!!! Tip "Local development environment variable"
+    To make local development easier when working on divbase-cli, you may want to set the environment variable:
+    ```bash
+    export DIVBASE_DEV=true
+    ```
+    This will configure logging and set the cli to interact with the local docker compose instance of the divbase api (aka `localhost:8000/api`). This logic is handled by `divbase_cli/cli_config.py`. Look in there if you want more specific control over things like logging level etc... via environment variables.
+
 ## 4. Run DivBase server locally using docker compose watch
 
 ```bash
@@ -89,6 +96,8 @@ Once the backend is up and running you can then run `divbase-cli` commands again
 
 The DivBase frontend is running on <http://localhost:8000>. The frontend is part of the FastAPI app deployment. All API routes are appended with `/api/v1` to avoid collisions. The frontend uses Jinja2 templating.
 
+## 5. Local development setup script
+
 To help with setup, we provide a local development setup script which will:
 
 - Create users and projects on your locally running DivBase instance and add users with different roles to each project.
@@ -101,7 +110,7 @@ You can run the local_dev_setup script like this:
 uv run scripts/local_dev_setup.py # make sure the compose stack is running
 ```
 
-## Extras
+## 6. Extras
 
 If using vscode you may want to consider some/all of the following for your `.vscode/settings.json`:
 
@@ -113,6 +122,14 @@ If using vscode you may want to consider some/all of the following for your `.vs
       "source.fixAll": "explicit"
     },
     "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
   },
   "python.analysis.autoImportCompletions": true,
   "python.testing.unittestEnabled": false,

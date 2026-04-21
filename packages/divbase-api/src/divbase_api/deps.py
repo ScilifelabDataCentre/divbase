@@ -22,9 +22,11 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.auth import verify_user_from_access_token, verify_user_from_refresh_token
-from divbase_api.crud.projects import get_project_id_from_name, get_project_with_user_role
+from divbase_api.crud.projects import (
+    get_project_by_name_or_id_with_user_role,
+)
 from divbase_api.db import get_db
-from divbase_api.exceptions import AuthenticationError, AuthorizationError, ProjectNotFoundError
+from divbase_api.exceptions import AuthenticationError, AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.security import TokenType, create_token
@@ -122,10 +124,9 @@ async def get_project_member_from_cookie(
     This function checks that the user is a member of the project and
     returns the project, user and their role.
     """
-    project, user_role = await get_project_with_user_role(db=db, project_id=project_id, user_id=current_user.id)
-
-    if not project:
-        raise ProjectNotFoundError()
+    project, user_role = await get_project_by_name_or_id_with_user_role(
+        db=db, project_id=project_id, user_id=current_user.id
+    )
 
     if user_role not in ProjectRoles:
         raise AuthorizationError("You don't have permission to access this project.")
@@ -170,17 +171,12 @@ async def get_project_member(
     db: AsyncSession = Depends(get_db),
 ) -> tuple[ProjectDB, UserDB, ProjectRoles]:
     """
-    This function checks that the user is a member of the project and
+    This function validates that the user is a member of the project and if so
     returns the project, user and their role.
     """
-    # TODO - the 2 below can be 1 db query
-    project_id = await get_project_id_from_name(db=db, project_name=project_name)
-    if not project_id:
-        raise ProjectNotFoundError()
-
-    project, user_role = await get_project_with_user_role(db=db, project_id=project_id, user_id=current_user.id)
-    if not project:
-        raise ProjectNotFoundError()
+    project, user_role = await get_project_by_name_or_id_with_user_role(
+        db=db, project_name=project_name, user_id=current_user.id
+    )
 
     if user_role not in ProjectRoles:
         raise AuthorizationError("You don't have permission to access this project.")

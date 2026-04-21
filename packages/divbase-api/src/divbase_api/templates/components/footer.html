@@ -1,53 +1,77 @@
-<footer class="mt-auto">
-    <hr class="m-0 pb-2">
+<footer class="scilife-footer mt-auto">
+    <div class="container py-4">
+        <div class="row g-4">
 
-    <div class="container">
-        <div class="row">
-            
-            {# Site navigation links TODO - several of these pages don't exist #}
-            <nav class="col-xl-2" aria-label="Footer navigation">
-                <h2 class="scilife-footer-titles">Site navigation</h2>
-                <ul class="list-unstyled scilife-footer-text">
-                    <li><a href="/">Home</a></li>
-                    <li><a href="/about">About DivBase</a></li>
-                    <li><a href="/about/sv">Information på svenska</a></li>
-                    <li><a href="/api/v1/docs">API Docs</a></li>
-                    <li><a href="/citation">Cite us</a></li>
-                    <li><a href="/contact">Contact us</a></li>               
+            {# Brand + social #}
+            <div class="col-12 col-lg-4">
+                <img class="scilife-footer-brand-logo mb-2" src="/static/logos/divbase_logo_white.webp" alt="DivBase logo">
+                <p class="scilife-footer-brand-text">
+                    Supporting genomics research in Sweden through data management and collaboration.
+                </p>
+                <p class="scilife-footer-brand-text">DivBase 
+                    <a class="scilife-footer-link" href="https://github.com/ScilifelabDataCentre/divbase/releases/tag/v{{ divbase_version }}" target="_blank" rel="noopener noreferrer">
+                        v{{ divbase_version }}
+                    </a>
+                </p>
+            </div>
+
+            {# Nav column 1 #}
+            <nav class="col-6 col-lg-2" aria-label="Footer navigation">
+                <ul class="list-unstyled scilife-footer-nav">
+                    <li><a href="{{ mkdocs_site_url }}/user-guides/" target="_blank" rel="noopener noreferrer">User guide</a></li>
+                    <li><a href="{{ mkdocs_site_url }}/development/" target="_blank" rel="noopener noreferrer">Developer guide</a></li>
+                    <li><a href="/api/v1/docs">API docs</a></li>
                     <li><a href="/faqs">FAQ</a></li>
-                    <li><a href="/terms">Terms of use</a></li>
-                    <li><a href="/privacy">Privacy policy</a></li>
-                    <li><a href="/user-guide">User guide</a></li>
                 </ul>
             </nav>
 
-            {# About text #}
-            <section class="col-xl-5">
-                <h2 class="scilife-footer-titles">About DivBase</h2>
-                <p>
-                    DivBase is developed and maintained by TODO ..... Add more info here.
-                    This service is supported by SciLifeLab and the Knut and Alice Wallenberg foundation through the DDLS program,
-                    as well as by the Swedish Foundation for Strategic Research (SSF).
-                </p>
+            {# Nav column 2 #}
+            <nav class="col-6 col-lg-2" aria-label="Footer navigation secondary">
+                <ul class="list-unstyled scilife-footer-nav">
+                    <li><a href="/about">About</a></li>
+                    <li><a href="/citation">Cite us</a></li>
+                    <li><a href="/contact">Contact us</a></li>
+                    <li><a href="/about/sv">På svenska</a></li>
+                </ul>
+            </nav>
+
+            {# Funders + social icons #}
+            <section class="col-12 col-lg-4">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <a href="https://www.scilifelab.se/" target="_blank" rel="noopener noreferrer">
+                        <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/scilifelab_logo_white.webp"
+                            alt="SciLifeLab Logo">
+                    </a>
+                    <a href="https://strategiska.se/en" target="_blank" rel="noopener noreferrer">
+                        <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/sfsr_logo_white.webp"
+                            alt="Swedish Foundation for Strategic Research Logo">
+                    </a>
+                    <a href="https://kaw.wallenberg.org/en" target="_blank" rel="noopener noreferrer">
+                        <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/kaw_logo_white.webp"
+                            alt="Knut and Alice Wallenberg Foundation Logo">
+                    </a>
+                </div>
+                <div class="d-flex gap-3 mt-2">
+                    <a href="/" aria-label="DivBase home" class="scilife-footer-social-link"><i class="bi bi-link-45deg"></i></a>
+                    <a href="https://www.linkedin.com/company/scilifelab" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" class="scilife-footer-social-link"><i class="bi bi-linkedin"></i></a>
+                    <a href="https://github.com/ScilifelabDataCentre/divbase" target="_blank" rel="noopener noreferrer" aria-label="GitHub" class="scilife-footer-social-link"><i class="bi bi-github"></i></a>
+                    <a href="mailto:{{ support_email }}" aria-label="Email us" class="scilife-footer-social-link"><i class="bi bi-envelope"></i></a>
+                </div>
             </section>
 
-            {# Funders #}
-            <section class="col-xl-5">
-                <h2 class="scilife-footer-titles mb-2">Supported by</h2>
-                <a href="https://kaw.wallenberg.org/en" target="_blank" style="text-decoration: none;">
-                    <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/kaw_logo.webp"
-                        alt="Knut and Alice Wallenberg Foundation Logo">
-                </a>
-                <a href="https://strategiska.se/en" target="_blank" style="text-decoration: none;">
-                    <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/sfsr_logo.webp"
-                        alt="Swedish Foundation for Strategic Research Logo">
-                </a>
-                <a href="https://www.scilifelab.se/" target="_blank" style="text-decoration: none;">
-                    <img fetchpriority="low" class="scilife-footer-img" src="/static/logos/scilifelab_logo.svg"
-                        alt="SciLifeLab Logo">
-                </a>
-            </section>
+        </div>
+    </div>
 
+    <hr>
+    <div class="container d-flex flex-wrap justify-content-between align-items-center py-2 gap-2 mb-2">
+        <p class="mb-0 scilife-footer-copyright">
+            Website content under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC-BY 4.0 licence</a>.
+            <br>
+            Website and SciLifeLab DivBase code under <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer">MIT licence</a> and available at <a href="https://github.com/ScilifelabDataCentre/divbase" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        </p>
+        <div class="d-flex gap-3">
+            <a href="/terms" class="scilife-footer-link">Terms of service</a>
+            <a href="/privacy" class="scilife-footer-link">Privacy policy</a>
         </div>
     </div>
 </footer>

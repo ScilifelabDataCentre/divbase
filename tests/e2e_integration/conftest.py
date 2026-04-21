@@ -74,6 +74,7 @@ def CONSTANTS():
         "SPLIT_SCAFFOLD_PROJECT": "split-scaffold-project",
         "CLEANED_PROJECT": "cleaned-project",
         "EMPTY_PROJECT": "empty-project",
+        "PAGINATION_PROJECT": "pagination-project",
         # Mappings of project names to S3 bucket names
         "PROJECT_TO_BUCKET_MAP": project_name_bucket_map,
         "PROJECT_CONTENTS": project_name_files_map,

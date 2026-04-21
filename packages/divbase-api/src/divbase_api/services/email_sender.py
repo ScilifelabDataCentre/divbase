@@ -31,6 +31,7 @@ def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     Render an email template with Jinja2.
     (Jinja2 relies on the context dict to fill in the variables in the template.)
     """
+    context["support_email"] = settings.api.user_support_email
     email_templates = Path(__file__).parent / "email_templates" / "build"
     template_str = (email_templates / template_name).read_text()
     return Template(template_str).render(context)

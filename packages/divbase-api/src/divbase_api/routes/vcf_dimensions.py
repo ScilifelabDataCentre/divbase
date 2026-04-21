@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
+from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry
 from divbase_api.crud.vcf_dimensions import (
     get_skipped_vcfs_by_project_async,
@@ -93,6 +94,7 @@ async def update_vcf_dimensions_endpoint(
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
+    await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,

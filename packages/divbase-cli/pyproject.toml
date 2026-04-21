@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "typer==0.24.1",
-    "divbase-lib==0.1.0.dev3"
+    "divbase-lib==0.1.0.dev5"
 ]
 dynamic = ["version"]
 
@@ -32,8 +32,7 @@ Repository = "https://github.com/ScilifelabDataCentre/divbase"
 Issues = "https://github.com/ScilifelabDataCentre/divbase/issues"
 
 [project.scripts]
-divbase = "divbase_cli.divbase_cli:main"
-divbase-cli = "divbase_cli.divbase_cli:main"  # TODO choose 1 
+divbase-cli = "divbase_cli.divbase_cli:main"
 
 [build-system]
 requires = ["hatchling >= 1.26"]
