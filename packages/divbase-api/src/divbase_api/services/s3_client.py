@@ -1,5 +1,5 @@
 """
-An s3FileManager object that lets you do basic operations with a bucket.
+An S3FileManager object that lets you do basic operations with a bucket.
 
 This class is a wrapper around the boto3 S3 client.
 
@@ -467,7 +467,12 @@ class S3FileManager:
 
 
 def create_s3_file_manager(url: str) -> S3FileManager:
-    """Helper function to creates an S3FileManager instance using the S3 service account's credentials"""
+    """
+    Helper function to creates an S3FileManager instance using the S3 service account's credentials
+
+    NOTE: This should only be used by tests, the API and worker have their own implementations
+    which make use of secret settings provided by their configs.
+    """
     access_key = os.environ["S3_SERVICE_ACCOUNT_ACCESS_KEY"]
     secret_key = os.environ["S3_SERVICE_ACCOUNT_SECRET_KEY"]
 

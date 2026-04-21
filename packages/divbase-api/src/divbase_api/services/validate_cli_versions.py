@@ -6,7 +6,7 @@ OR
 On login, add announcement that a new version of the CLI can be installed.
 """
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 
 
 def _parse_version(version: str) -> list[int]:
@@ -33,7 +33,7 @@ def _parse_version(version: str) -> list[int]:
     return numeric_parts
 
 
-def cli_version_outdated(cli_version: str, minimum_cli_version: str = settings.api.minimum_cli_version) -> bool:
+def cli_version_outdated(cli_version: str, minimum_cli_version: str = api_settings.general.minimum_cli_version) -> bool:
     """
     Compare the CLI version against the minimum required version.
     Version strings are expected to be in the format "major.minor.patch" (e.g., "2.5.0").
@@ -51,7 +51,7 @@ def cli_version_outdated(cli_version: str, minimum_cli_version: str = settings.a
     return False  # versions are equal
 
 
-def cli_update_available(cli_version: str, latest_cli_version: str = settings.api.latest_cli_version) -> bool:
+def cli_update_available(cli_version: str, latest_cli_version: str = api_settings.general.latest_cli_version) -> bool:
     """
     Compare the CLI version against the latest available version to determine if an update is available.
     Version strings are expected to be in the format "major.minor.patch" (e.g., "2.5.0").

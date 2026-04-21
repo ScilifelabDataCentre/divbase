@@ -47,7 +47,7 @@ For a user-submitted task to be fully integrated in DivBase, it needs to be impl
 - Define the task arguments and their type hints just like any other Python function. There are no mandatory args for DivBase tasks, but there are some patterns that can be reused. For instance, if the task logic will interact with S3, add `bucket_name: str,` Tasks that interact with VCF dimensions table need `project_id: int,` for the `get_vcf_metadata_by_project()` helper function and `project_name: str,` for exceptions.
 - The logic inside the task can be anything, but typically include reading file(s) from S3 and acting on them.
   - Divbase tasks can include database transaction (see next bullet below for more details), but if the task only does a database CRUD it would be better to implement that as an async database CRUD in the API layer rather than a Celery task since that is likely faster and does not require a Celery worker.
-  - There are existing helper functions for S3 operations (e.g. `create_s3_file_manager()`, `_download_vcf_files()`, `_delete_job_files_from_worker()`) and VCF dimensions metadata table transactions (e.g. `get_vcf_metadata_by_project()`, `get_skipped_vcfs_by_project_worker()`,`create_or_update_vcf_metadata()`). Look at previous tasks to see if there are existing helper functions or logic that can be reused.
+  - There are existing helper functions for S3 operations (e.g. `_create_s3_file_manager()`, `_download_vcf_files()`, `_delete_job_files_from_worker()`) and VCF dimensions metadata table transactions (e.g. `get_vcf_metadata_by_project()`, `get_skipped_vcfs_by_project_worker()`,`create_or_update_vcf_metadata()`). Look at previous tasks to see if there are existing helper functions or logic that can be reused.
 - Database transactions can be called from the task using the `SyncSessionLocal()` sessionmaker instance from SQLAlchemy. There is no point in trying to use async database sessions in DivBase Celery tasks since tasks are run in dedicated worker containers/pods and inside a Celery event pool (see the Celery docs for `prefork` pools). Furthermore, since Celery does not provide a simple way to use the async event loops from SQLAlchemy. Experiments during DivBase development showed that it is technically possible to implement workarounds to use async db sessions in tasks executed by Celery workers, but that it can easily result in event pool issues and errors.
 - Raise errors in the task function (catching any errors proprageted from potential helper fuctions called by the task). This assures that `CeleryTaskMeta` is correctly updated with task status `FAILURE` and the error message. This assures that the task history CLI command correctly prints this information in the user's terminal. If errors are returned in any other way that with a `raise`, there is a risk that the status of the task becomes `SUCESS` even if it exited due to errors.
 - Tasks end with a `return` statement. This is written to the `results` field in `CeleryTaskMeta`. Celery will use `pickle` to serialize the results for storage in the `CeleryTaskMeta` table.
@@ -377,7 +377,7 @@ Example of a DivBase cron task definition:
 
 ```python
 @app.task(name="cron_tasks.cleanup_old_task_history")
-def cleanup_old_task_history_task(retention_days: int = TASK_RETENTION_DAYS):
+def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days):
     """
     Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
     Runs daily to remove entries older than retention_days.
@@ -436,7 +436,7 @@ app.conf.beat_schedule = {
         "schedule": crontab(
             hour=5, minute=0
         ),  # Run daily at 5 AM CET (timezone defined in app in tasks.py). Don't set to 2 AM or 3 AM due to daylight saving
-        "kwargs": {"retention_days": TASK_RETENTION_DAYS},
+        "kwargs": {"retention_days": worker_settings.cron.task_retention_days},
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",

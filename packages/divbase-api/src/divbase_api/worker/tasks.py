@@ -11,6 +11,8 @@ import psutil
 from celery import Celery
 from celery.signals import (
     after_task_publish,
+    beat_init,
+    celeryd_init,
     task_prerun,
     worker_process_init,
 )
@@ -23,7 +25,7 @@ from divbase_api.exceptions import (
 )
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
-from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
+from divbase_api.services.s3_client import S3FileManager
 from divbase_api.worker.crud_dimensions import (
     SkippedVCFData,
     VCFMetadataData,
@@ -35,7 +37,6 @@ from divbase_api.worker.crud_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.worker.metrics import (
-    ENABLE_WORKER_METRICS_PER_TASK,
     MemoryMonitor,
     TaskMetrics,
     start_metrics_server,
@@ -45,6 +46,7 @@ from divbase_api.worker.metrics import (
 from divbase_api.worker.vcf_dimension_indexing import (
     VCFDimensionCalculator,
 )
+from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -53,12 +55,11 @@ from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFi
 logger = logging.getLogger(__name__)
 
 
-BROKER_URL = os.environ.get("CELERY_BROKER_URL", "pyamqp://guest@localhost//")
-RESULT_BACKEND = os.environ.get(
-    "CELERY_RESULT_BACKEND", "db+postgresql://divbase_user:badpassword@localhost:5432/divbase_db"
+app = Celery(
+    "divbase_worker",
+    broker=worker_settings.general.broker_url.get_secret_value(),
+    backend=worker_settings.general.result_backend.get_secret_value(),
 )
-S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
-app = Celery("divbase_worker", broker=BROKER_URL, backend=RESULT_BACKEND)
 
 
 CELERY_TASKMETA_TABLE_NAME = "celery_taskmeta"
@@ -81,16 +82,28 @@ app.conf.update(
 )
 
 
+@celeryd_init.connect
+@beat_init.connect
+def validate_settings(**kwargs):
+    """
+    Validate worker settings on celery daemon startup (celeryd_init) and celery Beat startup (beat_init)
+    Will raise an exception if any required settings are missing or settings misconfigured.
+    """
+    worker_settings.validate()
+    logger.info("Worker settings validated successfully on worker process init.")
+
+
 @worker_process_init.connect
 def init_worker_metrics(**kwargs):
     """
     Start the Prometheus metrics server for the Celery worker. This signal is triggered once per forked worker process.
     With celery prefork concurrency=1, only one worker process will start the metrics server.
     """
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled:
+        logger.info("Starting worker metrics server on port 8101.")
         start_metrics_server(port=8101)
     else:
-        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS_PER_TASK=false)")
+        logger.info("Worker metrics collection disabled (ENABLE_WORKER_METRICS not set to '1').")
 
 
 def dynamic_router(name, args, kwargs, options, task=None, **kw):
@@ -173,8 +186,7 @@ def sample_metadata_query_task(
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
     task_id = sample_metadata_query_task.request.id
-
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = _create_s3_file_manager()
 
     try:
         metadata_path = _download_sample_metadata(
@@ -247,7 +259,7 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         task_walltime_start = time.time()
         process = psutil.Process()
         cpu_start = process.cpu_times()
@@ -256,8 +268,7 @@ def bcftools_pipe_task(
 
     task_id = bcftools_pipe_task.request.id
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
-
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
+    s3_file_manager = _create_s3_file_manager()
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -273,7 +284,9 @@ def bcftools_pipe_task(
     )
 
     metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
     )
 
     metadata_result = run_sidecar_metadata_query(
@@ -304,7 +317,7 @@ def bcftools_pipe_task(
 
     # Measure download operation resources
     # Memory: Capture baseline before download, then measure incremental memory increase (delta)
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         download_cpu_start = process.cpu_times()
         download_mem_baseline = process.memory_info().rss
         download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
@@ -321,7 +334,7 @@ def bcftools_pipe_task(
 
     logger.info("Finished downloading VCF files from S3 to worker")
 
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         download_walltime = time.time() - download_start
         download_memory_stats = download_memory_monitor.stop()
         download_cpu_end = process.cpu_times()
@@ -347,8 +360,12 @@ def bcftools_pipe_task(
     # Execute bcftools and get true subprocess metrics
     # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
     # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    output_file, bcftools_metrics = BcftoolsQueryManager().execute_pipe(command, bcftools_inputs, job_id)
-
+    manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
+    output_file, bcftools_metrics = manager.execute_pipe(
+        command=command,
+        bcftools_inputs=bcftools_inputs,
+        job_id=job_id,
+    )
     logger.info("Finished bcftools subprocesses")
 
     bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
@@ -359,7 +376,7 @@ def bcftools_pipe_task(
     _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
     _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
 
-    if ENABLE_WORKER_METRICS_PER_TASK:
+    if worker_settings.metrics.enabled_per_task:
         memory_stats = memory_monitor.stop()
         cpu_end = process.cpu_times()
         python_overhead_cpu = (cpu_end.user + cpu_end.system) - (cpu_start.user + cpu_start.system)
@@ -400,8 +417,7 @@ def update_vcf_dimensions_task(
     """
     task_id = update_vcf_dimensions_task.request.id
 
-    s3_file_manager = create_s3_file_manager(url=S3_ENDPOINT_URL)
-
+    s3_file_manager = _create_s3_file_manager()
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
 
@@ -471,9 +487,7 @@ def update_vcf_dimensions_task(
     ]
 
     _ = _download_vcf_files(
-        files_to_download=non_indexed_vcfs,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
+        files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
     calculator = VCFDimensionCalculator()
@@ -558,6 +572,14 @@ def update_vcf_dimensions_task(
         return result.model_dump()
 
 
+def _create_s3_file_manager() -> S3FileManager:
+    return S3FileManager(
+        url=worker_settings.s3.endpoint_url,
+        access_key=worker_settings.s3.access_key.get_secret_value(),
+        secret_key=worker_settings.s3.secret_key.get_secret_value(),
+    )
+
+
 def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager) -> Path:
     """
     Download the metadata file from the specified S3 bucket.
@@ -583,7 +605,6 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_
     )
 
     logger.info(f"Downloaded VCF files: {[f.name for f in downloaded_files]}")
-
     return downloaded_files
 
 
@@ -766,7 +787,7 @@ def _check_if_samples_can_be_combined_with_bcftools(
 
         file_to_samples[file] = sample_names
 
-    manager = BcftoolsQueryManager()
+    manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
     sample_sets = manager._group_vcfs_by_sample_set(file_to_samples)
     logger.debug(f"Sample sets found in the VCF files: {sample_sets}")
 

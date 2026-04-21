@@ -7,13 +7,12 @@ Pre-signed url approach not used when the request to s3 can be done in the (user
 """
 
 import logging
-from functools import lru_cache
 from math import ceil
 
 import boto3
 from botocore.config import Config
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadResponse,
     CompleteMultipartUploadResponse,
@@ -53,16 +52,16 @@ class S3PreSignedService:
         )
         self.s3_pre_signing_client = boto3.client(
             "s3",
-            endpoint_url=settings.s3.presigning_url,
-            aws_access_key_id=settings.s3.access_key.get_secret_value(),
-            aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
+            endpoint_url=api_settings.s3.presigning_url,
+            aws_access_key_id=api_settings.s3.access_key.get_secret_value(),
+            aws_secret_access_key=api_settings.s3.secret_key.get_secret_value(),
             config=s3_config,
         )
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.s3.endpoint_url,
-            aws_access_key_id=settings.s3.access_key.get_secret_value(),
-            aws_secret_access_key=settings.s3.secret_key.get_secret_value(),
+            endpoint_url=api_settings.s3.endpoint_url,
+            aws_access_key_id=api_settings.s3.access_key.get_secret_value(),
+            aws_secret_access_key=api_settings.s3.secret_key.get_secret_value(),
             config=s3_config,
         )
 
@@ -224,9 +223,3 @@ class S3PreSignedService:
                 "Continuing without error."
             )
         return AbortMultipartUploadResponse(name=object_name, upload_id=upload_id)
-
-
-@lru_cache()
-def get_pre_signed_service() -> S3PreSignedService:
-    """Dependency to get pre-signed S3 service. To be used in FastAPI endpoints."""
-    return S3PreSignedService()

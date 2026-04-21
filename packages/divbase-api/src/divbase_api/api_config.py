@@ -19,8 +19,8 @@ LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
 
 
 @dataclass
-class APISettings:
-    """API configuration settings."""
+class GeneralSettings:
+    """General API configuration settings."""
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "NOT_SET")
@@ -127,10 +127,10 @@ class EmailSettings:
 
 
 @dataclass
-class Settings:
+class APISettings:
     """Configuration settings for DivBase API."""
 
-    api: APISettings = field(default_factory=APISettings)
+    general: GeneralSettings = field(default_factory=GeneralSettings)
     database: DBSettings = field(default_factory=DBSettings)
     s3: S3Settings = field(default_factory=S3Settings)
     jwt: JWTSettings = field(default_factory=JWTSettings)
@@ -139,14 +139,14 @@ class Settings:
     def validate_api_settings(self) -> None:
         """
         Validate all required settings are actually set.
-        This is run on startup of the API which means that later on in the codebase
+        This is run on startup of the API (lifespan event) which means that later on in the codebase
         we don't have to check for any non set values, we can just assume they are set.
         """
         required_fields = {
-            "DIVBASE_ENV": self.api.environment,
-            "FRONTEND_BASE_URL": self.api.frontend_base_url,
-            "MKDOCS_SITE_URL": self.api.mkdocs_site_url,
-            "USER_SUPPORT_EMAIL": self.api.user_support_email,
+            "DIVBASE_ENV": self.general.environment,
+            "FRONTEND_BASE_URL": self.general.frontend_base_url,
+            "MKDOCS_SITE_URL": self.general.mkdocs_site_url,
+            "USER_SUPPORT_EMAIL": self.general.user_support_email,
             "ASYNC_DATABASE_URL": self.database.url,
             "SYNC_DATABASE_URL": self.database.sync_url,
             "JWT_SECRET_KEY": self.jwt.secret_key,
@@ -161,11 +161,14 @@ class Settings:
             if isinstance(setting, SecretStr):
                 if setting.get_secret_value() == "NOT_SET":
                     raise ValueError(f"A required environment variable was not set: {setting_name=}")
-                if self.api.environment not in LOCAL_DEV_ENVIRONMENTS and setting.get_secret_value() == "badpassword":
+                if (
+                    self.general.environment not in LOCAL_DEV_ENVIRONMENTS
+                    and setting.get_secret_value() == "badpassword"
+                ):
                     raise ValueError(
                         f"A secret environment variable was set to badpassword for a non local environment: {setting_name=}"
                     )
 
 
 # This instance can be imported and used throughout the application.
-settings = Settings()
+api_settings = APISettings()
