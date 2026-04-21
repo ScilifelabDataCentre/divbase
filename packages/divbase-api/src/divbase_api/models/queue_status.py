@@ -17,7 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from divbase_api.models.base import BaseDBModel
 
 
-class QueueStatus(BaseDBModel):
+class QueueStatusDB(BaseDBModel):
     __tablename__ = "queue_status"
 
     is_closed: Mapped[bool] = mapped_column(default=False)

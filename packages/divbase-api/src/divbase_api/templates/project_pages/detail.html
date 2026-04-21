@@ -64,17 +64,8 @@
                         </div>
                         <div class="card-body">
                             <p class="text-muted">To configure the <code>divbase-cli</code> tool to use this project, run the following command to add this project to your local configuration file:</p>
-                            <div class="clipboard me-2">
-                                <button class="clipboard-button copy-button" type="button">
-                                    <span>Copy </span>
-                                    <i class="bi bi-clipboard me-2"></i>
-                                </button>
-                                <button class="clipboard-button copied-button" type="button" style="display: none;">
-                                    <span>Copied </span>
-                                    <i class="bi bi-clipboard-check me-2"></i>
-                                </button>
-                            </div>
-                            <pre id="cliCommand"><code>divbase-cli config add {{ project.name }}</code></pre>
+                            {% set to_copy = "divbase-cli config add " ~ project.name %}
+                            {% include "components/copy_to_clipboard.html" %}
                         </div>
                     </div>
                 </div>

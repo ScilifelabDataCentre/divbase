@@ -18,7 +18,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
 from divbase_api.services.validate_cli_versions import cli_version_outdated
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
@@ -71,7 +71,7 @@ class CLIVersionMiddleware(BaseHTTPMiddleware):
                 "Your install of divbase is too outdated and no longer compatible with DivBase Server. "
                 "You must first update your install of divbase in order to run any more commands. "
                 "If you're not sure how to do that, you can find instructions on how to upgrade here: "
-                f"{settings.api.mkdocs_site_url}/user-guides/installation"
+                f"{api_settings.general.mkdocs_site_url}/user-guides/installation"
             )
             body = {"detail": message, "type": "cli_version_outdated_error"}
             return JSONResponse(content=body, status_code=400)
@@ -90,10 +90,10 @@ def register_middleware(app: FastAPI) -> None:
     request -> last added middleware -> ... -> first added middleware -> route handler
     route handler -> first added middleware -> ... -> last added middleware -> response
     """
-    if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
+    if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
         allowed_hosts = ["localhost"]
     else:
-        frontend_host = urlparse(settings.api.frontend_base_url).hostname
+        frontend_host = urlparse(api_settings.general.frontend_base_url).hostname
         if not frontend_host:
             raise ValueError("Could not parse hostname from FRONTEND_BASE_URL.")
         allowed_hosts = [frontend_host]

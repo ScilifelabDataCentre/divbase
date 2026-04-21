@@ -2,10 +2,15 @@
 Security utilities for handling passwords and JSON Web Tokens (JWTs).
 
 FastAPI recommend using pwdlib and argon2 for password hashing (https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
+Personal Access Tokens (PATs) are hashed using SHA-256 since:
+    1. We need to verify them on every request, so should be relatively fast
+    2. They are random strings, so brute forcing not a concern unlike passwords.
 
 Follows setup from official full stack template: https://github.com/fastapi/full-stack-fastapi-template/blob/master/backend/app/core/security.py
 """
 
+import hashlib
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -17,9 +22,11 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import SecretStr
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
+
+PAT_TOKEN_PREFIX = "divbase_pat_"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -28,6 +35,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: SecretStr) -> str:
     return password_hash.hash(password.get_secret_value())
+
+
+def generate_personal_access_token() -> SecretStr:
+    return SecretStr(PAT_TOKEN_PREFIX + secrets.token_urlsafe(nbytes=32))
+
+
+def hash_personal_access_token(raw_token: SecretStr) -> str:
+    return hashlib.sha256(raw_token.get_secret_value().encode()).hexdigest()
 
 
 class TokenType(StrEnum):
@@ -40,10 +55,10 @@ class TokenType(StrEnum):
 
 
 token_expires_delta: dict[TokenType, timedelta] = {
-    TokenType.ACCESS: timedelta(seconds=settings.jwt.access_token_expires_seconds),
-    TokenType.REFRESH: timedelta(seconds=settings.jwt.refresh_token_expires_seconds),
-    TokenType.EMAIL_VERIFICATION: timedelta(seconds=settings.email.email_verify_expires_seconds),
-    TokenType.PASSWORD_RESET: timedelta(seconds=settings.email.password_reset_expires_seconds),
+    TokenType.ACCESS: timedelta(seconds=api_settings.jwt.access_token_expires_seconds),
+    TokenType.REFRESH: timedelta(seconds=api_settings.jwt.refresh_token_expires_seconds),
+    TokenType.EMAIL_VERIFICATION: timedelta(seconds=api_settings.email.email_verify_expires_seconds),
+    TokenType.PASSWORD_RESET: timedelta(seconds=api_settings.email.password_reset_expires_seconds),
 }
 
 
@@ -83,7 +98,9 @@ def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
         "sub": str(subject),
         "type": token_type.value,
     }
-    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret_key.get_secret_value(), algorithm=settings.jwt.algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, api_settings.jwt.secret_key.get_secret_value(), algorithm=api_settings.jwt.algorithm
+    )
     return TokenData(token=encoded_jwt, expires_at=int(expire.timestamp()))
 
 
@@ -97,7 +114,7 @@ def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData
     """
     try:
         payload = jwt.decode(
-            jwt=token, key=settings.jwt.secret_key.get_secret_value(), algorithms=[settings.jwt.algorithm]
+            jwt=token, key=api_settings.jwt.secret_key.get_secret_value(), algorithms=[api_settings.jwt.algorithm]
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None

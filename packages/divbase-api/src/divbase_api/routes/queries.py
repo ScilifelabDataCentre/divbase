@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
@@ -41,7 +41,7 @@ from divbase_lib.exceptions import (
     TaskUserError,
 )
 
-logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
+logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ async def submit_sample_metadata_query_job_endpoint(
 
     results = sample_metadata_query_task.apply_async(kwargs=task_kwargs.model_dump())
 
-    _ = await create_task_history_entry(
+    job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
         task_id=results.id,
@@ -108,10 +108,10 @@ async def submit_sample_metadata_query_job_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message) from None
     except celery.exceptions.TimeoutError:  # type: ignore
         error_message = (
-            f"The query is still being processed and has Task ID: {results.id}. \n"
+            f"The query is still being processed and has Task ID: {job_id}. \n"
             f"Please check back later for the results. \n"
             f"To check the status of the query you can use the following command: \n"
-            f"divbase-cli task-history id {results.id}"
+            f"divbase-cli task-history id {job_id}"
         )
         raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail=error_message) from None
 

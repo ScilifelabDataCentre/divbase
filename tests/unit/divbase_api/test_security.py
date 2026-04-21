@@ -12,6 +12,7 @@ from divbase_api.security import (
     TokenType,
     create_token,
     get_password_hash,
+    hash_personal_access_token,
     token_expires_delta,
     verify_password,
     verify_token,
@@ -116,3 +117,11 @@ def test_password_hashing():
 
     hashed_password_2 = get_password_hash(SecretStr(password))
     assert hashed_password != hashed_password_2
+
+
+def test_personal_access_token_hashing():
+    """Test that hashing a personal access token produces a consistent hash."""
+    raw_token = SecretStr("divbase_pat_abc123")
+    hashed_token_1 = hash_personal_access_token(raw_token)
+    hashed_token_2 = hash_personal_access_token(raw_token)
+    assert hashed_token_1 == hashed_token_2

@@ -23,7 +23,6 @@ def test_bcftools_pipe_task_with_real_worker(
     wait_for_celery_task_completion,
     bcftools_pipe_kwargs_fixture,
     run_update_dimensions,
-    db_session_sync,
     project_map,
     CONSTANTS,
 ):

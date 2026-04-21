@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Token Created – DivBase{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+
+            <div class="scilife-subsection mt-3 mb-4">
+                <h2><i class="bi bi-key text-success me-2"></i>Token generated</h2>
+            </div>
+
+            <div class="alert alert-warning" role="alert">
+                <h5 class="alert-heading">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Copy your token now, it will not be shown again.
+                </h5>
+                <p class="mb-0">
+                    Store it securely. If you lose it you will need to revoke this token and generate a new one.
+                </p>
+            </div>
+
+            {# Token display with copy button #}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-key me-2"></i>{{ pat.name }}</h5>
+                </div>
+                <div class="card-body">
+                    {% set to_copy = raw_token %}
+                    {% include "components/copy_to_clipboard.html" %}
+                </div>
+            </div>
+
+            {# Token summary #}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Token details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Name</p>
+                            <p class="mb-0 fw-medium">{{ pat.name }}</p>
+                        </div>
+                        {% if pat.description %}
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Description</p>
+                            <p class="mb-0">{{ pat.description }}</p>
+                        </div>
+                        {% endif %}
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Expires</p>
+                            <p class="mb-0 fw-medium">{{ expires_at_cet if expires_at_cet else "Never" }}</p>
+                        </div>
+                        <div class="col-sm-6">
+                            <p class="text-muted small fw-semibold mb-1">Scopes</p>
+                            <p class="mb-0">
+                                {% if pat.permissions.task_history %}
+                                        <span class="badge scilife-role-badge-read me-1">task_history</span>
+                                    {% endif %}
+                                    {% if not pat.permissions.all_projects %}
+                                        {% for project_id, role in pat.permissions.projects.items() %}
+                                            {% if project_id in project_name_by_id %}
+                                            <span class="badge scilife-role-badge-{{ role }} me-1">
+                                                <i class="bi bi-folder me-1"></i>{{ project_name_by_id[project_id] }} ({{ role }})
+                                            </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted small">No projects</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="badge scilife-role-badge-edit me-1">All projects</span>
+                                    {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Using your token</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Set the <code>DIVBASE_API_PAT</code> environment variable to be your token value and <code>divbase-cli</code> will use your token automatically — no login required.</p>
+                    {% set to_copy = 'export DIVBASE_API_PAT=' ~ raw_token %}
+                    {% include "components/copy_to_clipboard.html" %}
+                    <a href="{{ mkdocs_site_url }}/user-guides/using-divbase-programmatically/#use-personal-access-tokens-to-authenticate-programmatically" target="_blank">
+                        See the full usage guide on our documentation site.<i class="bi bi-box-arrow-up-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center mb-5">
+                <a href="/pats" class="btn scilife-confirm-button">
+                    <i class="bi bi-check-lg me-2"></i>Done
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_scripts %}
+<script src="/static/js/copy_to_clipboard.js"></script>
+{% endblock %}

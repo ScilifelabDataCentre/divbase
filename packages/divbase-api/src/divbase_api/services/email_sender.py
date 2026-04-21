@@ -20,7 +20,7 @@ from typing import Any
 import emails
 from jinja2 import Template
 
-from divbase_api.api_config import settings
+from divbase_api.api_config import api_settings
 from divbase_api.security import TokenType, create_token
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     Render an email template with Jinja2.
     (Jinja2 relies on the context dict to fill in the variables in the template.)
     """
-    context["support_email"] = settings.api.user_support_email
+    context["support_email"] = api_settings.general.user_support_email
     email_templates = Path(__file__).parent / "email_templates" / "build"
     template_str = (email_templates / template_name).read_text()
     return Template(template_str).render(context)
@@ -45,19 +45,19 @@ def _send_email(email_to: str, subject: str, html_content: str, retries: int = 3
     message = emails.Message(
         subject=subject,
         html=html_content,
-        mail_from=("DivBase", settings.email.from_email),
+        mail_from=("DivBase", api_settings.email.from_email),
     )
-    smtp_options = {"host": settings.email.smtp_server, "port": settings.email.smtp_port}
+    smtp_options = {"host": api_settings.email.smtp_server, "port": api_settings.email.smtp_port}
 
-    if settings.email.smtp_tls:
+    if api_settings.email.smtp_tls:
         smtp_options["tls"] = True
-    elif settings.email.smtp_ssl:
+    elif api_settings.email.smtp_ssl:
         smtp_options["ssl"] = True
 
-    if settings.email.smtp_user:
-        smtp_options["user"] = settings.email.smtp_user
-    if settings.email.smtp_password:
-        smtp_options["password"] = settings.email.smtp_password.get_secret_value()
+    if api_settings.email.smtp_user:
+        smtp_options["user"] = api_settings.email.smtp_user
+    if api_settings.email.smtp_password:
+        smtp_options["password"] = api_settings.email.smtp_password.get_secret_value()
 
     for attempt in range(1, retries + 1):
         response = message.send(to=email_to, smtp=smtp_options)
@@ -93,9 +93,9 @@ def send_verification_email(email_to: str, user_id: int) -> None:
     subject = "DivBase - verify your email address"
 
     token_data = create_token(subject=user_id, token_type=TokenType.EMAIL_VERIFICATION)
-    verification_url = f"{settings.api.frontend_base_url}/verify-email?token={token_data.token}"
+    verification_url = f"{api_settings.general.frontend_base_url}/verify-email?token={token_data.token}"
 
-    link_expire_hours = settings.email.email_verify_expires_seconds // 3600
+    link_expire_hours = api_settings.email.email_verify_expires_seconds // 3600
 
     html_content = render_email_template(
         template_name="email_verification.html",
@@ -125,9 +125,9 @@ def send_password_reset_email(email_to: str, user_id: int) -> None:
     subject = "DivBase - reset your password"
 
     token_data = create_token(subject=user_id, token_type=TokenType.PASSWORD_RESET)
-    reset_password_url = f"{settings.api.frontend_base_url}/reset-password?token={token_data.token}"
+    reset_password_url = f"{api_settings.general.frontend_base_url}/reset-password?token={token_data.token}"
 
-    link_expire_hours = settings.email.password_reset_expires_seconds // 3600
+    link_expire_hours = api_settings.email.password_reset_expires_seconds // 3600
 
     html_content = render_email_template(
         template_name="reset_password.html",
@@ -145,5 +145,31 @@ def send_password_has_been_reset_email(email_to: str) -> None:
     html_content = render_email_template(
         template_name="password_was_reset.html",
         context={"email": email_to},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_pat_created_email(email_to: str, pat_name: str, expires_at_cet: str | None) -> None:
+    """
+    Send a security notification email when a new personal access token is created.
+    """
+    subject = "DivBase - New personal access token created"
+    pats_url = f"{api_settings.general.frontend_base_url}/pats"
+    html_content = render_email_template(
+        template_name="pat_created.html",
+        context={"pat_name": pat_name, "pats_url": pats_url, "expires_at_cet": expires_at_cet},
+    )
+    _send_email(email_to=email_to, subject=subject, html_content=html_content)
+
+
+def send_pat_revoked_email(email_to: str, pat_name: str) -> None:
+    """
+    Send a security notification email when a personal access token is revoked.
+    """
+    subject = "DivBase - Personal access token revoked"
+    pats_url = f"{api_settings.general.frontend_base_url}/pats"
+    html_content = render_email_template(
+        template_name="pat_revoked.html",
+        context={"pat_name": pat_name, "pats_url": pats_url},
     )
     _send_email(email_to=email_to, subject=subject, html_content=html_content)

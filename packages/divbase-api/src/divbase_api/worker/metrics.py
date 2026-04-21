@@ -11,18 +11,11 @@ from typing import Optional
 import psutil
 from prometheus_client import Gauge, Info, start_http_server
 
+from divbase_api.worker.worker_config import worker_settings
+
 logger = logging.getLogger(__name__)
 
 WORKER_NAME = socket.gethostname()
-
-
-# Controls whether the Prometheus metrics server is started (system metrics, etc.)
-ENABLE_WORKER_METRICS = os.environ.get("ENABLE_WORKER_METRICS", "true").lower() == "true"
-
-# Controls whether per-task metrics (task/bcftools/VCF download) are collected and exposed
-# If false, only system-level metrics are collected.
-# If this flag is set true, ENABLE_WORKER_METRICS should also be set to true to be able to collect the metrics.
-ENABLE_WORKER_METRICS_PER_TASK = os.environ.get("ENABLE_WORKER_METRICS_PER_TASK", "true").lower() == "true"
 
 
 class MemoryMonitor:
@@ -230,9 +223,6 @@ GAUGE_MAPPING = {
     "task_vcf_download_memory_avg_bytes": task_vcf_download_memory_avg_bytes,
 }
 
-# Prometheus scrapes every 15 seconds in DivBase setup. A TLL of 5 min means it is available for 20 scrapes. Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
-TASK_METRICS_CACHE_TTL_MINUTES = int(os.environ.get("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
-
 
 def collect_system_metrics():
     """Collect system metrics for a specific worker process (by PID)."""
@@ -269,12 +259,12 @@ def store_task_metric_in_cache(metric_name: str, job_id: int, task_name: str, va
         }
 
 
-def purge_old_metrics_from_cache():
+def purge_old_metrics_from_cache(ttl_minutes: int = worker_settings.metrics.cache_ttl_minutes):
     """
-    Remove metrics older than TASK_METRICS_CACHE_TTL_MINUTES from cache.
+    Remove metrics older than ttl_minutes from cache.
     Each metric is timestamped when stored and can thus be purged individually based on age.
     """
-    cutoff_time = datetime.now() - timedelta(minutes=TASK_METRICS_CACHE_TTL_MINUTES)
+    cutoff_time = datetime.now() - timedelta(minutes=ttl_minutes)
     with metrics_cache_lock:
         for metric_name, gauge in GAUGE_MAPPING.items():
             tasks_to_remove = [
@@ -331,21 +321,18 @@ def start_metrics_server(port=8101):
     For k8s deployment, concurrency must be set to 1 (1 worker process per pod). Scaling will be handled by increasing the number of pods.
     Example with concurrency=1: 1 worker process, 1 collection thread, 1 HTTP server.
     """
-    if not ENABLE_WORKER_METRICS:
-        logger.info("Metrics collection disabled via ENABLE_WORKER_METRICS environment variable")
-        return
     global _metrics_server_started
 
     pid = os.getpid()
     worker_info.info({"worker_name": WORKER_NAME, "pid": str(pid)})
 
-    # Import here to avoid circular dependency
-    from divbase_api.services.queries import BcftoolsQueryManager
-
     bcftools_monitoring_config.info(
-        {"enabled": str(BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING), "sample_interval": "0.01s"}
+        {"enabled": str(worker_settings.metrics.enabled_per_task), "sample_interval": "0.01s"}
     )
-    logger.info(f"Bcftools subprocess monitoring: {BcftoolsQueryManager.ENABLE_SUBPROCESS_MONITORING}")
+    if worker_settings.metrics.enabled_per_task:
+        logger.info("Per-task bcftools subprocess monitoring is ENABLED.")
+    else:
+        logger.info("Per-task bcftools subprocess monitoring is DISABLED.")
 
     thread = threading.Thread(target=collect_system_metrics, daemon=True)
     thread.start()
@@ -357,7 +344,7 @@ def start_metrics_server(port=8101):
                 start_http_server(port)
                 _metrics_server_started = True
                 logger.info(f"Metrics HTTP server started on port {port}")
-                logger.info(f"Metrics cache TTL: {TASK_METRICS_CACHE_TTL_MINUTES} minutes")
+                logger.info(f"Metrics cache TTL: {worker_settings.metrics.cache_ttl_minutes} minutes")
 
                 # Start background thread for purging old metrics
                 purge_thread = threading.Thread(target=metrics_cache_purge_loop, daemon=True)

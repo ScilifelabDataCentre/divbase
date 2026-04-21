@@ -23,6 +23,8 @@ from divbase_api.exceptions import (
     AuthorizationError,
     DownloadedFileChecksumMismatchError,
     ObjectDoesNotExistError,
+    PATDuplicateNameError,
+    PATLimitExceededError,
     ProjectCreationError,
     ProjectMemberAlreadyExistsError,
     ProjectMemberNotFoundError,
@@ -127,6 +129,32 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
         )
     else:
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
+
+async def pat_limit_exceeded_error_handler(request: Request, exc: PATLimitExceededError):
+    logger.info(f"PAT limit exceeded for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "pat_limit_exceeded_error"},
+            headers=exc.headers,
+        )
+    else:
+        # The expected place for this error to occur is covered in the route itself, this is a fallback
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
+async def pat_duplicate_name_error_handler(request: Request, exc: PATDuplicateNameError):
+    logger.info(f"PAT duplicate name for {request.method} {request.url.path}: {exc.message}", exc_info=False)
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "pat_duplicate_name_error"},
+            headers=exc.headers,
+        )
+    else:
+        # The expected place for this error to occur is covered in the route itself, this is a fallback
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
 async def user_registration_error_handler(request: Request, exc: UserRegistrationError):
@@ -431,6 +459,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
     app.add_exception_handler(AuthenticationError, authentication_error_handler)  # type: ignore
     app.add_exception_handler(AuthorizationError, authorization_error_handler)  # type: ignore
+    app.add_exception_handler(PATLimitExceededError, pat_limit_exceeded_error_handler)  # type: ignore
+    app.add_exception_handler(PATDuplicateNameError, pat_duplicate_name_error_handler)  # type: ignore
     app.add_exception_handler(UserRegistrationError, user_registration_error_handler)  # type: ignore
     app.add_exception_handler(ProjectNotFoundError, project_not_found_error_handler)  # type: ignore
     app.add_exception_handler(ProjectMemberNotFoundError, project_member_not_found_error_handler)  # type: ignore

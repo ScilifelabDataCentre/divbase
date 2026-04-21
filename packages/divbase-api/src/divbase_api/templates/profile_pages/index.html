@@ -65,6 +65,25 @@
             </div>
         </div>
     </div>
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="bi bi-key me-2"></i>Personal Access Tokens</h3>
+                    <a href="/pats" class="btn scilife-confirm-button btn-sm">
+                        <i class="bi bi-key me-1"></i>Manage tokens
+                    </a>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-0">
+                        Personal access tokens more easily enable <code>divbase-cli</code> to be used in automated pipelines/slurm scripts to authenticate with DivBase
+                        without using your password. You can scope tokens to specific projects and <code>divbase-cli</code> commands.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% include "components/project_cards.html" %}
 </div>
 {% endblock %}

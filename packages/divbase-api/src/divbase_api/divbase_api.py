@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, settings
+from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
 from divbase_api.db import (
     check_db_migrations_up_to_date,
     create_first_admin_user,
@@ -24,6 +24,7 @@ from divbase_api.db import (
 from divbase_api.exception_handlers import register_exception_handlers
 from divbase_api.frontend_routes.auth import fr_auth_router
 from divbase_api.frontend_routes.core import fr_core_router
+from divbase_api.frontend_routes.personal_access_tokens import fr_pat_router
 from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.middleware import register_middleware
@@ -36,7 +37,7 @@ from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 
-logging.basicConfig(level=settings.api.log_level, handlers=[logging.StreamHandler(sys.stderr)])
+logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
     logger.info("Starting up DivBase API...")
 
-    settings.validate_api_settings()
+    api_settings.validate_api_settings()
     logger.info("All API settings are correctly set.")
 
     if not await health_check_db():
@@ -94,12 +95,13 @@ app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
 app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
-if settings.api.environment in LOCAL_DEV_ENVIRONMENTS:
+if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
     # not needed in deployed enviroments, so no need to expose it.
     app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)
 app.include_router(fr_core_router, prefix="", include_in_schema=False)
+app.include_router(fr_pat_router, prefix="/pats", include_in_schema=False)
 app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
 app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
 
