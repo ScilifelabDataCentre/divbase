@@ -75,7 +75,7 @@ class TestValidateUserSubmittedBcftoolsCommand:
             ("view file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view file.vcf", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view file.bcf", "Do not provide VCF/BCF input filenames in '--command'"),
-            ("view -", "Do not provide VCF/BCF input filenames in '--command'"),
+            ("view -", "Do not use stdin '-' in '--command'"),
             ("view -r file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view --regions=file.vcf.gz", "Do not provide VCF/BCF input filenames in '--command'"),
             ("view -t file.vcf", "Do not provide VCF/BCF input filenames in '--command'"),

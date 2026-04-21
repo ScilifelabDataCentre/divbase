@@ -249,6 +249,7 @@ The following `view` subcommands are not supported in DivBase:
 |-W[FMT], -W[=FMT], --write-index[=FMT] | Handled by the DivBase server |
 |-S, --samples-file FILE | Covered by `divbase-cli query vcf --samples-file`|
 |-s LIST, --samples LIST, --samples=LIST | Sample IDs must be provided via `--samples` or `--samples-file` (placeholder `view -s` without sample names is allowed) |
+|`-` (bcftools stdin input operator) | Piping of consequtive bcftools commands is handled by the DivBase server |
 |-f, --apply-filters LIST | Not supported in DivBase queries |
 <!-- markdownlint-enable MD056 -->
 
@@ -377,7 +378,8 @@ Result VCF file will contain samples S1,S2. The input VCF files needed for this 
 | `Unsupported bcftools command ...` | `--command` used a command other than `view` (for example `merge`). | Use only `bcftools view` syntax in `--command`. |
 | `Unsupported bcftools view option(s) found in '--command'` | `--command` contains DivBase-blocked options such as `-O`, `-o`, `-R`, `-T`, `-W`, `-S`, `--threads`, `--verbosity`, `-f`. | Remove blocked options and keep only supported `view` options. |
 | `Do not provide sample names in '--command' via '-s/--samples'` | Sample IDs were provided inside `--command` (for example `view -s S1,S2` or `view --samples=S1,S2`). | Provide sample IDs via `--samples`, `--samples-file`, or `--tsv-filter`. Use placeholder `view -s` if you want to control where sample subsetting happens in the pipe. |
-| `Do not provide VCF/BCF input filenames in '--command'` | A filename-like token was included in `--command` (for example `view file.vcf.gz`, `view -r file.vcf.gz`, `view sample.bcf`, `view -`). | Remove input filenames/stdin tokens from `--command`. DivBase resolves input files from project dimensions automatically. |
+| `Do not provide VCF/BCF input filenames in '--command'` | A filename-like token was included in `--command` (for example `view file.vcf.gz`, `view -r file.vcf.gz`, `view sample.bcf`). | Remove input filenames from `--command`. DivBase resolves input files from project dimensions automatically. |
+| `Do not use stdin '-' in '--command'` | Stdin input (`-`) was used in `--command` (for example `view -` or `view -r chr1:1-1000 -`). | Remove stdin token `-` from `--command`. DivBase resolves input files from project dimensions automatically. |
 | `Duplicate bcftools command segment(s) found in '--command'` | The same command segment was repeated in a semicolon-separated pipe. | Remove duplicated segments (for example avoid `view -r 1:1-100; view -r 1:1-100`). |
 | `--command contains empty strings` / `The --command option must be a non-empty bcftools view string` | Empty command string or empty `;` segments were submitted (for example `""`, `";"`, `"view -r 1:1-100;;view -g hom"`). | Provide a non-empty command. If you only want sample-based subsetting, use `--command "view -s"`. |
 | `When using all-samples mode, --command must include at least one supported bcftools view option other than '-s/--samples'` | `--all-samples` was used with no effective subsetting/filtering beyond sample placeholder. | In `--all-samples` mode include at least one supported non-sample `view` option, for example `-r`, `-t`, `-i`, `-e`, `-g`, `-q`, `-Q`, `-v`, `-V`. |

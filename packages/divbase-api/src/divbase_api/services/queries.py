@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 ###
-### Helper functions and data structures for the query managers
+### Data structures for the query managers and their helper functions
 ###
 
 
@@ -91,7 +91,7 @@ class ParsedCommandSegment:
 
     position: int
     cmd: str
-    args: list[str]
+    args: list[str]  # includes the bcftools command and its options. E.g. ["view", "-s", "-r", "chr1:1-1000"]
     cmd_name: str
     normalized_segment: str
 
@@ -106,6 +106,11 @@ class ParsedViewRegionsOption:
     regions_value: str | None
     violation_reason: str | None
     next_index: int
+
+
+###
+### Bcftools command validation and parsing helper functions
+###
 
 
 def _parse_command_segments(command: str) -> list[ParsedCommandSegment]:
@@ -213,96 +218,6 @@ def _parse_view_regions_option_argument(args: list[str], idx: int) -> ParsedView
     return _build_result(is_regions_option=False)
 
 
-def extract_region_scaffolds_from_command(command: str) -> list[str]:
-    """
-    Extract scaffold/chromosome names from -r/--regions selectors in bcftools view command segments.
-
-    Supported forms:
-    - -r chr1:1-1000
-    - -rchr1:1-1000
-    - --regions chr1:1-1000
-    - --regions=chr1:1-1000
-    """
-    scaffolds: list[str] = []
-
-    for segment in _parse_command_segments(command):
-        if segment.cmd_name != "view":
-            continue
-
-        args = segment.args
-        idx = 1
-        while idx < len(args):
-            parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
-            idx = parsed_region_option.next_index
-
-            if parsed_region_option.regions_value:
-                for region in parsed_region_option.regions_value.split(","):
-                    region = region.strip()
-                    if not region:
-                        continue
-                    scaffold_name = region.split(":")[0].strip()
-                    if scaffold_name:
-                        scaffolds.append(scaffold_name)
-
-    return scaffolds
-
-
-def run_sidecar_metadata_query(
-    file: Path,
-    filter_string: str = None,
-    project_id: int = None,
-    vcf_dimensions_data: ProjectVCFDimensionsData | None = None,
-) -> SampleMetadataQueryTaskResult:
-    """
-    Run a query on a sidecar metadata TSV file and map samples to VCF files.
-
-    Takes vcf_dimensions_data fetched by an API call in the task layer and extracts the unique sample names.
-
-    """
-    project_samples = set()
-    if vcf_dimensions_data and vcf_dimensions_data.vcf_files:
-        for vcf_entry in vcf_dimensions_data.vcf_files:
-            sample_names = vcf_entry.samples
-            project_samples.update(sample_names)
-
-    sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
-        filter_string=filter_string
-    )
-    query_message = sidecar_manager.query_message
-    warnings = sidecar_manager.warnings
-    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
-
-    logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
-
-    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
-        error_msg = f"No VCF dimensions data provided for project {project_id}. "
-        error_msg += "Please run 'divbase-cli dimensions update' first."
-        raise ValueError(error_msg)
-
-    sample_and_filename_subset: list[SampleFileMapping] = []
-    unique_filenames = set()
-
-    for vcf_entry in vcf_dimensions_data.vcf_files:
-        filename = vcf_entry.vcf_file_s3_key
-        sample_names = vcf_entry.samples
-
-        for sample_id in sample_names:
-            if sample_id in unique_sample_ids:
-                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
-                unique_filenames.add(filename)
-
-    return SampleMetadataQueryTaskResult(
-        sample_and_filename_subset=[
-            SampleFileMappingResult(sample_id=entry.sample_id, filename=entry.filename)
-            for entry in sample_and_filename_subset
-        ],
-        unique_sample_ids=list(unique_sample_ids),
-        unique_filenames=list(unique_filenames),
-        query_message=query_message,
-        warnings=warnings,
-    )
-
-
 def _check_if_arg_matches_short_or_long_option(arg: str, short_opt: str, long_opt: str) -> bool:
     """Helper function to check if a given argument matches either the short or long version of a bcftools option."""
     if arg == short_opt:
@@ -312,19 +227,6 @@ def _check_if_arg_matches_short_or_long_option(arg: str, short_opt: str, long_op
     if arg == long_opt:
         return True
     return bool(arg.startswith(f"{long_opt}="))
-
-
-def _check_if_arg_looks_like_vcf_or_bcf_input_file(arg: str) -> bool:
-    """Helper function to check if a arg looks like a VCF/BCF input filename or stdin arg."""
-    if arg == "-":
-        return True
-
-    normalized_arg = arg.lower()
-    if normalized_arg.endswith(".vcf.gz"):
-        return True
-    if normalized_arg.endswith(".vcf"):
-        return True
-    return bool(normalized_arg.endswith(".bcf"))
 
 
 def _check_if_view_option_is_supported(arg: str) -> str | None:
@@ -389,34 +291,147 @@ def _check_if_view_samples_option_violates_constraints(arg: str, all_samples: bo
     return None
 
 
-def _analyze_view_samples_option(
-    arg: str,
-    next_arg_lookahead: str | None,
-    position: int,
+def _validate_view_segment(
+    segment: ParsedCommandSegment,
     all_samples: bool,
-) -> None:
+) -> tuple[list[str], bool]:
     """
-    Analyze a '-s/--samples' argument in a view command.
+    Validate one parsed `bcftools view` command segment and return collected violations.
+    """
+    position = segment.position
+    args = segment.args
+    unsupported_view_options = []
+    has_non_sample_filter_flag = False
 
-    Raises TaskUserError for invalid usage.
-    """
-    sample_option_violation_reason = _check_if_view_samples_option_violates_constraints(
-        arg=arg, all_samples=all_samples
+    def _check_if_arg_looks_like_vcf_or_bcf_filename(arg: str) -> bool:
+        """Reusable helper function to check if a given argument looks like a VCF or BCF filename, based on its extension."""
+        normalized_arg = arg.lower()
+        if normalized_arg.endswith(".vcf.gz"):
+            return True
+        if normalized_arg.endswith(".vcf"):
+            return True
+        return bool(normalized_arg.endswith(".bcf"))
+
+    def _format_segment_argument_violation(argument: str, reason: str) -> str:
+        """Reusable helper function to format a violation message for a given argument in a command segment."""
+        return f"Pipe segment {position}, argument '{argument}': {reason}"
+
+    filename_in_command_error_message = (
+        "Do not provide VCF/BCF input filenames in '--command'; DivBase resolves input files from project dimensions."
     )
-    if sample_option_violation_reason is not None:
-        raise TaskUserError(f"Pipe segment {position}, argument '{arg}': {sample_option_violation_reason}")
+    stdin_in_command_error_message = (
+        "Do not use stdin '-' in '--command'; DivBase resolves input files from project dimensions."
+    )
 
-    if arg in ("-s", "--samples"):
-        # Look ahead to the next argument after -s/--samples to check if it is an option (beginning with - or --). Anything else is considered a sample name.
-        # E.g. "view -s S1,S2" is invalid.
-        if next_arg_lookahead is not None and not next_arg_lookahead.startswith("-"):
-            raise TaskUserError(
-                f"Pipe segment {position}, argument '{arg}': "
-                "Do not provide sample names in '--command' via '-s/--samples'. "
-                "DivBase resolves sample IDs from '--tsv-filter', '--samples', or '--samples-file'. "
-                "If you only want sample-based subsetting, use '--command \"view -s\"'."
+    # Users must explicitly provide at least one view flag.
+    # This guards against autoinject of -s for `--command "view"` when sample selection is used, which could lead to bugs.
+    if not any(argument.startswith("-") for argument in args[1:]):
+        for argument in args[1:]:
+            if _check_if_arg_looks_like_vcf_or_bcf_filename(argument):
+                unsupported_view_options.append(
+                    _format_segment_argument_violation(
+                        argument=argument,
+                        reason=filename_in_command_error_message,
+                    )
+                )
+        if unsupported_view_options:
+            return unsupported_view_options, False
+        raise TaskUserError(
+            f"Pipe segment {position}: 'view' must include at least one bcftools view option flag "
+            "(short or long form). "
+            'If you only want sample-based subsetting, use --command "view -s".'
+        )
+
+    # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
+    idx = 1
+    while idx < len(args):
+        arg = args[idx]
+        next_idx = idx + 1
+
+        if arg == "-":
+            # Do not support bcftools stdin operator '-' for piping files into a bcftools pipe (e.g. 'cat file1.vcf | bcftools view -' or 'cat file1.vcf | bcftools view -r 1:1-10000 -')
+            unsupported_view_options.append(
+                _format_segment_argument_violation(
+                    argument=arg,
+                    reason=stdin_in_command_error_message,
+                )
             )
-        return
+            idx = next_idx
+            continue
+
+        reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
+        if reason_for_not_supported is not None:
+            unsupported_view_options.append(
+                _format_segment_argument_violation(
+                    argument=arg,
+                    reason=reason_for_not_supported,
+                )
+            )
+            idx = next_idx
+            continue
+
+        # Check for unsupported usage of -s/--samples in the command string.
+        if _check_if_arg_matches_short_or_long_option(arg, "-s", "--samples"):
+            next_arg_lookahead = args[idx + 1] if idx + 1 < len(args) else None
+            sample_option_violation_reason = _check_if_view_samples_option_violates_constraints(
+                arg=arg, all_samples=all_samples
+            )
+            if sample_option_violation_reason is not None:
+                raise TaskUserError(f"Pipe segment {position}, argument '{arg}': {sample_option_violation_reason}")
+
+            # Look ahead to the next argument after -s/--samples to check if it is an option
+            # (beginning with - or --). Anything else is treated as user-provided sample names.
+            # E.g. "view -s S1,S2" is invalid.
+            if arg in ("-s", "--samples") and next_arg_lookahead is not None and not next_arg_lookahead.startswith("-"):
+                raise TaskUserError(
+                    f"Pipe segment {position}, argument '{arg}': "
+                    "Do not provide sample names in '--command' via '-s/--samples'. "
+                    "DivBase resolves sample IDs from '--tsv-filter', '--samples', or '--samples-file'. "
+                    "If you only want sample-based subsetting, use '--command \"view -s\"'."
+                )
+            idx = next_idx
+            continue
+
+        parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
+        next_idx = parsed_region_option.next_index
+        if parsed_region_option.is_regions_option:
+            if parsed_region_option.violation_reason:
+                unsupported_view_options.append(
+                    _format_segment_argument_violation(
+                        argument=arg,
+                        reason=parsed_region_option.violation_reason,
+                    )
+                )
+            elif parsed_region_option.regions_value is not None and _check_if_arg_looks_like_vcf_or_bcf_filename(
+                parsed_region_option.regions_value
+            ):
+                # For '-r/--regions' forms, reject filename-like region values so commands like
+                # `view -r file.vcf.gz` do not look like user-provided input files.
+                unsupported_view_options.append(
+                    _format_segment_argument_violation(
+                        argument=parsed_region_option.regions_value,
+                        reason=filename_in_command_error_message,
+                    )
+                )
+                idx = next_idx
+                continue
+
+        if _check_if_arg_looks_like_vcf_or_bcf_filename(arg):
+            unsupported_view_options.append(
+                _format_segment_argument_violation(
+                    argument=arg,
+                    reason=filename_in_command_error_message,
+                )
+            )
+            idx = next_idx
+            continue
+
+        if all_samples and arg.startswith("-"):
+            has_non_sample_filter_flag = True
+
+        idx = next_idx
+
+    return unsupported_view_options, has_non_sample_filter_flag
 
 
 def validate_user_submitted_bcftools_command(command: str, all_samples: bool = False) -> str:
@@ -435,18 +450,14 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
     Returns the validated command string.
     """
     valid_commands = BcftoolsQueryManager.VALID_BCFTOOLS_COMMANDS
-    unsupported_view_options = []
+    segment_violations = []
     has_all_samples_and_at_least_one_view_option_that_is_not_samples = False
     normalized_segments_with_positions: dict[str, list[int]] = {}
-    filename_in_command_error_message = (
-        "Do not provide VCF/BCF input filenames in '--command'; DivBase resolves input files from project dimensions."
-    )
 
     for segment in _parse_command_segments(command):
         # evaluate each command segment separately. E.g. "view -s -r 1:1-100; view -G" contains two semicolon-separated segments.
         position = segment.position
         cmd = segment.cmd
-        args = segment.args
         cmd_name = segment.cmd_name
 
         if not cmd:
@@ -461,111 +472,22 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
 
         # Duplication tracking.
         normalized_segment = segment.normalized_segment  # quoting/whitespace normalized by shlex.join
-        if normalized_segment not in normalized_segments_with_positions:
-            normalized_segments_with_positions[normalized_segment] = [position]
-        else:
-            # Track duplicate segments by position.
-            normalized_segments_with_positions[normalized_segment].append(position)
+        normalized_segments_with_positions.setdefault(normalized_segment, []).append(position)
 
-        # TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
+        segment_violations_for_segment, has_non_sample_filter_flag = _validate_view_segment(
+            segment=segment,
+            all_samples=all_samples,
+        )
+        segment_violations.extend(segment_violations_for_segment)
+        has_all_samples_and_at_least_one_view_option_that_is_not_samples |= has_non_sample_filter_flag
 
-        # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
-
-        # TODO: since we only support `view`, can there be a shortform where we skip `view` and just have the view flags?
-
-        if cmd_name == "view":
-            # Users must explicitly provide at least one view flag.
-            # This guards against autoinject of -s for `--command "view"` when sample selection is used, which could lead to bugs
-            if not any(argument.startswith("-") for argument in args[1:]):
-                for argument in args[1:]:
-                    if _check_if_arg_looks_like_vcf_or_bcf_input_file(argument):
-                        unsupported_view_options.append(
-                            f"Pipe segment {position}, argument '{argument}': {filename_in_command_error_message}"
-                        )
-                if unsupported_view_options:
-                    details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
-                    raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
-                raise TaskUserError(
-                    f"Pipe segment {position}: 'view' must include at least one bcftools view option flag "
-                    "(short or long form). "
-                    'If you only want sample-based subsetting, use --command "view -s".'
-                )
-
-            # Check for unsupported view options and for unsupported usage of -s/--samples in the command string.
-            idx = 1
-            while idx < len(args):
-                arg = args[idx]
-                next_idx = idx + 1
-
-                if arg == "-":
-                    # Do not support bcftools stdin operator '-' for piping files into a bcftools pipe (e.g. 'cat file1.vcf | bcftools view -' or 'cat file1.vcf | bcftools view -r 1:1-10000 -')
-                    unsupported_view_options.append(
-                        f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
-                    )
-                    idx = next_idx
-                    continue
-
-                reason_for_not_supported = _check_if_view_option_is_supported(arg=arg)
-                if reason_for_not_supported is not None:
-                    unsupported_view_options.append(
-                        f"Pipe segment {position}, argument '{arg}': {reason_for_not_supported}"
-                    )
-                    idx = next_idx
-                    continue
-
-                # Check for unsupported usage of -s/--samples in the command string.
-                if _check_if_arg_matches_short_or_long_option(arg, "-s", "--samples"):
-                    next_arg_lookahead = args[idx + 1] if idx + 1 < len(args) else None
-                    _analyze_view_samples_option(
-                        arg=arg,
-                        next_arg_lookahead=next_arg_lookahead,
-                        position=position,
-                        all_samples=all_samples,
-                    )
-                    idx = next_idx
-                    continue
-
-                parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
-                next_idx = parsed_region_option.next_index
-                if parsed_region_option.is_regions_option and parsed_region_option.violation_reason:
-                    unsupported_view_options.append(
-                        f"Pipe segment {position}, argument '{arg}': {parsed_region_option.violation_reason}"
-                    )
-
-                if _check_if_arg_looks_like_vcf_or_bcf_input_file(arg):
-                    unsupported_view_options.append(
-                        f"Pipe segment {position}, argument '{arg}': {filename_in_command_error_message}"
-                    )
-                    idx = next_idx
-                    continue
-
-                # For '-r/--regions <value>' forms, also validate that the value is not a filename-like (sub)string.
-                # Keep this explicit so behavior remains user-friendly for commands like: view -r file.vcf.gz
-                if (
-                    parsed_region_option.is_regions_option
-                    and parsed_region_option.regions_value is not None
-                    and _check_if_arg_looks_like_vcf_or_bcf_input_file(parsed_region_option.regions_value)
-                ):
-                    if arg in ("-r", "--regions"):
-                        unsupported_view_options.append(
-                            f"Pipe segment {position}, argument '{parsed_region_option.regions_value}': {filename_in_command_error_message}"
-                        )
-                    idx = next_idx
-                    continue
-
-                if all_samples and arg.startswith("-"):
-                    has_all_samples_and_at_least_one_view_option_that_is_not_samples = True
-
-                idx = next_idx
-
-    if unsupported_view_options:
-        details = "\n".join(f"  • {violation}" for violation in unsupported_view_options)
+    if segment_violations:
+        details = "\n".join(f"  • {violation}" for violation in segment_violations)
         raise TaskUserError(f"Unsupported bcftools view option(s) found in '--command':\n{details}")
 
-    duplicate_segments = {}
-    for segment, positions in normalized_segments_with_positions.items():
-        if len(positions) > 1:
-            duplicate_segments[segment] = positions
+    duplicate_segments = {
+        segment: positions for segment, positions in normalized_segments_with_positions.items() if len(positions) > 1
+    }
     if duplicate_segments:
         duplicate_details = []
         for segment, positions in duplicate_segments.items():
@@ -586,6 +508,42 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
         )
 
     return command
+
+
+def extract_region_scaffolds_from_command(command: str) -> list[str]:
+    """
+    Extract scaffold/chromosome names from -r/--regions selectors in bcftools view command segments.
+
+    Used by bcftools command validator, and by VCF query task to determin which VCF files to download if the user has specified region-based subsetting in the command.
+
+    Supported forms:
+    - -r chr1:1-1000
+    - -rchr1:1-1000
+    - --regions chr1:1-1000
+    - --regions=chr1:1-1000
+    """
+    scaffolds: list[str] = []
+
+    for segment in _parse_command_segments(command):
+        if segment.cmd_name != "view":
+            continue
+
+        args = segment.args
+        idx = 1
+        while idx < len(args):
+            parsed_region_option = _parse_view_regions_option_argument(args=args, idx=idx)
+            idx = parsed_region_option.next_index
+
+            if parsed_region_option.regions_value:
+                for region in parsed_region_option.regions_value.split(","):
+                    region = region.strip()
+                    if not region:
+                        continue
+                    scaffold_name = region.split(":")[0].strip()
+                    if scaffold_name:
+                        scaffolds.append(scaffold_name)
+
+    return scaffolds
 
 
 ###
@@ -636,6 +594,8 @@ class BcftoolsQueryManager:
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
     CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
+
+    # TODO: since we only support `view`, can there be a shortform where we skip `view` in the user input and just have the view flags? i.e. just "-s -r 1:1-100" instead of "view -s -r 1:1-100". ?
 
     def __init__(self, enable_subprocess_monitoring: bool = False):
         # this can be controlled by the worker config
@@ -850,6 +810,9 @@ class BcftoolsQueryManager:
                         cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted}"
                     elif cmd_with_samples.startswith("view "):
                         cmd_with_samples = f"view -s {samples_in_file_bcftools_formatted} {cmd_with_samples[5:]}"
+
+            # TODO perhaps the default place for `view -s` should be the last place of the command? since it is faster on shorter files?
+            # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
 
             # Ensure source VCFs are indexed *before* command execution.
             self.ensure_csi_index(file)
@@ -1267,8 +1230,64 @@ class BcftoolsQueryManager:
 
 
 ###
-### Sample metadadata query manager
+### Sample metadadata query manager and helper functions
 ###
+
+
+def run_sidecar_metadata_query(
+    file: Path,
+    filter_string: str = None,
+    project_id: int = None,
+    vcf_dimensions_data: ProjectVCFDimensionsData | None = None,
+) -> SampleMetadataQueryTaskResult:
+    """
+    Run a query on a sidecar metadata TSV file and map samples to VCF files.
+
+    Takes vcf_dimensions_data fetched by an API call in the task layer and extracts the unique sample names.
+
+    """
+    project_samples = set()
+    if vcf_dimensions_data and vcf_dimensions_data.vcf_files:
+        for vcf_entry in vcf_dimensions_data.vcf_files:
+            sample_names = vcf_entry.samples
+            project_samples.update(sample_names)
+
+    sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
+        filter_string=filter_string
+    )
+    query_message = sidecar_manager.query_message
+    warnings = sidecar_manager.warnings
+    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
+
+    logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
+
+    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
+        error_msg = f"No VCF dimensions data provided for project {project_id}. "
+        error_msg += "Please run 'divbase-cli dimensions update' first."
+        raise ValueError(error_msg)
+
+    sample_and_filename_subset: list[SampleFileMapping] = []
+    unique_filenames = set()
+
+    for vcf_entry in vcf_dimensions_data.vcf_files:
+        filename = vcf_entry.vcf_file_s3_key
+        sample_names = vcf_entry.samples
+
+        for sample_id in sample_names:
+            if sample_id in unique_sample_ids:
+                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
+                unique_filenames.add(filename)
+
+    return SampleMetadataQueryTaskResult(
+        sample_and_filename_subset=[
+            SampleFileMappingResult(sample_id=entry.sample_id, filename=entry.filename)
+            for entry in sample_and_filename_subset
+        ],
+        unique_sample_ids=list(unique_sample_ids),
+        unique_filenames=list(unique_filenames),
+        query_message=query_message,
+        warnings=warnings,
+    )
 
 
 class SidecarQueryManager:
