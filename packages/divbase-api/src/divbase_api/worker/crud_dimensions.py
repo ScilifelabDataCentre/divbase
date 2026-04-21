@@ -77,7 +77,10 @@ def get_vcf_metadata_by_project(db: Session, project_id: int) -> ProjectVCFDimen
             ProjectVCFDimensionsEntry(
                 vcf_file_s3_key=entry.vcf_file_s3_key,
                 s3_version_id=entry.s3_version_id,
-                samples=sorted(s.sample_name for s in entry.samples),
+                # IMPORTANT: keep sample order as stored/indexed from VCF header.
+                # Sorting here would hide "same sample IDs, different order" and
+                # break overlap classification that protects bcftools concat/merge semantics.
+                samples=[s.sample_name for s in entry.samples],
                 scaffolds=sorted(s.scaffold_name for s in entry.scaffolds),
                 variant_count=entry.variant_count or 0,
                 sample_count=entry.sample_count or 0,

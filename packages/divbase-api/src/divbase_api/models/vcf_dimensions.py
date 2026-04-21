@@ -41,10 +41,19 @@ class VCFMetadataDB(BaseDBModel):
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="vcf_metadata")
 
     samples: Mapped[list["VCFMetadataSamplesDB"]] = relationship(
-        "VCFMetadataSamplesDB", back_populates="vcf_metadata", cascade="all, delete-orphan"
+        "VCFMetadataSamplesDB",
+        back_populates="vcf_metadata",
+        cascade="all, delete-orphan",
+        # Keep insertion order (VCF header sample order) stable when loading from DB.
+        # This order is semantically important for overlap checks that must detect
+        # "identical sample IDs but different order" as bcftools concat-incompatible.
+        order_by="VCFMetadataSamplesDB.id",
     )
     scaffolds: Mapped[list["VCFMetadataScaffoldsDB"]] = relationship(
-        "VCFMetadataScaffoldsDB", back_populates="vcf_metadata", cascade="all, delete-orphan"
+        "VCFMetadataScaffoldsDB",
+        back_populates="vcf_metadata",
+        cascade="all, delete-orphan",
+        order_by="VCFMetadataScaffoldsDB.id",
     )
 
 
