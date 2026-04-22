@@ -21,7 +21,7 @@ Assuming that a task has been implemented as decribed in this document, DivBase 
 
 ## 1. Overview
 
-Tasks are generally executed asynchronously and can possibly take a bit of time to run. This means that queing tasks and fetching task results are treated as two separate processes with their own CLI commands\*. For instance, a user might send a VCF file query task with the `divbase-cli query bcftools-pipe` CLI command; they can then run the `divbase-cli task-history user` command to learn the status of the job (queuing, started, sucess, failed) and any result or error messages. This document describes the steps needed to fully implement a task in Divbase, including  a CLI command to schedule the task, and the steps needed to make the task work with the task history command. Details on how the task history architechture works is not covered in this document.
+Tasks are generally executed asynchronously and can possibly take a bit of time to run. This means that queing tasks and fetching task results are treated as two separate processes with their own CLI commands\*. For instance, a user might send a VCF file query task with the `divbase-cli query vcf` CLI command; they can then run the `divbase-cli task-history user` command to learn the status of the job (queuing, started, sucess, failed) and any result or error messages. This document describes the steps needed to fully implement a task in Divbase, including  a CLI command to schedule the task, and the steps needed to make the task work with the task history command. Details on how the task history architechture works is not covered in this document.
 
 \* One exception is `sample_metadata_query_task` that is assumed to run so quickly that it waits for results to be returned back to the user's terminal. The task is enqueued as an asynchronous celery task like any other task, with the difference that the API layer waits for the task layer to return the results so that the API in turn can return that to the users terminal.
 
@@ -171,7 +171,7 @@ class TaskHistoryResult(BaseModel):
 ### 2.3. API endpoint
 
 - API endpoints for enqueueing tasks are found in files the folder: `./packages/divbase-api/src/divbase_api/routes/`
-- Endpoint functions are decorated on the form `@query_router.post("<ENDPOINT_URL>", status_code=status.HTTP_201_CREATED)`, where `<ENDPOINT_URL>` should be a RESTful URL such as `/bcftools-pipe/projects/{project_name}`
+- Endpoint functions are decorated on the form `@query_router.post("<ENDPOINT_URL>", status_code=status.HTTP_201_CREATED)`, where `<ENDPOINT_URL>` should be a RESTful URL such as `/vcf/projects/{project_name}`
 - To make use of fastAPIs async worker threads, define the function as`async def <ENDPOINT_FUNCTION_NAME>()`
 - The endpoint function has several required arguments: the Pydantic Request model (see Section 2.2.) and three helper arguments / fastAPI dependency injections. The Pydantic model is used to convert the incoming payload into the model and validate its types (see Section 2.4 for how the CLI uses and serializes the same Pydantic model in the request).
 
@@ -194,8 +194,8 @@ class TaskHistoryResult(BaseModel):
 Example of an API endpoint. This pattern can more or less be used as boilerplate code when creating new endpoints for user-submitted tasks.
 
 ```python
-@query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
-async def create_bcftools_jobs(
+@query_router.post("/vcf/projects/{project_name}", status_code=status.HTTP_201_CREATED)
+async def submit_vcf_query_job_endpoint(
     bcftools_query_request: BcftoolsQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -260,7 +260,7 @@ The DivBase client uses the [Typer](https://typer.tiangolo.com/) library to buil
 
 - The CLI commands are defined in files in the folder `./packages/divbase-cli/src/divbase_cli/cli_commands/`. The CLI commands make requests to the API and gets responses back. For task-submitting requests, the CLI commands send task args to the corresponding API endpoint based on the user's CLI input.
 - There needs to be a Typer app (on the form `query_app = typer.Typer()`) to which the CLI command functions needs to be connected. The app needs to be initiated with `app.add_typer(query_app, name="query")` in `./packages/divbase-cli/src/divbase_cli/divbase_cli.py`.
-- The typer app name is used as a decorator for the function, e.g. `@query_app.command("bcftools-pipe")`. The argument of the decorator will become the command for the CLI.
+- The typer app name is used as a decorator for the function, e.g. `@query_app.command("vcf")`. The argument of the decorator will become the command for the CLI.
 - Pack the task arguments in the Pydantic request model (see Section 2.2), e.g. `request_data=BcftoolsQueryRequest()` for type validation.
 - The `resolve_project()` helper function is be used to fetch the data from the users local config and is needed for the established pattern to make the request. This helper function need that the CLI function args contain `project: str | None = PROJECT_NAME_OPTION,`. See an existing CLI file for more details on the constants they are calling.
 - The main function call for all DivBase CLI->API interactions is `make_authenticated_request()`. If the user is logged in to the CLI, it sends the user's JSON Web Token as part of the request, which the API uses to validate the user's identity and project role/permissions.
@@ -279,8 +279,8 @@ query_app = typer.Typer(
 )
 
 
-@query_app.command("bcftools-pipe")
-def pipe_query(
+@query_app.command("vcf")
+def vcf_query(
     tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
@@ -301,13 +301,13 @@ def pipe_query(
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=project_config.divbase_url,
-        api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
+        api_route=f"v1/query/vcf/projects/{project_config.name}",
         json=request_data.model_dump(), # serialize the Pydantic model to Python dict since the API expects JSON. On the API side, it converted back to the Pydantic model.
     )
 
     # Using the pattern described in Section 2.3, the API returns the DivBase task ID, which can be displayed to the user in their terminal like such:
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}")
 ```
 
 ### 2.5. Task History deserialization

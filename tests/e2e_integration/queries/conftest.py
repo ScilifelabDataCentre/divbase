@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from celery import current_app
 
-from divbase_api.services.queries import BcftoolsQueryManager, SidecarQueryManager
+from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, SampleFileMapping, SidecarQueryManager
 
 
 @pytest.fixture
@@ -30,14 +30,17 @@ def example_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
     """Return sample inputs for bcftools tests."""
     test_filenames = ["sample1.vcf.gz", "sample2.vcf.gz"]
     test_samples = [
-        {"Sample_ID": "S1", "Filename": "sample1.vcf.gz"},
-        {"Sample_ID": "S2", "Filename": "sample1.vcf.gz"},
-        {"Sample_ID": "S3", "Filename": "sample2.vcf.gz"},
+        SampleFileMapping(sample_id="S1", filename="sample1.vcf.gz"),
+        SampleFileMapping(sample_id="S2", filename="sample1.vcf.gz"),
+        SampleFileMapping(sample_id="S3", filename="sample2.vcf.gz"),
     ]
     expected_temp_files = ["temp_subset_0_0.vcf.gz", "temp_subset_0_1.vcf.gz"]
     return {
-        "filenames": test_filenames,
-        "sample_and_filename_subset": test_samples,
+        "bcftools_inputs": BCFToolsInput(
+            filenames=test_filenames,
+            sample_and_filename_subset=test_samples,
+            sampleIDs=["S1", "S2", "S3"],
+        ),
         "output_temp_files": expected_temp_files,
     }
 
@@ -77,17 +80,20 @@ def demo_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
         "/app/tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz",
     ]
     sample_and_filename_subset = [
-        {"Sample_ID": "5a_HOM-I13", "Filename": test_filenames[1]},
-        {"Sample_ID": "5a_HOM-I14", "Filename": test_filenames[1]},
-        {"Sample_ID": "5a_HOM-I20", "Filename": test_filenames[1]},
-        {"Sample_ID": "5a_HOM-I21", "Filename": test_filenames[1]},
-        {"Sample_ID": "5a_HOM-I7", "Filename": test_filenames[0]},
-        {"Sample_ID": "1b_HOM-G58", "Filename": test_filenames[0]},
+        SampleFileMapping(sample_id="5a_HOM-I13", filename=test_filenames[1]),
+        SampleFileMapping(sample_id="5a_HOM-I14", filename=test_filenames[1]),
+        SampleFileMapping(sample_id="5a_HOM-I20", filename=test_filenames[1]),
+        SampleFileMapping(sample_id="5a_HOM-I21", filename=test_filenames[1]),
+        SampleFileMapping(sample_id="5a_HOM-I7", filename=test_filenames[0]),
+        SampleFileMapping(sample_id="1b_HOM-G58", filename=test_filenames[0]),
     ]
 
     return {
-        "filenames": test_filenames,
-        "sample_and_filename_subset": sample_and_filename_subset,
+        "bcftools_inputs": BCFToolsInput(
+            filenames=test_filenames,
+            sample_and_filename_subset=sample_and_filename_subset,
+            sampleIDs=[row.sample_id for row in sample_and_filename_subset],
+        ),
     }
 
 
@@ -186,7 +192,7 @@ def bcftools_pipe_kwargs_fixture():
     return {
         "tsv_filter": "Area:West of Ireland,Northern Portugal;Sex:F",
         "metadata_tsv_name": "sample_metadata.tsv",
-        "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+        "command": "view -r 21:15000000-25000000",
         "bucket_name": "divbase-local-query-project",
         "project_name": "query-project",
         "user_id": 1,

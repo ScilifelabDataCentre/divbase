@@ -1,6 +1,6 @@
 # Tutorial: Running a DivBase query on a public dataset
 
-This tutorial assumes that you have an account on DivBase and have a membership in a DivBase project with at least an EDIT role (i.e. can upload files and run queries).
+This tutorial assumes that you have an account on DivBase and have a membership in a DivBase project with at least an EDIT role (i.e. can upload files and run queries). If this is your first time using DivBase, you may want to have a look at the [Quick Start guide](quick-start.md) before trying the tutorial out.
 
 We will use a mouse (_Mus musculus_) data set availalbe on the European Nucleotide Archive: <https://www.ebi.ac.uk/ena/browser/view/ERZ022025>. It a 5.5 Gb VCF.gz file that contains 18 samples and 66,007,044 variants.
 
@@ -27,10 +27,8 @@ divbase-cli files upload mgp.v3.snps.rsIDdbSNPv137.vcf.gz --project <YOUR_DIVBAS
 For the sake of demonstration, we can create a sidecar metadata file for the 18 samples in this dataset so that we can use that for the query. In fact, a file prepared for this demo can be downloaded from the DivBase repo with:
 
 ```bash
-curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/docs-on-queries/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
+curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/main/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
 ```
-
-TODO update the TSV url when it has been merged to main.
 
 And then upload it to the DivBase project with:
 
@@ -89,7 +87,7 @@ divbase-cli task-history user
 ## 3. Submit a query job
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli query vcf --tsv-filter 'Area:North,East' --command 'view -s; view -r 1:15000000-25000000' --metadata-tsv-name tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
 note that we are specifically using the `tutorial_mock_metadata_mgpv3snps.tsv` sample metadata. If this is not specified, the query will default to `sample_metadata.tsv`.

@@ -244,7 +244,7 @@ def main():
     wait_for_task_completion(dimensions_job_id, project_name=project_name, admin_token=admin_token, timeout=600)
 
     print("\nSubmitting query job to task queue...")
-    cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project {project_name}"
+    cmd_query = f"divbase-cli query vcf --tsv-filter 'Area:North,East' --command 'view -s; view -r 1:15000000-25000000' --metadata-tsv-name {mock_metadata} --project {project_name}"
     subprocess.run(shlex.split(cmd_query), check=True, env=LOCAL_ENV)
 
     print("\nThe query has been submitted. Check the divbase task history for updates.")

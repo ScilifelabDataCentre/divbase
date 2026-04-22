@@ -171,7 +171,7 @@ def test_get_dimensions_info_returns_empty(
     project_id = project_map[project_name]
 
     result = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert result["vcf_files"] == []
+    assert result.vcf_files == []
 
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
@@ -221,7 +221,7 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
 
     # Verify the index has entries in the DB before the second run
     vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert len(vcf_dimensions_before.get("vcf_files", [])) > 0, "Expected DB to have indexed entries"
+    assert len(vcf_dimensions_before.vcf_files) > 0, "Expected DB to have indexed entries"
 
     # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
     mock_empty_s3 = MagicMock()
@@ -250,8 +250,8 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
     # DB index should now be empty for this project
     db_session_sync.expire_all()
     vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert vcf_dimensions_after.get("vcf_files") == [], (
-        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.get('vcf_files')}"
+    assert vcf_dimensions_after.vcf_files == [], (
+        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
     )
 
 
@@ -269,7 +269,7 @@ def test_remove_VCF_and_update_dimension_entry(
 
     delete_vcf_metadata(db=db_session_sync, vcf_file_s3_key=vcf_file, project_id=project_id)
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+    filenames = [entry.vcf_file_s3_key for entry in updated_dimensions.vcf_files]
     assert vcf_file not in filenames
 
 
@@ -300,7 +300,7 @@ def test_delete_vcf_metadata_batch(
 
     db_session_sync.expire_all()
     updated_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    filenames = [entry["vcf_file_s3_key"] for entry in updated_dimensions.get("vcf_files", [])]
+    filenames = [entry.vcf_file_s3_key for entry in updated_dimensions.vcf_files]
 
     for vcf_file in batch_to_delete:
         assert vcf_file not in filenames, f"Expected {vcf_file} to be deleted, but found in: {filenames}"
@@ -468,14 +468,14 @@ def test_update_dimensions_reindexes_when_child_rows_missing(
     db_session_sync.commit()
 
     dimensions_after_child_row_delete = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    for entry in dimensions_after_child_row_delete["vcf_files"]:
-        if entry["vcf_file_s3_key"] == target_vcf:
+    for entry in dimensions_after_child_row_delete.vcf_files:
+        if entry.vcf_file_s3_key == target_vcf:
             incomplete_entry = entry
             break
-    assert incomplete_entry["sample_count"] > 0
-    assert incomplete_entry["samples"] == []
-    assert incomplete_entry["variant_count"] > 0
-    assert incomplete_entry["scaffolds"] == []
+    assert incomplete_entry.sample_count > 0
+    assert incomplete_entry.samples == []
+    assert incomplete_entry.variant_count > 0
+    assert incomplete_entry.scaffolds == []
 
     second_result = run_update_dimensions(
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
@@ -487,15 +487,15 @@ def test_update_dimensions_reindexes_when_child_rows_missing(
 
     db_session_sync.expire_all()  # Force refresh of db session to avoid stale cache from the session used by run_update_dimensions()
     dimensions_after_reindex = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    for entry in dimensions_after_reindex["vcf_files"]:
-        if entry["vcf_file_s3_key"] == target_vcf:
+    for entry in dimensions_after_reindex.vcf_files:
+        if entry.vcf_file_s3_key == target_vcf:
             repaired_entry = entry
             break
 
-    assert repaired_entry["sample_count"] > 0
-    assert len(repaired_entry["samples"]) > 0
-    assert repaired_entry["variant_count"] > 0
-    assert len(repaired_entry["scaffolds"]) > 0
+    assert repaired_entry.sample_count > 0
+    assert len(repaired_entry.samples) > 0
+    assert repaired_entry.variant_count > 0
+    assert len(repaired_entry.scaffolds) > 0
 
 
 def test_show_unique_samples(
@@ -560,6 +560,42 @@ def test_show_unique_scaffolds_dedicated_endpoint(
     # Verify numeric scaffolds come first, sorted numerically
     numeric_scaffolds = [s for s in scaffold_names if s.isdigit()]
     assert numeric_scaffolds == sorted(numeric_scaffolds, key=int), "Numeric scaffolds should be sorted numerically"
+
+
+def test_show_unique_vcf_files_dedicated_endpoint(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Test the CLI 'dimensions show --cached-vcf-files' command using the dedicated endpoint.
+    This tests both the CRUD function and the CLI integration.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"dimensions show --project {project_name} --cached-vcf-files"
+    cli_result = runner.invoke(app, command)
+    assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    rows = [line for line in cli_result.stdout.splitlines() if line.strip()]
+    assert rows, "Expected TSV output rows for cached VCF files"
+    assert rows[0].split("\t") == ["Filename", "S3 version ID"], f"Unexpected TSV header: {rows[0]}"
+
+    data_rows = [row.split("\t") for row in rows[1:]]
+    assert len(data_rows) > 0, "Expected at least one cached VCF file entry"
+
+    vcf_files = [row[0] for row in data_rows]
+    expected_vcf_files = sorted(
+        [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+    )
+    assert vcf_files == expected_vcf_files, f"Expected {expected_vcf_files}, got {vcf_files}"
+    assert all(row[1] for row in data_rows), "Expected non-empty s3_version_id values"
 
 
 def test_show_dimensions_sample_names_output_writes_file(
@@ -664,15 +700,12 @@ def test_show_dimensions_truncates_sample_names_in_terminal(
     command = f"dimensions show --project {project_name} --sample-names-limit 2"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
-
-    dimensions_info = yaml.safe_load(cli_result.stdout)
-    indexed_files = dimensions_info.get("indexed_files", [])
-    assert len(indexed_files) > 0, "Expected indexed files in output"
-
-    first_entry_dimensions = indexed_files[0].get("dimensions", {})
-    shown_sample_names = first_entry_dimensions.get("sample_names", [])
-    assert len(shown_sample_names) <= 2, f"Expected sample_names to be truncated to <=2, got {shown_sample_names}"
-    assert "sample_names_note" in first_entry_dimensions, "Expected truncation note in output"
+    output = cli_result.stdout
+    assert "sample_names_note" in output, "Expected truncation note in output"
+    assert "Showing first 2 of" in output, "Expected truncation message with chosen sample_names_limit"
+    assert "--sample-names-output" in output and "--sample-names-stdout" in output, (
+        "Expected note to guide user to full sample-name output options"
+    )
 
 
 def test_show_dimensions_rejects_output_and_stdout_together(
@@ -687,7 +720,8 @@ def test_show_dimensions_rejects_output_and_stdout_together(
     command = f"dimensions show --project {project_name} --sample-names-output {output_path} --sample-names-stdout"
     cli_result = runner.invoke(app, command)
     assert cli_result.exit_code != 0, "Expected command to fail when both output modes are provided"
-    assert "Use only one of --sample-names-output or --sample-names-stdout." in cli_result.stderr
+    assert "Use only one of --sample-names-output" in cli_result.stderr
+    assert "--sample-names-stdout" in cli_result.stderr
 
 
 @pytest.mark.parametrize(
@@ -726,6 +760,12 @@ def test_show_dimensions_rejects_output_and_stdout_together(
             ["1", "4", "5", "6", "7", "8", "13", "18", "20", "21", "22", "24"],
             True,  # Should be sorted numerically then alphabetically
         ),
+        (
+            "--cached-vcf-files",
+            None,
+            None,
+            True,  # Should be sorted alphabetically
+        ),
     ],
 )
 def test_show_unique_items_parametrized(
@@ -739,7 +779,7 @@ def test_show_unique_items_parametrized(
     verify_sorting,
 ):
     """
-    Parametrized test for --unique-samples and --unique-scaffolds options.
+    Parametrized test for --unique-samples, --unique-scaffolds, and --cached-vcf-files options.
     Tests both the CRUD functions and CLI integration.
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
@@ -753,6 +793,25 @@ def test_show_unique_items_parametrized(
     cli_result = runner.invoke(app, command)
 
     assert cli_result.exit_code == 0, f"Command failed with: {cli_result.stdout}"
+    if option_flag == "--cached-vcf-files":
+        rows = [line for line in cli_result.stdout.splitlines() if line.strip()]
+        assert rows, "Expected TSV output rows for cached VCF files"
+        assert rows[0].split("\t") == ["Filename", "S3 version ID"], f"Unexpected TSV header: {rows[0]}"
+
+        data_rows = [row.split("\t") for row in rows[1:]]
+        assert len(data_rows) > 0, f"Expected at least one item in {option_flag} output"
+
+        expected_vcf_files = sorted(
+            [f for f in CONSTANTS["PROJECT_CONTENTS"][project_name] if f.endswith(".vcf.gz") or f.endswith(".vcf")]
+        )
+        item_vcf_files = [row[0] for row in data_rows]
+        assert item_vcf_files == expected_vcf_files, f"Expected {expected_vcf_files}, got {item_vcf_files}"
+        assert all(row[1] for row in data_rows), "Expected non-empty s3_version_id values"
+
+        if verify_sorting:
+            assert item_vcf_files == sorted(item_vcf_files), "VCF filenames should be sorted alphabetically"
+        return
+
     assert "count:" in cli_result.stdout, "Expected count to be displayed in output"
     assert expected_message in cli_result.stdout, f"Expected message '{expected_message}' in output"
     assert "[" in cli_result.stdout and "]" in cli_result.stdout, "Expected list output"
@@ -910,8 +969,10 @@ def test_validate_metadata_file_with_errors(
 
     assert "Expected 4 tab-separated columns from reading the header, found 2" in cli_result.stdout
     # Rich/terminal wrapping can split long phrases across lines, so assert key fragments.
-    assert "mixed element types" in cli_result.stdout and "in lists" in cli_result.stdout
-    assert "Found 2 cell(s) with invalid list syntax or not parsed as list" in cli_result.stdout
+    assert "mixed element types" in cli_result.stdout
+    assert ("in lists" in cli_result.stdout) or ("list-format/type" in cli_result.stdout)
+    assert "Found 2 cell(s) with" in cli_result.stdout
+    assert "Column 'Population'" in cli_result.stdout
     assert "Sample_ID is empty or missing in 2 row(s)" in cli_result.stdout
     assert "Duplicate Sample_IDs found: 'test_duplicate' appears in 2 row(s)" in cli_result.stdout
     assert "Sample_ID column contains list values" in cli_result.stdout
@@ -1018,15 +1079,15 @@ def test_update_dimensions_indexes_uncompressed_vcf(
         # Verify the dimensions were stored correctly in the DB
         db_session_sync.expire_all()
         vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-        all_indexed_keys = [entry["vcf_file_s3_key"] for entry in vcf_dimensions.get("vcf_files", [])]
+        all_indexed_keys = [entry.vcf_file_s3_key for entry in vcf_dimensions.vcf_files]
         assert plain_vcf_name in all_indexed_keys
 
-        entry = next(e for e in vcf_dimensions["vcf_files"] if e["vcf_file_s3_key"] == plain_vcf_name)
-        assert entry["sample_count"] == 2
-        assert entry["variant_count"] == 2
-        assert "1" in entry["scaffolds"]
-        assert "sample1" in entry["samples"]
-        assert "sample2" in entry["samples"]
+        entry = next(e for e in vcf_dimensions.vcf_files if e.vcf_file_s3_key == plain_vcf_name)
+        assert entry.sample_count == 2
+        assert entry.variant_count == 2
+        assert "1" in entry.scaffolds
+        assert "sample1" in entry.samples
+        assert "sample2" in entry.samples
     finally:
         # Remove the uploaded file from the bucket to avoid polluting subsequent tests.
         # auto_clean_dimensions_entries_for_all_projects only cleans the DB, not the bucket.

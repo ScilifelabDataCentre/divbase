@@ -4,30 +4,44 @@ The DivBase query system is built around the DivBase server having cached key te
 
 This allows the DivBase server to make quick checks against against the project VCF Dimensions cache when users submit a query or validate a sidecar metadata TSV file instead of having to read each VCF file every time a query is submitted. This makes the server-side operations more efficient when it comes to internal transfer and reading of files, and for checking VCF query feasibility against the requirements of `bcftools`. For the user, this will lead to faster feedback, especially when the system needs to send an error or warning message.
 
-**An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries**. Updating it is done with the command `divbase-cli dimensions update`. The command needs to be run every time the VCF files in a DivBase project has changed, that is:
+!!! Note
+    An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries to the DivBase server.
 
-- When any new VCF file is uploaded to the project.
+All query commands rely on the dimensions cache to quickly resolve samples, scaffolds, and file compatibility.
+Every time a new VCF file has been added or an existing VCF version has been replaced, run:
 
-- When an existing VCF file is replaced with a new version.
+```bash
+divbase-cli dimensions update --project <PROJECT_NAME>
+
+# This will return the job ID of the submitted job. Example:
+# Job submitted successfully with task id: 123. To check the status of your job, use the command: divbase-cli task-history id 123
+
+# Job status can be viewed with e.g.
+divbase-cli task-history id 123
+
+```
 
 !!! Warning
     DivBase system does not automatically run `divbase-cli dimensions update` when files are uploaded. This needs to be manually done by one project member that has at least an EDIT role in the project.
 
 There are four CLI commands sorted under `divbase-cli dimensions`:
 
-- [update](#dimensions-update)
+- [divbase-cli dimensions update](#dimensions-update)
 
-- [show](#dimensions-show)
+- [divbase-cli dimensions show](#dimensions-show)
 
-- [create-metadata-template](sidecar-metadata.md#creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)
+- [divbase-cli dimensions create-metadata-template](sidecar-metadata.md#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project)
 
-- [validate-metadata-file](sidecar-metadata.md#validating-a-sidecar-metadata-tsv-with-divbase-cli)
+- [divbase-cli dimensions validate-metadata-file](sidecar-metadata.md#12-validating-a-sidecar-metadata-tsv-with-divbase-cli)
 
 The former two relate generating/updating and viewing the VCF dimensions of a project and will be described on this page. The latter two relate to the user-defined sidecar metadata TSV and are described in the guide on [Sidecar sample metadata TSV queries](sidecar-metadata.md). The commands are sorted under `divbase-cli dimensions` since they rely on calling the VCF dimensions cache of the project. A list of all DivBase CLI commands that require an up-to-date VCF Dimensions cache is found in the section [CLI Commands that rely on that the project's VCF dimensions cache is up to date](#cli-commands-that-rely-on-that-the-projects-vcf-dimensions-cache-is-up-to-date)
 
 ## Dimensions update
 
 The `divbase-cli dimensions update` pre-reads the VCF files in the project's data store so that DivBase does not need to fetch and read each VCF every time the user submits commands that require knowledge about the VCF dimensions, such as queries.
+
+!!! Note
+    For this to work, please sure the VCF files in your DivBase project follow the requirements and recommendations described in [Working with VCF Files in DivBase](vcf-files.md).
 
 The `divbase-cli dimensions update` will look for `.vcf.gz` files in the project's data store. If there is no VCF dimensions cache for the project, it will create it. If not, it will compare the existing record in the cache with the current status of the object store. If any new VCF files have been added or if any VCF file version have been updated, it will update the VCF dimensions cache with that information. DivBase uses `bcftools` to extract the dimensions information from the VCF files.
 
@@ -100,6 +114,7 @@ It is also possible to filter the output by adding the following options to the 
 | `--filename`             | Show only the entry for this VCF filename                                                                               |
 | `--unique-scaffolds`     | Show all unique scaffold names found across all the VCF files in the project                                            |
 | `--unique-samples`       | Show all unique sample names found across all the VCF files in the project                                              |
+| `--cached-vcf-files`     | If set, will show all VCF file entries (filename + s3 version ID) found in the project's VCF dimensions cache.          |
 | `--sample-names-limit`   | Maximum number of sample names to display per list in terminal output. [default: 20]                                    |
 | `--sample-names-output`  | Write full sample names to file instead of truncating in terminal output. Mutually exclusive with --sample-names-stdout.|
 | `--sample-names-stdout`  | Print full sample names to stdout (useful for piping). Mutually exclusive with --sample-names-output.                   |
@@ -113,16 +128,17 @@ It is also possible to filter the output by adding the following options to the 
 
 Several DivBase CLI commands required that the VCF dimensions cache of the project is up-to-date with the current versions of the VCF files in the project's data store:
 
-`divbase-cli dimensions show`
+|Command | Link to description |
+|---|---|
+| `divbase-cli dimensions show` | See [section above in this guide](vcf-dimensions.md#dimensions-show) |
+| `divbase-cli dimensions create-metadata-template` | See [section in Sidecar metadata TSV guide](sidecar-metadata.md#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project) |
+| `divbase-cli dimensions validate-metadata-file` | See [section in Sidecar metadata TSV guide](sidecar-metadata.md#12-validating-a-sidecar-metadata-tsv-with-divbase-cli) |
+| `divbase-cli query tsv` | See [section in Sidecar metadata TSV guide](sidecar-metadata.md#2-query-syntax-for-sidecar-metadata) |
+| `divbase-cli query vcf` | See [Guide on VCF queries](vcf-query-syntax.md)|
 
-`divbase-cli dimensions create-metadata-template`
+## Read next
 
-`divbase-cli dimensions validate-metadata-file`
-
-`divbase-cli query tsv`
-
-`divbase-cli query bcftools-pipe`
-
-TODO: describe how these commands use the dimensions and how they behave when the dimensions cache is missing or not up to date with the project's S3 bucket
-
-TODO: add link here to discussion in VCF Query docs on sample set compatibility. E.g.: The VCF dimensions are also used to a-priori estimate whether the sample sets in the VCF files are compatible with the requirements of `bcftools merge` and `bcftools concat`.
+- [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md)
+- [DivBase VCF query syntax](vcf-query-syntax.md)
+- [How to create efficient DivBase queries](how-to-create-efficient-divbase-queries.md)
+- [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)

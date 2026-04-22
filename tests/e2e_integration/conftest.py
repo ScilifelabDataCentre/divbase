@@ -119,8 +119,8 @@ def clean_vcf_dimensions():
         try:
             vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-            for entry in vcf_dimensions_data.get("vcf_files", []):
-                vcf_file = entry["vcf_file_s3_key"]
+            for entry in vcf_dimensions_data.vcf_files:
+                vcf_file = entry.vcf_file_s3_key
                 try:
                     delete_vcf_metadata(db=db, vcf_file_s3_key=vcf_file, project_id=project_id)
                 except Exception as e:

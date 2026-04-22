@@ -17,9 +17,9 @@ runner = CliRunner()
 
 PROJECT_NAME = "project1"
 TSV_FILTER = "Area:West of Ireland"
-BCFTOOLS_CMD = "view -s SAMPLES; view -r 21:15000000-25000000"
+BCFTOOLS_CMD = "view -r 21:15000000-25000000"
 COMMANDS = [
-    f"query bcftools-pipe --tsv-filter '{TSV_FILTER}' --command '{BCFTOOLS_CMD}' --project {PROJECT_NAME}",
+    f"query vcf --tsv-filter '{TSV_FILTER}' --command '{BCFTOOLS_CMD}' --project {PROJECT_NAME}",
     f"query tsv '{TSV_FILTER}' --project {PROJECT_NAME}",
     f"dimensions update --project {PROJECT_NAME}",
 ]
@@ -70,7 +70,6 @@ def test_regular_users_cannot_submit_tasks_when_queue_closed(
     for command in COMMANDS:
         result = runner.invoke(app, command)
         assert result.exit_code != 0
-        print(result.output)
         assert isinstance(result.exception, DivBaseAPIError)
         assert "400" in str(result.exception)
         assert "queue_closed_error" in str(result.exception)

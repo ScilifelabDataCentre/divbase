@@ -14,11 +14,13 @@ from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
+from divbase_api.crud.vcf_dimensions import get_unique_samples_by_project_async
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.services.queries import validate_user_submitted_bcftools_command
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
@@ -53,7 +55,7 @@ query_router = APIRouter()
     status_code=status.HTTP_200_OK,
     response_model=SampleMetadataQueryTaskResult,
 )
-async def sample_metadata_query(
+async def submit_sample_metadata_query_job_endpoint(
     sample_metadata_query_request: SampleMetadataQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -116,21 +118,44 @@ async def sample_metadata_query(
     return SampleMetadataQueryTaskResult(**result_dict)
 
 
-@query_router.post("/bcftools-pipe/projects/{project_name}", status_code=status.HTTP_201_CREATED)
-async def create_bcftools_jobs(
+@query_router.post("/vcf/projects/{project_name}", status_code=status.HTTP_201_CREATED)
+async def submit_vcf_query_job_endpoint(
     bcftools_query_request: BcftoolsQueryRequest,
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> int:
     """
-    Create a new bcftools query job for the specified project.
+    Submit a vcf query job for the specified project.
     """
     project, current_user, role = project_and_user_and_role
 
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to query this project.")
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
+
+    if bcftools_query_request.samples is not None:
+        project_samples = set(await get_unique_samples_by_project_async(db=db, project_id=project.id))
+        mismatched_samples = sorted(set(bcftools_query_request.samples) - project_samples)
+        if mismatched_samples:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "The following sample IDs were not found in the project's dimensions index: "
+                    f"{', '.join(mismatched_samples)}. "
+                    "Please verify that the sample names are correctly spelled. "
+                    "If the sample names are correct, please make sure the dimensions index is up to date "
+                    "by running 'divbase-cli dimensions update --project <project_name>'."
+                ),
+            )
+
+    try:
+        validated_bcftools_commands = validate_user_submitted_bcftools_command(
+            command=bcftools_query_request.command,
+            all_samples=bcftools_query_request.all_samples,
+        )
+    except TaskUserError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     job_id = await create_task_history_entry(
         user_id=current_user.id,
@@ -140,13 +165,15 @@ async def create_bcftools_jobs(
 
     task_kwargs = BcftoolsQueryKwargs(
         tsv_filter=bcftools_query_request.tsv_filter,
-        command=bcftools_query_request.command,
+        command=validated_bcftools_commands,
         metadata_tsv_name=bcftools_query_request.metadata_tsv_name,
         bucket_name=project.bucket_name,
         project_id=project.id,
         project_name=project.name,
         user_id=current_user.id,
         job_id=job_id,
+        samples=bcftools_query_request.samples,
+        all_samples=bcftools_query_request.all_samples,
     )
 
     result = bcftools_pipe_task.apply_async(kwargs=task_kwargs.model_dump())

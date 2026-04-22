@@ -7,6 +7,7 @@ A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for th
 """
 
 import datetime
+import gzip
 import logging
 import os
 import subprocess
@@ -18,7 +19,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from celery import current_app
-from sqlalchemy import select
+from sqlalchemy import func, select
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -32,7 +33,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
-from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError
+from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, TaskUserError
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -140,6 +141,30 @@ def test_sample_metadata_query(
         assert filename in result.stdout
 
 
+def test_sample_metadata_query_prints_explicit_message_when_no_samples_match(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test that query tsv prints an explicit message when filters match zero samples."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    query_string = "Area:ValueThatDoesNotExistInFixtures"
+    command = f"query tsv '{query_string}' --project {project_name}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Unique Sample IDs: []" in result.stdout
+    assert "Unique filenames: []" in result.stdout
+    assert "No samples match your query filters." in result.stdout
+
+
 def test_bcftools_pipe_query(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
@@ -153,23 +178,177 @@ def test_bcftools_pipe_query(
     user_id = 1
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
 
     user_task_id = result.stdout.strip().split()[-1]
-    _ = wait_for_task_complete(user_task_id=user_task_id)
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
 
     command = f"files ls --project {project_name} --include-results-files"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
-    assert any(QUERY_RESULTS_FILE_PREFIX in line and ".vcf.gz" in line for line in result.stdout.splitlines()), (
-        f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output"
+    assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
+        f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
     )
+
+
+@pytest.mark.parametrize(
+    "arg_command,expected_records,expected_view_command_filter_fragment",
+    [
+        (
+            r"view -i 'FILTER~\"q10\"'",
+            [("17330", ".", "q10"), ("1234567", "microsat1", "q10;s50")],
+            'FILTER~"q10"',
+        ),
+        (
+            r"view -i 'FILTER=\"q10\"'",
+            [("17330", ".", "q10")],
+            'FILTER="q10"',
+        ),
+        (
+            r"view -i 'FILTER=\"q10;s50\"'",
+            [("1234567", "microsat1", "q10;s50")],
+            'FILTER="q10;s50"',
+        ),
+    ],
+    ids=[
+        "filter-subset-match-q10",
+        "filter-exact-match-q10",
+        "filter-exact-match-q10-s50",
+    ],
+)
+def test_bcftools_pipe_query_supports_semicolon_in_filter_expression_e2e(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+    arg_command,
+    expected_records,
+    expected_view_command_filter_fragment,
+):
+    """
+    Test that VCF queries can support bcftools view -i FILTER expressions (including semicolon values)
+    """
+    project_name, bucket_name = cleaned_project_bucket
+    project_id = project_map[project_name]
+    user_id = 1
+    fixture_name = "vcf_specification_v45_example11.vcf.gz"
+    fixture_path = (fixtures_dir / fixture_name).resolve()
+    upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+    assert upload_result.exit_code == 0, f"Upload failed: {upload_result.stdout}"
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    query_result = runner.invoke(
+        app,
+        f'query vcf --samples "NA00001,NA00002,NA00003" --command "{arg_command}" --project {project_name}',
+    )
+    assert query_result.exit_code == 0, f"Query submission failed: {query_result.stdout}"
+    assert "Job submitted" in query_result.stdout
+
+    user_task_id = query_result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
+    assert hasattr(task_result.result, "output_file"), f"Missing output_file in task result: {task_result.result}"
+    output_file = task_result.result.output_file
+
+    stream_result = runner.invoke(
+        app,
+        f"files stream {output_file} --project {project_name}",
+    )
+    assert stream_result.exit_code == 0, f"Streaming query result failed: {stream_result.stdout}"
+
+    streamed_vcf_content = gzip.decompress(stream_result.stdout_bytes).decode("utf-8")
+    assert "##bcftools_viewCommand=" in streamed_vcf_content
+    assert expected_view_command_filter_fragment in streamed_vcf_content
+
+    records = [line for line in streamed_vcf_content.splitlines() if line and not line.startswith("#")]
+    parsed_records = [(cols[1], cols[2], cols[6]) for cols in (record.split("\t") for record in records)]
+
+    assert parsed_records == expected_records, (
+        f"Unexpected records for command '{arg_command}'. Expected {expected_records}, got {parsed_records}"
+    )
+
+
+def test_bcftools_pipe_query_direct_samples_mode(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test running a bcftools pipe query using direct sample IDs from CLI."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    arg_command = "view -r 21:15000000-25000000"
+    command = f"query vcf --samples '5a_HOM-I13,1b_HOM-G58' --command '{arg_command}' --project {project_name} "
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Job submitted" in result.stdout
+    user_task_id = result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+
+
+def test_bcftools_pipe_query_all_samples_mode(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test running a bcftools pipe query with explicit --all-samples mode."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    arg_command = "view -r 21:15000000-25000000"
+    command = f"query vcf --all-samples --command '{arg_command}' --project {project_name} "
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "Job submitted" in result.stdout
+    user_task_id = result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+
+
+def test_bcftools_pipe_query_without_selection_mode_fails_on_submission(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+):
+    """Test that query vcf without any sample-selection mode fails before job submission."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    command = f"query vcf --command 'view -r 21:15000000-25000000' --project {project_name} "
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 2  # Typer exits with code 2 for argument validation errors
+    assert isinstance(result.exception, SystemExit)
+    output = result.stdout + (str(result.exception) if result.exception else "")
+    assert "Job submitted successfully with task id:" not in output
 
 
 def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_runs(
@@ -179,7 +358,7 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     project_map,
 ):
     """
-    Tests that running a bcftools-pipe query twice works without running dimensions update between the two runs.
+    Tests that running a vcf query twice works without running dimensions update between the two runs.
     Results files are prefixed with QUERY_RESULTS_FILE_PREFIX and _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket
     skips files that begin with that prefix.
     """
@@ -190,8 +369,8 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    arg_command = "view -r 21:15000000-25000000"
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
 
     first_result = runner.invoke(app, command)
     assert first_result.exit_code == 0, f"First run failed: {first_result.stdout}"
@@ -212,22 +391,41 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
 def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_user_with_existing_config):
     project_name = "non_existent_project"
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES"
+    arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     result = runner.invoke(app, command)
     assert isinstance(result.exception, ProjectNotInConfigError)
 
 
 @pytest.mark.parametrize(
-    "project_name,tsv_filter,command,expected_error",
+    "project_name,tsv_filter,command,expected_error,expected_stage",
     [
         # Malformed tsv filter (missing colon)
-        ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError"),
+        ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError", "task_failure"),
         # bad command
-        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command"),
+        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command", "submission_failure"),
         # empty command string
-        ("DEFAULT", "DEFAULT", "", "Empty"),
+        ("DEFAULT", "DEFAULT", "", "non-empty bcftools view string", "submission_failure"),
+        # sample-file options in --command are rejected early by task guard
+        ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file", "submission_failure"),
+        # output options in --command are rejected early by API guard
+        ("DEFAULT", "DEFAULT", "view -Oz", "-O/--output-type", "submission_failure"),
+        # input VCF filenames in --command are rejected early by API guard
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view file.vcf.gz",
+            "Do not provide VCF/BCF input filenames in '--command'",
+            "submission_failure",
+        ),
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view -r file.vcf.gz",
+            "Do not provide VCF/BCF input filenames in '--command'",
+            "submission_failure",
+        ),
     ],
 )
 def test_bcftools_pipe_query_errors(
@@ -237,23 +435,55 @@ def test_bcftools_pipe_query_errors(
     tsv_filter,
     command,
     expected_error,
+    expected_stage,
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
 ):
-    """Test that validation errors cause task FAILURE status."""
+    """Test command and filter validation errors for bcftools queries."""
     if "DEFAULT" in project_name:
         project_name = CONSTANTS["QUERY_PROJECT"]
     if "DEFAULT" in tsv_filter:
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
     if "DEFAULT" in command:
-        command = "view -s SAMPLES"
+        command = "view -r 21:15000000-25000000"
 
     project_id = project_map[project_name]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     user_id = 1
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
-    command_str = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+    command_str = f"query vcf --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
+
+    if expected_stage == "submission_failure":
+        with SyncSessionLocal() as db:
+            tasks_before = db.execute(
+                select(func.count(TaskHistoryDB.id))
+                .where(TaskHistoryDB.project_id == project_id)
+                .where(TaskHistoryDB.user_id == user_id)
+            ).scalar_one()
+
+        response = runner.invoke(app, command_str)
+        assert response.exit_code == 1
+
+        output = response.stdout
+        if response.exception is not None:
+            output = f"{output}\n{response.exception}"
+        normalized_output = " ".join(output.split())
+        assert expected_error in normalized_output, (
+            f"Expected '{expected_error}' in submission failure output, but got: {normalized_output}"
+        )
+        assert "Job submitted successfully with task id:" not in output
+
+        with SyncSessionLocal() as db:
+            tasks_after = db.execute(
+                select(func.count(TaskHistoryDB.id))
+                .where(TaskHistoryDB.project_id == project_id)
+                .where(TaskHistoryDB.user_id == user_id)
+            ).scalar_one()
+
+        assert tasks_after == tasks_before, "Submission-time command validation should not create a task history entry"
+        return
+
     response = runner.invoke(app, command_str)
 
     assert response.exit_code == 0
@@ -292,9 +522,9 @@ def test_get_task_status_by_task_id(
     run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
 
     tsv_filter = "Area:West of Ireland,Northern Portugal;"
-    arg_command = "view -s SAMPLES; view -r 21:15000000-25000000"
+    arg_command = "view -r 21:15000000-25000000"
 
-    command = f"query bcftools-pipe --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+    command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
     first_task_result = runner.invoke(app, command)
     assert first_task_result.exit_code == 0
     first_task_id = first_task_result.stdout.strip().split()[-1]
@@ -380,7 +610,7 @@ def test_query_exits_when_dimensions_are_outdated(
 
             params = {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "bucket_name": bucket_name,
                 "project_id": project_id,
@@ -611,7 +841,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 "user_id": 1,
@@ -627,7 +857,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 "user_id": 1,
@@ -641,7 +871,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Only one file remained after concatenation, renamed this file to",
                 f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
-                "Cleaning up 14 temporary files",
             ],
             [],
         ),
@@ -649,7 +878,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -s SAMPLES; view -r 31,34,36,321,324",
+                "command": "view -r 31,34,36,321,324",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
@@ -668,7 +897,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
                 "project_name": "split-scaffold-project",
                 # project_id is added dynamically in the tests
@@ -696,7 +925,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Portugal",
-                "command": "view -s SAMPLES; view -r 21:15000000-25000000",
+                "command": "view -r 21:15000000-25000000",
                 "metadata_tsv_name": "sample_metadata.tsv",
                 "project_name": "query-project",
                 # project_id is added dynamically in the tests
@@ -713,7 +942,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Merged all temporary files into 'merged_unsorted_",
                 f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
                 "bcftools processing completed successfully",
-                "Cleaning up 7 temporary files",
             ],
             [],
         ),
@@ -721,7 +949,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf",
-                "command": "view -s SAMPLES; view -r 1,4,6,21,24",
+                "command": "view -r 1,4,6,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
@@ -743,7 +971,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 12 temporary files",
             ],
             [],
         ),
@@ -751,7 +978,7 @@ class TestSidecarQueryTaskErrorsPropagation:
         (
             {
                 "tsv_filter": "Area:Northern Spanish shelf,Iceland",
-                "command": "view -s SAMPLES; view -r 1,4,6,8,13,18,21,24",
+                "command": "view -r 1,4,6,8,13,18,21,24",
                 "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
                 "project_name": "mixed-concat-merge-project",
                 # project_id is added dynamically in the tests
@@ -776,7 +1003,6 @@ class TestSidecarQueryTaskErrorsPropagation:
                 "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
                 "Merged all files (including concatenated files) into 'merged_unsorted_",
                 "bcftools processing completed successfully",
-                "Cleaning up 19 temporary files",
             ],
             [],
         ),
@@ -795,7 +1021,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     project_map,
 ):
     """
-    This is a special integration test that allows for running bcftools-pipe queries directly in eager mode
+    This is a special integration test that allows for running vcf queries directly in eager mode
     in a way that allows for catching the logs that otherwise would be printed inside the workers. For
     comparison, running a CLIrunner test will only give the "task submitted" log back.
 
@@ -989,7 +1215,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             ),
         ):
             if not expect_success:
-                with pytest.raises((VCFDimensionsEntryMissingError, ValueError)) as e:
+                with pytest.raises((VCFDimensionsEntryMissingError, TaskUserError)) as e:
                     bcftools_pipe_task(**params)
                 for msg in expected_error_msgs:
                     assert msg.replace("\n", "") in str(e.value).replace("\n", "")

@@ -5,7 +5,7 @@ This section covers how to configure divbase-cli to know which projects you're a
 
 ## Prerequisites
 
-- Installed divbase-cli, see the [quickstart guide](quick-start.md) or [installation section](installation.md) of the documentation.
+- Installed divbase-cli, see the [Quick Start guide](quick-start.md) or [installation section](installation.md) of the documentation.
 - Have created a [DivBase account via the website](https://divbase.scilifelab.se) and have access to at least one DivBase project. See the [account management guide](account-management.md) for more information on how to get access to a project.
 
 ## 1. Create a user config file and add your project(s)

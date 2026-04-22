@@ -11,7 +11,7 @@ Welcome to DivBase. DivBase is a service built by [Scilifelab](https://www.scili
 
 - **[Quick Start Guide](user-guides/quick-start.md)**
 
-TODO - add some tutorial links here?
+- **[Tutorial: Running a VCF query on a public dataset](user-guides/tutorial-query-on-public-data.md)**
 
 ## What is DivBase?
 

@@ -17,6 +17,7 @@ TODO:
 """
 
 import logging
+from pathlib import Path
 
 import typer
 from rich import print
@@ -41,19 +42,33 @@ METADATA_TSV_ARGUMENT = typer.Option(
 BCFTOOLS_ARGUMENT = typer.Option(
     ...,
     help="""
-        String consisting of the bcftools command to run on the files returned by the tsv query.
+        String consisting of the bcftools view command(s) to run. E.g. "view -r 21:15000000-25000000" or "view -s".
+        The string cannot be empty; if you only want to subset on the selected samples, use: --command "view -s"
         """,
 )
 
-# In 1 command this is required, other optional, hence only defining the text up here.
-TSV_FILTER_HELP_TEXT = """String consisting of keys:values in the tsv file to filter on.
-    The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the key
-    are the column header names in the tsv, and values are the column values. 
-    Multiple values for a key are separated by commas, and multiple keys are 
-    separated by semicolons. When multple keys are provided, an intersect query 
-    will be performed. E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'.
-    """
+# Sample metadata and VCF queries both use the same core text, so it is defined up here.
+TSV_FILTER_SYNTAX = (
+    "String consisting of keys:values in the tsv file to filter on. "
+    "The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the keys are the column header names in the tsv, "
+    "and values are the column values. Multiple values for a key are separated by commas, and multiple keys are "
+    "separated by semicolons. When multiple keys are provided, an intersect query will be performed. "
+    "E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'."
+)
 
+TSV_FILTER_HELP_TEXT_VCF = (
+    "This option calculates the samples to filter the VCFs on based on a sample metadata query. "
+    + TSV_FILTER_SYNTAX
+    + "\n\nMutually exclusive with --samples, --samples-file, and --all-samples."
+)
+
+SAMPLE_SELECTION_HELP_PANEL = "Sample Selection (Required: Include Exactly One)"
+VCF_QUERY_HELP_TEXT = (
+    "Submit a VCF query to run on the DivBase API. "
+    "A single, merged VCF file with the query results will be added to the project on success.\n\n"
+    "Exactly one sample-selection mode is required: "
+    "--tsv-filter | --samples | --samples-file | --all-samples."
+)
 
 query_app = typer.Typer(
     help="Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase API",
@@ -63,9 +78,9 @@ query_app = typer.Typer(
 
 @query_app.command("tsv")
 def sample_metadata_query(
-    filter: str = typer.Argument(
+    tsv_filter: str = typer.Argument(
         ...,
-        help=TSV_FILTER_HELP_TEXT,
+        help=TSV_FILTER_SYNTAX,
     ),
     show_sample_results: bool = typer.Option(
         default=False,
@@ -77,15 +92,11 @@ def sample_metadata_query(
     """
     Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
-
-    TODO: it perhaps be useful to set the default download_dir in the config so that we can
-    look for files there? For now this code just uses file.parent as the download directory.
-    TODO: handle when the name of the sample column is something other than Sample_ID
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    request_data = SampleMetadataQueryRequest(tsv_filter=filter, metadata_tsv_name=metadata_tsv_name)
+    request_data = SampleMetadataQueryRequest(tsv_filter=tsv_filter, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
@@ -106,7 +117,7 @@ def sample_metadata_query(
     if show_sample_results:
         print("[bright_blue]Name and file for each sample in query results:[/bright_blue]")
         for sample in results.sample_and_filename_subset:
-            print(f"Sample ID: '{sample['Sample_ID']}', Filename: '{sample['Filename']}'")
+            print(f"Sample ID: '{sample.sample_id}', Filename: '{sample.filename}'")
 
     print(f"The results for the query ([bright_blue]{results.query_message}[/bright_blue]):")
 
@@ -114,37 +125,176 @@ def sample_metadata_query(
     unique_filenames = results.unique_filenames or []
     print(f"Unique Sample IDs: {unique_sample_ids}")
     print(f"Unique filenames: {unique_filenames}\n")
+    if not unique_sample_ids:
+        print("[yellow]No samples match your query filters.[/yellow]\n")
 
 
-@query_app.command("bcftools-pipe")
-def pipe_query(
-    tsv_filter: str = typer.Option(None, help=TSV_FILTER_HELP_TEXT),
+@query_app.command("vcf", help=VCF_QUERY_HELP_TEXT)
+def vcf_query(
+    tsv_filter: str | None = typer.Option(
+        None, help=TSV_FILTER_HELP_TEXT_VCF, rich_help_panel=SAMPLE_SELECTION_HELP_PANEL
+    ),
+    samples: str | None = typer.Option(
+        None,
+        help="Comma-separated list of sample IDs. Mutually exclusive with --tsv-filter, --samples-file, and --all-samples.",
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
+    ),
+    samples_file: Path | None = typer.Option(
+        None,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help=(
+            "Path to a UTF-8 text file with one sample ID per line. Blank lines and lines starting with # are ignored. "
+            "Mutually exclusive with --tsv-filter, --samples, and --all-samples."
+        ),
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
+    ),
+    all_samples: bool = typer.Option(
+        False,
+        "--all-samples",
+        help=(
+            "Use all samples in the project for the query. "
+            "Mutually exclusive with --tsv-filter, --samples, and --samples-file."
+        ),
+        rich_help_panel=SAMPLE_SELECTION_HELP_PANEL,
+    ),
     command: str = BCFTOOLS_ARGUMENT,
     metadata_tsv_name: str = METADATA_TSV_ARGUMENT,
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Submit a query to run on the DivBase API. A single, merged VCF file will be added to the project on success.
-
-    TODO Error handling for subprocess calls.
-    TODO: handle case empty results are returned from tsv_query()
-    TODO what if the user just want to run bcftools on existing files in the bucket, without a tsv file query first?
-    TODO what if a job fails and the user wants to re-run it? do we store temp files?
-    TODO be consistent about input argument and options. when are they optional, how is that indicated in docstring? etc.
-    TODO consider handling the bcftools command whitelist checks also on the CLI level since the error messages are nicer looking?
-    TODO consider moving downloading of missing files elsewhere, since this is now done before the celery task
+    Submit a VCF query to run on the DivBase API. A single, merged VCF file with the query results will be added to the project on success.
     """
+
+    # TODO Error handling for subprocess calls.
+    # TODO: handle the case empty results are returned from tsv_query()
+    # TODO what if a job fails and the user wants to re-run it? do we store temp files?
+
+    # Note! Pydantic model validator also enforces this on the API side just queries can be submitted directly to the endpoint.
+    # This block here is to catch it on the CLI side with a more user-friendly error message before even making the API call.
+    has_tsv_filter = tsv_filter is not None
+    has_samples = samples is not None
+    has_samples_file = samples_file is not None
+    has_all_samples = all_samples
+    selection_count = sum([has_tsv_filter, has_samples, has_samples_file, has_all_samples])
+    if selection_count > 1:
+        raise typer.BadParameter("Use only one of --tsv-filter, --samples, --samples-file, or --all-samples.")
+    if selection_count == 0:
+        raise typer.BadParameter(
+            "Sample selection is required. Use one of --tsv-filter, --samples, --samples-file, or --all-samples."
+        )
+
+    normalized_samples, sample_input_warnings = _normalize_samples_input(samples=samples, samples_file=samples_file)
+    if sample_input_warnings:
+        print("[yellow]Warnings:[/yellow]")
+        for warning in sample_input_warnings:
+            print(f"  • {warning}")
+        print()
+
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    request_data = BcftoolsQueryRequest(tsv_filter=tsv_filter, command=command, metadata_tsv_name=metadata_tsv_name)
+    request_data = BcftoolsQueryRequest(
+        tsv_filter=tsv_filter,
+        command=command,
+        metadata_tsv_name=metadata_tsv_name,
+        samples=normalized_samples,
+        all_samples=all_samples,
+    )
 
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=logged_in_url,
-        api_route=f"v1/query/bcftools-pipe/projects/{project_config.name}",
+        api_route=f"v1/query/vcf/projects/{project_config.name}",
         json=request_data.model_dump(),
     )
 
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(
+        f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
+    )
+
+
+def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:
+    """
+    Normalize sample selection inputs from CLI options.
+    """
+    if samples is not None:
+        normalized = []
+        for sample in samples.split(","):
+            sample_clean = sample.strip()
+            if sample_clean:
+                normalized.append(sample_clean)
+
+        if not normalized:
+            raise typer.BadParameter("--samples must contain at least one non-empty sample ID.")
+        return normalized, []
+
+    if samples_file is not None:
+        raw_lines = samples_file.read_text(encoding="utf-8").splitlines()
+        normalized = []
+        warnings = []
+        delimiter_lines = []
+        found_delimiters = set()
+        disallowed_delimiters = (",", ";", "\t", "|")
+        delimiter_display = {
+            ",": "','",
+            ";": "';'",
+            "\t": "'tab'",
+            "|": "'|'",
+        }
+
+        for line_number, raw_line in enumerate(raw_lines, start=1):
+            stripped = raw_line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+
+            normalized.append(stripped)
+            line_delimiters = set()
+            for delimiter in disallowed_delimiters:
+                if delimiter in stripped:
+                    line_delimiters.add(delimiter)
+
+            if line_delimiters:
+                delimiter_lines.append((line_number, stripped))
+                found_delimiters.update(line_delimiters)
+
+        if not normalized:
+            raise typer.BadParameter(
+                f"Samples file has no sample IDs after ignoring blank/comment lines: {samples_file}. Please ensure that it contains at least one sample ID."
+            )
+
+        if delimiter_lines:
+            preview_entries = []  # Only preview up to the first 3 lines with delimiters to avoid overwhelming the user with a long list if there are many problematic lines.
+            for line_number, line_value in delimiter_lines[:3]:
+                preview_entries.append(f"line {line_number} ('{line_value}')")
+            preview = ", ".join(preview_entries)
+
+            previewed_line_count = min(len(delimiter_lines), 3)
+            extra_line_count = len(delimiter_lines) - previewed_line_count
+            extra_msg = f", +{extra_line_count} more line(s)" if extra_line_count > 0 else ""
+
+            delimiter_names = []
+            for delimiter in disallowed_delimiters:
+                if delimiter in found_delimiters:
+                    delimiter_names.append(delimiter_display[delimiter])
+            delimiters_found_str = ", ".join(delimiter_names)
+
+            raise typer.BadParameter(
+                "Invalid --samples-file format: expected one sample ID per line with no delimiters. "
+                f"Found delimiter(s) {delimiters_found_str} on {len(delimiter_lines)} line(s): \n{preview}{extra_msg}. "
+                "\nPlease do not use delimiters (',' ';' '\\t' '|') in your samples file."
+            )
+
+        if len(normalized) == 1:
+            warnings.append(
+                "Only one sample ID was found in --samples-file after ignoring blank/comment lines. "
+                "If this was not intended, verify that the file has one sample ID per line."
+            )
+
+        return normalized, warnings
+
+    return None, []

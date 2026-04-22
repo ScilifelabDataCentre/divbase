@@ -2,12 +2,14 @@ import pytest
 from celery import current_app
 from kombu.connection import Connection
 
+from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     _calculate_pairwise_overlap_types_for_sample_sets,
     _check_if_samples_can_be_combined_with_bcftools,
     bcftools_pipe_task,
 )
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.exceptions import TaskUserError
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -108,26 +110,25 @@ def test_calculate_pairwise_overlap_types_for_sample_sets(
 
     print(result)
 
-    assert "identical elements, different order" in result
-    assert "partly overlapping" in result
-    assert "non-overlapping" in result
+    assert isinstance(result.identical_elements_different_order, list)
+    assert isinstance(result.partly_overlapping, list)
+    assert isinstance(result.non_overlapping, list)
 
     for expected in expected_identical_diff_order:
         assert any(
             (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["identical elements, different order"]
+            for pair in result.identical_elements_different_order
         )
 
     for expected in expected_partly:
         assert any(
             (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["partly overlapping"]
+            for pair in result.partly_overlapping
         )
 
     for expected in expected_non_overlap:
         assert any(
-            (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
-            for pair in result["non-overlapping"]
+            (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair for pair in result.non_overlapping
         )
 
 
@@ -179,10 +180,21 @@ def test_check_if_samples_can_be_combined_with_bcftools_param(
     expected_message_part,
     caplog,
 ):
-    vcf_dimensions_data = dimensions_index
+    vcf_dimensions_data = ProjectVCFDimensionsData(
+        project_id=1,
+        vcf_file_count=len(dimensions_index["vcf_files"]),
+        vcf_files=[
+            ProjectVCFDimensionsEntry(
+                vcf_file_s3_key=entry["vcf_file_s3_key"],
+                s3_version_id=None,
+                samples=entry.get("samples", []),
+            )
+            for entry in dimensions_index["vcf_files"]
+        ],
+    )
 
     if should_raise_error:
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(TaskUserError) as excinfo:
             _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
         assert expected_message_part in str(excinfo.value)
     else:

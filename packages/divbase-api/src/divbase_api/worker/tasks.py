@@ -1,9 +1,9 @@
 import dataclasses
 import logging
 import os
-import re
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from itertools import combinations
 from pathlib import Path
 
@@ -24,9 +24,17 @@ from divbase_api.exceptions import (
     VCFDimensionsEntryMissingError,
 )
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
-from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, run_sidecar_metadata_query
+from divbase_api.services.queries import (
+    BCFToolsInput,
+    BcftoolsQueryManager,
+    SampleFileMapping,
+    extract_region_scaffolds_from_command,
+    run_sidecar_metadata_query,
+    validate_user_submitted_bcftools_command,
+)
 from divbase_api.services.s3_client import S3FileManager
 from divbase_api.worker.crud_dimensions import (
+    ProjectVCFDimensionsData,
     SkippedVCFData,
     VCFMetadataData,
     create_or_update_skipped_vcf,
@@ -64,6 +72,41 @@ app = Celery(
 
 CELERY_TASKMETA_TABLE_NAME = "celery_taskmeta"
 CELERY_GROUPMETA_TABLE_NAME = "celery_groupmeta"
+
+
+class VCFQuerySampleSelectionMode(str, Enum):
+    """
+    Enum for the different sample selection modes.
+    """
+
+    SAMPLE_METADATA_QUERY = "sample_metadata_query"
+    CLI_SAMPLES = "cli_samples"
+    ALL_SAMPLES = "all_samples"
+
+
+@dataclasses.dataclass
+class SampleModeResult:
+    """
+    Resolved sample/file inputs for the bcftools pipeline. Returned by every sample selection mode resolver
+    so the rest of the pipeline can be shared regardless of how samples were selected.
+    """
+
+    files_to_download: list[str]
+    sample_and_filename_subset: list[SampleFileMapping]
+    unique_sample_ids: list[str]
+    metadata_path: Path | None = None
+
+
+@dataclasses.dataclass
+class SampleSetOverlapResults:
+    """
+    Pairwise overlap classification result for sample sets.
+    """
+
+    identical_elements_different_order: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+    partly_overlapping: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+    non_overlapping: list[tuple[tuple, tuple]] = dataclasses.field(default_factory=list)
+
 
 # Celery results backend config
 app.conf.update(
@@ -188,31 +231,22 @@ def sample_metadata_query_task(
     task_id = sample_metadata_query_task.request.id
     s3_file_manager = _create_s3_file_manager()
 
-    try:
-        metadata_path = _download_sample_metadata(
-            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
-        )
-    except ObjectDoesNotExistError:
-        # If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards.
-        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
-        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
+    metadata_path = _download_sample_metadata_for_task(
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+        project_name=project_name,
+    )
 
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-    if not vcf_dimensions_data.get("vcf_files"):
+    if not vcf_dimensions_data.vcf_files:
         # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
         raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
 
-    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
-        vcf_dimensions_data=vcf_dimensions_data,
-        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
-        project_id=project_id,
-    )
-
-    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
         vcf_dimensions_data=vcf_dimensions_data,
         latest_versions_of_bucket_files=latest_versions_of_bucket_files,
@@ -247,14 +281,16 @@ def sample_metadata_query_task(
 
 @app.task(name="tasks.bcftools_query", tags=["slow"])
 def bcftools_pipe_task(
-    tsv_filter: str,
+    tsv_filter: str | None,
+    metadata_tsv_name: str | None,
     command: str,
-    metadata_tsv_name: str,
     bucket_name: str,
     project_id: int,
     project_name: str,
     user_id: int,
     job_id: int,
+    samples: list[str] | None = None,
+    all_samples: bool = False,
 ):
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
@@ -273,8 +309,9 @@ def bcftools_pipe_task(
     with SyncSessionLocal() as db:
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-    if not vcf_dimensions_data.get("vcf_files"):
-        raise VCFDimensionsEntryMissingError(project_name=project_name)
+    if not vcf_dimensions_data.vcf_files:
+        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
     _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
@@ -283,31 +320,48 @@ def bcftools_pipe_task(
         project_id=project_id,
     )
 
-    metadata_path = _download_sample_metadata(
-        metadata_tsv_name=metadata_tsv_name,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
+    sample_selection_mode = _determine_sample_selection_mode(
+        tsv_filter=tsv_filter,
+        samples=samples,
+        all_samples=all_samples,
     )
 
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-        project_id=project_id,
-        vcf_dimensions_data=vcf_dimensions_data,
-    )
-
-    files_to_download = metadata_result.unique_filenames
-    sample_and_filename_subset = metadata_result.sample_and_filename_subset
-
-    if "view -r" in command:
-        files_to_download = _check_for_unnecessary_files_for_region_query(
-            command=command,
-            files_to_download=metadata_result.unique_filenames,
+    if sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
+        resolved_sample_mode_results = _resolve_inputs_for_sample_metadata_mode(
+            metadata_tsv_name=metadata_tsv_name,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
+            tsv_filter=tsv_filter,
+            project_id=project_id,
+            project_name=project_name,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
+        resolved_sample_mode_results = _resolve_inputs_for_cli_samples_mode(
+            samples=samples,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
+        resolved_sample_mode_results = _resolve_inputs_for_all_samples_mode(
             vcf_dimensions_data=vcf_dimensions_data,
         )
 
+    files_to_download = resolved_sample_mode_results.files_to_download
+    sample_and_filename_subset = resolved_sample_mode_results.sample_and_filename_subset
+    metadata_path = resolved_sample_mode_results.metadata_path
+
+    # Defensive validation in worker: API route validates before queueing, but task execution can also be invoked directly in tests/internal paths.
+    command = validate_user_submitted_bcftools_command(command=command, all_samples=all_samples)
+
+    region_scaffolds = extract_region_scaffolds_from_command(command=command)
+    if region_scaffolds:
+        files_to_download = _check_for_unnecessary_files_for_region_query(
+            scaffolds=region_scaffolds,
+            files_to_download=files_to_download,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
         sample_and_filename_subset = [
-            entry for entry in metadata_result.sample_and_filename_subset if entry["Filename"] in files_to_download
+            entry for entry in sample_and_filename_subset if entry.filename in files_to_download
         ]
 
     _check_if_samples_can_be_combined_with_bcftools(
@@ -347,12 +401,12 @@ def bcftools_pipe_task(
             f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
         )
 
-    bcftools_inputs = dataclasses.asdict(
-        BCFToolsInput(
-            sample_and_filename_subset=sample_and_filename_subset,
-            sampleIDs=metadata_result.unique_sample_ids,
-            filenames=files_to_download,
-        )
+    bcftools_inputs = BCFToolsInput(
+        sample_and_filename_subset=sample_and_filename_subset,
+        sampleIDs=resolved_sample_mode_results.unique_sample_ids,
+        filenames=files_to_download,
+        # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
+        auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
     )
 
     logger.info("Started bcftools subprocesses")
@@ -426,8 +480,8 @@ def update_vcf_dimensions_task(
         vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
         already_skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)
 
-        indexed_entries = vcf_dimensions_data.get("vcf_files", [])
-        already_indexed_vcfs = {entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in indexed_entries}
+        indexed_entries = vcf_dimensions_data.vcf_files
+        already_indexed_vcfs = {entry.vcf_file_s3_key: entry.s3_version_id for entry in indexed_entries}
 
         vcfs_deleted_from_bucket_since_last_indexing = _remove_stale_dimensions_db_entries(
             indexed_vcf_keys=set(already_indexed_vcfs),
@@ -453,10 +507,9 @@ def update_vcf_dimensions_task(
         )
 
     incomplete_indexed_vcfs = {
-        entry["vcf_file_s3_key"]
+        entry.vcf_file_s3_key
         for entry in indexed_entries
-        if (entry.get("sample_count", 0) > 0 and not entry.get("samples"))
-        or (entry.get("variant_count", 0) > 0 and not entry.get("scaffolds"))
+        if (entry.sample_count > 0 and not entry.samples) or (entry.variant_count > 0 and not entry.scaffolds)
     }
 
     latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
@@ -542,8 +595,9 @@ def update_vcf_dimensions_task(
                 final_vcf_files_in_bucket.add(file)
 
         post_run_indexed = set()
-        for entry in get_vcf_metadata_by_project(project_id=project_id, db=db).get("vcf_files", []):
-            post_run_indexed.add(entry["vcf_file_s3_key"])
+        post_run_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db)
+        for entry in post_run_dimensions.vcf_files:
+            post_run_indexed.add(entry.vcf_file_s3_key)
         post_run_skipped = set(get_skipped_vcfs_by_project_worker(db=db, project_id=project_id).keys())
 
         deleted_during_run = _remove_stale_dimensions_db_entries(
@@ -570,6 +624,24 @@ def update_vcf_dimensions_task(
 
         # Convert to dict since celery serializes to JSON when writing to results backend. Pydantic model serialization is not supported by celery
         return result.model_dump()
+
+
+def _download_sample_metadata_for_task(
+    metadata_tsv_name: str, bucket_name: str, s3_file_manager: S3FileManager, project_name: str
+) -> Path:
+    """
+    Wrapper function to download the sample metadata file for the specified task and raise a TaskUserError if the file is not found.
+    If ObjectDoesNotExistError, propagate the more specific TSVFileNotFoundInProjectError upwards so that the celery task is marked as FAILED.
+    """
+    try:
+        metadata_path = _download_sample_metadata(
+            metadata_tsv_name=metadata_tsv_name, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        )
+    except ObjectDoesNotExistError:
+        # Wrap exception in TaskUserError () to avoid Celery serialization UnpicklableExceptionWrapper issue
+        raise TaskUserError(str(TSVFileNotFoundInProjectError(metadata_tsv_name, project_name))) from None
+
+    return metadata_path
 
 
 def _create_s3_file_manager() -> S3FileManager:
@@ -671,47 +743,159 @@ def _remove_stale_dimensions_db_entries(
     return deleted_dimensions_entries
 
 
+def _determine_sample_selection_mode(
+    tsv_filter: str | None, samples: list[str] | None, all_samples: bool
+) -> VCFQuerySampleSelectionMode:
+    if tsv_filter is not None:
+        return VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
+    if samples is not None:
+        return VCFQuerySampleSelectionMode.CLI_SAMPLES
+    if all_samples:
+        return VCFQuerySampleSelectionMode.ALL_SAMPLES
+    raise TaskUserError(
+        "No sample-selection mode was provided. Use one of --tsv-filter, --samples/--samples-file, or --all-samples."
+    )
+
+
+def _resolve_inputs_for_sample_metadata_mode(
+    metadata_tsv_name: str,
+    bucket_name: str,
+    s3_file_manager: S3FileManager,
+    tsv_filter: str,
+    project_id: int,
+    project_name: str,
+    vcf_dimensions_data: ProjectVCFDimensionsData,
+) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline based on the sample metadata query TSV filter.
+    For the mode: VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY
+    """
+
+    metadata_path = _download_sample_metadata_for_task(
+        metadata_tsv_name=metadata_tsv_name,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
+        project_name=project_name,
+    )
+
+    metadata_result = run_sidecar_metadata_query(
+        file=metadata_path,
+        filter_string=tsv_filter,
+        project_id=project_id,
+        vcf_dimensions_data=vcf_dimensions_data,
+    )
+    return SampleModeResult(
+        files_to_download=metadata_result.unique_filenames,
+        sample_and_filename_subset=[
+            SampleFileMapping(sample_id=row.sample_id, filename=row.filename)
+            for row in metadata_result.sample_and_filename_subset
+        ],
+        unique_sample_ids=metadata_result.unique_sample_ids,
+        metadata_path=metadata_path,
+    )
+
+
+def _resolve_inputs_for_cli_samples_mode(
+    samples: list[str],
+    vcf_dimensions_data: ProjectVCFDimensionsData,
+) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline based on a list of sample names provided directly via the CLI.
+    Uses already-fetched vcf_dimensions_data to map each requested sample to its VCF file — no extra DB call needed.
+    For the mode: VCFQuerySampleSelectionMode.CLI_SAMPLES
+    """
+    requested_samples = list(dict.fromkeys(samples))
+    requested_set = set(requested_samples)
+    files_to_download: list[str] = []
+    sample_and_filename_subset: list[SampleFileMapping] = []
+    matched_samples: set[str] = set()
+
+    for vcf_entry in vcf_dimensions_data.vcf_files:
+        filename = vcf_entry.vcf_file_s3_key
+        for sample_id in vcf_entry.samples:
+            if sample_id in requested_set:
+                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
+                matched_samples.add(sample_id)
+                if filename not in files_to_download:
+                    files_to_download.append(filename)
+
+    missing_samples = [sample_id for sample_id in requested_samples if sample_id not in matched_samples]
+
+    if missing_samples:
+        raise TaskUserError(
+            f"The following sample IDs were not found in the project's dimensions index: {', '.join(missing_samples)}."
+        )
+
+    matched_sample_ids = []
+    matched_sample_ids_set = {entry.sample_id for entry in sample_and_filename_subset}
+    for sample_id in samples:
+        if sample_id in matched_sample_ids_set and sample_id not in matched_sample_ids:
+            matched_sample_ids.append(sample_id)
+
+    return SampleModeResult(
+        files_to_download=files_to_download,
+        sample_and_filename_subset=sample_and_filename_subset,
+        unique_sample_ids=matched_sample_ids,
+        metadata_path=None,
+    )
+
+
+def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensionsData) -> SampleModeResult:
+    """
+    Resolve sample and file inputs for the bcftools pipeline when all samples in the project should be included.
+    For the mode: VCFQuerySampleSelectionMode.ALL_SAMPLES
+    """
+    sample_and_filename_subset: list[SampleFileMapping] = []
+    files_to_download = []
+    unique_sample_ids = set()
+
+    for vcf_entry in vcf_dimensions_data.vcf_files:
+        filename = vcf_entry.vcf_file_s3_key
+        files_to_download.append(filename)
+        for sample_id in vcf_entry.samples:
+            sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
+            unique_sample_ids.add(sample_id)
+
+    return SampleModeResult(
+        files_to_download=files_to_download,
+        sample_and_filename_subset=sample_and_filename_subset,
+        unique_sample_ids=list(unique_sample_ids),
+        metadata_path=None,
+    )
+
+
 def _check_for_unnecessary_files_for_region_query(
-    command: str,
+    scaffolds: list[str],
     files_to_download: list[str],
-    vcf_dimensions_data: dict,
+    vcf_dimensions_data: ProjectVCFDimensionsData,
 ) -> list[str]:
     """
-    If the 'view -r' query is present, read the .vcf_dimensions.yaml file and check if the specified scaffolds are available in the VCF files.
+    Given parsed scaffold names from region selectors, check if those scaffolds are available in the VCF files.
     If a file in files_to_download (as identified by sidecar sample metadata query) does not contain any of the specified scaffolds, it will be skipped.
     This will save time and resources by avoiding unnecessary transfer of irrelevant files between the bucket and the worker.
 
     NOTE! There is a risk that users mistype...
 
     """
-    if not vcf_dimensions_data.get("vcf_files"):
+    if not vcf_dimensions_data.vcf_files:
         logger.warning(
             "VCF dimensions data is missing or empty. "
             "All current VCF files will be transferred to the worker without filtering."
         )
         return files_to_download
 
-    scaffolds = []
     files_to_download_updated = []
-
-    matches = re.findall(r"view\s+-r\s+([^\s;]+)", command)
-    if not matches:
+    if not scaffolds:
         return files_to_download
 
-    for match in matches:
-        regions = [region.strip() for region in match.split(",") if region.strip()]
-        for region in regions:
-            scaffold_name = region.split(":")[0]
-            scaffolds.append(scaffold_name)
-
-    vcf_lookup = {entry["vcf_file_s3_key"]: entry for entry in vcf_dimensions_data["vcf_files"]}
+    vcf_lookup = {entry.vcf_file_s3_key: entry for entry in vcf_dimensions_data.vcf_files}
 
     for file in files_to_download:
         if file not in vcf_lookup:
             logger.warning(f"File '{file}' is not indexed in the VCF dimensions.")
             continue
 
-        record_scaffolds = set(vcf_lookup[file].get("scaffolds", []))
+        record_scaffolds = set(vcf_lookup[file].scaffolds)
 
         for scaffold_name in scaffolds:
             if scaffold_name in record_scaffolds:
@@ -720,7 +904,7 @@ def _check_for_unnecessary_files_for_region_query(
                     files_to_download_updated.append(file)
 
     if not files_to_download_updated:
-        raise ValueError(
+        raise TaskUserError(
             "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, "
             "there are no VCF files in the project that fulfill the query.\n"
             "Please try another -r query with scaffolds/chromosomes that are present in the VCF files.\n"
@@ -732,11 +916,15 @@ def _check_for_unnecessary_files_for_region_query(
 
 
 def _delete_job_files_from_worker(
-    vcf_paths: list[Path] = None, metadata_path: Path = None, output_file: Path = None
+    vcf_paths: list[Path] | None = None,
+    metadata_path: Path | None = None,
+    output_file: Path | None = None,
 ) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
     """
+
+    vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
         vcf_path = Path(vcf_path)
         try:
@@ -751,12 +939,14 @@ def _delete_job_files_from_worker(
                 logger.info(f"Deleted CSI index {csi_path} from worker.")
             except Exception as e:
                 logger.warning(f"Could not delete CSI index file {csi_path}: {e}")
+
     if metadata_path is not None:
         try:
             os.remove(metadata_path)
             logger.info(f"Deleted {metadata_path} from worker.")
         except Exception as e:
             logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
+
     if output_file is not None:
         try:
             os.remove(output_file)
@@ -767,23 +957,23 @@ def _delete_job_files_from_worker(
 
 def _check_if_samples_can_be_combined_with_bcftools(
     files_to_download: list[str],
-    vcf_dimensions_data: dict,
+    vcf_dimensions_data: ProjectVCFDimensionsData,
 ) -> None:
     """
     Check if samples in VCF files can be combined with bcftools merge/concat.
-    Raises ValueError if samples have incompatible overlaps.
+    Raises TaskUserError if samples have incompatible overlaps.
     """
 
-    vcf_lookup = {entry["vcf_file_s3_key"]: entry for entry in vcf_dimensions_data["vcf_files"]}
+    vcf_lookup = {entry.vcf_file_s3_key: entry for entry in vcf_dimensions_data.vcf_files}
 
     file_to_samples = {}
     for file in files_to_download:
         if file not in vcf_lookup:
-            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
 
-        sample_names = vcf_lookup[file].get("samples")
+        sample_names = vcf_lookup[file].samples
         if not sample_names:
-            raise ValueError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
 
         file_to_samples[file] = sample_names
 
@@ -794,35 +984,34 @@ def _check_if_samples_can_be_combined_with_bcftools(
     sample_set_overlap_results = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets)
     logger.debug(f"Sample sets overlap type: {sample_set_overlap_results}")
 
-    if (
-        sample_set_overlap_results["identical elements, different order"]
-        or sample_set_overlap_results["partly overlapping"]
-    ):
+    if sample_set_overlap_results.identical_elements_different_order or sample_set_overlap_results.partly_overlapping:
         msg_lines = []
-        if sample_set_overlap_results["identical elements, different order"]:
+        if sample_set_overlap_results.identical_elements_different_order:
             msg_lines.append(
                 "Sample sets with identical elements but different order:\n"
                 + "\n".join(
                     [
                         f"{pair[0]} vs {pair[1]}"
-                        for pair in sample_set_overlap_results["identical elements, different order"]
+                        for pair in sample_set_overlap_results.identical_elements_different_order
                     ]
                 )
             )
-        if sample_set_overlap_results["partly overlapping"]:
+        if sample_set_overlap_results.partly_overlapping:
             msg_lines.append(
                 "Sample sets that are partly overlapping:\n"
-                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results["partly overlapping"]])
+                + "\n".join([f"{pair[0]} vs {pair[1]}" for pair in sample_set_overlap_results.partly_overlapping])
             )
         full_msg = "\n\n".join(msg_lines)
         logger.error(full_msg)
-        raise ValueError(full_msg)
+        raise TaskUserError(full_msg)
     else:
         logger.info("No unsupported sample sets found. Proceeding with bcftools pipeline.")
         return
 
 
-def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tuple, list[str]]):
+def _calculate_pairwise_overlap_types_for_sample_sets(
+    sample_sets_dict: dict[tuple, list[str]],
+) -> SampleSetOverlapResults:
     """
     Analyze all pairwise overlap types between sample sets.
     Catches the case where two sets have the same elements but different order.
@@ -832,27 +1021,25 @@ def _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict: dict[tup
     tuples are used in the input to maintain order within the sample sets, but tuples do not support '&' intersection operations. Thus they need to be converted with set()
 
     """
-    keys = ["identical elements, different order", "partly overlapping", "non-overlapping"]
-    sample_set_overlap_results = {key: [] for key in keys}
+    sample_set_overlap_results = SampleSetOverlapResults()
     sample_sets = list(sample_sets_dict.keys())
     logger.debug(f"Sample sets for overlap analysis: {sample_sets}")
     for set1, set2 in combinations(sample_sets, 2):
         set1_set = set(set1)
         set2_set = set(set2)
         if set1_set == set2_set and set1 != set2:
-            overlap = "identical elements, different order"
+            sample_set_overlap_results.identical_elements_different_order.append((set1, set2))
         elif set1_set & set2_set:
-            overlap = "partly overlapping"
+            sample_set_overlap_results.partly_overlapping.append((set1, set2))
         elif set1_set.isdisjoint(set2_set):
-            overlap = "non-overlapping"
+            sample_set_overlap_results.non_overlapping.append((set1, set2))
         else:
             continue
-        sample_set_overlap_results[overlap].append((set1, set2))
     return sample_set_overlap_results
 
 
 def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
-    vcf_dimensions_data: dict,
+    vcf_dimensions_data: ProjectVCFDimensionsData,
     latest_versions_of_bucket_files: dict[str, str],
     project_id: int,
 ) -> None:
@@ -862,9 +1049,7 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
 
     Skipped VCF files (DivBase-generated result files) are considered tracked.
     """
-    indexed_vcf_lookup = {
-        entry["vcf_file_s3_key"]: entry["s3_version_id"] for entry in vcf_dimensions_data.get("vcf_files", [])
-    }
+    indexed_vcf_lookup = {entry.vcf_file_s3_key: entry.s3_version_id for entry in vcf_dimensions_data.vcf_files}
 
     with SyncSessionLocal() as db:
         skipped_vcfs = get_skipped_vcfs_by_project_worker(db=db, project_id=project_id)

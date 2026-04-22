@@ -5,14 +5,17 @@ from pathlib import Path
 import typer
 import yaml
 from rich import print
+from rich.table import Table
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project
 from divbase_cli.user_auth import make_authenticated_request
+from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
+    DimensionsVCFFilesResult,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator
 
@@ -40,7 +43,9 @@ def update_dimensions_index(
     )
 
     task_id = response.json()
-    print(f"Job submitted successfully with task id: {task_id}")
+    print(
+        f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
+    )
 
 
 @dimensions_app.command("show")
@@ -54,14 +59,21 @@ def show_dimensions_index(
         typer.Option(
             False,
             "--unique-scaffolds",
-            help="If set, will show all unique scaffold names found across all the VCF files in the project.",
+            help="If set, will show all unique scaffold names found across all the VCF files in the project's VCF dimensions cache.",
         )
     ),
     unique_samples: bool = (
         typer.Option(
             False,
             "--unique-samples",
-            help="If set, will show all unique sample names found across all the VCF files in the project.",
+            help="If set, will show all unique sample names found across all the VCF files in the project's VCF dimensions cache.",
+        )
+    ),
+    unique_vcf_files: bool = (
+        typer.Option(
+            False,
+            "--cached-vcf-files",
+            help="If set, will show all VCF file entries (filename + s3 version ID) found in the project's VCF dimensions cache.",
         )
     ),
     sample_names_limit: int = typer.Option(
@@ -139,6 +151,28 @@ def show_dimensions_index(
         print(
             f"Unique scaffold names found across all the VCF files in the project (count: {scaffold_count}):\n{unique_scaffold_names_sorted}"
         )
+        return
+
+    if unique_vcf_files:
+        response = make_authenticated_request(
+            method="GET",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}/vcf-files",
+        )
+        unique_vcf_files_with_versions = DimensionsVCFFilesResult(**response.json()).unique_vcf_files
+        unique_vcf_files_with_versions = sorted(
+            unique_vcf_files_with_versions,
+            key=lambda entry: entry.vcf_file_s3_key,
+        )
+
+        table = Table()
+        table.add_column("Filename")
+        table.add_column("S3 version ID")
+
+        for entry in unique_vcf_files_with_versions:
+            table.add_row(entry.vcf_file_s3_key, entry.s3_version_id)
+
+        print_rich_table_as_tsv(table=table)
         return
 
     response = make_authenticated_request(

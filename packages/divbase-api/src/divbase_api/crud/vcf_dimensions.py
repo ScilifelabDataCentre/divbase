@@ -108,3 +108,22 @@ async def get_unique_scaffolds_by_project_async(db: AsyncSession, project_id: in
     numeric = sorted([int(s) for s in scaffolds if s.isdigit()])
     non_numeric = sorted([s for s in scaffolds if not s.isdigit()])
     return [str(n) for n in numeric] + non_numeric
+
+
+async def get_unique_vcf_files_by_project_async(db: AsyncSession, project_id: int) -> list[dict[str, str]]:
+    """
+    Get unique VCF file/version pairs across all VCF files for a project.
+    """
+
+    stmt = (
+        select(VCFMetadataDB.vcf_file_s3_key, VCFMetadataDB.s3_version_id)
+        .where(VCFMetadataDB.project_id == project_id)
+        .distinct()
+        .order_by(VCFMetadataDB.vcf_file_s3_key)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    unique_vcf_files = []
+    for file_name, version_id in rows:
+        unique_vcf_files.append({"vcf_file_s3_key": file_name, "s3_version_id": version_id})
+    return unique_vcf_files

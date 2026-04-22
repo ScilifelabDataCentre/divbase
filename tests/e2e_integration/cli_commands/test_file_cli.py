@@ -12,7 +12,6 @@ import shutil
 from io import StringIO
 from pathlib import Path
 
-import boto3
 import pytest
 from typer.testing import CliRunner
 
@@ -38,7 +37,7 @@ S3_PAGINATION_LIMIT = 1000
 
 
 @pytest.fixture(autouse=True)
-def start_with_clean_project(CONSTANTS):
+def start_with_clean_project(cleaned_project_bucket):
     """
     For tests that require a project with a clean bucket, this fixture will
     ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before and after running the test.
@@ -47,22 +46,7 @@ def start_with_clean_project(CONSTANTS):
     If you modify the approach make sure your implementation does not just add delete markers.
     The files need to be actually deleted.
     """
-    s3_resource = boto3.resource(
-        "s3",
-        endpoint_url=CONSTANTS["MINIO_URL"],
-        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-    )
-    # pylance does not understand boto3 resource returns types, hence ignore below
-    cleaned_project_bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][CONSTANTS["CLEANED_PROJECT"]]
-
-    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
-    bucket.object_versions.delete()
-
     yield
-
-    bucket = s3_resource.Bucket(cleaned_project_bucket_name)  # type: ignore
-    bucket.object_versions.delete()
 
 
 @pytest.fixture(scope="module")

@@ -17,7 +17,7 @@ Create an account on [DivBase](https://divbase.scilifelab.se) and make sure to v
 
 If you have an account you can be added to an existing project by a project member with the role manager. Ask them to add you and give them the email address you used to sign up with.
 
-Managers can see this guide here on how to add members to a project here (TODO).
+Managers can see the guide on [Account management](account-management.md) for details on how to add members to a project.
 
 ### Option 2: Create a new project
 
@@ -155,7 +155,7 @@ There are three types of queries in DivBase:
 - Combined sample metadata and VCF data query
 
 !!! note
-    Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries.md) after reading this quick start.
+    Queries are one of the more complex aspects of DivBase and therefore the user is encouraged to read the section on [Running Queries](running-queries-overview.md) after reading this quick start.
 
 ### Running sample metadata queries
 
@@ -175,13 +175,19 @@ DivBase uses [`bcftools`](https://github.com/samtools/bcftools) to subset VCF da
 For instance, to subset all VCF files in the project on a chromosomal region in a scaffold named `21`:
 
 ```bash
-divbase-cli query bcftools-pipe --command "view -r 21:15000000-25000000"
+divbase-cli query vcf --command "view -r 21:15000000-25000000"
 ```
 
-The VCF queries can be combined with sidecar sample metadata queries with `--tsv-filter` and the fixed expression `view -s SAMPLES` (where `SAMPLES` tells DivBase to use the results from the sidecar filtering as input for `bcftools view -s`). In this way, only the VCF files that fulfil the sample metadata query will be used in the `bcftools` subset commands. An example:
+The VCF queries can be combined with sidecar sample metadata queries using `--tsv-filter`. DivBase will first resolve which samples match the metadata filter, then automatically inject those sample IDs into the `bcftools` command. Only VCF files that contain at least one of the matching samples will be processed. An example:
 
 ```bash
-divbase-cli query bcftools-pipe --tsv-filter "Area:Northern Portugal" --command "view -s SAMPLES; view -r 21:15000000-25000000"
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -r 21:15000000-25000000"
+```
+
+By default, sample IDs are injected at the first command segment (e.g. the above becomes `view -s S1,S2 -r 21:15000000-25000000`). If you are using a multi-segment pipe and want explicit control over which segment receives the sample injection, you can use `view -s` (without sample values) as a placeholder in that position:
+
+```bash
+divbase-cli query vcf --tsv-filter "Area:Northern Portugal" --command "view -s; view -r 21:15000000-25000000"
 ```
 
 !!! note
@@ -195,31 +201,34 @@ You can check the status of all of your submitted jobs using:
 divbase-cli task-history user
 ```
 
-Once a `bcftools-pipe` job is complete, you can download the resulting merged vcf file:
+Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli files download merged_[JOB_ID].vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download result_of_job_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
 ```
 
-Replacing [JOB_ID] with the actual job ID from the task history.
+Replacing <JOB_ID> with the actual job ID from the task history.
 
 ## Next steps
 
-TODO - a selection of links to more detailed user guides
+This quick start guide was hopefully enough to get you started using DivBase. If you want to learn more about the different features of DivBase, we have many detailed guides.
+
+For details on:
+
+- Installing the DivBase client on your computer, see [Installation](installation.md) and [Setup DivBase CLI](setup_divbase_cli.md)
+
+- How to format your VCF files to get the most out of DivBase, see [Working with VCF Files in DivBase](vcf-files.md)
+
+- Everything releated to DivBase queries, we reccomend to start at [Running Queries: Overview](running-queries-overview.md)
+
+- Creating a snapshot the version of the files in a DivBase project at a current time, see [Project versioning](project-versioning.md)
 
 ## Getting help
 
 If you run into issues:
 
 1. **Check the output**: Read the error message
-2. **Consult and search the docs**: [Full documentation](../index.md)
+2. **Consult and search the docs**: Browse the [Full documentation](../index.md) or look at common issues in the [Troubleshooting](troubleshooting.md) page.
 3. **Get help on the command you're running**: `divbase-cli COMMAND --help`
 
-To get assistance from us you can either send us an email (TODO - link) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).
-
-## Common Issues
-
-??? question "Authentication Issues"
-    - Make sure you've verified your email address
-    - Check if you can login to your account on the [DivBase Website](https://divbase.scilifelab.se). If it fails on the website it will also fail on the CLI.
-    - Try logging out and back in: `divbase-cli auth logout` then `divbase-cli auth login`
+To get assistance from us you can either send us an email (<TODO@scilifelab.se>) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).

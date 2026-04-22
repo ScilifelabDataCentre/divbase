@@ -174,7 +174,7 @@ def submit_jobs_to_queue(output_files: list[str], project_name: str, n_replicate
     for replicate in range(n_replicates):
         for filename in output_files:
             metadata_filename = filename.replace("mock_vcf_file", "mock_metadata_file").replace(".vcf.gz", ".tsv")
-            cmd_query = f"divbase-cli query bcftools-pipe --tsv-filter 'Area:North,East' --command 'view -s SAMPLES' --metadata-tsv-name {metadata_filename} --project {project_name}"
+            cmd_query = f"divbase-cli query vcf --tsv-filter 'Area:North,East' --command 'view -s' --metadata-tsv-name {metadata_filename} --project {project_name}"
             result = subprocess.run(shlex.split(cmd_query), check=True, env=LOCAL_ENV, capture_output=True, text=True)
             output = result.stdout
 
