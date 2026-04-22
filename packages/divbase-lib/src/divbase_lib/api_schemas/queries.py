@@ -2,9 +2,11 @@
 Schemas for query routes.
 """
 
-from typing import Annotated, Optional, Self
+from typing import Optional, Self
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from divbase_lib.utils import split_semicolon_bcftools_command_segments
 
 # Shared helper functions and models
 
@@ -14,8 +16,7 @@ def validate_command_not_empty(command: str) -> str:
     Validator function to ensure that the user-submitted bcftools command string is not empty or just whitespace.
     If there are multiple segments separated by semicolons, it also validates that none of the segments are empty or whitespace.
 
-    This is shared by the BcftoolsQueryRequest.command field and the BcftoolsQueryKwargs.command fields, and is used instead of @field_validator()
-    to avoid replicating the code.
+    Shared helper for command field validators in BcftoolsQueryRequest.command and BcftoolsQueryKwargs.command.
     """
     command_string = command.strip()
     if command_string == "":
@@ -24,7 +25,7 @@ def validate_command_not_empty(command: str) -> str:
             'If you only want to subset based on samples, use --command "view -s" in combination with one of the sample-selection options: --tsv-filter, --samples, --samples-file.'
         )
 
-    segments = command_string.split(";")
+    segments = split_semicolon_bcftools_command_segments(command_string)
     for position, segment in enumerate(segments, start=1):
         if segment.strip() == "":
             raise ValueError(
@@ -33,9 +34,6 @@ def validate_command_not_empty(command: str) -> str:
             )
 
     return command
-
-
-NonEmptyCommand = Annotated[str, AfterValidator(validate_command_not_empty)]
 
 
 class SharedBaseModel(BaseModel):
@@ -65,9 +63,14 @@ class BcftoolsQueryRequest(SharedBaseModel):
 
     tsv_filter: str | None = None  # Used for metadata mode only
     metadata_tsv_name: str | None = None  # Used for metadata mode only
-    command: NonEmptyCommand  # TODO add field to describe that this is bcftools commands
+    command: str  # bcftools command input with --command
     samples: list[str] | None = None
     all_samples: bool = False
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(_cls, value: str) -> str:
+        return validate_command_not_empty(value)
 
     @model_validator(mode="after")
     def validate_sample_selection_mode(self) -> Self:
@@ -117,7 +120,7 @@ class BcftoolsQueryKwargs(SharedBaseModel):
 
     tsv_filter: str | None = None  # Used for metadata mode only
     metadata_tsv_name: str | None = None  # Used for metadata mode only
-    command: NonEmptyCommand
+    command: str  # bcftools command input with --command
     bucket_name: str
     project_id: int
     project_name: str
@@ -125,6 +128,11 @@ class BcftoolsQueryKwargs(SharedBaseModel):
     job_id: int
     samples: list[str] | None = None
     all_samples: bool = False
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(_cls, value: str) -> str:
+        return validate_command_not_empty(value)
 
     @model_validator(mode="after")
     def validate_sample_selection_mode(self) -> Self:

@@ -52,6 +52,7 @@ class TestValidateUserSubmittedBcftoolsCommand:
             "view -s",
             "view -s -r 21:15000000-25000000",
             "view --samples -i 'QUAL>20'",
+            "view -i 'FILTER=\"A;B\"'; view -r 1:1-1000",
         ],
     )
     def test_validate_user_submitted_bcftools_command_accepts_valid_commands(self, command):

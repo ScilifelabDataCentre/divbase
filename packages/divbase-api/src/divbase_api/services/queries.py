@@ -33,6 +33,7 @@ from divbase_lib.exceptions import (
     TaskUserError,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator, ValidationCategory
+from divbase_lib.utils import split_semicolon_bcftools_command_segments
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def _parse_command_segments(command: str) -> list[ParsedCommandSegment]:
     """
     segments: list[ParsedCommandSegment] = []
 
-    for position, raw_cmd in enumerate(command.split(";"), start=1):
+    for position, raw_cmd in enumerate(split_semicolon_bcftools_command_segments(command), start=1):
         cmd = raw_cmd.strip()
         if not cmd:
             # Defensive skip only. Empty segments are rejected by schema validation upstream.
@@ -461,7 +462,7 @@ def validate_user_submitted_bcftools_command(command: str, all_samples: bool = F
         cmd_name = segment.cmd_name
 
         if not cmd:
-            # Empty command/empty ';' segments are already rejected by Pydantic (NonEmptyCommand) upstream of this function. This skip is only defensive.
+            # Empty command/empty ';' segments are already rejected by upstream Pydantic command field validation.
             continue
 
         if cmd_name not in valid_commands:
@@ -662,7 +663,7 @@ class BcftoolsQueryManager:
 
         if not command or command.strip() == ";" or command.strip() == "":
             raise BcftoolsPipeEmptyCommandError()
-        command_list = command.split(";")
+        command_list = split_semicolon_bcftools_command_segments(command)
         pipe_has_sample_placeholder = any(
             self._command_has_sample_placeholder(cmd.strip()) for cmd in command_list if cmd.strip()
         )

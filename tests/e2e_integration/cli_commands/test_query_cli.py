@@ -7,6 +7,7 @@ A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for th
 """
 
 import datetime
+import gzip
 import logging
 import os
 import subprocess
@@ -194,6 +195,86 @@ def test_bcftools_pipe_query(
     assert result.exit_code == 0
     assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
         f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
+    )
+
+
+@pytest.mark.parametrize(
+    "arg_command,expected_records,expected_view_command_filter_fragment",
+    [
+        (
+            r"view -i 'FILTER~\"q10\"'",
+            [("17330", ".", "q10"), ("1234567", "microsat1", "q10;s50")],
+            'FILTER~"q10"',
+        ),
+        (
+            r"view -i 'FILTER=\"q10\"'",
+            [("17330", ".", "q10")],
+            'FILTER="q10"',
+        ),
+        (
+            r"view -i 'FILTER=\"q10;s50\"'",
+            [("1234567", "microsat1", "q10;s50")],
+            'FILTER="q10;s50"',
+        ),
+    ],
+    ids=[
+        "filter-subset-match-q10",
+        "filter-exact-match-q10",
+        "filter-exact-match-q10-s50",
+    ],
+)
+def test_bcftools_pipe_query_supports_semicolon_in_filter_expression_e2e(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+    arg_command,
+    expected_records,
+    expected_view_command_filter_fragment,
+):
+    """
+    Test that VCF queries can support bcftools view -i FILTER expressions (including semicolon values)
+    """
+    project_name, bucket_name = cleaned_project_bucket
+    project_id = project_map[project_name]
+    user_id = 1
+    fixture_name = "vcf_specification_v45_example11.vcf.gz"
+    fixture_path = (fixtures_dir / fixture_name).resolve()
+    upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+    assert upload_result.exit_code == 0, f"Upload failed: {upload_result.stdout}"
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    query_result = runner.invoke(
+        app,
+        f'query vcf --samples "NA00001,NA00002,NA00003" --command "{arg_command}" --project {project_name}',
+    )
+    assert query_result.exit_code == 0, f"Query submission failed: {query_result.stdout}"
+    assert "Job submitted" in query_result.stdout
+
+    user_task_id = query_result.stdout.strip().split()[-1]
+    task_result = wait_for_task_complete(user_task_id=user_task_id)
+    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
+    assert hasattr(task_result.result, "output_file"), f"Missing output_file in task result: {task_result.result}"
+    output_file = task_result.result.output_file
+
+    stream_result = runner.invoke(
+        app,
+        f"files stream {output_file} --project {project_name}",
+    )
+    assert stream_result.exit_code == 0, f"Streaming query result failed: {stream_result.stdout}"
+
+    streamed_vcf_content = gzip.decompress(stream_result.stdout_bytes).decode("utf-8")
+    assert "##bcftools_viewCommand=" in streamed_vcf_content
+    assert expected_view_command_filter_fragment in streamed_vcf_content
+
+    records = [line for line in streamed_vcf_content.splitlines() if line and not line.startswith("#")]
+    parsed_records = [(cols[1], cols[2], cols[6]) for cols in (record.split("\t") for record in records)]
+
+    assert parsed_records == expected_records, (
+        f"Unexpected records for command '{arg_command}'. Expected {expected_records}, got {parsed_records}"
     )
 
 

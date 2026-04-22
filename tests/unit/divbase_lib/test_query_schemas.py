@@ -62,10 +62,19 @@ def test_bcftools_query_request_accepts_valid_pipeline_segments(command):
     assert model.command == command
 
 
-def test_bcftools_query_request_rejects_semicolon_inside_quoted_segment_current_behavior():
-    """Test that BcftoolsQueryRequest raises ValidationError when command includes semicolons inside quoted segments, which is currently not supported."""
-    with pytest.raises(ValidationError, match="empty pipeline segment"):
+def test_bcftools_query_request_accepts_semicolon_inside_quoted_segment():
+    """Test that semicolons inside quoted expressions are treated as literals, not pipeline delimiters."""
+    model = BcftoolsQueryRequest(
+        command="view -i 'FILTER=\"A;B\"'; view -r 1:1-1000",
+        all_samples=True,
+    )
+    assert model.command == "view -i 'FILTER=\"A;B\"'; view -r 1:1-1000"
+
+
+def test_bcftools_query_request_rejects_true_empty_segment_after_quoted_semicolon_expression():
+    """Test that true empty segments are still rejected even when quoted semicolons are present."""
+    with pytest.raises(ValidationError, match="empty pipeline segment at position 2"):
         BcftoolsQueryRequest(
-            command="view -i 'INFO/CSQ~\"A;B\";;QUAL>20'",
+            command="view -i 'FILTER=\"A;B\"';",
             all_samples=True,
         )

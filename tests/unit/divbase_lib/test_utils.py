@@ -2,7 +2,7 @@
 
 import pytest
 
-from divbase_lib.utils import format_file_size
+from divbase_lib.utils import format_file_size, split_semicolon_bcftools_command_segments
 
 
 @pytest.mark.parametrize(
@@ -31,3 +31,17 @@ def test_format_file_size(size_bytes, expected_output):
     Test that format_file_size correctly converts byte sizes to human-readable strings.
     """
     assert format_file_size(size_bytes) == expected_output
+
+
+@pytest.mark.parametrize(
+    "command,expected_segments",
+    [
+        ("view -s; view -r 1", ["view -s", " view -r 1"]),
+        ("view -i 'FILTER=\"A;B\"'; view -r 1", ["view -i 'FILTER=\"A;B\"'", " view -r 1"]),
+        ('view -i "FILTER=\\"A;B\\""; view -r 1', ['view -i "FILTER=\\"A;B\\""', " view -r 1"]),
+        ("view -r 1;", ["view -r 1", ""]),
+    ],
+)
+def test_split_semicolon_command_segments(command, expected_segments):
+    """Test that command splitting keeps semicolons inside quoted substrings."""
+    assert split_semicolon_bcftools_command_segments(command) == expected_segments

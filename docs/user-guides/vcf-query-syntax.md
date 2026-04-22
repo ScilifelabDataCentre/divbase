@@ -267,6 +267,22 @@ The DivBase server will check if these are included in the `--command` string be
     #  • Pipe segment 3, token '-W': Option '-W/--write-index' is handled by the DivBase server.
     ```
 
+### 4.3. Special considerations
+
+#### 4.3.1. Semicolons inside `FILTER` expressions
+
+As described above in e.g. [Section 4](#4-writing-the-bcftools-command-argument), users can create pipes of several `bcftools` commands by delimiting them with a semicolon (`;`). However, a few `bcftools` commands can possibly contain semicolons as part of a value. One example is  `bcftools view -i` [filter expressions](https://samtools.github.io/bcftools/bcftools.html#expressions), such as `bcftools view -i FILTER="q10;s50"`. If you want to use this for DivBase queries, you will need to ensure that the inner double quotes are escaped in the `--command` string so the expression is preserved correctly through CLI/API parsing.
+
+Example with escaped inner double quotes:
+
+```bash
+divbase-cli query vcf \
+  --all-samples \
+  --command "view -i 'FILTER=\"q10;s50\"'; view -r 20:1-2000000"
+```
+
+Failing to not escape the inner double quotes might lead to the string given by `--command` being altered befored it reaches the  `bcftools` layer of DivBase, and can thus lead to incorrect results or errors in the query.
+
 ## 5. What happens after submitting a VCF query? (Job lifecycle and outputs)
 
 ### 5.1. What the user can see after submitting the job

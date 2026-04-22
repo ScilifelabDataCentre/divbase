@@ -10,6 +10,7 @@ it is autoused, so it does not need to be specified in each test.
 import logging
 from pathlib import Path
 
+import boto3
 import pytest
 from typer.testing import CliRunner
 
@@ -164,3 +165,28 @@ def _create_logged_in_user_fixture(user_type: str):
 def fixtures_dir():
     """Path to the fixtures directory."""
     return Path(__file__).parent.parent.parent / "fixtures"
+
+
+@pytest.fixture
+def cleaned_project_bucket(CONSTANTS):
+    """
+    Ensure cleaned-project bucket is empty before and after test.
+
+    Use this for tests that require deterministic project bucket contents.
+    """
+    s3_resource = boto3.resource(
+        "s3",
+        endpoint_url=CONSTANTS["MINIO_URL"],
+        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
+        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
+    )
+
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    # pylance does not understand boto3 resource return types.
+    bucket = s3_resource.Bucket(bucket_name)  # type: ignore
+    bucket.object_versions.delete()
+
+    yield project_name, bucket_name
+
+    bucket.object_versions.delete()
