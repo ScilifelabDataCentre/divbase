@@ -1,12 +1,15 @@
 ## Stage 1: Build
-FROM python:3.12.11-alpine3.22 AS builder
-
-WORKDIR /app
+FROM ghcr.io/astral-sh/uv:python3.13-alpine3.23 AS builder
 
 ARG BCFTOOLS_VERSION="1.22"
 
-RUN apk update && \
-    apk add --no-cache \
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+
+RUN apk add --no-cache \
     gcc \
     musl-dev \
     python3-dev \
@@ -26,21 +29,25 @@ RUN curl -fsSL https://github.com/samtools/bcftools/releases/download/${BCFTOOLS
     && cd /tmp/bcftools-${BCFTOOLS_VERSION} \
     && make \
     && make install \
-    && cd - && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}  \
-    && pip install --upgrade pip
+    && rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
-# Pip will complain if the readme is not copied over, since it is referenced in pyproject.toml   
-COPY README.md ./
+# This installs dependencies but not divbase packages so layer only invalidated when dependencies change, not source code
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
+    --mount=type=bind,source=packages/divbase-lib/pyproject.toml,target=/app/packages/divbase-lib/pyproject.toml \
+    --mount=type=bind,source=packages/divbase-api/pyproject.toml,target=/app/packages/divbase-api/pyproject.toml \
+    uv sync --frozen --no-dev --no-install-workspace --package divbase-api
 
-# Copy all package sources and install in dependency order
+# Copy source code and install workspace packages
+COPY README.md pyproject.toml uv.lock ./
 COPY packages/divbase-lib/ ./packages/divbase-lib/
-RUN pip install ./packages/divbase-lib/
 COPY packages/divbase-api/ ./packages/divbase-api/
-RUN pip install ./packages/divbase-api/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable --package divbase-api
 
-
-## Stage 2: Final image
-FROM python:3.12.11-alpine3.22
+## Stage 2: Final image (without uv installed)
+FROM python:3.13-alpine3.23
 
 WORKDIR /app
 
@@ -55,13 +62,17 @@ RUN apk add --no-cache \
     openssl \
     perl
 
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-
-# Create a proper user and group to avoid Celery warnings. Write access to /app is needed for bcftools.
+# Setup a non-root user. Write access to /app is needed for bcftools.
 RUN addgroup -g 1000 appuser && \
     adduser -u 1000 -G appuser -s /bin/sh -D appuser && \
     chown -R appuser:appuser /app
+
+COPY --from=builder /usr/local/bin/bcftools /usr/local/bin/bcftools
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+
+# PYTHONUNBUFFERED=1 allows for log messages to be sent immediately rather than buffered, can lose log message on application crash otherwise
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
 
 USER appuser
 
