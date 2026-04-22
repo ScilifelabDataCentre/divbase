@@ -14,7 +14,7 @@ divbase-cli task-history id <JOB_ID>
 
 The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the job ID.
 
-Users can query the VCF data in their project with or without combining it with a [sample metadata query](docs/user-guides/sidecar-metadata.md).
+Users can query the VCF data in their project with or without combining it with a [sample metadata query](sidecar-metadata.md).
 
 Example of a VCF query that identifies the samples and VCF files to filter on in the project's datastore and then applies a subset based on genomic range:
 
@@ -404,7 +404,7 @@ See also:
 
 - [Troubleshooting](troubleshooting.md)
 - [VCF Dimensions](vcf-dimensions.md)
-- [Sample metadata query](sidecar-metadata-queries.md)
+- [Sample metadata query](sidecar-metadata.md)
 
 ## 8. Read next
 

@@ -8,13 +8,13 @@ This allows the DivBase server to make quick checks against against the project 
     An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries to the DivBase server.
 
 All query commands rely on the dimensions cache to quickly resolve samples, scaffolds, and file compatibility.
-Every time a new VCF files has been added added or and existic VCF version has been replaced with a new version, run:
+Every time a new VCF file has been added or an existing VCF version has been replaced, run:
 
 ```bash
 divbase-cli dimensions update --project <PROJECT_NAME>
 
 # This will return the job ID of the submitted job. Example:
-# Job submitted successfully with task id: 123
+# Job submitted successfully with task id: 123. To check the status of your job, use the command: divbase-cli task-history id 123
 
 # Job status can be viewed with e.g.
 divbase-cli task-history id 123

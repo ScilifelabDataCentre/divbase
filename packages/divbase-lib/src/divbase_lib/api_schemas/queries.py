@@ -152,7 +152,7 @@ class BcftoolsQueryKwargs(SharedBaseModel):
             raise ValueError("Only one of tsv_filter, samples, or all_samples may be provided.")
         if selection_count == 0:
             # Backward compatibility for historical task kwargs created before all_samples option was implemented.
-            # To ensure that task-history deserizliation does not break for existing tasks.
+            # To ensure that task-history deserialization does not break for existing tasks.
             # Could be handled by a backfilling migration instead.
             self.all_samples = True
             return self
