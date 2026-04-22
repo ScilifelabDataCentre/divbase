@@ -8,10 +8,11 @@ https://typer.tiangolo.com/tutorial/app-dir/
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
+from pydantic import SecretStr
 
 APP_NAME = "divbase-cli"
 APP_DIR = Path(typer.get_app_dir(APP_NAME))
@@ -41,12 +42,19 @@ class DivBaseCLISettings:
     CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", CONFIG_PATH))
     TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
-    DIVBASE_API_PAT: str | None = os.getenv("DIVBASE_API_PAT")
+
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
     LOGGING_ON: bool = os.getenv("DIVBASE_LOGGING_ON", DEFAULT_LOGGING_ON) == "1"
     LOG_LEVEL: str = os.getenv("DIVBASE_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
+    DIVBASE_API_PAT: SecretStr | None = field(init=False)
+
     def __post_init__(self):
+        if os.getenv("DIVBASE_API_PAT"):
+            self.DIVBASE_API_PAT = SecretStr(os.environ["DIVBASE_API_PAT"])
+        else:
+            self.DIVBASE_API_PAT = None
+
         valid_levels = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"]
         if self.LOG_LEVEL not in valid_levels:
             raise ValueError(f"Invalid LOG_LEVEL: {self.LOG_LEVEL}. Must be one of {valid_levels}.")

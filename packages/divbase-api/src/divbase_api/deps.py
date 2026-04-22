@@ -36,8 +36,9 @@ from divbase_api.db import get_db
 from divbase_api.exceptions import AuthenticationError, AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.security import PAT_TOKEN_PREFIX, TokenType, create_token
+from divbase_api.security import TokenType, create_token
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 logger = logging.getLogger(__name__)
 

@@ -51,3 +51,6 @@ QUERY_RESULTS_FILE_PREFIX = "result_of_job_"
 # 2. Add an announcement about a new CLI version being available when the user logs in.
 # 3. Do Nothing as the user's CLI version is up to date.
 CLI_VERSION_HEADER_KEY = "X-CLI-Version"
+
+# Personal Access Tokens (PATs) are used for passwordless auth with DivBase API
+PAT_TOKEN_PREFIX = "divbase_pat_"
