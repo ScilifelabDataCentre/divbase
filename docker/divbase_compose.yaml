@@ -65,10 +65,10 @@ services:
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /usr/local/lib/python3.12/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /usr/local/lib/python3.12/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=1", "-B"] #-Q "celery" is the default queue, so let the quick worker also handle it to avoid issues with tasks not being picked up
@@ -148,15 +148,15 @@ services:
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
-    command: ["fastapi", "dev", "--host", "0.0.0.0", "/usr/local/lib/python3.12/site-packages/divbase_api/divbase_api.py"]
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"] 
     develop: # rebuild only on changes to deps. 
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /usr/local/lib/python3.12/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /usr/local/lib/python3.12/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
     volumes:
