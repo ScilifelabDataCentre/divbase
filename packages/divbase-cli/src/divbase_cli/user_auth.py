@@ -3,8 +3,8 @@ Manage user authentication with the DivBase server.
 
 This includes login/logout and the getting, storing, using, and refreshing of access + refresh JWTs and Personal Access Tokens (PATs).
 
-User JWTs are stored in the devices's OS keyring. They fallback to a local file with 0600 permissions if not possible.
-PATS provided via enviroment variable
+User JWTs are stored in the device's OS keyring. They fallback to a local file with 0600 permissions if not possible.
+PATs provided via environment variable
 """
 
 import contextlib
@@ -362,6 +362,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
             # Prevents user getting warning about being already logged in when they try to log in again.
             config = load_user_config()
             config.set_login_status(url=None, email=None)
+            _delete_stored_jwts(token_path=cli_settings.TOKENS_PATH)
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE) from None
 
         _handle_divbase_api_error(response=response, http_method="POST", url=refresh_url)

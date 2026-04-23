@@ -2,7 +2,7 @@
 Tests for the user configuration CLI commands.
 
 Tests start from 1 of 2 types of user config files:
-- : A brand new user who has not run a single divbase-cli command before.
+- A brand new user who has not run a single divbase-cli command before. (no fixture needed, config and tokens auto cleaned between tests)
 - logged_out_user_with_existing_config: A config file with some pre-existing projects and a default project set.
 """
 

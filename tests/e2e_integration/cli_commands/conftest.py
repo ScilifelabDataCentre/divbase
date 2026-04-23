@@ -49,11 +49,9 @@ def logged_out_user_with_existing_config(CONSTANTS):
     """
     Fixture to provide a NOT logged in user with an "existing" user configuration file with
     some existing projects and a default project set.
-    """
-    # ensure no config or tokens file exist before test
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
+    NOTE: config and tokens cleaned up before and after tests by clean_tmp_config_and_tokens_between_tests fixture
+    """
     # running any cmd that requires the config file will create it
     # so we can just run the config add cmd directly.
     for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
@@ -66,10 +64,6 @@ def logged_out_user_with_existing_config(CONSTANTS):
     assert result.exit_code == 0
 
     yield
-
-    # clean up after test, delete config and tokens file
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture
@@ -114,6 +108,9 @@ def _create_logged_in_user_fixture(user_type: str):
 
     Args:
         user_type: One of "admin", "read user", "edit user", "manage user"
+
+    NOTE: Whilst config and tokens cleaned up before and after tests by clean_tmp_config_and_tokens_between_tests fixture
+    This factory can be used multiple times in a single test, hence need to clean up existing config and tokens here too.
     """
 
     def factory(CONSTANTS):

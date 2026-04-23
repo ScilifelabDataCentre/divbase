@@ -272,9 +272,9 @@ def test_pat_does_not_work_on_frontend_endpoints(
 
     home_url = "http://localhost:8001/"
     # technically don't need the token here
-    response = httpx.get(home_url, headers={"Authorization": f"Bearer {raw_token}"})
+    response = httpx.get(home_url, headers={"Authorization": f"Bearer {raw_token.get_secret_value()}"})
     assert response.status_code == 200
 
     profile_url = "http://localhost:8001/profile/"
-    response = httpx.get(profile_url, headers={"Authorization": f"Bearer {raw_token}"})
+    response = httpx.get(profile_url, headers={"Authorization": f"Bearer {raw_token.get_secret_value()}"})
     assert response.status_code == 302  # redirected to login, so rejected as expected
