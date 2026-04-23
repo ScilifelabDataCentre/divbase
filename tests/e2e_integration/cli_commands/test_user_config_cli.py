@@ -2,7 +2,7 @@
 Tests for the user configuration CLI commands.
 
 Tests start from 1 of 2 types of user config files:
-- logged_out_user_with_no_config: A brand new user who has not run a single divbase-cli command before.
+- : A brand new user who has not run a single divbase-cli command before.
 - logged_out_user_with_existing_config: A config file with some pre-existing projects and a default project set.
 """
 
@@ -15,7 +15,7 @@ from divbase_cli.user_config import load_user_config
 runner = CliRunner()
 
 
-def test_add_project_command(logged_out_user_with_no_config):
+def test_add_project_command():
     project_name = "test_project"
     command = f"config add {project_name}"
     result = runner.invoke(app, command)
@@ -25,7 +25,7 @@ def test_add_project_command(logged_out_user_with_no_config):
     assert project_name in config_contents.all_project_names
 
 
-def test_add_project_as_default_command(logged_out_user_with_no_config):
+def test_add_project_as_default_command():
     project_name = "test_project"
 
     command = f"config add {project_name} --default"
@@ -37,7 +37,7 @@ def test_add_project_as_default_command(logged_out_user_with_no_config):
     assert config.default_project == project_name
 
 
-def test_add_project_and_specify_urls(logged_out_user_with_no_config):
+def test_add_project_and_specify_urls():
     project_name = "test_project"
     divbase_url = "https://divbasewebsite.com"
 
@@ -53,7 +53,7 @@ def test_add_project_and_specify_urls(logged_out_user_with_no_config):
     assert project.divbase_url == divbase_url
 
 
-def test_add_project_that_already_exists(logged_out_user_with_no_config):
+def test_add_project_that_already_exists():
     """
     Should warn user and not be duplicated in the config.
     The newer project settings should be in the config file (i.e. overwrite the old ones).
@@ -109,7 +109,7 @@ def test_show_default_project_command(logged_out_user_with_existing_config, CONS
     assert CONSTANTS["DEFAULT_PROJECT"] in result.output
 
 
-def test_show_default_with_no_default_set_command(logged_out_user_with_no_config):
+def test_show_default_with_no_default_set_command():
     command = "config show-default"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
@@ -166,7 +166,7 @@ def test_show_user_config_command(logged_out_user_with_existing_config, CONSTANT
         assert project_name in result.output
 
 
-def test_show_user_config_with_no_projects_command(logged_out_user_with_no_config):
+def test_show_user_config_with_no_projects_command():
     command = "config show"
     result = runner.invoke(app, command)
 

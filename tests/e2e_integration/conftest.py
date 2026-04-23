@@ -5,9 +5,12 @@ It handles spinning up the job system docker stack for the duration of the test 
 It also collects fixtures and constants that are needed across multiple test modules.
 """
 
+import contextlib
 import logging
 
+import keyring
 import pytest
+from keyring.errors import NoKeyringError, PasswordDeleteError
 from typer.testing import CliRunner
 
 from divbase_api.worker.crud_dimensions import (
@@ -37,18 +40,23 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(autouse=True, scope="function")
-def clean_tmp_config_token_dir():
+def clean_tmp_config_and_tokens_between_tests():
     """
-    To avoid test pollution, ensure that any config or token files created in tests
-    are removed after each test function and are not created where the local dev/user has their config or token file.
-
-    Related to this fixture is cli_config.py where the cli_settings instance is created at module load time.
-    Using env variables we point to these "testing" paths instead for the config and token paths.
+    To avoid test pollution, ensure that any config or token files created in a test from logging in
+    is removed before each test is run.
     """
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+    with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
     yield
+
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+    with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 

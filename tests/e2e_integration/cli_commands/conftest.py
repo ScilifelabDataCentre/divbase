@@ -7,11 +7,14 @@ The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
 """
 
+import contextlib
 import logging
 from pathlib import Path
 
 import boto3
+import keyring
 import pytest
+from keyring.errors import NoKeyringError, PasswordDeleteError
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
@@ -39,20 +42,6 @@ def tmp_config_path(tmp_path):
     Fixture to provide a path to where the a configuration can be created.
     """
     return tmp_path / "test_config.yaml"
-
-
-@pytest.fixture
-def logged_out_user_with_no_config():
-    """
-    Fixture to provide a user with a fresh config file that is not logged in anywhere.
-    """
-    # ensure no config or tokens file exist before test
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
-    yield
-    # clean up after test, delete config and tokens file
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture
@@ -130,6 +119,9 @@ def _create_logged_in_user_fixture(user_type: str):
     def factory(CONSTANTS):
         # ensure no config or tokens file exist before test
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
         # running any cmd that requires the config file will create it
@@ -156,6 +148,9 @@ def _create_logged_in_user_fixture(user_type: str):
 
         # clean up after test, delete config and tokens file
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
     return factory
