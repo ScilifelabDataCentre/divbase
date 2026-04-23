@@ -8,7 +8,6 @@ it is autoused, so it does not need to be specified in each test.
 """
 
 import logging
-from pathlib import Path
 
 import boto3
 import pytest
@@ -96,12 +95,6 @@ def logged_in_read_user_with_existing_config(CONSTANTS):
 
 
 @pytest.fixture
-def logged_in_edit_user_with_existing_config(CONSTANTS):
-    """Fixture to provide a logged in edit user with existing config."""
-    yield from _create_logged_in_user_fixture("edit user")(CONSTANTS)
-
-
-@pytest.fixture
 def logged_in_manage_user_with_existing_config(CONSTANTS):
     """Fixture to provide a logged in manage user with existing config."""
     yield from _create_logged_in_user_fixture("manage user")(CONSTANTS)
@@ -159,12 +152,6 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
     return factory
-
-
-@pytest.fixture
-def fixtures_dir():
-    """Path to the fixtures directory."""
-    return Path(__file__).parent.parent.parent / "fixtures"
 
 
 @pytest.fixture

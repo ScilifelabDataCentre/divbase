@@ -6,6 +6,7 @@ It also collects fixtures and constants that are needed across multiple test mod
 """
 
 import logging
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -19,6 +20,7 @@ from divbase_api.worker.crud_dimensions import (
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.divbase_cli import app
 from tests.e2e_integration.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.e2e_integration.helpers.setup_test_data import (
     API_ADMIN_CREDENTIALS,
@@ -173,3 +175,36 @@ def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project
     for project_id in project_map.values():
         clean_vcf_dimensions(db_session_sync, project_id)
     yield
+
+
+@pytest.fixture
+def logged_in_edit_user_with_existing_config(CONSTANTS):
+    """Shared fixture: logged-in edit user with existing CLI config."""
+    # ensure no config or tokens file exist before test
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+    for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
+        add_command = f"config add {project}"
+        result = runner.invoke(app, add_command)
+        assert result.exit_code == 0
+
+    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']}"
+    result = runner.invoke(app, set_default_command)
+    assert result.exit_code == 0
+
+    user_creds = CONSTANTS["TEST_USERS"]["edit user"]
+    login_command = f"auth login {user_creds['email']}"
+    result = runner.invoke(app=app, args=login_command, input=f"{user_creds['password']}\n")
+    assert result.exit_code == 0, f"Login failed: {result.output}"
+
+    yield
+
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+
+@pytest.fixture
+def fixtures_dir():
+    """Path to shared tests fixtures directory."""
+    return Path(__file__).parent.parent / "fixtures"

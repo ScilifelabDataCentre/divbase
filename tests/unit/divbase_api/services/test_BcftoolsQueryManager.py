@@ -1,3 +1,5 @@
+"""Unit tests for BcftoolsQueryManager class, i.e. service layer called by the vcf query task."""
+
 import subprocess
 from unittest.mock import MagicMock, patch
 

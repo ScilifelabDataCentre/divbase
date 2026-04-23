@@ -6,37 +6,23 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for the tests.
 """
 
-import datetime
 import gzip
 import logging
-import os
-import subprocess
+import re
 import time
-from contextlib import contextmanager
-from pathlib import Path
-from unittest.mock import patch
 
 import boto3
 import pytest
-from celery import current_app
-from sqlalchemy import func, select
 from typer.testing import CliRunner
 
-from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
-from divbase_api.models.users import UserDB
-from divbase_api.services.queries import BcftoolsQueryManager
-from divbase_api.services.task_history import _deserialize_celery_task_metadata
-from divbase_api.worker.tasks import bcftools_pipe_task
-from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
-from divbase_lib.api_schemas.task_history import TaskHistoryResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
-from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, TaskUserError
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
+
+_TASK_TERMINAL_STATES = {"SUCCESS", "FAILURE"}
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -45,53 +31,87 @@ def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions
     yield
 
 
-def wait_for_task_complete(user_task_id: int, max_retries: int = 30) -> TaskHistoryResult:
+def _extract_results_file_key(text: str) -> str | None:
+    """Extract the query results `.vcf.gz` key from user-visible CLI output."""
+    match = re.search(rf"({re.escape(QUERY_RESULTS_FILE_PREFIX)}[^\s\"']*\.vcf\.gz)", text)
+    return match.group(1) if match else None
+
+
+def _extract_task_state_from_terminal_stdout(stdout: str) -> str | None:
     """
-    For a given task_id, check the status of the task via the PostgreSQL results backend until it is complete or times out.
-    Need to join CeleryTaskMeta with TaskHistoryDB to get timestamps for the mandatory fields of the pydantic model.
-    Deserialization is needed because of how the celery results backed stores fields.
+    Infer task state from the `State` column in `task-history id` terminal output.
+
+    Only terminal states are considered. Any other state is treated as non-terminal
+    and will be retried by the polling helper.
     """
-    celery_task_id = None
-    with SyncSessionLocal() as db:
-        row = db.execute(select(TaskHistoryDB.task_id).where(TaskHistoryDB.id == user_task_id)).first()
-        if row is None:
-            raise ValueError(f"No TaskHistoryDB entry found for id={user_task_id}")
-        celery_task_id = row[0]
+    states_pattern = "|".join(sorted(_TASK_TERMINAL_STATES))
+    # Match rich table cells such as `| SUCCESS |` or `│ FAILURE │`.
+    match = re.search(rf"(?:\||│)\s*({states_pattern})\s*(?:\||│)", stdout)
+    if match:
+        return match.group(1)
 
-    while max_retries > 0:
-        with SyncSessionLocal() as db:
-            stmt = (
-                select(
-                    *CeleryTaskMeta.__table__.c,
-                    TaskHistoryDB.id.label("user_task_id"),
-                    TaskHistoryDB.created_at,
-                    TaskStartedAtDB.started_at,
-                    UserDB.email.label("submitter_email"),
-                )
-                .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
-                .join(TaskStartedAtDB, TaskHistoryDB.task_id == TaskStartedAtDB.task_id, isouter=True)
-                .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
-                .where(CeleryTaskMeta.task_id == celery_task_id)
-            )
+    # Rich table output can truncate the State column in non-interactive test runs.
+    # Fall back to stable result payload markers from the same CLI output.
+    normalized_stdout = " ".join(stdout.split())
+    if any(
+        marker in normalized_stdout
+        for marker in (
+            "'status': 'completed'",
+            '"status": "completed"',
+            '"status":"completed"',
+        )
+    ):
+        return "SUCCESS"
+    if any(
+        marker in normalized_stdout
+        for marker in ('"exc_type":"', '"exc_type":', '"error":"', '"error":', "'error':", "'exc_type':")
+    ):
+        return "FAILURE"
 
-            result = db.execute(stmt).first()
+    return None
 
-            if result is None:
-                time.sleep(1)
-                max_retries -= 1
-                continue
 
-            task_dict = dict(result._mapping)
-            status = task_dict.get("status")
-            if status in ["SUCCESS", "FAILURE"]:
-                deserialized = _deserialize_celery_task_metadata(task_dict)
-                return deserialized
+def wait_for_task_terminal_state_using_CLI(
+    user_task_id: int | str, max_retries: int = 60, retry_delay: int = 1
+) -> tuple[str, str]:
+    """
+    Repeatedly poll `divbase-cli task-history id` until the Celery task reaches one of the two terminal state
+    used for DivBase celery tasks: SUCCESS or FAILURE.
 
-            time.sleep(1)
-            max_retries -= 1
+    By using the CLI command to poll the task state instead of direct db lookups, this becomes a e2e test helper.
+    """
+    latest_stdout = ""
+    transient_visibility_error = "Task ID not found or you don't have permission to view the history for this task ID."
+    # For testing cases, we know that the task ID will exist, so if the signal hits this message, it just means to wait and try the CLI cmd again
+
+    for attempt in range(max_retries):
+        result = runner.invoke(app, f"task-history id {user_task_id}")
+        latest_stdout = result.stdout
+
+        if result.exit_code == 0:
+            state = _extract_task_state_from_terminal_stdout(latest_stdout)
+            if state in _TASK_TERMINAL_STATES:
+                return state, latest_stdout
+            time.sleep(retry_delay)
+            continue
+
+        # Right after submission, task-history can transiently return this before task metadata is queryable.
+        combined_output = f"{latest_stdout}\n{result.exception!r}" if result.exception else latest_stdout
+        if transient_visibility_error in combined_output:
+            time.sleep(retry_delay)
+            continue
+
+        # Fail fast on unexpected CLI errors.
+        raise AssertionError(
+            "task-history polling failed unexpectedly.\n"
+            f"task_id={user_task_id}, attempt={attempt + 1}/{max_retries}, exit_code={result.exit_code}\n"
+            f"stdout:\n{latest_stdout}\n"
+            f"exception: {result.exception!r}"
+        )
 
     raise TimeoutError(
-        f"Task {user_task_id} (celery_task_id={celery_task_id}) did not complete within the expected time"
+        f"Task {user_task_id} did not reach SUCCESS/FAILURE after {max_retries} retries. "
+        f"Latest output:\n{latest_stdout}"
     )
 
 
@@ -145,7 +165,6 @@ def test_sample_metadata_query_prints_explicit_message_when_no_samples_match(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test that query tsv prints an explicit message when filters match zero samples."""
@@ -186,8 +205,8 @@ def test_bcftools_pipe_query(
     assert "Job submitted" in result.stdout
 
     user_task_id = result.stdout.strip().split()[-1]
-    task_result = wait_for_task_complete(user_task_id=user_task_id)
-    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+    assert task_state == "SUCCESS", f"Task failed. task-history output:\n{task_stdout}"
 
     command = f"files ls --project {project_name} --include-results-files"
     result = runner.invoke(app, command)
@@ -255,10 +274,15 @@ def test_bcftools_pipe_query_supports_semicolon_in_filter_expression_e2e(
     assert "Job submitted" in query_result.stdout
 
     user_task_id = query_result.stdout.strip().split()[-1]
-    task_result = wait_for_task_complete(user_task_id=user_task_id)
-    assert task_result.status == "SUCCESS", f"Task failed: {task_result.result}"
-    assert hasattr(task_result.result, "output_file"), f"Missing output_file in task result: {task_result.result}"
-    output_file = task_result.result.output_file
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+    assert task_state == "SUCCESS", f"Task failed. task-history output:\n{task_stdout}"
+
+    output_file = _extract_results_file_key(task_stdout)
+    if output_file is None:
+        list_results = runner.invoke(app, f"files ls --project {project_name} --include-results-files")
+        assert list_results.exit_code == 0, f"Could not list results files: {list_results.stdout}"
+        output_file = _extract_results_file_key(list_results.stdout)
+    assert output_file is not None, "Could not determine query results file from task-history/files ls output"
 
     stream_result = runner.invoke(
         app,
@@ -282,7 +306,6 @@ def test_bcftools_pipe_query_direct_samples_mode(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test running a bcftools pipe query using direct sample IDs from CLI."""
@@ -299,15 +322,14 @@ def test_bcftools_pipe_query_direct_samples_mode(
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
     user_task_id = result.stdout.strip().split()[-1]
-    task_result = wait_for_task_complete(user_task_id=user_task_id)
-    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+    assert task_state == "SUCCESS", f"Expected SUCCESS. task-history output:\n{task_stdout}"
 
 
 def test_bcftools_pipe_query_all_samples_mode(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test running a bcftools pipe query with explicit --all-samples mode."""
@@ -324,15 +346,14 @@ def test_bcftools_pipe_query_all_samples_mode(
     assert result.exit_code == 0
     assert "Job submitted" in result.stdout
     user_task_id = result.stdout.strip().split()[-1]
-    task_result = wait_for_task_complete(user_task_id=user_task_id)
-    assert task_result.status == "SUCCESS", f"Expected SUCCESS but got {task_result.status}: {task_result.result}"
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+    assert task_state == "SUCCESS", f"Expected SUCCESS. task-history output:\n{task_stdout}"
 
 
 def test_bcftools_pipe_query_without_selection_mode_fails_on_submission(
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
     run_update_dimensions,
-    db_session_sync,
     project_map,
 ):
     """Test that query vcf without any sample-selection mode fails before job submission."""
@@ -375,15 +396,15 @@ def test_bcftools_pipe_query_succeeds_twice_without_dimensions_update_between_ru
     first_result = runner.invoke(app, command)
     assert first_result.exit_code == 0, f"First run failed: {first_result.stdout}"
     first_task_id = first_result.stdout.strip().split()[-1]
-    first_task = wait_for_task_complete(user_task_id=first_task_id)
-    assert first_task.status == "SUCCESS", f"First run task failed: {first_task.result}"
+    first_task_state, first_task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=first_task_id)
+    assert first_task_state == "SUCCESS", f"First run task failed. task-history output:\n{first_task_stdout}"
 
     second_result = runner.invoke(app, command)
     assert second_result.exit_code == 0, f"Second run failed: {second_result.stdout}"
     second_task_id = second_result.stdout.strip().split()[-1]
-    second_task = wait_for_task_complete(user_task_id=second_task_id)
-    assert second_task.status == "SUCCESS", (
-        f"Second run failed with: {second_task.result}. "
+    second_task_state, second_task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=second_task_id)
+    assert second_task_state == "SUCCESS", (
+        f"Second run task failed. task-history output:\n{second_task_stdout}\n"
         "This suggests that result files from the first run are incorrectly triggering DimensionsNotUpToDateWithBucketError."
     )
 
@@ -399,32 +420,28 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
 
 
 @pytest.mark.parametrize(
-    "project_name,tsv_filter,command,expected_error,expected_stage",
+    "project_name,tsv_filter,command,expected_error",
     [
-        # Malformed tsv filter (missing colon)
-        ("DEFAULT", "Area West of Ireland", "DEFAULT", "SidecarInvalidFilterError", "task_failure"),
         # bad command
-        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command", "submission_failure"),
+        ("DEFAULT", "DEFAULT", "invalid-command", "Unsupported bcftools command"),
         # empty command string
-        ("DEFAULT", "DEFAULT", "", "non-empty bcftools view string", "submission_failure"),
+        ("DEFAULT", "DEFAULT", "", "non-empty bcftools view string"),
         # sample-file options in --command are rejected early by task guard
-        ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file", "submission_failure"),
+        ("DEFAULT", "DEFAULT", "view -S samples.txt", "-S/--samples-file"),
         # output options in --command are rejected early by API guard
-        ("DEFAULT", "DEFAULT", "view -Oz", "-O/--output-type", "submission_failure"),
+        ("DEFAULT", "DEFAULT", "view -Oz", "-O/--output-type"),
         # input VCF filenames in --command are rejected early by API guard
         (
             "DEFAULT",
             "DEFAULT",
             "view file.vcf.gz",
             "Do not provide VCF/BCF input filenames in '--command'",
-            "submission_failure",
         ),
         (
             "DEFAULT",
             "DEFAULT",
             "view -r file.vcf.gz",
             "Do not provide VCF/BCF input filenames in '--command'",
-            "submission_failure",
         ),
     ],
 )
@@ -435,11 +452,10 @@ def test_bcftools_pipe_query_errors(
     tsv_filter,
     command,
     expected_error,
-    expected_stage,
     CONSTANTS,
     logged_in_edit_user_with_existing_config,
 ):
-    """Test command and filter validation errors for bcftools queries."""
+    """Test submission-time command validation errors for bcftools queries."""
     if "DEFAULT" in project_name:
         project_name = CONSTANTS["QUERY_PROJECT"]
     if "DEFAULT" in tsv_filter:
@@ -454,66 +470,25 @@ def test_bcftools_pipe_query_errors(
 
     command_str = f"query vcf --tsv-filter '{tsv_filter}' --command '{command}' --project {project_name} "
 
-    if expected_stage == "submission_failure":
-        with SyncSessionLocal() as db:
-            tasks_before = db.execute(
-                select(func.count(TaskHistoryDB.id))
-                .where(TaskHistoryDB.project_id == project_id)
-                .where(TaskHistoryDB.user_id == user_id)
-            ).scalar_one()
-
-        response = runner.invoke(app, command_str)
-        assert response.exit_code == 1
-
-        output = response.stdout
-        if response.exception is not None:
-            output = f"{output}\n{response.exception}"
-        normalized_output = " ".join(output.split())
-        assert expected_error in normalized_output, (
-            f"Expected '{expected_error}' in submission failure output, but got: {normalized_output}"
-        )
-        assert "Job submitted successfully with task id:" not in output
-
-        with SyncSessionLocal() as db:
-            tasks_after = db.execute(
-                select(func.count(TaskHistoryDB.id))
-                .where(TaskHistoryDB.project_id == project_id)
-                .where(TaskHistoryDB.user_id == user_id)
-            ).scalar_one()
-
-        assert tasks_after == tasks_before, "Submission-time command validation should not create a task history entry"
-        return
-
     response = runner.invoke(app, command_str)
+    assert response.exit_code == 1
 
-    assert response.exit_code == 0
-    user_task_id = response.stdout.strip().split()[-1]
-    result = wait_for_task_complete(user_task_id=user_task_id)
-
-    assert result.status == "FAILURE", f"Expected FAILURE status but got {result.status}"
-
-    # For failed tasks, result is a dict with exception info
-    full_error = ""
-    if isinstance(result.result, dict):
-        exc_type = str(result.result.get("exc_type", ""))
-        exc_message_list = result.result.get("exc_message", [])
-        if isinstance(exc_message_list, list):
-            exc_message = " ".join(str(msg) for msg in exc_message_list)
-        else:
-            exc_message = str(exc_message_list)
-        full_error = f"{exc_type} {exc_message}"
-    else:
-        full_error = str(result.result)
-
-    assert expected_error in full_error, f"Expected '{expected_error}' in error message, but got: {full_error}"
+    output = response.stdout
+    if response.exception is not None:
+        output = f"{output}\n{response.exception}"
+    normalized_output = " ".join(output.split())
+    assert expected_error in normalized_output, (
+        f"Expected '{expected_error}' in submission failure output, but got: {normalized_output}"
+    )
+    assert "Job submitted successfully with task id:" not in output
 
 
 def test_get_task_status_by_task_id(
     CONSTANTS, logged_in_edit_user_with_existing_config, run_update_dimensions, project_map
 ):
     """
-    Get the status of a task by its ID, as in the task ID int that is returned to the users, not the Celery UUID task ID.
-    Uses the PostgreSQL Celery results backend to get task info.
+    CLI smoke test: submitting a task should return a user task id and that id should be queryable via
+    task-history CLI command.
     """
     project_name = CONSTANTS["QUERY_PROJECT"]
     project_id = project_map[project_name]
@@ -525,110 +500,25 @@ def test_get_task_status_by_task_id(
     arg_command = "view -r 21:15000000-25000000"
 
     command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
-    first_task_result = runner.invoke(app, command)
-    assert first_task_result.exit_code == 0
-    first_task_id = first_task_result.stdout.strip().split()[-1]
-
-    second_task_result = runner.invoke(app, command)
-    assert second_task_result.exit_code == 0
-    second_task_id = second_task_result.stdout.strip().split()[-1]
+    submit_result = runner.invoke(app, command)
+    assert submit_result.exit_code == 0
+    assert "Job submitted successfully with task id:" in submit_result.stdout
+    assert "task-history id" in " ".join(submit_result.stdout.split())
+    task_id = submit_result.stdout.strip().split()[-1]
 
     max_retries = 10
     retry_delay = 0.5
+    status_result = None
+    for _ in range(max_retries):
+        status_result = runner.invoke(app, f"task-history id {task_id}")
+        if status_result.exit_code == 0:
+            break
+        time.sleep(retry_delay)
 
-    with SyncSessionLocal() as db:
-        for task_id in [first_task_id, second_task_id]:
-            result = None
-            for _ in range(max_retries):
-                stmt = (
-                    select(CeleryTaskMeta.status)
-                    .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
-                    .where(TaskHistoryDB.id == task_id)
-                )
-                result = db.execute(stmt).scalar_one_or_none()
-
-                if result is not None:
-                    break
-
-                time.sleep(retry_delay)
-
-            assert result is not None, f"Task {task_id} not found in results backend after {max_retries} retries"
-            assert result in ["PENDING", "STARTED", "SUCCESS", "FAILURE"]
-
-
-@pytest.mark.parametrize(
-    "test_scenario,vcf_filename,job_id,cleanup_file",
-    [
-        ("version_outdated", "HOM_20ind_17SNPs.1.vcf.gz", 1, False),
-        ("unindexed", "HOM_20ind_17SNPs_first_10_samples.vcf.gz", 2, True),
-    ],
-)
-def test_query_exits_when_dimensions_are_outdated(
-    CONSTANTS,
-    logged_in_edit_user_with_existing_config,
-    fixtures_dir,
-    run_update_dimensions,
-    project_map,
-    test_scenario,
-    vcf_filename,
-    job_id,
-    cleanup_file,
-):
-    """
-    Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions index is not up-to-date. Test for these cases:
-    1. version_outdated: uploads a new version of an existing VCF file after dimensions update
-    2. unindexed: uploads a new VCF file that is not present in the dimensions index
-    """
-    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
-    project_id = project_map[project_name]
-    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    user_id = 1
-    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
-
-    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
-        if filename.startswith(fixture_dir):
-            return filename
-        return f"{fixture_dir}/{filename}"
-
-    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
-        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
-
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
-        pass
-
-    with (
-        patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
-        patch("divbase_api.worker.tasks._download_vcf_files", new=patched_download_vcf_files),
-    ):
-        test_file_path = (fixtures_dir / vcf_filename).resolve()
-        command = f"files upload {test_file_path}  --project {project_name} --disable-safe-mode"
-        result = runner.invoke(app, command)
-
-        try:
-            assert result.exit_code == 0
-            assert vcf_filename in result.stdout
-
-            params = {
-                "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -r 1,4,6,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "bucket_name": bucket_name,
-                "project_id": project_id,
-                "project_name": project_name,
-                "user_id": 1,
-                "job_id": job_id,
-            }
-            with pytest.raises(DimensionsNotUpToDateWithBucketError) as excinfo:
-                bcftools_pipe_task(**params)
-            assert (
-                "The following VCF files or file versions in the project are not part of the project's VCF dimensions"
-                in str(excinfo.value)
-            )
-        finally:
-            # Ensure cleanup always runs for the unindexed scenario to avoid test pollution.
-            if cleanup_file:
-                command = f"files rm {vcf_filename}  --project {project_name}"
-                runner.invoke(app, command)
+    assert status_result is not None
+    assert status_result.exit_code == 0
+    assert task_id in status_result.stdout
+    assert "DivBase Task History for Task ID" in status_result.stdout
 
 
 class TestSidecarQueryTaskErrorsPropagation:
@@ -831,402 +721,3 @@ class TestSidecarQueryTaskErrorsPropagation:
 
         assert cli_result.exit_code == 0, f"Query should succeed with comma warning. Output: {cli_result.output}"
         assert "comma" in cli_result.output.lower(), "Expected warning message about comma in metadata value"
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "params,expect_success,ensure_dimensions_file,expected_logs,expected_error_msgs",
-    [
-        # Case 0: expected to be fail, vcf dimensions file is empty so the early check for the file in the task raises an error
-        (
-            {
-                "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -r 1,4,6,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "project_name": "split-scaffold-project",
-                "user_id": 1,
-            },
-            False,
-            False,
-            ["Starting bcftools_pipe_task"],
-            [
-                "The VCF dimensions index in project 'split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
-            ],
-        ),
-        # Case 1: expected to be sucessful, should lead to concat
-        (
-            {
-                "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -r 1,4,6,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "project_name": "split-scaffold-project",
-                "user_id": 1,
-            },
-            True,
-            True,
-            [
-                "Starting bcftools_pipe_task",
-                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
-                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
-                "Only one file remained after concatenation, renamed this file to",
-                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
-                "bcftools processing completed successfully",
-            ],
-            [],
-        ),
-        # Case 2: expected to fail since there are no scaffolds in the vcf files that match the -r query
-        (
-            {
-                "tsv_filter": "Area:West of Ireland;Sex:F",
-                "command": "view -r 31,34,36,321,324",
-                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "project_name": "split-scaffold-project",
-                # project_id is added dynamically in the tests
-                "user_id": 1,
-            },
-            False,
-            True,
-            [
-                "Starting bcftools_pipe_task",
-            ],
-            [
-                "Based on the 'view -r' query and the VCF scaffolds indexed in DivBase, there are no VCF files in the project that fulfill the query."
-            ],
-        ),
-        # Case 3: expected to be sucessful, code should handle no tsv-filter in query
-        (
-            {
-                "tsv_filter": "",
-                "command": "view -r 1,4,6,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-                "project_name": "split-scaffold-project",
-                # project_id is added dynamically in the tests
-                "user_id": 1,
-            },
-            True,
-            True,
-            [
-                "Empty filter provided - returning ALL records. This may be a large result set.",
-                "Starting bcftools_pipe_task",
-                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'",
-                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'",
-                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs.6.vcf.gz'",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'",
-                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs.24.vcf.gz'",
-                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
-                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
-                "Only one file remained after concatenation, renamed this file to",
-                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
-                "bcftools processing completed successfully",
-            ],
-            [],
-        ),
-        # Case 4: expected to be sucessful, should lead to merge
-        (
-            {
-                "tsv_filter": "Area:Northern Portugal",
-                "command": "view -r 21:15000000-25000000",
-                "metadata_tsv_name": "sample_metadata.tsv",
-                "project_name": "query-project",
-                # project_id is added dynamically in the tests
-                "user_id": 1,
-            },
-            True,
-            True,
-            [
-                "Starting bcftools_pipe_task",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_last_10_samples.vcf.gz'.",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_first_10_samples.vcf.gz'.",
-                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
-                "Sample names do not overlap between temp files, will continue with 'bcftools merge'",
-                "Merged all temporary files into 'merged_unsorted_",
-                f"Sorting the results file to ensure proper order of variants. Final results are in '{QUERY_RESULTS_FILE_PREFIX}",
-                "bcftools processing completed successfully",
-            ],
-            [],
-        ),
-        # Case 5: expected to be sucessful, should lead one file being subset and renamed rather than bcftools merge/concat
-        (
-            {
-                "tsv_filter": "Area:Northern Spanish shelf",
-                "command": "view -r 1,4,6,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
-                "project_name": "mixed-concat-merge-project",
-                # project_id is added dynamically in the tests
-                "user_id": 1,
-            },
-            True,
-            True,
-            [
-                "Starting bcftools_pipe_task",
-                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
-                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
-                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
-                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
-                "Merged all files (including concatenated files) into 'merged_unsorted_",
-                "bcftools processing completed successfully",
-            ],
-            [],
-        ),
-        # Case 6: expected to be sucessful, should lead to two different sample sets being concatenated, then merged with a third file
-        (
-            {
-                "tsv_filter": "Area:Northern Spanish shelf,Iceland",
-                "command": "view -r 1,4,6,8,13,18,21,24",
-                "metadata_tsv_name": "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
-                "project_name": "mixed-concat-merge-project",
-                # project_id is added dynamically in the tests
-                "user_id": 1,
-            },
-            True,
-            True,
-            [
-                "Starting bcftools_pipe_task",
-                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs.1.vcf.gz'.",
-                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs.4.vcf.gz'.",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs.21.vcf.gz'.",
-                "'view -r' query requires scaffold '1'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '4'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '6'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '21'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '24'. It is present in file 'HOM_20ind_17SNPs_changed_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '8'. It is present in file 'HOM_20ind_17SNPs.8_edit_new_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '13'. It is present in file 'HOM_20ind_17SNPs.13_edit_new_sample_names.vcf.gz'.",
-                "'view -r' query requires scaffold '18'. It is present in file 'HOM_20ind_17SNPs.18_edit_new_sample_names.vcf.gz'.",
-                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
-                "Sample names overlap between some temp files, will concat overlapping sets, then merge if needed and possible.",
-                "Merged all files (including concatenated files) into 'merged_unsorted_",
-                "bcftools processing completed successfully",
-            ],
-            [],
-        ),
-    ],
-)
-def test_bcftools_pipe_cli_integration_with_eager_mode(
-    tmp_path,
-    CONSTANTS,
-    caplog,
-    params,
-    expect_success,
-    ensure_dimensions_file,
-    expected_logs,
-    expected_error_msgs,
-    run_update_dimensions,
-    project_map,
-):
-    """
-    This is a special integration test that allows for running vcf queries directly in eager mode
-    in a way that allows for catching the logs that otherwise would be printed inside the workers. For
-    comparison, running a CLIrunner test will only give the "task submitted" log back.
-
-    For this to work, a substantial amount of patching is needed. In short, since the task is run eagerly
-    and directly, bcftools will need to be run with docker exec instead of subprocess (see BcftoolsQueryManager.run_bcftools).
-    This is complicated by the fact that in the e2e process, files are transferred from the bucket to the
-    worker. For the testing compose stack, the test buckets are built from ./tests/fixtures, so the workaround
-    here is to patch out the transfer and have bcftools read all files directly from ./tests/fixtures. This
-    works since the compose stack mounts ./tests/fixtures. However, for this test, the python code typically
-    needs to look at ./tests/fixtures, but the docker exec needs to look at the mount in the container at
-    /app/tests/fixtures. A lot of patching back and forth to ensure that every function looks in the right
-    dir (locally or container) is thus needed.
-
-    The benefit of all this patching is that now it is possible to parameterize the test for expected (worker) log outcomes!
-
-    """
-    project_name = params["project_name"]
-    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    params["bucket_name"] = bucket_name
-    project_id = project_map[project_name]
-    params["project_id"] = project_id
-    # Add job_id, incrementing for each parameterization
-    if not hasattr(test_bcftools_pipe_cli_integration_with_eager_mode, "call_count"):
-        test_bcftools_pipe_cli_integration_with_eager_mode.call_count = 1
-    params["job_id"] = test_bcftools_pipe_cli_integration_with_eager_mode.call_count
-    test_bcftools_pipe_cli_integration_with_eager_mode.call_count += 1
-
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    caplog.set_level(logging.INFO)
-
-    original_task_always_eager = current_app.conf.task_always_eager
-    original_task_eager_propagates = current_app.conf.task_eager_propagates
-    original_merge_or_concat_bcftools_temp_files = BcftoolsQueryManager.merge_or_concat_bcftools_temp_files
-
-    def ensure_fixture_path(filename, fixture_dir="tests/fixtures"):
-        if filename.startswith(fixture_dir):
-            return filename
-        return f"{fixture_dir}/{filename}"
-
-    def strip_fixture_dir(filename):
-        fixture_dir = "tests/fixtures/"
-        if filename.startswith(fixture_dir):
-            return filename[len(fixture_dir) :]
-        return filename
-
-    def patched_download_sample_metadata(metadata_tsv_name, bucket_name, s3_file_manager):
-        """
-        Patches the path for the sidecar metadata file so that it can be read from fixtures and not be downloaded.
-        """
-        return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
-
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
-        """
-        Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
-        """
-        return [ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures") for file_name in files_to_download]
-
-    def patched_run_bcftools(self, command: str) -> None:
-        """
-        Patches the working dir used when running bcftools commands inside the Docker container.
-        """
-
-        class DummyProc:
-            """
-            Dummy process object to mock subprocess.Popen for testing.
-            Provides a .pid attribute and minimal methods so that code
-            expecting a real process (for per-task resource monitoring/metrics)
-            does not fail. Used to simulate a running process in tests
-            where no actual subprocess is started.
-            """
-
-            def __init__(self):
-                self.pid = 12345
-
-            # Simulate sucessful completion using 0
-            def wait(self):
-                return 0
-
-            def poll(self):
-                return 0
-
-        container_id = self.get_container_id(self.CONTAINER_NAME)
-        logger = logging.getLogger("divbase_lib.queries")
-        logger.debug(f"Executing command in container with ID: {container_id}")
-        docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
-        subprocess.run(docker_cmd, check=True)
-        return DummyProc()
-
-    @contextmanager
-    def patched_temp_file_management(self):
-        """Context manager to handle temporary file cleanup, ensuring all temp files are in ./tests/fixtures."""
-        self.temp_files = []
-        try:
-            yield self
-        finally:
-            if self.temp_files:
-                logger = logging.getLogger("divbase_lib.queries")
-                logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
-                temp_files_with_path = [ensure_fixture_path(f) for f in self.temp_files]
-                self.cleanup_temp_files(temp_files_with_path)
-
-    def patched_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier):
-        """
-        Patches a method that needs quite a bit of patching of submethods, hence nested patches...
-        It ensures that all paths are correctly set to either ./tests/fixtures or /app/tests/fixtures depending
-        on if python code or docker exec code needs to access the files.
-        """
-        original_rename = os.rename
-        original_get_all_sample_names_from_vcf_files = self._get_all_sample_names_from_vcf_files
-        original_group_vcfs_by_sample_set = self._group_vcfs_by_sample_set
-
-        def patched_rename(src, dst):
-            src = ensure_fixture_path(src)
-            dst = ensure_fixture_path(dst)
-            return original_rename(src, dst)
-
-        def patched_get_all_sample_names_from_vcf_files(output_temp_files):
-            output_temp_files = [ensure_fixture_path(f) for f in output_temp_files]
-            return original_get_all_sample_names_from_vcf_files(output_temp_files)
-
-        def patched_group_vcfs_by_sample_set(sample_names_per_VCF):
-            stripped = {strip_fixture_dir(k): v for k, v in sample_names_per_VCF.items()}
-            return original_group_vcfs_by_sample_set(stripped)
-
-        with (
-            patch("os.rename", new=patched_rename),
-            patch.object(self, "_get_all_sample_names_from_vcf_files", new=patched_get_all_sample_names_from_vcf_files),
-            patch.object(self, "_group_vcfs_by_sample_set", new=patched_group_vcfs_by_sample_set),
-        ):
-            return original_merge_or_concat_bcftools_temp_files(self, output_temp_files, identifier)
-
-    def patched_upload_results_file(output_file, bucket_name, s3_file_manager):
-        """
-        Use the bucket_name from the test parameterization for uploading the results file
-        """
-        output_file = Path(ensure_fixture_path(str(output_file)))
-        return s3_file_manager.upload_files(
-            to_upload={output_file.name: output_file},
-            bucket_name=bucket_name,
-        )
-
-    def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
-        """
-        Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
-        """
-
-        logger = logging.getLogger("divbase_api.worker.tasks")
-
-        if output_file is not None:
-            output_file = ensure_fixture_path(str(output_file))
-            try:
-                os.remove(output_file)
-                logger.info(f"deleted {output_file}")
-            except Exception as e:
-                logger.warning(f"Could not delete output file from worker {output_file}: {e}")
-
-    def patched_prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
-        """Create header file in the fixtures directory where the testing stack workers can find it"""
-        header_path = ensure_fixture_path(header_filename)
-        with open(header_path, "w") as file:
-            file.write('##DivBase_created="This is a results file created by a DivBase query; ')
-            file.write(f'Date={datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"\n')
-
-    if ensure_dimensions_file:
-        run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name)
-    try:
-        current_app.conf.update(
-            task_always_eager=True,
-            task_eager_propagates=True,
-        )
-
-        with (
-            patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
-            patch("divbase_api.services.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
-            patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_api.services.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
-            patch(
-                "divbase_api.services.queries.BcftoolsQueryManager.temp_file_management",
-                new=patched_temp_file_management,
-            ),
-            patch(
-                "divbase_api.services.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
-                new=patched_merge_or_concat_bcftools_temp_files,
-            ),
-            patch("divbase_api.worker.tasks._upload_results_file", new=patched_upload_results_file),
-            patch("divbase_api.worker.tasks._delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
-            patch(
-                "divbase_api.services.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
-                new=patched_prepare_txt_with_divbase_header_for_vcf,
-            ),
-        ):
-            if not expect_success:
-                with pytest.raises((VCFDimensionsEntryMissingError, TaskUserError)) as e:
-                    bcftools_pipe_task(**params)
-                for msg in expected_error_msgs:
-                    assert msg.replace("\n", "") in str(e.value).replace("\n", "")
-            else:
-                result = bcftools_pipe_task(**params)
-                assert result is not None
-
-            for log_msg in expected_logs:
-                assert log_msg in caplog.text
-
-            print(f"Captured logs:\n{caplog.text}")
-    finally:
-        current_app.conf.task_always_eager = original_task_always_eager
-        current_app.conf.task_eager_propagates = original_task_eager_propagates

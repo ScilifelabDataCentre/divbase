@@ -15,6 +15,8 @@ from divbase_api.services.queries import (
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
+    _calculate_pairwise_overlap_types_for_sample_sets,
+    _check_if_samples_can_be_combined_with_bcftools,
     _determine_sample_selection_mode,
     _resolve_inputs_for_all_samples_mode,
     _resolve_inputs_for_cli_samples_mode,
@@ -503,3 +505,145 @@ class TestBcftoolsReturnCodeHandling:
             manager.merge_or_concat_bcftools_temp_files(list(sample_names_map.keys()), identifier=identifier)
 
         assert failing_prefix in str(exc_info.value)
+
+
+class TestSampleSetOverlapHelpers:
+    @pytest.mark.parametrize(
+        "sample_sets_dict,expected_identical_diff_order,expected_partly,expected_non_overlap",
+        [
+            (
+                {
+                    tuple(["S1", "S2", "S3"]): [],
+                    tuple(["S3", "S4"]): [],
+                    tuple(["S5", "S6"]): [],
+                },
+                [],
+                [(tuple(["S1", "S2", "S3"]), tuple(["S3", "S4"]))],
+                [(tuple(["S1", "S2", "S3"]), tuple(["S5", "S6"]))],
+            ),
+            (
+                {
+                    tuple(["A"]): [],
+                    tuple(["B"]): [],
+                    tuple(["C"]): [],
+                },
+                [],
+                [],
+                [
+                    (tuple(["A"]), tuple(["B"])),
+                    (tuple(["A"]), tuple(["C"])),
+                    (tuple(["B"]), tuple(["C"])),
+                ],
+            ),
+            (
+                {
+                    tuple(["X", "Y"]): [],
+                    tuple(["Y", "X"]): [],
+                },
+                [(tuple(["X", "Y"]), tuple(["Y", "X"]))],
+                [],
+                [],
+            ),
+        ],
+    )
+    def test_calculate_pairwise_overlap_types_for_sample_sets(
+        self,
+        sample_sets_dict,
+        expected_identical_diff_order,
+        expected_partly,
+        expected_non_overlap,
+    ):
+        """Test that _calculate_pairwise_overlap_types_for_sample_sets correctly calculates the pairwise overlap types for sample sets."""
+
+        result = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict)
+
+        assert isinstance(result.identical_elements_different_order, list)
+        assert isinstance(result.partly_overlapping, list)
+        assert isinstance(result.non_overlapping, list)
+
+        for expected in expected_identical_diff_order:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.identical_elements_different_order
+            )
+
+        for expected in expected_partly:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.partly_overlapping
+            )
+
+        for expected in expected_non_overlap:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.non_overlapping
+            )
+
+    @pytest.mark.parametrize(
+        "files_to_download,dimensions_index,should_raise_error,expected_message_part",
+        [
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B", "A"]},
+                    ]
+                },
+                True,
+                "identical elements but different order",
+            ),
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B", "C"]},
+                    ]
+                },
+                True,
+                "partly overlapping",
+            ),
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B"]},
+                    ]
+                },
+                False,
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+            ),
+        ],
+    )
+    def test_check_if_samples_can_be_combined_with_bcftools_param(
+        self,
+        files_to_download,
+        dimensions_index,
+        should_raise_error,
+        expected_message_part,
+        caplog,
+    ):
+        """Test that check_if_samples_can_be_combined_with_bcftools raises TaskUserError when samples have incompatible overlaps."""
+        vcf_dimensions_data = ProjectVCFDimensionsData(
+            project_id=1,
+            vcf_file_count=len(dimensions_index["vcf_files"]),
+            vcf_files=[
+                ProjectVCFDimensionsEntry(
+                    vcf_file_s3_key=entry["vcf_file_s3_key"],
+                    s3_version_id=None,
+                    samples=entry.get("samples", []),
+                )
+                for entry in dimensions_index["vcf_files"]
+            ],
+        )
+
+        if should_raise_error:
+            with pytest.raises(TaskUserError) as excinfo:
+                _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
+            assert expected_message_part in str(excinfo.value)
+        else:
+            with caplog.at_level("INFO"):
+                _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
+            assert expected_message_part in caplog.text
