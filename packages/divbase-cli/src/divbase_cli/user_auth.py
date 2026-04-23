@@ -283,6 +283,7 @@ def make_authenticated_request(
                 # Prevents user getting warning about being already logged in when they try to log in again
                 config = load_user_config()
                 config.set_login_status(url=None, email=None)
+                _delete_stored_jwts(token_path)
                 raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
             else:
                 token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
