@@ -40,9 +40,14 @@ class DivBaseCLISettings:
     """
 
     CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", CONFIG_PATH))
-    TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
-    DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
 
+    # for tokens stored via OS keyring, we use these to define a unique lookup key.
+    KEYRING_SERVICE: str = os.getenv("DIVBASE_KEYRING_SERVICE", "divbase-cli")
+    KEYRING_USERNAME: str = "tokens"
+    # Fallback path for tokens storage if keyring cannot be used on device.
+    TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
+
+    DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
     LOGGING_ON: bool = os.getenv("DIVBASE_LOGGING_ON", DEFAULT_LOGGING_ON) == "1"
     LOG_LEVEL: str = os.getenv("DIVBASE_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
