@@ -6,6 +6,7 @@ It also collects fixtures and constants that are needed across multiple test mod
 """
 
 import logging
+import time
 from pathlib import Path
 
 import pytest
@@ -144,14 +145,62 @@ def clean_vcf_dimensions():
 @pytest.fixture
 def run_update_dimensions(CONSTANTS):
     """
-    Factory fixture that runs update_vcf_dimensions_task.
+    Factory fixture that submits update_vcf_dimensions_task to Celery and waits for completion.
+    This ensures bcftools-dependent indexing runs in the worker container, not the host pytest process.
     Usage: run_update_dimensions(bucket_name, project_id, project_name)
     """
 
-    def _update(bucket_name="split-scaffold-project", project_id=None, project_name=None, user_id=None):
-        return update_vcf_dimensions_task(
-            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
-        )
+    def _update(
+        bucket_name="split-scaffold-project",
+        project_id=None,
+        project_name=None,
+        user_id=None,
+        max_wait_seconds: int = 120,
+        max_timeout_retries: int = 1,
+    ):
+        kwargs = {
+            "bucket_name": bucket_name,
+            "project_id": project_id,
+            "project_name": project_name,
+            "user_id": user_id,
+        }
+
+        def _wait_for_completion(async_result):
+            start_time = time.time()
+            while True:
+                if async_result.state == "FAILURE":
+                    raise AssertionError(
+                        "update_vcf_dimensions_task failed in worker.\n"
+                        f"task_id={async_result.id}, project_name={project_name}, bucket_name={bucket_name}\n"
+                        f"result={async_result.result!r}"
+                    )
+
+                if async_result.ready():
+                    return async_result.get()
+
+                if time.time() - start_time > max_wait_seconds:
+                    raise TimeoutError(
+                        f"update_vcf_dimensions_task timed out after {max_wait_seconds}s "
+                        f"(task_id={async_result.id}, project_name={project_name}, bucket_name={bucket_name})"
+                    )
+                time.sleep(1)
+
+        for attempt in range(1, max_timeout_retries + 2):
+            async_result = update_vcf_dimensions_task.apply_async(kwargs=kwargs)
+            try:
+                return _wait_for_completion(async_result)
+            except TimeoutError:
+                if attempt > max_timeout_retries:
+                    raise
+                logger.warning(
+                    "update_vcf_dimensions_task timed out (attempt %d/%d). Retrying once with same kwargs. "
+                    "task_id=%s project_name=%s bucket_name=%s",
+                    attempt,
+                    max_timeout_retries + 1,
+                    async_result.id,
+                    project_name,
+                    bucket_name,
+                )
 
     return _update
 

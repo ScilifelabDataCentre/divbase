@@ -489,7 +489,6 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         on if python code or docker exec code needs to access the files.
         """
         original_rename = os.rename
-        original_get_all_sample_names_from_vcf_files = self._get_all_sample_names_from_vcf_files
         original_group_vcfs_by_sample_set = self._group_vcfs_by_sample_set
 
         def patched_rename(src, dst):
@@ -498,8 +497,37 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             return original_rename(src, dst)
 
         def patched_get_all_sample_names_from_vcf_files(output_temp_files):
-            output_temp_files = [ensure_fixture_path(f) for f in output_temp_files]
-            return original_get_all_sample_names_from_vcf_files(output_temp_files)
+            """
+            Extract sample names from temp VCF files by running bcftools in the worker container.
+            This avoids relying on a host-installed bcftools binary when running eager-mode tests.
+            """
+            sample_names_per_VCF = {}
+            container_id = self.get_container_id(self.CONTAINER_NAME)
+
+            for vcf_file in output_temp_files:
+                local_fixture_path = ensure_fixture_path(vcf_file)
+                container_fixture_path = f"/app/tests/fixtures/{Path(local_fixture_path).name}"
+
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "exec",
+                        "-w",
+                        "/app/tests/fixtures",
+                        container_id,
+                        "bcftools",
+                        "query",
+                        "-l",
+                        container_fixture_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                sample_names = result.stdout.strip().split("\n")
+                sample_names_per_VCF[local_fixture_path] = sample_names if sample_names != [""] else []
+
+            return sample_names_per_VCF
 
         def patched_group_vcfs_by_sample_set(sample_names_per_VCF):
             stripped = {strip_fixture_dir(k): v for k, v in sample_names_per_VCF.items()}

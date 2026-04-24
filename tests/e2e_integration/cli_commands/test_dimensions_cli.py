@@ -352,6 +352,7 @@ def test_delete_skipped_vcf_batch(
 
 def test_update_dimensions_skips_divbase_generated_vcf(
     CONSTANTS,
+    run_update_dimensions,
     project_map,
     tmp_path,
 ):
@@ -384,7 +385,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(
         bucket_name=bucket_name,
     )
 
-    result = update_vcf_dimensions_task(
+    result = run_update_dimensions(
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
     )
 
@@ -398,6 +399,7 @@ def test_update_dimensions_skips_divbase_generated_vcf(
 
 def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     CONSTANTS,
+    run_update_dimensions,
     project_map,
 ):
     """
@@ -409,7 +411,7 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     project_id = project_map[project_name]
     user_id = 1
 
-    result_first_run = update_vcf_dimensions_task(
+    result_first_run = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
@@ -423,7 +425,7 @@ def test_update_dimensions_twice_with_no_new_VCF_added_inbetween(
     for vcf in expected_vcfs:
         assert vcf in added_files, f"{vcf} not found in indexed files: {added_files}"
 
-    result_second_run = update_vcf_dimensions_task(
+    result_second_run = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
@@ -999,40 +1001,34 @@ def test_validate_metadata_file_nonexistent(
 
 def test_update_dimensions_cleans_up_csi_index_files_from_worker(
     CONSTANTS,
+    run_update_dimensions,
     project_map,
-    tmp_path,
-    monkeypatch,
 ):
     """
-    Test that CSI index files created during dimension calculation are deleted from the worker
-    filesystem after update_vcf_dimensions_task completes.
+    Test that dimensions update does not upload CSI index files to the project bucket.
+    Currently, DivBase does not store CSI index files in the project bucket. Recreating them in the queries when needed
+    is costlier/slower, but avoids drift between the CSI files and their parent VCF files in the bucket.
     """
-    monkeypatch.chdir(tmp_path)
-
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
     project_id = project_map[project_name]
     user_id = 1
 
-    result = update_vcf_dimensions_task(
+    result = run_update_dimensions(
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
     )
 
     assert result["status"] == "completed"
 
-    vcf_files_remaining = list(tmp_path.glob("*.vcf")) + list(tmp_path.glob("*.vcf.gz"))
-    assert vcf_files_remaining == [], (
-        f"Expected all VCF files to be deleted from worker after task, but found: {vcf_files_remaining}"
-    )
-
-    csi_files_remaining = list(tmp_path.glob("*.csi"))
-    assert csi_files_remaining == [], (
-        f"Expected all CSI index files to be deleted from worker after task, but found: {csi_files_remaining}"
-    )
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    bucket_files = s3_file_manager.list_files(bucket_name=bucket_name)
+    csi_files_in_bucket = [file for file in bucket_files if file.endswith(".csi")]
+    assert csi_files_in_bucket == [], f"Did not expect CSI files in bucket, found: {csi_files_in_bucket}"
 
 
 def test_update_dimensions_indexes_uncompressed_vcf(
     CONSTANTS,
+    run_update_dimensions,
     db_session_sync,
     project_map,
     tmp_path,
@@ -1068,7 +1064,7 @@ def test_update_dimensions_indexes_uncompressed_vcf(
     )
 
     try:
-        result = update_vcf_dimensions_task(
+        result = run_update_dimensions(
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
 
