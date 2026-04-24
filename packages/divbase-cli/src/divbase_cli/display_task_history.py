@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from rich.console import Console
 from rich.table import Table
 
+from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.api_schemas.task_history import (
     BcftoolsQueryTaskResult,
     DimensionUpdateTaskResult,
@@ -40,12 +41,14 @@ class TaskHistoryDisplayManager:
         project_name: str | None,
         mode: str,
         display_limit: int = 10,
+        format_output_as_tsv: bool = False,
     ):
         self.task_items = task_items
         self.user_email = user_email
         self.project_name = project_name
         self.mode = mode
         self.display_limit = display_limit
+        self.format_output_as_tsv = format_output_as_tsv
 
     def print_task_history(self) -> None:
         """Display the task history fetched from the results backend in a formatted table."""
@@ -63,8 +66,11 @@ class TaskHistoryDisplayManager:
             else:
                 state = "QUEUING"
 
-            colour = self.STATE_COLOURS.get(state, "white")
-            state_with_colour = f"[{colour}]{state}[/{colour}]"
+            if self.format_output_as_tsv:
+                state_with_colour = state
+            else:
+                colour = self.STATE_COLOURS.get(state, "white")
+                state_with_colour = f"[{colour}]{state}[/{colour}]"
 
             submitter = task.submitter_email or "Unknown"
             result = self._format_result(task, state)
@@ -78,8 +84,12 @@ class TaskHistoryDisplayManager:
                 str(task.runtime if task.runtime is not None else "N/A"),
                 result,
             )
-        console = Console()
-        console.print(table)
+
+        if self.format_output_as_tsv:
+            print_rich_table_as_tsv(table=table)
+        else:
+            console = Console()
+            console.print(table)
 
     def _create_task_history_table(self):
         """
@@ -130,10 +140,15 @@ class TaskHistoryDisplayManager:
             else:
                 error_msg = str(task.result) or "Unknown error"
 
+            error_msg = str(error_msg)
+            if self.format_output_as_tsv:
+                return error_msg
             return f"[{colour}]{error_msg}[/{colour}]"
 
         if isinstance(task.result, BcftoolsQueryTaskResult):
             result_message = f"Output file ready for download: {task.result.output_file}"
+            if self.format_output_as_tsv:
+                return result_message
             return f"[{colour}]{result_message}[/{colour}]"
 
         elif isinstance(task.result, SampleMetadataQueryTaskResult):
@@ -142,6 +157,8 @@ class TaskHistoryDisplayManager:
                 f"VCF files containing the sample IDs:\n  {task.result.unique_filenames}\n"
                 f"Sample metadata query:\n  {task.result.query_message}"
             )
+            if self.format_output_as_tsv:
+                return result_message
             return f"[{colour}]{result_message}[/{colour}]"
 
         elif isinstance(task.result, DimensionUpdateTaskResult):
@@ -150,6 +167,8 @@ class TaskHistoryDisplayManager:
                 f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
+            if self.format_output_as_tsv:
+                return result_message
             return f"[{colour}]{result_message}[/{colour}]"
 
         if isinstance(task.result, dict) and ("exc_type" in task.result or "error" in task.result):
@@ -163,9 +182,14 @@ class TaskHistoryDisplayManager:
                     error_msg = str(exc_message)
                 else:
                     error_msg = task.result.get("exc_type", "Unknown error")
+            error_msg = str(error_msg)
+            if self.format_output_as_tsv:
+                return error_msg
             return f"[{colour}]{error_msg}[/{colour}]"
 
         result_message = str(task.result)
+        if self.format_output_as_tsv:
+            return result_message
         return f"[{colour}]{result_message}[/{colour}]"
 
     def _to_cet(self, timestamp_str):
