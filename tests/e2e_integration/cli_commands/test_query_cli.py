@@ -6,7 +6,9 @@ All tests are run against a docker compose setup with the entire DivBase stack r
 A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for the tests.
 """
 
+import csv
 import gzip
+import io
 import logging
 import re
 import time
@@ -37,45 +39,33 @@ def _extract_results_file_key(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _extract_task_state_from_terminal_stdout(stdout: str) -> str | None:
+def _extract_task_state_from_task_history_tsv(stdout: str) -> str | None:
     """
-    Infer task state from the `State` column in `task-history id` terminal output.
+    Infer task state from `divbase-cli task-history id --tsv` output.
 
-    Only terminal states are considered. Any other state is treated as non-terminal
-    and will be retried by the polling helper.
+    Returns the state string from the TSV `State` column when present; otherwise None.
     """
-    states_pattern = "|".join(sorted(_TASK_TERMINAL_STATES))
-    # Match rich table cells such as `| SUCCESS |` or `│ FAILURE │`.
-    match = re.search(rf"(?:\||│)\s*({states_pattern})\s*(?:\||│)", stdout)
-    if match:
-        return match.group(1)
+    try:
+        reader = csv.DictReader(io.StringIO(stdout), delimiter="\t")
+        first_row = next(reader, None)
+    except csv.Error:
+        return None
 
-    # Rich table output can truncate the State column in non-interactive test runs.
-    # Fall back to stable result payload markers from the same CLI output.
-    normalized_stdout = " ".join(stdout.split())
-    if any(
-        marker in normalized_stdout
-        for marker in (
-            "'status': 'completed'",
-            '"status": "completed"',
-            '"status":"completed"',
-        )
-    ):
-        return "SUCCESS"
-    if any(
-        marker in normalized_stdout
-        for marker in ('"exc_type":"', '"exc_type":', '"error":"', '"error":', "'error':", "'exc_type':")
-    ):
-        return "FAILURE"
+    if first_row is None:
+        return None
 
-    return None
+    state = first_row.get("State")
+    if state is None:
+        return None
+
+    return state.strip().upper()
 
 
 def wait_for_task_terminal_state_using_CLI(
     user_task_id: int | str, max_retries: int = 60, retry_delay: int = 1
 ) -> tuple[str, str]:
     """
-    Repeatedly poll `divbase-cli task-history id` until the Celery task reaches one of the two terminal state
+    Repeatedly poll `divbase-cli task-history id --tsv` until the Celery task reaches one of the two terminal state
     used for DivBase celery tasks: SUCCESS or FAILURE.
 
     By using the CLI command to poll the task state instead of direct db lookups, this becomes a e2e test helper.
@@ -85,11 +75,11 @@ def wait_for_task_terminal_state_using_CLI(
     # For testing cases, we know that the task ID will exist, so if the signal hits this message, it just means to wait and try the CLI cmd again
 
     for attempt in range(max_retries):
-        result = runner.invoke(app, f"task-history id {user_task_id}")
+        result = runner.invoke(app, f"task-history id {user_task_id} --tsv")
         latest_stdout = result.stdout
 
         if result.exit_code == 0:
-            state = _extract_task_state_from_terminal_stdout(latest_stdout)
+            state = _extract_task_state_from_task_history_tsv(latest_stdout)
             if state in _TASK_TERMINAL_STATES:
                 return state, latest_stdout
             time.sleep(retry_delay)
