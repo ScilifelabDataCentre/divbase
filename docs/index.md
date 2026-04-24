@@ -19,7 +19,7 @@ TODO. - Would be good with a diagram here too.
 
 ## Access DivBase
 
-Want to use DivBase? Create an account or sign in at [https://divbase.scilifelab.se](https://divbase.scilifelab.se){:target="_blank"}.
+Want to use DivBase? Create an account or sign in at [https://divbase.scilifelab-2-prod.sys.kth.se](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"}.
 
 ## Getting Support
 

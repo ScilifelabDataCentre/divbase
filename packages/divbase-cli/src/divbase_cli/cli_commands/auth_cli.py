@@ -23,8 +23,11 @@ from divbase_cli.user_config import load_user_config
 
 logger = logging.getLogger(__name__)
 
+divbase_home_url = cli_settings.DIVBASE_API_URL.replace("/api", "")
+
 auth_app = typer.Typer(
-    no_args_is_help=True, help="Login/logout of DivBase server. To register, visit https://divbase.scilifelab.se/."
+    no_args_is_help=True,
+    help=f"Login/logout of DivBase server. To register, visit {divbase_home_url}.",
 )
 
 

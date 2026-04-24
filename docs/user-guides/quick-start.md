@@ -9,7 +9,7 @@ This guide will walk you through everything you need to start managing and query
 
 ## Step 1: Create an account
 
-Create an account on [DivBase](https://divbase.scilifelab.se) and make sure to verify your email address.
+Create an account on [DivBase](https://divbase.scilifelab-2-prod.sys.kth.se) and make sure to verify your email address.
 
 ## Step 2: Join or create a project
 

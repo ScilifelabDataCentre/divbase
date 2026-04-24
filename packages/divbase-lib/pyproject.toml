@@ -29,7 +29,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://divbase.scilifelab.se"
+Homepage = "https://divbase.scilifelab-2-prod.sys.kth.se"
 Documentation = "https://scilifelabdatacentre.github.io/divbase"
 Repository = "https://github.com/ScilifelabDataCentre/divbase"
 Issues = "https://github.com/ScilifelabDataCentre/divbase/issues"

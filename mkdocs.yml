@@ -111,7 +111,7 @@ nav:
     - "Monitoring: Celery Worker Metrics": development/worker_metrics.md
     - Contributing to DivBase development: CONTRIBUTING.md
     - Security Policy: SECURITY.md
-  - "Go to DivBase Website": https://divbase.scilifelab.se
+  - "Go to DivBase Website": https://divbase.scilifelab-2-prod.sys.kth.se
 
 hooks:
   - scripts/build_docs.py
@@ -146,7 +146,7 @@ extra:
     - icon: fontawesome/brands/github-alt
       link: https://github.com/ScilifelabDataCentre/divbase   
     - icon: fontawesome/solid/globe
-      link: https://divbase.scilifelab.se
+      link: https://divbase.scilifelab-2-prod.sys.kth.se
       name: Website
 
 extra_javascript:

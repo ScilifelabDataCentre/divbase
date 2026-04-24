@@ -25,7 +25,7 @@ if DEV_MODE:
     DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
     DEFAULT_LOGGING_ON = "1"
 else:
-    DEFAULT_DIVBASE_API_URL = "https://divbase-dev.scilifelab-2-dev.sys.kth.se/api"  # TODO - prod url when time
+    DEFAULT_DIVBASE_API_URL = "https://divbase.scilifelab-2-prod.sys.kth.se/api"
     DEFAULT_LOGGING_ON = "0"
 
 
