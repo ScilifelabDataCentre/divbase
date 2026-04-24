@@ -27,7 +27,7 @@ def disable_keyring_backend(monkeypatch):
     Awkward to do that if stored in device keyring. So we can disable keyring for these tests,
     which will fall back to storing the JWTs in a file.
 
-    NOTE: In e.g. CI where a keyring backed wont be available, tests will (aka should) still work as they will from the start use the file-based fallback.
+    In e.g. CI where a keyring backend won't be available, tests will still work as they will from the start use the file-based fallback.
     """
     monkeypatch.setattr(keyring, "set_password", lambda *a, **kw: (_ for _ in ()).throw(NoKeyringError()))
     monkeypatch.setattr(keyring, "get_password", lambda *a, **kw: None)

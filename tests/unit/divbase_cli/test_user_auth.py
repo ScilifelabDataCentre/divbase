@@ -82,7 +82,6 @@ def test_check_existing_session_not_logged_in(mock_logged_out_user_config):
     assert result is None
 
 
-@patch("divbase_cli.user_auth.load_user_tokens")
 def test_check_existing_session_when_logged_in_to_different_divbase_url(mock_logged_in_user_config):
     """Test that check_existing_session returns None if logged in to a different divbase URL."""
 
@@ -103,7 +102,7 @@ def test_check_existing_session_when_logged_in(mock_load_user_tokens, mock_logge
 @patch("divbase_cli.user_auth.keyring.set_password", side_effect=NoKeyringError)
 def test_dump_tokens_falls_back_to_file_when_no_keyring(mock_set_password, mock_token_data, tmp_path):
     """
-    If afftempt to dump tokens with keyring fails, tokens should be written to a file with 0600 permissions."""
+    If attempt to dump tokens with keyring fails, tokens should be written to a file with 0600 permissions."""
     output = tmp_path / ".secrets"
 
     mock_token_data.dump_tokens(output_path=output)

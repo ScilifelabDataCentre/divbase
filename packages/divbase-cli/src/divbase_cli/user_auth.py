@@ -11,7 +11,6 @@ import contextlib
 import json
 import logging
 import os
-import stat
 import time
 import warnings
 from dataclasses import dataclass
@@ -68,10 +67,11 @@ class TokenData:
             logger.debug(f"Keyring JWT storage failed with error: {e}\n falling back to file storage.")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as file:
+        # Create file with 0600 permissions (user read/write only).
+        # Windows doesn't support 0600 permissions, but Windows can use keyring.
+        fd = os.open(path=output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
+        with os.fdopen(fd, "w") as file:
             yaml.safe_dump(token_dict, file, sort_keys=False)
-        # only user has read and write permissions for tokens (0600)
-        os.chmod(path=output_path, mode=stat.S_IRUSR | stat.S_IWUSR)
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
