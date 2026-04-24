@@ -1,6 +1,8 @@
 import datetime
 import re
 from contextlib import contextmanager
+from csv import reader
+from io import StringIO
 from time import sleep
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -142,6 +144,8 @@ def capture_task_history_manager():
     assertions can be made on the actually content of the class and not the rich table output,
     which is sensitive to formatting errors (newlines, whitespaces, etc).
     """
+
+    # TODO now that there is a --tsv option for divbase-cli task-history cmds, this fixture and the tests that call it could be refeactored to assert on the tsv output instead.
     captured_manager = None
 
     def capture_display_manager(self):
@@ -195,6 +199,48 @@ def test_edit_user_can_only_see_their_own_task_history(CONSTANTS, logged_in_edit
 
     assert CONSTANTS["TEST_USERS"]["edit user"]["email"] in user_emails
     assert CONSTANTS["TEST_USERS"]["manage user"]["email"] not in user_emails
+
+
+def test_task_history_user_tsv_output_is_parseable_and_plain(
+    logged_in_edit_user_with_existing_config,
+):
+    """Test that task-history user --tsv emits parseable TSV (not rich table output)."""
+    result_history = runner.invoke(app, "task-history user --tsv --limit 50")
+    assert result_history.exit_code == 0
+
+    # Rich table border chars should not be present in TSV mode.
+    for border_char in ("│", "┃", "┏", "┓", "┗", "┛", "┡", "┩", "┠", "┨", "┬", "┴", "┼", "┯", "┷", "━", "─"):
+        assert border_char not in result_history.stdout
+
+    rows = list(
+        reader(StringIO(result_history.stdout), delimiter="\t")
+    )  # use stringIO to handle newlines in stdout output
+    assert len(rows) > 1  # Header + at least one data row
+
+    expected_headers = [
+        "Submitting user",
+        "Task ID",
+        "State",
+        "Created at",
+        "Started at",
+        "Runtime (s)",
+        "Result",
+    ]
+    assert rows[0] == expected_headers
+
+    for row in rows[1:]:
+        assert len(row) == len(expected_headers)
+
+        task_id = row[1]
+        state = row[2]
+        result_text = row[6]
+
+        assert task_id.isdigit()
+        assert (
+            "[" not in state and "]" not in state
+        )  # Rich markup tags such as [green]...[/green] should not be present in TSV state cell
+        assert state in {"QUEUING", "STARTED", "SUCCESS", "FAILURE", "RETRY", "REVOKED"}
+        assert result_text != ""
 
 
 def test_admin_user_can_see_all_task_history(CONSTANTS, logged_in_admin_with_existing_config):

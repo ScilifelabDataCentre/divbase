@@ -10,7 +10,7 @@ dependencies = [
     "pyjwt==2.12.0",
     "pwdlib[argon2]==0.3.0",
     "starlette-admin==0.16.0",
-    "emails==0.6",
+    "emails==1.1.1",
     "jinja2==3.1.6",
     "celery==5.6.2",
     "alembic==1.18.4",
