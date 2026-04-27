@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -123,6 +124,36 @@ def reset_query_projects_bucket(CONSTANTS):
     yield
 
 
+def _checksum_vcf_stream_skip_double_hash_headers(streamed_gz_bytes: bytes, tmp_path) -> str:
+    """
+    Helper function that calculate the MD5 checksum of a ##-headerless VCF stream. Intended for toy VCF results files since this
+    implementation was not designed to be performant for scaling to large VCF files.
+
+    VCF files contains ## and # headers. The challenge with the ## headers are that they can contain timestamped lines
+    that change the checksum. This is part of the bcftools audit trail. It can be turned off, but that is not desired for DivBase.
+    Timestamped lines will be part of the DivBase results files since the queries run 'bcftools view'. And since many tests
+    will make assertions on the results files, we need to skip the timestamped lines if we want to make assertions on the checksums.
+    Otherwise the checksums will not be deterministic.
+
+    Example: the VCF file fixture in tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz contains the ## header
+    ##bcftools_viewCommand=view -S subset_samples.txt -Oz -o HOM_20ind_17SNPs.vcf.gz ...Date=Tue May 27 18:16:01 2025
+
+    There is also one # header line. That one contains the canonical columns and all the sample name columns. That one should be kept in
+    for the checksum calculation.
+    """
+    text = gzip.decompress(streamed_gz_bytes).decode("utf-8")
+    kept_lines = [line for line in text.splitlines() if not line.startswith("##")]
+    normalized_bytes = ("\n".join(kept_lines) + "\n").encode("utf-8")
+
+    normalized_file = tmp_path / "vcf_stream_skip_double_hash_headers.vcf"
+    normalized_file.write_bytes(normalized_bytes)
+
+    return calculate_md5_checksum(
+        file_path=normalized_file,
+        output_format=MD5CheckSumFormat.HEX,
+    )
+
+
 class TestQueryTSVSuccess:
     """Successful query tsv CLI test cases."""
 
@@ -221,6 +252,61 @@ class TestQueryVCFSuccess:
         )
 
     @pytest.mark.parametrize(
+        "project_name, sample_selection_command,bcftools_view_command,expected_checksum",
+        [
+            # for available project_name values, see CONSTANTS in tests/e2e_integration/conftest.py
+            (
+                "query-project",
+                "Area:West of Ireland,Northern Portugal;Sex:F",
+                "view -s",
+                "3f9c371bcffb8126663cf08a802ae58c",
+            ),
+        ],
+    )
+    def test_vcf_query_result_file_by_headerless_checksum(
+        self,
+        CONSTANTS,
+        logged_in_edit_user_with_existing_config,
+        run_update_dimensions,
+        project_map,
+        project_name,
+        sample_selection_command,
+        bcftools_view_command,
+        expected_checksum,
+        tmp_path,
+    ):
+        """
+        Test that vcf queries for a given project, sample selection command, and bcftools view command produce the expected ##-headerless VCF checksum.
+
+        The checksum should preferrably be calculated by running the bcftools command sequence manually in the worker-long container to separate the
+        divbase-cli query vcf command from manually running the bcftools command sequence.
+        """
+        project_id = project_map[project_name]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        user_id = 1
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+        query_result = runner.invoke(
+            app,
+            f"query vcf --tsv-filter '{sample_selection_command}' --command '{bcftools_view_command}' --project {project_name}",
+        )
+        assert query_result.exit_code == 0, f"Query submission failed: {query_result.stdout}"
+        assert "Job submitted" in query_result.stdout
+
+        user_task_id = query_result.stdout.strip().split()[-1]
+        task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+        assert task_state == "SUCCESS", f"Expected SUCCESS. task-history output:\n{task_stdout}"
+
+        output_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz"
+
+        stream_result = runner.invoke(app, f"files stream {output_file} --project {project_name}")
+        assert stream_result.exit_code == 0, f"Streaming query result failed: {stream_result.stdout}"
+
+        checksum = _checksum_vcf_stream_skip_double_hash_headers(stream_result.stdout_bytes, tmp_path)
+        assert checksum == expected_checksum, f"Expected checksum {expected_checksum}, got {checksum}"
+
+    @pytest.mark.parametrize(
         "arg_command,expected_records,expected_view_command_filter_fragment",
         [
             (
@@ -287,11 +373,6 @@ class TestQueryVCFSuccess:
         assert task_state == "SUCCESS", f"Task failed. task-history output:\n{task_stdout}"
 
         output_file = _extract_results_file_key(task_stdout)
-        if output_file is None:
-            list_results = runner.invoke(app, f"files ls --project {project_name} --include-results-files")
-            assert list_results.exit_code == 0, f"Could not list results files: {list_results.stdout}"
-            output_file = _extract_results_file_key(list_results.stdout)
-        assert output_file is not None, "Could not determine query results file from task-history/files ls output"
 
         stream_result = runner.invoke(
             app,
