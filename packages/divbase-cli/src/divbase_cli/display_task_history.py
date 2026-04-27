@@ -140,11 +140,11 @@ class TaskHistoryDisplayManager:
             else:
                 error_msg = str(task.result) or "Unknown error"
 
-            return self._wrap_with_colour(str(error_msg), colour)
+            return self._colourize_if_enabled(str(error_msg), colour)
 
         if isinstance(task.result, BcftoolsQueryTaskResult):
             result_message = f"Output file ready for download: {task.result.output_file}"
-            return self._wrap_with_colour(result_message, colour)
+            return self._colourize_if_enabled(result_message, colour)
 
         elif isinstance(task.result, SampleMetadataQueryTaskResult):
             result_message = (
@@ -152,7 +152,7 @@ class TaskHistoryDisplayManager:
                 f"VCF files containing the sample IDs:\n  {task.result.unique_filenames}\n"
                 f"Sample metadata query:\n  {task.result.query_message}"
             )
-            return self._wrap_with_colour(result_message, colour)
+            return self._colourize_if_enabled(result_message, colour)
 
         elif isinstance(task.result, DimensionUpdateTaskResult):
             result_message = (
@@ -160,7 +160,7 @@ class TaskHistoryDisplayManager:
                 f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
-            return self._wrap_with_colour(result_message, colour)
+            return self._colourize_if_enabled(result_message, colour)
 
         if isinstance(task.result, dict) and ("exc_type" in task.result or "error" in task.result):
             # Handle any remaining error dicts that weren't caught by FAILURE state check
@@ -173,12 +173,12 @@ class TaskHistoryDisplayManager:
                     error_msg = str(exc_message)
                 else:
                     error_msg = task.result.get("exc_type", "Unknown error")
-            return self._wrap_with_colour(str(error_msg), colour)
+            return self._colourize_if_enabled(str(error_msg), colour)
 
         result_message = str(task.result)
-        return self._wrap_with_colour(result_message, colour)
+        return self._colourize_if_enabled(result_message, colour)
 
-    def _wrap_with_colour(self, text: str, colour: str) -> str:
+    def _colourize_if_enabled(self, text: str, colour: str) -> str:
         if self.format_output_as_tsv:
             return text
         return f"[{colour}]{text}[/{colour}]"
