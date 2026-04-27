@@ -9,6 +9,7 @@ import logging
 
 import typer
 
+from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project, resolve_url_for_non_project_specific_commands
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
@@ -26,6 +27,7 @@ task_history_app = typer.Typer(
 
 @task_history_app.command("user")
 def list_task_history_for_user(
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str | None = typer.Option(
         None, help="Optional project name to filter the user's task history by project."
@@ -59,12 +61,14 @@ def list_task_history_for_user(
         project_name=project,
         mode="user_project" if project else "user",
         display_limit=limit,
+        format_output_as_tsv=format_output_as_tsv,
     ).print_task_history()
 
 
 @task_history_app.command("id")
 def task_history_by_id(
     task_id: int | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
     Check status of a specific task submitted by the user by its task ID.
@@ -83,6 +87,7 @@ def task_history_by_id(
         user_email=None,
         project_name=None,
         mode="id",
+        format_output_as_tsv=format_output_as_tsv,
     ).print_task_history()
 
 
@@ -93,6 +98,7 @@ def list_task_history_for_project(
         help="Project name to check the task history for. Leave blank to use the default project set in your config.",
     ),
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
     Check status of all tasks submitted for a project. Requires a manager role in the project. Displays the latest 10 tasks by default, unless --limit is specified.
@@ -115,4 +121,5 @@ def list_task_history_for_project(
         project_name=project_config.name,
         mode="project",
         display_limit=limit,
+        format_output_as_tsv=format_output_as_tsv,
     ).print_task_history()
