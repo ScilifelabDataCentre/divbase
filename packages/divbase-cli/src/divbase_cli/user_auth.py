@@ -68,7 +68,8 @@ class TokenData:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         # Create file with 0600 permissions (user read/write only).
-        # Windows doesn't support 0600 permissions, but Windows can use keyring.
+        # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
+        # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
         fd = os.open(path=output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
         with os.fdopen(fd, "w") as file:
             yaml.safe_dump(token_dict, file, sort_keys=False)
