@@ -7,6 +7,7 @@ import shutil
 import keyring
 import pytest
 from keyring.errors import NoKeyringError
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
@@ -266,3 +267,18 @@ def test_any_command_with_outdated_cli_version_fails(monkeypatch):
     assert isinstance(result.exception, DivBaseAPIError)
     assert "400" in str(result.exception)
     assert "cli_version_outdated_error" in str(result.exception)
+
+
+def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatch):
+    """
+    When a JWT session (stored in fallback file) and a PAT are both available, the JWT is used.
+
+    We know it works as if the PAT was used, would get error as PAT made up.
+    """
+    log_in_as_user()
+
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr("divbase_pat_fake_not_a_real_token"))
+
+    result = runner.invoke(app=app, args="auth whoami")
+    assert result.exit_code == 0
+    assert USER_EMAIL in result.stdout

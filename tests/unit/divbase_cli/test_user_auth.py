@@ -173,3 +173,30 @@ def test_delete_stored_tokens_tolerates_missing_keyring_entry(mock_delete_passwo
     token_file = tmp_path / ".secrets"
     _delete_stored_jwts(token_file)
     _delete_stored_jwts(token_file)
+
+
+@patch("divbase_cli.user_auth.keyring.get_password")
+def test_load_user_tokens_keyring_takes_priority_over_file(mock_get_password, mock_token_data, tmp_path):
+    """
+    Assert that when tokens exist in both keyring and the fallback file,
+    keyring tokens take priority. -  we mock a keyring creation.
+    """
+    mock_get_password.return_value = json.dumps(
+        {
+            "access_token": "keyring_access",
+            "refresh_token": "keyring_refresh",
+            "access_token_expires_at": mock_token_data.access_token_expires_at,
+            "refresh_token_expires_at": mock_token_data.refresh_token_expires_at,
+        }
+    )
+    token_file = tmp_path / ".secrets"
+    token_file.write_text(
+        "access_token: file_access\n"
+        "refresh_token: file_refresh\n"
+        f"access_token_expires_at: {mock_token_data.access_token_expires_at}\n"
+        f"refresh_token_expires_at: {mock_token_data.refresh_token_expires_at}\n"
+    )
+
+    result = load_user_tokens(token_path=token_file)
+    assert result is not None
+    assert result.access_token.get_secret_value() == "keyring_access"
