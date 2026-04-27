@@ -356,6 +356,58 @@ def test_edit_user_cannot_see_task_history_for_project_not_member_of(
     assert "project_not_found_error" in str(result_history.exception)
 
 
+def test_task_history_id_tsv_can_lookup_submitted_query_task(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+):
+    """
+    Smoke test that a task ID returned by `query vcf` can be looked up via
+    `task-history id --tsv`.
+    """
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    submit_command = (
+        f"query vcf --tsv-filter 'Area:West of Ireland,Northern Portugal;' "
+        f"--command 'view -r 21:15000000-25000000' --project {project_name}"
+    )
+    submit_result = runner.invoke(app, submit_command)
+    assert submit_result.exit_code == 0
+    task_id = submit_result.stdout.strip().split()[-1]
+
+    max_retries = 10
+    retry_delay = 0.5
+    lookup_result = None
+    rows = None
+
+    for _ in range(max_retries):
+        lookup_result = runner.invoke(app, f"task-history id {task_id} --tsv")
+        if lookup_result.exit_code == 0:
+            rows = list(reader(StringIO(lookup_result.stdout), delimiter="\t"))
+            if len(rows) > 1:
+                break
+        sleep(retry_delay)
+
+    assert lookup_result is not None
+    assert lookup_result.exit_code == 0
+    assert rows is not None and len(rows) > 1
+
+    headers = rows[0]
+    data_row = rows[1]
+    assert "Task ID" in headers
+    assert "State" in headers
+
+    task_id_index = headers.index("Task ID")
+    state_index = headers.index("State")
+    assert data_row[task_id_index] == task_id
+    assert data_row[state_index] in {"QUEUING", "STARTED", "SUCCESS", "FAILURE", "RETRY", "REVOKED"}
+
+
 def test_manage_user_query_project_only_can_see_all_task_history_for_their_project(
     CONSTANTS, logged_in_manage_user_query_project_only_with_existing_config
 ):
