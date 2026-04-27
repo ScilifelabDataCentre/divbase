@@ -4,6 +4,10 @@ E2E tests for the "divbase-cli auth" CLI commands.
 
 import shutil
 
+import keyring
+import pytest
+from keyring.errors import NoKeyringError
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
@@ -17,16 +21,17 @@ USER_EMAIL = "edit@divbase.se"
 USER_PASSWORD = "badpassword"
 
 
-def log_in_as_user():
+@pytest.fixture()
+def disable_keyring_backend(monkeypatch):
     """
-    Helper function to log in as a user.
-    Not a fixture as want to ensure logged out before and after each test and could be timing issues when
-    combined with other fixtures (e.g. ensure_logged_out).
+    Some tests want to manipulate the JWTs (to e.g. simulate making them being expired or revoked).
+    Awkward to do that if stored in device keyring. So we can disable keyring for these tests,
+    which will fall back to storing the JWTs in a file.
+
+    In e.g. CI where a keyring backend won't be available, tests will still work as they will from the start use the file-based fallback.
     """
-    command = f"auth login {USER_EMAIL}"
-    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
-    assert result.exit_code == 0
-    assert "Logged in successfully" in result.stdout
+    monkeypatch.setattr(keyring, "set_password", lambda *a, **kw: (_ for _ in ()).throw(NoKeyringError()))
+    monkeypatch.setattr(keyring, "get_password", lambda *a, **kw: None)
 
 
 def make_tokens_expired(access: bool = False, refresh: bool = False):
@@ -46,16 +51,12 @@ def make_tokens_expired(access: bool = False, refresh: bool = False):
                 token_file.write(line)
 
 
-def test_login_command(logged_out_user_with_no_config):
-    command = f"auth login {USER_EMAIL}"
-
-    result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
-    assert result.exit_code == 0
-    assert "Logged in successfully" in result.stdout
-    assert USER_EMAIL in result.stdout
-
-
-def test_login_command_with_password_prompted(logged_out_user_with_no_config):
+def log_in_as_user():
+    """
+    Helper function to log in as a user.
+    Not a fixture as want to ensure logged out before and after each test and could be timing issues when
+    combined with other fixtures (e.g. ensure_logged_out).
+    """
     command = f"auth login {USER_EMAIL}"
     result = runner.invoke(app=app, args=command, input=f"{USER_PASSWORD}\n")
     assert result.exit_code == 0
@@ -63,7 +64,11 @@ def test_login_command_with_password_prompted(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_login_command_fails_with_invalid_credentials(logged_out_user_with_no_config):
+def test_login_command():
+    log_in_as_user()
+
+
+def test_login_command_fails_with_invalid_credentials():
     """Test login command fails with invalid credentials."""
     command = f"auth login {USER_EMAIL}"
 
@@ -73,7 +78,7 @@ def test_login_command_fails_with_invalid_credentials(logged_out_user_with_no_co
     assert "Invalid email or password" in str(result.exception)
 
 
-def test_login_command_with_invalid_server_url(logged_out_user_with_no_config):
+def test_login_command_with_invalid_server_url():
     """Test login command fails with an invalid server URL."""
     command = f"auth login {USER_EMAIL} --divbase-url https://invalid-url"
 
@@ -82,7 +87,7 @@ def test_login_command_with_invalid_server_url(logged_out_user_with_no_config):
     assert isinstance(result.exception, DivBaseAPIConnectionError)
 
 
-def test_login_command_already_logged_in(logged_out_user_with_no_config):
+def test_login_command_already_logged_in():
     """Test login command when already logged in."""
     log_in_as_user()
 
@@ -104,7 +109,7 @@ def test_login_command_already_logged_in(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_force_login_option(logged_out_user_with_no_config):
+def test_force_login_option():
     """Should not prompt about logging in again"""
     log_in_as_user()
     command = f"auth login {USER_EMAIL} --force"
@@ -115,7 +120,7 @@ def test_force_login_option(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_logout_command(logged_out_user_with_no_config):
+def test_logout_command():
     """Test basic usage of logout and that running multiple times is ok."""
     command = "auth logout"
 
@@ -128,7 +133,7 @@ def test_logout_command(logged_out_user_with_no_config):
     assert "Logged out successfully" in result.stdout
 
 
-def test_login_logout_cycle(logged_out_user_with_no_config):
+def test_login_logout_cycle():
     """Test a few repeated login/logout cycles."""
     login_command = f"auth login {USER_EMAIL} --force"
     logout_command = "auth logout"
@@ -144,7 +149,7 @@ def test_login_logout_cycle(logged_out_user_with_no_config):
         assert "Logged out successfully" in result.stdout
 
 
-def test_whoami_command(logged_out_user_with_no_config):
+def test_whoami_command():
     """Test basic usage of whoami command."""
     log_in_as_user()
     command = "auth whoami"
@@ -154,7 +159,7 @@ def test_whoami_command(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_no_config):
+def test_whoami_command_fails_if_not_logged_in():
     """Test basic usage of whoami command."""
     command = "auth whoami"
 
@@ -163,7 +168,7 @@ def test_whoami_command_fails_if_not_logged_in(logged_out_user_with_no_config):
     assert isinstance(result.exception, AuthenticationError)
 
 
-def test_whoami_command_needing_refresh_token(logged_out_user_with_no_config):
+def test_whoami_command_needing_refresh_token(disable_keyring_backend):
     """
     We simulate that the access token has expired by manually setting it to be expired in the users .secrets file
 
@@ -178,24 +183,24 @@ def test_whoami_command_needing_refresh_token(logged_out_user_with_no_config):
     assert USER_EMAIL in result.stdout
 
 
-def test_whoami_with_expired_tokens_fails(logged_in_admin_with_existing_config):
+def test_whoami_with_expired_tokens_fails(disable_keyring_backend):
     """
     Simulate that both the access token and refresh token have expired by manually setting them to be expired
     in the users .secrets file.
 
     This should force authentication to fail when running the whoami command, requiring the user to log in again.
     """
-    command = "auth whoami"
-
+    log_in_as_user()
     make_tokens_expired(access=True, refresh=True)
 
+    command = "auth whoami"
     result = runner.invoke(app=app, args=command)
     assert result.exit_code != 0
     assert isinstance(result.exception, AuthenticationError)
     assert LOGIN_AGAIN_MESSAGE in str(result.exception)
 
 
-def test_using_revoked_refresh_token_fails(logged_out_user_with_no_config, tmp_path):
+def test_using_revoked_refresh_token_fails(tmp_path, disable_keyring_backend):
     """
     Validate that when the refresh token is revoked, the user cannot use it to get a new access token.
 
@@ -236,7 +241,7 @@ def test_using_revoked_refresh_token_fails(logged_out_user_with_no_config, tmp_p
     assert USER_EMAIL in result.stdout
 
 
-def test_login_with_outdated_cli_version_fails(logged_out_user_with_no_config, monkeypatch):
+def test_login_with_outdated_cli_version_fails(monkeypatch):
     """Test that login fails if the CLI version is outdated (rejected by the API middleware)"""
     monkeypatch.setattr("divbase_cli.user_auth.cli_version", "0.0.0")
 
@@ -249,7 +254,7 @@ def test_login_with_outdated_cli_version_fails(logged_out_user_with_no_config, m
     assert "cli_version_outdated_error" in str(result.exception)
 
 
-def test_any_command_with_outdated_cli_version_fails(logged_out_user_with_no_config, monkeypatch):
+def test_any_command_with_outdated_cli_version_fails(monkeypatch):
     """Test that any command fails if the CLI version is outdated."""
     log_in_as_user()
 
@@ -262,3 +267,18 @@ def test_any_command_with_outdated_cli_version_fails(logged_out_user_with_no_con
     assert isinstance(result.exception, DivBaseAPIError)
     assert "400" in str(result.exception)
     assert "cli_version_outdated_error" in str(result.exception)
+
+
+def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatch):
+    """
+    When a JWT session (stored in fallback file) and a PAT are both available, the JWT is used.
+
+    We know it works as if the PAT was used, would get error as PAT made up.
+    """
+    log_in_as_user()
+
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr("divbase_pat_fake_not_a_real_token"))
+
+    result = runner.invoke(app=app, args="auth whoami")
+    assert result.exit_code == 0
+    assert USER_EMAIL in result.stdout

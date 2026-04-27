@@ -7,11 +7,14 @@ The S3FileManager class is patched in all tests to use this test MinIO server,
 it is autoused, so it does not need to be specified in each test.
 """
 
+import contextlib
 import logging
 from pathlib import Path
 
 import boto3
+import keyring
 import pytest
+from keyring.errors import NoKeyringError, PasswordDeleteError
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
@@ -42,29 +45,13 @@ def tmp_config_path(tmp_path):
 
 
 @pytest.fixture
-def logged_out_user_with_no_config():
-    """
-    Fixture to provide a user with a fresh config file that is not logged in anywhere.
-    """
-    # ensure no config or tokens file exist before test
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
-    yield
-    # clean up after test, delete config and tokens file
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
-
-
-@pytest.fixture
 def logged_out_user_with_existing_config(CONSTANTS):
     """
     Fixture to provide a NOT logged in user with an "existing" user configuration file with
     some existing projects and a default project set.
-    """
-    # ensure no config or tokens file exist before test
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
+    NOTE: config and tokens cleaned up before and after tests by clean_tmp_config_and_tokens_between_tests fixture
+    """
     # running any cmd that requires the config file will create it
     # so we can just run the config add cmd directly.
     for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
@@ -77,10 +64,6 @@ def logged_out_user_with_existing_config(CONSTANTS):
     assert result.exit_code == 0
 
     yield
-
-    # clean up after test, delete config and tokens file
-    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture
@@ -125,11 +108,17 @@ def _create_logged_in_user_fixture(user_type: str):
 
     Args:
         user_type: One of "admin", "read user", "edit user", "manage user"
+
+    NOTE: Whilst config and tokens cleaned up before and after tests by clean_tmp_config_and_tokens_between_tests fixture
+    This factory can be used multiple times in a single test, hence need to clean up existing config and tokens here too.
     """
 
     def factory(CONSTANTS):
         # ensure no config or tokens file exist before test
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
         # running any cmd that requires the config file will create it
@@ -156,6 +145,9 @@ def _create_logged_in_user_fixture(user_type: str):
 
         # clean up after test, delete config and tokens file
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+        # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
+        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
     return factory

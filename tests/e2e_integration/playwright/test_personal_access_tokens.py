@@ -14,6 +14,7 @@ from divbase_api.crud.personal_access_tokens import PAT_MAX_ACTIVE_TOKENS
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import generate_personal_access_token, hash_personal_access_token
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 from .conftest import FRONTEND_BASE_URL, _create_logged_in_user_page, navigate_to
 
@@ -92,9 +93,9 @@ def test_create_full_access_pat_shows_token(logged_in_edit_user_pat_page: Page):
     expect(logged_in_edit_user_pat_page.get_by_role("heading", name="Token generated")).to_be_visible()
     expect(logged_in_edit_user_pat_page.get_by_text("Copy your token now, it will not be shown again.")).to_be_visible()
     # The raw token element contains the token value; verify its prefix
-    token_text = logged_in_edit_user_pat_page.get_by_text(re.compile(r"divbase_pat_")).first.text_content()
+    token_text = logged_in_edit_user_pat_page.get_by_text(re.compile(rf"{PAT_TOKEN_PREFIX}")).first.text_content()
     assert token_text is not None
-    assert token_text.strip().startswith("divbase_pat_")
+    assert token_text.strip().startswith(PAT_TOKEN_PREFIX)
 
 
 def test_created_pat_appears_in_list(logged_in_edit_user_pat_page: Page):
