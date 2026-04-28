@@ -254,10 +254,6 @@ class TestQueryVCFSuccess:
             f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
         )
 
-        # "tsv_filter": "Area:West of Ireland;Sex:F",
-        # "command": "view -r 1,4,6,21,24",
-        # "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
-
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
         [
@@ -294,10 +290,32 @@ class TestQueryVCFSuccess:
                 "view -s",
                 "f44ecb1c1ebc5e03a0e9055a699b8cee",
             ),
+            (  # Case 3: Sample metadata HOM_chr_split_version with view -r subset. Based on intergration test cases in tests/e2e_integration/queries_integration/test_bcftools_tasks.py.
+                [
+                    "HOM_20ind_17SNPs.1.vcf.gz",
+                    "HOM_20ind_17SNPs.4.vcf.gz",
+                    "HOM_20ind_17SNPs.5.vcf.gz",
+                    "HOM_20ind_17SNPs.6.vcf.gz",
+                    "HOM_20ind_17SNPs.7.vcf.gz",
+                    "HOM_20ind_17SNPs.8.vcf.gz",
+                    "HOM_20ind_17SNPs.13.vcf.gz",
+                    "HOM_20ind_17SNPs.18.vcf.gz",
+                    "HOM_20ind_17SNPs.20.vcf.gz",
+                    "HOM_20ind_17SNPs.21.vcf.gz",
+                    "HOM_20ind_17SNPs.22.vcf.gz",
+                    "HOM_20ind_17SNPs.24.vcf.gz",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
+                ],
+                "sample_metadata_HOM_20ind_17SNPs.tsv",
+                "--tsv-filter 'Area:West of Ireland;Sex:F'",
+                "view -r 1,4,6,21,24",
+                "9ef2d87a9adf577c2f45b47d1e70138b",
+            ),
         ],
         ids=[
             "case-1-sample-metadata-HOM-20ind",
             "case-2-sample-metadata-HOM-chr-split",
+            "case-3-sample-metadata-HOM-chr-split-view-r-subset",
         ],
     )
     def test_vcf_query_result_file_by_headerless_checksum(
@@ -321,8 +339,8 @@ class TestQueryVCFSuccess:
         The expected checksum should be calculated with _checksum_vcf_skip_double_hash_headers() to skip the ## headers (since they can contain timestamps that change the checksum).
         For more details on how to calculate the expected checksum, see docs/development/writing_e2e_tests_for_vcf_results_checksums.md.
 
-        The parametrised test cases for this test might overlap with other test cases; however, this test is intended to ensure stable results file output over time. Other tests might
-        assert on more granular details of the results file generation.
+        The parametrised test cases for this test might overlap with other e2e and integration test cases; this is intentional as this test aims to assert on stable results file output over time.
+        Other tests might assert on more granular details of the results file generation.
         """
         # The cleaned_project_bucket fixture is function-scoped, so its setup/teardown runs once
         # per parametrized test invocation, keeping this test isolated.
