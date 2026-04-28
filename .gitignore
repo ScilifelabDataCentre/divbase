@@ -34,6 +34,10 @@ split_scaffold_files.txt
 scripts/benchmarking/*.yaml
 scripts/benchmarking/results
 
+# pytest-cov generate files
+.coverage
+htmlcov/
+
 #MacOS artifacts
 .DS_Store
 
