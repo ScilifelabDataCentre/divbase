@@ -255,16 +255,21 @@ class TestQueryVCFSuccess:
         )
 
     @pytest.mark.parametrize(
-        "project_name, sample_selection_command,bcftools_view_command,expected_checksum",
+        "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
         [
-            # for available project_name values, see CONSTANTS in tests/e2e_integration/conftest.py
             (
-                "query-project",
-                "Area:West of Ireland,Northern Portugal;Sex:F",
+                [
+                    "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+                    "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+                    "sample_metadata.tsv",
+                ],
+                "sample_metadata.tsv",
+                "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F'",
                 "view -s",
                 "3f9c371bcffb8126663cf08a802ae58c",
             ),
         ],
+        ids=["cleaned-project-tsv-filter-view-s-baseline"],
     )
     def test_vcf_query_result_file_by_headerless_checksum(
         self,
@@ -272,8 +277,11 @@ class TestQueryVCFSuccess:
         logged_in_edit_user_with_existing_config,
         run_update_dimensions,
         project_map,
-        project_name,
-        sample_selection_command,
+        fixtures_dir,
+        cleaned_project_bucket,
+        files_to_upload,
+        metadata_tsv_name,
+        sample_selection_args,
         bcftools_view_command,
         expected_checksum,
         tmp_path,
@@ -281,18 +289,30 @@ class TestQueryVCFSuccess:
         """
         Test that vcf queries for a given project, sample selection command, and bcftools view command produce the expected ##-headerless VCF checksum.
 
-        The expected checksum should preferrably be calculated by running the bcftools command sequence manually in the worker-long container to separate the
-        divbase-cli query vcf command from manually running the bcftools command sequence. See docs/development/writing_e2e_tests_for_vcf_results_checksums.md for more details.
+        The expected checksum should be calculated with _checksum_vcf_skip_double_hash_headers() to skip the ## headers (since they can contain timestamps that change the checksum).
+        For more details on how to calculate the expected checksum, see docs/development/writing_e2e_tests_for_vcf_results_checksums.md.
         """
+        # The cleaned_project_bucket fixture is function-scoped, so its setup/teardown runs once
+        # per parametrized test invocation, keeping this test isolated.
+        project_name, bucket_name = cleaned_project_bucket
+        assert project_name == CONSTANTS["CLEANED_PROJECT"]
+
         project_id = project_map[project_name]
-        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
         user_id = 1
+
+        for fixture_name in files_to_upload:
+            fixture_path = (fixtures_dir / fixture_name).resolve()
+            upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+            assert upload_result.exit_code == 0, f"Upload failed for {fixture_name}: {upload_result.stdout}"
+
         run_update_dimensions(
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
+
+        metadata_arg = f" --metadata-tsv-name {metadata_tsv_name}" if metadata_tsv_name else ""
         query_result = runner.invoke(
             app,
-            f"query vcf --tsv-filter '{sample_selection_command}' --command '{bcftools_view_command}' --project {project_name}",
+            f"query vcf {sample_selection_args} --command '{bcftools_view_command}' --project {project_name}{metadata_arg}",
         )
         assert query_result.exit_code == 0, f"Query submission failed: {query_result.stdout}"
         assert "Job submitted" in query_result.stdout
