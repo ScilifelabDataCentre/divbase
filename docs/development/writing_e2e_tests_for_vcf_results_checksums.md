@@ -132,6 +132,8 @@ The test paramerters are the following:
 - `bcftools_view_command`: the bcftools command pipe, as described in [VCF query user guide](../user-guides/vcf-query-syntax.md/#4-writing-the-bcftools-command-argument)
 - `expected_checksum`: the expected `##` headerless checksum calculated as described in [Section 1.](#1-calculate-the-expected--headerless-checksum) of this guide.
 
+For each added test case, also add a nickname for the test case to `ids`. This will be displayed in the pytest results upon failure for easier identification of the test case. For this reason, consider prefixing the test case nickname with `case-` and a running number, such as `case-1-sample-metadata-HOM-20ind`.
+
 Example parameterization using the test case described throughout this guide:
 
 ```python
@@ -148,5 +150,8 @@ Example parameterization using the test case described throughout this guide:
                 "view -s",
                 "3f9c371bcffb8126663cf08a802ae58c",
             ),
+        ],
+        ids=[
+            "case-1-sample-metadata-HOM-20ind",
         ],
 ```
