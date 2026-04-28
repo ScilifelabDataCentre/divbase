@@ -1267,8 +1267,11 @@ def run_sidecar_metadata_query(
         error_msg += "Please run 'divbase-cli dimensions update' first."
         raise ValueError(error_msg)
 
+    # sets are useful for uniqueness but they are not ordered. The sample-order in bcftools results files becomes non-derterministic if unique_filenames is a set.
+    # This was discovered by the results file checksum e2e tests. Use an itermediate set seen_filenames for uniqueness and unique_filenames for as an ordered list.
     sample_and_filename_subset: list[SampleFileMapping] = []
-    unique_filenames = set()
+    unique_filenames: list[str] = []
+    seen_filenames: set[str] = set()
 
     for vcf_entry in vcf_dimensions_data.vcf_files:
         filename = vcf_entry.vcf_file_s3_key
@@ -1277,7 +1280,9 @@ def run_sidecar_metadata_query(
         for sample_id in sample_names:
             if sample_id in unique_sample_ids:
                 sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
-                unique_filenames.add(filename)
+                if filename not in seen_filenames:
+                    seen_filenames.add(filename)
+                    unique_filenames.append(filename)
 
     return SampleMetadataQueryTaskResult(
         sample_and_filename_subset=[
@@ -1285,7 +1290,7 @@ def run_sidecar_metadata_query(
             for entry in sample_and_filename_subset
         ],
         unique_sample_ids=list(unique_sample_ids),
-        unique_filenames=list(unique_filenames),
+        unique_filenames=unique_filenames,
         query_message=query_message,
         warnings=warnings,
     )

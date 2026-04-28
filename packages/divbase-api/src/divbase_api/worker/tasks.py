@@ -847,19 +847,24 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
     """
     sample_and_filename_subset: list[SampleFileMapping] = []
     files_to_download = []
-    unique_sample_ids = set()
+    unique_sample_ids: list[
+        str
+    ] = []  # To ensure that the sample ID order in the bcftools results are deterministic, use an itermediate set seen_filenames for uniqueness and unique_filenames for as an ordered list.
+    seen_sample_ids: set[str] = set()
 
     for vcf_entry in vcf_dimensions_data.vcf_files:
         filename = vcf_entry.vcf_file_s3_key
         files_to_download.append(filename)
         for sample_id in vcf_entry.samples:
             sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
-            unique_sample_ids.add(sample_id)
+            if sample_id not in seen_sample_ids:
+                seen_sample_ids.add(sample_id)
+                unique_sample_ids.append(sample_id)
 
     return SampleModeResult(
         files_to_download=files_to_download,
         sample_and_filename_subset=sample_and_filename_subset,
-        unique_sample_ids=list(unique_sample_ids),
+        unique_sample_ids=unique_sample_ids,
         metadata_path=None,
     )
 
