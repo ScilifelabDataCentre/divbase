@@ -21,7 +21,7 @@ import httpx
 import keyring
 import stamina
 import yaml
-from keyring.errors import KeyringError, NoKeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 from pydantic import SecretStr
 
 from divbase_cli import __version__ as cli_version
@@ -85,7 +85,7 @@ class TokenData:
 
 def _delete_stored_jwts(token_path: Path) -> None:
     """Attempt to delete user JWTs from both the keyring and the fallback file."""
-    with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+    with contextlib.suppress(KeyringError):
         keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
     token_path.unlink(missing_ok=True)
 

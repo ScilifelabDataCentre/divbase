@@ -10,7 +10,7 @@ import logging
 
 import keyring
 import pytest
-from keyring.errors import NoKeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
 from divbase_api.worker.crud_dimensions import (
@@ -47,7 +47,7 @@ def clean_tmp_config_and_tokens_between_tests():
     """
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
-    with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+    with contextlib.suppress(KeyringError):
         keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
@@ -55,7 +55,7 @@ def clean_tmp_config_and_tokens_between_tests():
 
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
-    with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+    with contextlib.suppress(KeyringError):
         keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
     cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 

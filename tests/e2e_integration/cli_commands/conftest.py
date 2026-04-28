@@ -14,7 +14,7 @@ from pathlib import Path
 import boto3
 import keyring
 import pytest
-from keyring.errors import NoKeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
@@ -117,7 +117,7 @@ def _create_logged_in_user_fixture(user_type: str):
         # ensure no config or tokens file exist before test
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
-        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+        with contextlib.suppress(KeyringError):
             keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
@@ -146,7 +146,7 @@ def _create_logged_in_user_fixture(user_type: str):
         # clean up after test, delete config and tokens file
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
-        with contextlib.suppress(NoKeyringError, PasswordDeleteError):
+        with contextlib.suppress(KeyringError):
             keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
