@@ -12,6 +12,7 @@ import io
 import logging
 import re
 import time
+from pathlib import Path
 
 import boto3
 import pytest
@@ -124,10 +125,12 @@ def reset_query_projects_bucket(CONSTANTS):
     yield
 
 
-def _checksum_vcf_stream_skip_double_hash_headers(streamed_gz_bytes: bytes, tmp_path) -> str:
+def _checksum_vcf_skip_double_hash_headers(vcf_gz_file: Path, tmp_path: Path) -> str:
     """
-    Helper function that calculate the MD5 checksum of a ##-headerless VCF stream. Intended for toy VCF results files since this
-    implementation was not designed to be performant for scaling to large VCF files.
+    Calculate MD5 for a VCF file after stripping all `##` header lines. Intended for toy VCF results files since this implementation
+    was not designed to be performant for scaling to large VCF files.
+
+    The function requires a VCF file and not streamed bytes, since calculate_md5_checksum() expects a file path.
 
     VCF files contains ## and # headers. The challenge with the ## headers are that they can contain timestamped lines
     that change the checksum. This is part of the bcftools audit trail. It can be turned off, but that is not desired for DivBase.
@@ -141,7 +144,7 @@ def _checksum_vcf_stream_skip_double_hash_headers(streamed_gz_bytes: bytes, tmp_
     There is also one # header line. That one contains the canonical columns and all the sample name columns. That one should be kept in
     for the checksum calculation.
     """
-    text = gzip.decompress(streamed_gz_bytes).decode("utf-8")
+    text = gzip.decompress(vcf_gz_file.read_bytes()).decode("utf-8")
     kept_lines = [line for line in text.splitlines() if not line.startswith("##")]
     normalized_bytes = ("\n".join(kept_lines) + "\n").encode("utf-8")
 
@@ -278,8 +281,8 @@ class TestQueryVCFSuccess:
         """
         Test that vcf queries for a given project, sample selection command, and bcftools view command produce the expected ##-headerless VCF checksum.
 
-        The checksum should preferrably be calculated by running the bcftools command sequence manually in the worker-long container to separate the
-        divbase-cli query vcf command from manually running the bcftools command sequence.
+        The expected checksum should preferrably be calculated by running the bcftools command sequence manually in the worker-long container to separate the
+        divbase-cli query vcf command from manually running the bcftools command sequence. See docs/development/writing_e2e_tests_for_vcf_results_checksums.md for more details.
         """
         project_id = project_map[project_name]
         bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -300,10 +303,19 @@ class TestQueryVCFSuccess:
 
         output_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz"
 
-        stream_result = runner.invoke(app, f"files stream {output_file} --project {project_name}")
-        assert stream_result.exit_code == 0, f"Streaming query result failed: {stream_result.stdout}"
+        # The _checksum_vcf_skip_double_hash_headers eventually requires a VCF file and not streamed bytes, so we can either download it or stream it to a file.
+        # The benefit of using divbase-cli files download is that that command runs a download integrity checksum test, meaning that we know that the file that
+        # will be stripped for ## headers by _checksum_vcf_skip_double_hash_headers is intact at the helper function call time.
+        download_result = runner.invoke(
+            app,
+            f"files download {output_file} --download-dir {tmp_path} --project {project_name}",
+        )
+        assert download_result.exit_code == 0, f"Downloading query result failed: {download_result.stdout}"
 
-        checksum = _checksum_vcf_stream_skip_double_hash_headers(stream_result.stdout_bytes, tmp_path)
+        downloaded_results_file = tmp_path / output_file
+        assert downloaded_results_file.exists(), f"Expected downloaded file not found: {downloaded_results_file}"
+
+        checksum = _checksum_vcf_skip_double_hash_headers(vcf_gz_file=downloaded_results_file, tmp_path=tmp_path)
         assert checksum == expected_checksum, f"Expected checksum {expected_checksum}, got {checksum}"
 
     @pytest.mark.parametrize(
