@@ -254,10 +254,14 @@ class TestQueryVCFSuccess:
             f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
         )
 
+        # "tsv_filter": "Area:West of Ireland;Sex:F",
+        # "command": "view -r 1,4,6,21,24",
+        # "metadata_tsv_name": "sample_metadata_HOM_chr_split_version.tsv",
+
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
         [
-            (
+            (  # Case 1: Sample metadata HOM_20ind_17SNPs (the DivBase dev classic test case)
                 [
                     "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
                     "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
@@ -268,8 +272,33 @@ class TestQueryVCFSuccess:
                 "view -s",
                 "3f9c371bcffb8126663cf08a802ae58c",
             ),
+            (  # Case 2: Sample metadata HOM_chr_split_version.
+                # Interestingly, while the data content for this results filecase is the same of case 1, it uses bcftools concat since split VCF files and thus the sample column order is different => different checksum.
+                [
+                    "HOM_20ind_17SNPs.1.vcf.gz",
+                    "HOM_20ind_17SNPs.4.vcf.gz",
+                    "HOM_20ind_17SNPs.5.vcf.gz",
+                    "HOM_20ind_17SNPs.6.vcf.gz",
+                    "HOM_20ind_17SNPs.7.vcf.gz",
+                    "HOM_20ind_17SNPs.8.vcf.gz",
+                    "HOM_20ind_17SNPs.13.vcf.gz",
+                    "HOM_20ind_17SNPs.18.vcf.gz",
+                    "HOM_20ind_17SNPs.20.vcf.gz",
+                    "HOM_20ind_17SNPs.21.vcf.gz",
+                    "HOM_20ind_17SNPs.22.vcf.gz",
+                    "HOM_20ind_17SNPs.24.vcf.gz",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
+                ],
+                "sample_metadata_HOM_20ind_17SNPs.tsv",
+                "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F'",
+                "view -s",
+                "f44ecb1c1ebc5e03a0e9055a699b8cee",
+            ),
         ],
-        ids=["cleaned-project-tsv-filter-view-s-baseline"],
+        ids=[
+            "case-1-sample-metadata-HOM-20ind",
+            "case-2-sample-metadata-HOM-chr-split",
+        ],
     )
     def test_vcf_query_result_file_by_headerless_checksum(
         self,
