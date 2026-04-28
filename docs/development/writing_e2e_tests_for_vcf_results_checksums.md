@@ -117,3 +117,36 @@ For this example, this should result in the checksum:
 ```
 
 ## 2. Implementing the test case in the parametrized test for ## headerless VCF checksums
+
+Once the expected ## headerless checksum is calculated for the given results VCf files, the test case can be added to `test_vcf_query_result_file_by_headerless_checksum()` in `tests/e2e_integration/cli_commands/test_query_cli.py`.
+
+Store the required input files in `tests/fixtures`. This includes the `.vcf.gz` file(s) and a metadata TSV file (when needed).
+
+The test is designed to upload the fixture files to the `cleaned-project` project in the testing docker compose stack. This project is emptied before and after each test run (including parametrised runs) via the `cleaned_project_bucket` fixture. There is therefore no need to create new testing projects in the `tests/e2e_integration/conftest.py` file.
+
+The test paramerters are the following:
+
+- `files_to_upload`: an array of the files to be uploaded for the test case
+- `metadata_tsv_name`: [Optional] a sidecar sample metadata TSV file. Can be omitted for cases that do not use `--tsv-filter`
+- `sample_selection_args`: `--tsv-filter`, `--samples` or `--all-samples` as described in the [VCF query user guide](../user-guides/vcf-query-syntax.md/#3-sample-and-vcf-file-selection)
+- `bcftools_view_command`: the bcftools command pipe, as described in [VCF query user guide](../user-guides/vcf-query-syntax.md/#4-writing-the-bcftools-command-argument)
+- `expected_checksum`: the expected `##` headerless checksum calculated as described in [Section 1.](#1-calculate-the-expected--headerless-checksum) of this guide.
+
+Example parameterization using the test case described throughout this guide:
+
+```python
+        "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
+        [
+            (
+                [
+                    "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+                    "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+                    "sample_metadata.tsv",
+                ],
+                "sample_metadata.tsv",
+                "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F'",
+                "view -s",
+                "3f9c371bcffb8126663cf08a802ae58c",
+            ),
+        ],
+```
