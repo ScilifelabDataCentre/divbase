@@ -126,8 +126,8 @@ The test is designed to upload the fixture files to the `cleaned-project` projec
 
 The test paramerters are the following:
 
-- `files_to_upload`: an array of the files to be uploaded for the test case
-- `metadata_tsv_name`: [Optional] a sidecar sample metadata TSV file. Can be omitted for cases that do not use `--tsv-filter`
+- `files_to_upload`: an array of the VCF and sample metadata TSV files to be uploaded for the test case
+- `metadata_tsv_name`: [Optional] a sidecar sample metadata TSV file. If used here, the file needs to be part of the `files_to_upload` array. Can be omitted for cases that do not use `--tsv-filter`
 - `sample_selection_args`: `--tsv-filter`, `--samples` or `--all-samples` as described in the [VCF query user guide](../user-guides/vcf-query-syntax.md/#3-sample-and-vcf-file-selection)
 - `bcftools_view_command`: the bcftools command pipe, as described in [VCF query user guide](../user-guides/vcf-query-syntax.md/#4-writing-the-bcftools-command-argument)
 - `expected_checksum`: the expected `##` headerless checksum calculated as described in [Section 1.](#1-calculate-the-expected--headerless-checksum) of this guide.
@@ -141,9 +141,9 @@ Example parameterization using the test case described throughout this guide:
                 [
                     "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
                     "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
-                    "sample_metadata.tsv",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
                 ],
-                "sample_metadata.tsv",
+                "sample_metadata_HOM_20ind_17SNPs.tsv",
                 "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F'",
                 "view -s",
                 "3f9c371bcffb8126663cf08a802ae58c",

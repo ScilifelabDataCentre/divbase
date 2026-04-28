@@ -261,9 +261,9 @@ class TestQueryVCFSuccess:
                 [
                     "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
                     "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
-                    "sample_metadata.tsv",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
                 ],
-                "sample_metadata.tsv",
+                "sample_metadata_HOM_20ind_17SNPs.tsv",
                 "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F'",
                 "view -s",
                 "3f9c371bcffb8126663cf08a802ae58c",
@@ -291,6 +291,9 @@ class TestQueryVCFSuccess:
 
         The expected checksum should be calculated with _checksum_vcf_skip_double_hash_headers() to skip the ## headers (since they can contain timestamps that change the checksum).
         For more details on how to calculate the expected checksum, see docs/development/writing_e2e_tests_for_vcf_results_checksums.md.
+
+        The parametrised test cases for this test might overlap with other test cases; however, this test is intended to ensure stable results file output over time. Other tests might
+        assert on more granular details of the results file generation.
         """
         # The cleaned_project_bucket fixture is function-scoped, so its setup/teardown runs once
         # per parametrized test invocation, keeping this test isolated.
