@@ -1,22 +1,37 @@
 # Installing divbase-cli
 
-## Recommended options: pipx or uv tool
+## Recommended: uv
 
-### 1. With pipx
+The recommended way to install `divbase-cli` is via [uv](https://docs.astral.sh/uv/){target="_blank"}, a fast Python package manager. uv manages isolated tool environments automatically, so there are no dependency conflicts and no need to manually create/activate a virtual environment
+
+**Step 1 — Install uv** (if you don't have it already):
+
+=== "Linux / macOS / Windows Subsystem for Linux"
+
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+
+See the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/){target="_blank"} for more details.
+
+**Step 2 — Install divbase-cli:**
 
 ```bash
-pipx install divbase-cli
+uv tool install divbase-cli
 ```
 
-If you do not have pipx installed, you can install it by following [the official instructions from pipx](https://pipx.pypa.io/stable/installation/).
+`divbase-cli` is now available in your path and you can start using it immediately.
 
-!!! info "why pipx and not pip?"
-    Pipx is recommended for command-line tools that need to be run from the terminal. With pipx, the tool is installed in an isolated environment and made available globally, which avoids dependency conflicts with other Python packages on your system.
-
-To upgrade your prior install of divbase-cli, use:
+To upgrade later:
 
 ```bash
-pipx upgrade divbase-cli
+uv tool upgrade divbase-cli
 ```
 
 !!! info "Which version is installed?"
@@ -26,37 +41,27 @@ pipx upgrade divbase-cli
     divbase-cli --version
     ```
 
-### 2. With uv tool
+## Alternative: pipx
 
-If you use the package manager [uv](https://docs.astral.sh/uv/), you can install `divbase-cli` using UV's equivalent to pipx (`uv tool`):
-
-```bash
-uv tool install divbase-cli
-```
-
-And to upgrade an existing installation:
+If you already use [pipx](https://pipx.pypa.io/stable/), it works just as well:
 
 ```bash
-uv tool upgrade divbase-cli
+pipx install divbase-cli
 ```
 
-## Alternative Installation Methods
-
-### pip with a Virtual Environment
-
-If you would prefer to manually create a virtual environment with for example `conda`/`mamba`/`venv` then you can install `divbase-cli` with pip after activating your virtual environment.
-
-For example, with conda:
+To upgrade:
 
 ```bash
-conda create -n divbase python=3.13
-conda activate divbase
-pip install divbase-cli
+pipx upgrade divbase-cli
 ```
 
-And to upgrade later:
+---
 
-```bash
-conda activate divbase
-pip install --upgrade divbase-cli
-```
+!!! question "Why not create a virtual environment?"
+    `divbase-cli` is a command-line tool, not a library. Installing it into a virtual environment (venv, conda, mamba etc.) is unnecessary and means you have to activate that environment every time you want to use it. Use `uv tool` or `pipx` instead. The benefits of isolation from creating a virtual environment are already provided by these tools.
+
+    If you really want to install divbase-cli into a virtual environment you can do so with pip
+    ```bash
+    # make sure you are using python 3.12 or higher
+    pip install divbase-cli
+    ```
