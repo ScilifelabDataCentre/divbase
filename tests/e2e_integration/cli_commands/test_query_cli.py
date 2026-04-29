@@ -1230,3 +1230,61 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
     finally:
         current_app.conf.task_always_eager = original_task_always_eager
         current_app.conf.task_eager_propagates = original_task_eager_propagates
+
+
+def test_get_vcf_results_downloads_file_on_task_success(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    tmp_path,
+):
+    """Test that divbase-cli query get-vcf-results exits 0 and downloads the results file when the submitted VCF query task succeeds."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    tsv_filter = "Area:West of Ireland,Northern Portugal;"
+    arg_command = "view -r 21:15000000-25000000"
+    submit_result = runner.invoke(
+        app, f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name}"
+    )
+    assert submit_result.exit_code == 0, f"Query submission failed: {submit_result.stdout}"
+    task_id = submit_result.stdout.strip().split()[-1]
+
+    result = runner.invoke(app, f"query get-vcf-results {task_id} --project {project_name} --download-dir {tmp_path}")
+
+    assert result.exit_code == 0, f"get-vcf-results failed: {result.stdout}"
+    assert (tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz").exists()
+
+
+def test_get_vcf_results_exits_with_code_1_when_task_failed(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    tmp_path,
+):
+    """Test that divbase-cli query get-vcf-results exits 1 when the VCF query task completed with FAILURE."""
+    project_name = CONSTANTS["QUERY_PROJECT"]
+    project_id = project_map[project_name]
+    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+    user_id = 1
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    # A malformed tsv filter (missing colon) passes submission but causes task FAILURE via SidecarInvalidFilterError.
+    malformed_filter = "Area West of Ireland"
+    arg_command = "view -r 21:15000000-25000000"
+    submit_result = runner.invoke(
+        app, f"query vcf --tsv-filter '{malformed_filter}' --command '{arg_command}' --project {project_name}"
+    )
+    assert submit_result.exit_code == 0, f"Query submission should succeed for this filter: {submit_result.stdout}"
+    task_id = submit_result.stdout.strip().split()[-1]
+
+    result = runner.invoke(app, f"query get-vcf-results {task_id} --project {project_name} --download-dir {tmp_path}")
+
+    assert result.exit_code == 1
+    assert "failed" in result.stdout
+    assert f"task-history id {task_id}" in result.stdout
