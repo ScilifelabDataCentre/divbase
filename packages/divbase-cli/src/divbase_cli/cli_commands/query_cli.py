@@ -25,6 +25,7 @@ from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import PolledTaskNotFinalError, UnsupportedTaskTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_project, resolve_url_for_non_project_specific_commands
 from divbase_cli.retries import (
     retry_polling_until_final_or_retryable_api_errors,
@@ -36,7 +37,6 @@ from divbase_lib.api_schemas.queries import (
     SampleMetadataQueryTaskResult,
 )
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
-from divbase_lib.exceptions import PolledTaskNotFinalError
 
 logger = logging.getLogger(__name__)
 
@@ -230,17 +230,23 @@ def vcf_query(
     )
 
 
-@query_app.command("get-results", help=GET_RESULTS_HELP_TEXT)
+@query_app.command("get-vcf-results", help=GET_RESULTS_HELP_TEXT)
 def get_results_from_query_job_by_task_id(
     task_id: int = typer.Argument(..., help="Task ID of the query job to poll for results from."),
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Get results from a query job by its task ID by first polling for the final state of the task.
+    Get results from a VCF query job by its task ID by first polling for the final state of the task and then downloading the results file.
     """
 
     divbase_url = resolve_url_for_non_project_specific_commands()
-    task_status = poll_task_until_final_state_reached(divbase_url=divbase_url, task_id=task_id)
+
+    try:
+        task_status = poll_task_until_final_state_reached(divbase_url=divbase_url, task_id=task_id)
+    except UnsupportedTaskTypeError as e:
+        raise typer.BadParameter(
+            f"Task {task_id} has unsupported task type '{e.task_name}'. Only VCF query jobs are supported for this CLI command."
+        ) from e
 
     if task_status == "SUCCESS":
         print(f"Task {task_id} completed successfully.")
@@ -266,6 +272,7 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> TaskH
     """
 
     FINAL_STATES = {"SUCCESS", "FAILURE"}
+    SUPPORTED_TASK_NAMES = {"tasks.bcftools_query"}
 
     response = make_authenticated_request(
         method="GET",
@@ -275,12 +282,15 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> TaskH
     # Endpoint returns 403 if the task is not found or the user does not have permission to view it. So item should not be empty.
     items = response.json()
 
-    task_status = TaskHistoryResult(**items[0]).status  # for task ID lookups, only one entry is returned
+    task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
 
-    if task_status in FINAL_STATES:
-        return task_status
+    if task_results.name not in SUPPORTED_TASK_NAMES:
+        raise UnsupportedTaskTypeError(task_results.name)
 
-    raise PolledTaskNotFinalError(f"Task {task_id} state is {task_status}")
+    if task_results.status in FINAL_STATES:
+        return task_results.status
+
+    raise PolledTaskNotFinalError(f"Task {task_id} state is {task_results.status}")
 
 
 def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:

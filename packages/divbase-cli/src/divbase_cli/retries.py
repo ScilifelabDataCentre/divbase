@@ -7,8 +7,7 @@ Functions are used in stamina (package) decorators.
 
 import httpx
 
-from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
-from divbase_lib.exceptions import PolledTaskNotFinalError
+from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError, PolledTaskNotFinalError
 
 
 def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
