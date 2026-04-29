@@ -31,6 +31,7 @@ class WorkerS3Settings:
     """S3 configuration settings for the worker."""
 
     endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
+    bucket_prefix: str = os.getenv("S3_BUCKET_PREFIX", "NOT_SET")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 
@@ -83,6 +84,7 @@ class WorkerSettings:
             "CELERY_RESULT_BACKEND": self.general.result_backend,
             "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
+            "S3_BUCKET_PREFIX": self.s3.bucket_prefix,
         }
         for setting_name, setting in required_fields.items():
             if isinstance(setting, str) and setting == "NOT_SET":

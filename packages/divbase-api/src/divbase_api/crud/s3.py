@@ -2,10 +2,18 @@
 Crud operations for the S3 endpoints
 """
 
+import logging
+
+import boto3
+from botocore.exceptions import ClientError
+from pydantic import SecretStr
+
 from divbase_api.api_config import api_settings
 from divbase_api.services.pre_signed_urls import S3PreSignedService
 from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.s3 import FileChecksumResponse
+
+logger = logging.getLogger(__name__)
 
 
 def get_s3_file_manager() -> S3FileManager:
@@ -45,3 +53,58 @@ def get_s3_checksums(bucket_name: str, files_to_check: list[str]) -> list[FileCh
             )
 
     return response
+
+
+def validate_s3_service_account(
+    endpoint_url: str, bucket_prefix: str, access_key: SecretStr, secret_key: SecretStr
+) -> None:
+    """
+    Validate the S3 service account can connect and has at least some of its expected permissions, raises an error if not.
+    Called at API startup (lifespan event) and celery worker startup
+
+    The bucket_prefix defines the prefix of the buckets the service account is supposed to be able to access in each environment:
+    for e.g. local dev and test it is:
+    divbase-local-{*} , where * is a number starting from 1.
+    """
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key.get_secret_value(),
+        aws_secret_access_key=secret_key.get_secret_value(),
+    )
+    known_bucket_name = f"{bucket_prefix}1"
+
+    try:
+        _ = s3_client.head_object(
+            Bucket=known_bucket_name,
+            Key="a-non-existent-key-for-connection-and-permissions-check",
+        )
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "403":
+            raise RuntimeError(
+                "S3 service account does not have the correct permissions or access key and secret key."
+            ) from e
+        if error_code != "404":
+            logger.error(f"s3.head_object failed but not due to permissions. Error was: {error_code}")
+            raise RuntimeError(
+                "S3 service account cannot connect to S3 or seems to be missing expected permissions."
+            ) from e
+
+    try:
+        s3_client.delete_object(
+            Bucket=known_bucket_name,
+            Key="a-non-existent-key-for-connection-and-permissions-check",
+            VersionId="00000000000000000000000000000000",
+        )
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "AccessDenied":
+            return None
+        else:
+            raise RuntimeError(
+                "Permissions check failed: S3 service may have s3:DeleteObjectVersion (hard delete permissions)."
+            ) from e
+    raise RuntimeError(
+        "Permissions check failed: S3 service account seems to have s3:DeleteObjectVersion (hard delete permissions)."
+    )

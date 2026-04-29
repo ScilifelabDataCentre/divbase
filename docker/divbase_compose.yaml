@@ -57,6 +57,7 @@ services:
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
+      - S3_BUCKET_PREFIX=divbase-local-
       - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
       - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
       - ENABLE_WORKER_METRICS=0 # Disable metrics collection and metrics server in the worker as it comes with some overhead.
@@ -181,6 +182,7 @@ services:
     - FIRST_ADMIN_PASSWORD=badpassword
     - S3_ENDPOINT_URL=http://host.docker.internal:9000
     - S3_PRESIGNING_URL=http://localhost:9000
+    - S3_BUCKET_PREFIX=divbase-local-
     - S3_SERVICE_ACCOUNT_ACCESS_KEY=s3-service-account
     - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     depends_on: *worker-api-depends

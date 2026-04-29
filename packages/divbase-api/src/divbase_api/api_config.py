@@ -64,6 +64,7 @@ class S3Settings:
 
     endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "NOT_SET")
     presigning_url: str = os.getenv("S3_PRESIGNING_URL", "NOT_SET")
+    bucket_prefix: str = os.getenv("S3_BUCKET_PREFIX", "NOT_SET")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 
@@ -152,6 +153,7 @@ class APISettings:
             "JWT_SECRET_KEY": self.jwt.secret_key,
             "S3_ENDPOINT_URL": self.s3.endpoint_url,
             "S3_PRESIGNING_URL": self.s3.presigning_url,
+            "S3_BUCKET_PREFIX": self.s3.bucket_prefix,
             "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }

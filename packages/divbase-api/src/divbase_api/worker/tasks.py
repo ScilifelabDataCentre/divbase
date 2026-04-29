@@ -18,6 +18,7 @@ from celery.signals import (
 )
 from sqlalchemy.exc import SQLAlchemyError
 
+from divbase_api.crud.s3 import validate_s3_service_account
 from divbase_api.exceptions import (
     ObjectDoesNotExistError,
     TSVFileNotFoundInProjectError,
@@ -134,6 +135,14 @@ def validate_settings(**kwargs):
     """
     worker_settings.validate()
     logger.info("Worker settings validated successfully on worker process init.")
+
+    validate_s3_service_account(
+        endpoint_url=worker_settings.s3.endpoint_url,
+        bucket_prefix=worker_settings.s3.bucket_prefix,
+        access_key=worker_settings.s3.access_key,
+        secret_key=worker_settings.s3.secret_key,
+    )
+    logger.info("S3 service account can connect to S3 and seems to have the expected permissions")
 
 
 @worker_process_init.connect
