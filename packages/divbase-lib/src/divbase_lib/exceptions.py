@@ -154,3 +154,9 @@ class ChecksumVerificationError(Exception):
             f" The file has been deleted to avoid accidental use of a corrupted file."
         )
         super().__init__(message)
+
+
+class PolledTaskNotFinalError(Exception):
+    """Raised when a polled celerytask is not in a final state."""
+
+    pass

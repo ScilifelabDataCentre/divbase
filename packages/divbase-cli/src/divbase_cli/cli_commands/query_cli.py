@@ -19,18 +19,24 @@ TODO:
 import logging
 from pathlib import Path
 
+import stamina
 import typer
 from rich import print
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.config_resolver import ensure_logged_in, resolve_project
+from divbase_cli.config_resolver import ensure_logged_in, resolve_project, resolve_url_for_non_project_specific_commands
+from divbase_cli.retries import (
+    retry_polling_until_final_or_retryable_api_errors,
+)
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryRequest,
     SampleMetadataQueryRequest,
     SampleMetadataQueryTaskResult,
 )
+from divbase_lib.api_schemas.task_history import TaskHistoryResult
+from divbase_lib.exceptions import PolledTaskNotFinalError
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +74,12 @@ VCF_QUERY_HELP_TEXT = (
     "A single, merged VCF file with the query results will be added to the project on success.\n\n"
     "Exactly one sample-selection mode is required: "
     "--tsv-filter | --samples | --samples-file | --all-samples."
+)
+
+GET_RESULTS_HELP_TEXT = (
+    "Poll for completion of a query job and download (or print) the results."
+    "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the"
+    "terminal state of the job (SUCCESS/FAILED). Designed to be of particular use in scripts and other automated workflows."
 )
 
 query_app = typer.Typer(
@@ -216,6 +228,59 @@ def vcf_query(
     print(
         f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
     )
+
+
+@query_app.command("get-results", help=GET_RESULTS_HELP_TEXT)
+def get_results_from_query_job_by_task_id(
+    task_id: int = typer.Argument(..., help="Task ID of the query job to poll for results from."),
+    project: str | None = PROJECT_NAME_OPTION,
+) -> None:
+    """
+    Get results from a query job by its task ID by first polling for the final state of the task.
+    """
+
+    divbase_url = resolve_url_for_non_project_specific_commands()
+    task_status = poll_task_until_final_state_reached(divbase_url=divbase_url, task_id=task_id)
+
+    if task_status == "SUCCESS":
+        print(f"Task {task_id} completed successfully.")
+    else:
+        print(f"Task {task_id} failed.")
+
+
+@stamina.retry(
+    on=retry_polling_until_final_or_retryable_api_errors,
+    wait_initial=1.0,  # seconds. Some overhead time is required to init the Celery task even with idle workers, so wait a bit before first poll.
+    wait_exp_base=2,  # exponential backoff factor
+    wait_max=60.0,  # cap exponential backoff at once per 60 seconds if it reaches that far.
+    timeout=60
+    * 60
+    * 12,  # To avoid infinite polling in case of unforeseen errors. This needs to include time in the queue and time to process the task
+)
+def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> TaskHistoryResult:
+    """
+    Poll for the final state (SUCCESS/FAILURE) of a celery task by task ID.
+
+    Note that this is designed with two layers of retry_only_on_retryable_divbase_api_errors: the outer layer (this function), and the inner layer (make_authenticated_request; 3 attempts).
+    This is to make this polling more resilient to temporary API errors for the intent of using the CLI command that calls this in scripts and other automated workflows.
+    """
+
+    FINAL_STATES = {"SUCCESS", "FAILURE"}
+
+    response = make_authenticated_request(
+        method="GET",
+        divbase_base_url=divbase_url,
+        api_route=f"v1/task-history/tasks/{task_id}",
+    )
+    # Endpoint returns 403 if the task is not found or the user does not have permission to view it. So item should not be empty.
+    items = response.json()
+
+    task_status = TaskHistoryResult(**items[0]).status  # for task ID lookups, only one entry is returned
+
+    if task_status in FINAL_STATES:
+        return task_status
+
+    raise PolledTaskNotFinalError(f"Task {task_id} state is {task_status}")
 
 
 def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:
