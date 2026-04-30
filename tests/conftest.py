@@ -11,3 +11,9 @@ def pytest_addoption(parser):
         default=False,
         help="Run slow tests",
     )
+    parser.addoption(
+        "--coverage-docker",
+        action="store_true",
+        default=False,
+        help="Orchestrate coverage.py analysis during e2e tests through a special Docker Compose overlay that runs it in the FastAPI and Celery worker containers.",
+    )

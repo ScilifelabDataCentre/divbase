@@ -36,7 +36,9 @@ scripts/benchmarking/results
 
 # pytest-cov generate files
 .coverage
+.coverage.*
 htmlcov/
+docker/coverage-data/
 
 #MacOS artifacts
 .DS_Store

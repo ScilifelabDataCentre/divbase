@@ -1,0 +1,49 @@
+# Compose overlay that runs FastAPI and Celery worker containers with coverage.py.
+# Apply as a third layer on top of divbase_compose.yaml + divbase_compose.tests.yaml.
+#
+# Each container in the coverage testing stack:
+#   1. Installs coverage[toml] into the existing venv at startup (appuser owns the venv).
+#   2. Starts the service under `coverage run --parallel-mode`, writing
+#      .coverage.<hostname>.<pid> files to the mounted /coverage-data volume.
+#   3. Receives SIGTERM on `docker compose stop`, which triggers the coverage atexit
+#      handler and flushes data before the container exits.
+#
+# After tests, combine data from all sources:
+#   coverage combine .coverage docker/coverage-data/
+#   coverage html
+#
+# The [tool.coverage.paths] section in pyproject.toml remaps container site-packages
+# paths back to the host packages/ directory tree so the merged report shows correct files.
+
+services:
+  fastapi:
+    environment:
+      - COVERAGE_FILE=/coverage-data/.coverage
+    volumes:
+      - ./coverage-data:/coverage-data
+    # Reset entrypoint from base image in order to run the coverage on the testing stack containers.
+    # uv-created venvs don't include pip, so install pip via ensurepip (standard lib) first
+    # use 'coverage[toml]' instead of just 'coverage' to be able to read the tool.coverage.* configs from pyproject.toml
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m fastapi run --host 0.0.0.0 /app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"
+
+  worker-quick:
+    environment:
+      - COVERAGE_FILE=/coverage-data/.coverage
+    volumes:
+      - ./coverage-data:/coverage-data
+    entrypoint: ["/bin/sh", "-c"]
+    # Coverage.py monitors the main process. --pool=solo: ensure tasks are run in the main process (no fork) to avoid Celery spawning child threads that are not under coverage monitoring.
+    # Celery Beat (-B) runs in a background thread and is unaffected by pool type.
+    command:
+      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m celery -A divbase_api.worker.tasks worker --loglevel=info -Q quick,celery --hostname=worker-quick@%h --concurrency=1 -B --pool=solo"
+
+  worker-long:
+    environment:
+      - COVERAGE_FILE=/coverage-data/.coverage
+    volumes:
+      - ./coverage-data:/coverage-data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m celery -A divbase_api.worker.tasks worker --loglevel=info -Q long --hostname=worker-long@%h --concurrency=1 --pool=solo"
