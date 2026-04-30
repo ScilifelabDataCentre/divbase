@@ -1,5 +1,7 @@
 """
 Definitions of periodic cron tasks for Celery Beat.
+
+TODO - DOCS on how hard deletion is treated differently.
 """
 
 import logging
@@ -16,7 +18,6 @@ from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskS
 from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
-from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -231,101 +232,6 @@ def update_storage_usage_metrics():
     }
 
 
-@app.task(name="cron_tasks.hard_delete_expired_soft_deleted_objects")
-def hard_delete_expired_soft_deleted_objects(
-    retention_days: int = worker_settings.cron.soft_deleted_files_retention_days,
-):
-    """
-    Periodic task to hard delete any soft-deleted objects from each project's S3 bucket after given retention period.
-
-    All versions of a file that has been soft deleted for more than 30 days are hard deleted:
-    This rule has 1 exception, if a version of a file is recorded in a user defined project version, then it is not hard deleted.
-
-    In those cases, a delete marker is re-added to the file. Otherwise, the undeleted files would show up
-    as the latest version of the file and be queryable/usable, which would not be expected behaviour.
-
-    NOTE: Results files are not handled here, they are handled in a seperate task that also deletes the associated job entries in the db tables.
-    """
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    s3_file_manager = _create_s3_file_manager()
-
-    per_project_delete_count = {}
-    # Mapping of protected file versions per project ID, to avoid deleting
-    protected_project_files: dict[int, dict[str, set[str]]] = {}
-    with SyncSessionLocal() as db:
-        projects = db.execute(statement=select(ProjectDB)).scalars().all()
-        for project in projects:
-            per_project_delete_count[project.name] = 0
-
-            protected_versions_map: dict[str, set[str]] = {}
-            stmt = select(ProjectVersionDB).where(ProjectVersionDB.project_id == project.id)
-            project_versions = db.execute(stmt).scalars().all()
-
-            for version in project_versions:
-                if not version.files:
-                    continue
-                for filename, version_details in version.files.items():
-                    version_id = version_details["version_id"]
-                    if filename not in protected_versions_map:
-                        protected_versions_map[filename] = set()
-                    protected_versions_map[filename].add(version_id)
-
-            protected_project_files[project.id] = protected_versions_map
-
-            # look for objects where the current file version is a delete marker older than the cutoff
-            candidate_objects_to_purge = s3_file_manager.get_expired_soft_deleted_objects(
-                bucket_name=project.bucket_name,
-                cutoff_date=cutoff_date,
-                prefix_exclude=QUERY_RESULTS_FILE_PREFIX,  # handled by diff cron task.
-            )
-
-            objects_to_re_soft_delete = []
-            for object_name in candidate_objects_to_purge:
-                protected_ids = protected_versions_map.get(object_name, set())
-
-                # We need to list all versions of this specific key to determine what to keep/delete
-                # easier to use the s3_client directly
-                versions_resp = s3_file_manager.s3_client.list_object_versions(
-                    Bucket=project.bucket_name, Prefix=object_name
-                )
-
-                # Delete both file versions and delete markers of the object.
-                objects_to_delete = []
-                for version in versions_resp.get("Versions", []):
-                    if version["Key"] == object_name:
-                        if version["VersionId"] not in protected_ids:
-                            objects_to_delete.append({"Key": object_name, "VersionId": version["VersionId"]})
-                        else:
-                            objects_to_re_soft_delete.append(object_name)
-
-                for marker in versions_resp.get("DeleteMarkers", []):
-                    if marker["Key"] == object_name:
-                        objects_to_delete.append({"Key": object_name, "VersionId": marker["VersionId"]})
-
-                if objects_to_delete:
-                    s3_file_manager.hard_delete_specific_object_versions(
-                        objects=objects_to_delete,
-                        bucket_name=project.bucket_name,
-                    )
-
-                    per_project_delete_count[project.name] += len(objects_to_delete)
-
-            # If the latest version of a file was hard deleted, but an older version is protected.
-            # Then we need to re-add a delete marker, otherwise the protected file will become the latest.
-            # Which would make it show up in ls, download and query jobs...
-            s3_file_manager.soft_delete_objects(
-                objects=objects_to_re_soft_delete,
-                bucket_name=project.bucket_name,
-            )
-
-    return {
-        "status": "completed",
-        "objects_hard_deleted_per_project": per_project_delete_count,
-        "cutoff_date": cutoff_date.isoformat(),
-        "retention_days": retention_days,
-    }
-
-
 # NOTE! If you add a new task here, make sure it starts with "cron_tasks"
 # Don't set to 2 AM or 3 AM due to daylight saving.
 # Timezone for job schedule is CET (defined in app in tasks.py).
@@ -349,9 +255,5 @@ app.conf.beat_schedule = {
     "update-storage-usage-metrics-daily": {
         "task": "cron_tasks.update_storage_usage_metrics",
         "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
-    },
-    "hard-delete-expired-soft-deleted-objects-weekly": {
-        "task": "cron_tasks.hard_delete_expired_soft_deleted_objects",
-        "schedule": crontab(day_of_week=1, hour=5, minute=35),  # Run every Monday at 5:35 AM CET
     },
 }

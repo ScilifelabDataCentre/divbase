@@ -15,6 +15,7 @@ import boto3
 import stamina
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDoesNotExistError
 from divbase_lib.api_schemas.project_versions import FileDetails
@@ -248,19 +249,23 @@ class S3FileManager:
 
     def restore_objects(self, objects: list[str], bucket_name: str) -> RestoreObjectsResponse:
         """
-        Attempts to restore a list of soft-deleted objects by removing their delete markers.
+        Attempts to restore a list of soft-deleted objects.
+
+        When a file has a deletion marker as its latest version, restoring it by deleting the marker
+        requires s3:DeleteObjectVersion — the same permission as hard-deleting a version. To avoid
+        needing to give the API service account hard-delete permissions, we restore by copying the latest
+        non-marker version to a new current version instead.
 
         This method categorizes the outcome for each object into one of two states:
         - 'restored':
-            The object had a delete marker which was successfully removed. OR
+            A copy was created from the latest version (file is now accessible). OR
             The object was already live (no delete marker present as latest version).
         - 'not_restored':
-            The object does not exist in the bucket (no versions or markers) OR
-            we failed to remove the delete marker due to an unexpected s3 error.
+            The object does not exist in the bucket (no versions or markers), has no non-marker
+            version to copy from, or the copy operation failed.
         """
         restored_objects, not_restored = [], []
 
-        markers_to_delete = []
         for obj_key in objects:
             response = self.s3_client.list_object_versions(Bucket=bucket_name, Prefix=obj_key)
 
@@ -272,53 +277,33 @@ class S3FileManager:
             is_not_deleted = versions and versions[0]["IsLatest"]
 
             if is_deleted:
-                version_id = delete_markers[0]["VersionId"]
-                markers_to_delete.append({"Key": obj_key, "VersionId": version_id})
+                # Find the latest non-marker version to copy from
+                non_marker_versions = sorted(versions, key=lambda v: v["LastModified"], reverse=True)
+                if not non_marker_versions:
+                    logger.error(f"Cannot restore '{obj_key}': deletion marker exists but no data version found.")
+                    not_restored.append(obj_key)
+                    continue
+
+                source_version_id = non_marker_versions[0]["VersionId"]
+                copy_source = {"Bucket": bucket_name, "Key": obj_key, "VersionId": source_version_id}
+                try:
+                    self.s3_client.copy_object(
+                        Bucket=bucket_name,
+                        Key=obj_key,
+                        CopySource=copy_source,
+                    )
+                    restored_objects.append(obj_key)
+                except ClientError as e:
+                    logger.error(f"Failed to restore '{obj_key}' via copy: {e}")
+                    not_restored.append(obj_key)
+
             elif is_not_deleted:
                 restored_objects.append(obj_key)
             else:
                 # object not found, could be typo or was already hard deleted.
                 not_restored.append(obj_key)
 
-        if not markers_to_delete:
-            return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
-
-        for i in range(0, len(markers_to_delete), S3_BATCH_SIZE):
-            batch = markers_to_delete[i : i + S3_BATCH_SIZE]
-            delete_response = self.s3_client.delete_objects(
-                Bucket=bucket_name,
-                Delete={"Objects": batch},
-            )
-            for deleted_obj in delete_response.get("Deleted", []):
-                restored_objects.append(deleted_obj["Key"])
-
-            if delete_response.get("Errors"):
-                for error in delete_response["Errors"]:
-                    logger.error(
-                        f"Failed to remove delete marker for '{error['Key']}' (version: {error['VersionId']}): "
-                        f"{error['Code']} - {error['Message']}"
-                    )
-                    not_restored.append(error["Key"])
-
         return RestoreObjectsResponse(restored=restored_objects, not_restored=not_restored)
-
-    def hard_delete_specific_object_versions(self, objects: list[dict[str, str]], bucket_name: str) -> None:
-        """
-        Hard delete a file from the S3 bucket by specifying the version of the object to delete.
-
-        The list of objects to delete should have the form:
-        [
-            {"Key": "file1.txt", "VersionId": "version-id-1"},
-            {"Key": "file2.txt", "VersionId": "version-id-2"},
-        ]
-
-        For versioned buckets,
-        - deleting an object without specifying a version id just adds a deletion marker.
-        - If you specify the version id, it hard deletes that specific version of the object.
-        """
-        for i in range(0, len(objects), S3_BATCH_SIZE):
-            batch = objects[i : i + S3_BATCH_SIZE]
-            self.s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
 
     def latest_version_of_all_files(self, bucket_name: str) -> dict[str, str]:
         """
