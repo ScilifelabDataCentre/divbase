@@ -7,7 +7,7 @@ Functions are used in stamina (package) decorators.
 
 import httpx
 
-from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError, PolledTaskNotFinalError
 
 
 def retry_only_on_retryable_http_errors(exc: Exception) -> bool:
@@ -32,3 +32,13 @@ def retry_only_on_retryable_divbase_api_errors(exception: Exception) -> bool:
 
     # Retry only for server errors (5xx) and rate limiting (429)
     return isinstance(exception, DivBaseAPIError) and (exception.status_code == 429 or exception.status_code >= 500)
+
+
+def retry_only_while_polled_task_not_final(exc: Exception) -> bool:
+    """Retry only while a polled celery task is not in a final state."""
+    return isinstance(exc, PolledTaskNotFinalError)
+
+
+def retry_polling_until_final_or_retryable_api_errors(exc: Exception) -> bool:
+    """Retry only while a polled celery task is not in a final state or on retryable DivBase API errors."""
+    return retry_only_while_polled_task_not_final(exc) or retry_only_on_retryable_divbase_api_errors(exc)
