@@ -31,6 +31,7 @@ pytest tests/e2e_integration/ \
     --ignore=tests/e2e_integration/playwright \
     --coverage-docker \
     --cov \
+    --cov-branch \
     --cov-context=test \
     --cov-report=term-missing \
     "$@" || PYTEST_EXIT=$?
@@ -43,12 +44,16 @@ if [[ $PYTEST_EXIT -ge 2 ]]; then
 fi
 
 echo ""
+echo "- Coverage data files before combine:"
+ls -la docker/coverage-data/ || true
+
+echo ""
 echo "- Combining host and container coverage data"
 cp .coverage docker/coverage-data/.coverage.host
 coverage combine docker/coverage-data/
 
 echo " - Generating HTML report"
-coverage html
+coverage html --show-contexts
 
 echo ""
 echo "Done! Open htmlcov/index.html to browse coverage."

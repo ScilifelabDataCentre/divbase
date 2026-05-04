@@ -1,19 +1,30 @@
-# Compose overlay that runs FastAPI and Celery worker containers with coverage.py.
-# Apply as a third layer on top of divbase_compose.yaml + divbase_compose.tests.yaml.
+# Compose overlay that orchestrates FastAPI and Celery worker containers with coverage.py monitoring.
+# Intended to be applied as a third layer on top of divbase_compose.yaml + divbase_compose.tests.yaml.
 #
-# Each container in the coverage testing stack:
-#   1. Installs coverage[toml] into the existing venv at startup (appuser owns the venv).
-#   2. Starts the service under `coverage run --parallel-mode`, writing
-#      .coverage.<hostname>.<pid> files to the mounted /coverage-data volume.
-#   3. Receives SIGTERM on `docker compose stop`, which triggers the coverage atexit
-#      handler and flushes data before the container exits.
+# Running coverage.py on distributed systems is tricky, but possible. This solution uses exec python -c 
+# commands in the docker entrypoints to handle the finicky details of running coverage for the fastAPI 
+# and Celery worker containers for DivBase. The challenge was to figure out how to make the containers
+# stop coverage correctly so that the results are saved to the host mount volume before the container exits.
+# Hence the somewhat complex entrypoint commands that set up signal handlers and atexit handlers to ensure 
+# that coverage.py saves on shutdown.
+#
+# SHUTDOWN SIGNALS:
+# To flush the results to file, coverage.py needs to receive a SIGTERM signal and run its shutdown handlers. 
+# However, Docker sends SIGTERM to PID 1 in the container, which is usually a shell that doesn't forward signals. 
+# By using exec python, we make Python the PID 1 process, allowing it to receive SIGTERM directly. 
+#
+# Both uvicorn and Celery install their own SIGTERM handlers, so when Docker stops the containers, the signal is received, 
+# graceful shutdown runs, and coverage.py flushes the data before exit.
+# The test suite scripts and conftest files ensures that the testing stack is stopped with SIGTERM first (docker compose stop)
+# before teardown continues with docker compose down (SIGKILL). SIGTERM is needed for coverage to flush is results.
+#
+# source_pkgs overrides pyproject.toml's source_pkgs (which includes divbase_cli).
+# divbase_cli is not installed in the api/worker containers so it is excluded here.
 #
 # After tests, combine data from all sources:
-#   coverage combine .coverage docker/coverage-data/
+#   cp .coverage docker/coverage-data/.coverage.host
+#   coverage combine docker/coverage-data/
 #   coverage html
-#
-# The [tool.coverage.paths] section in pyproject.toml remaps container site-packages
-# paths back to the host packages/ directory tree so the merged report shows correct files.
 
 services:
   fastapi:
@@ -21,12 +32,21 @@ services:
       - COVERAGE_FILE=/coverage-data/.coverage
     volumes:
       - ./coverage-data:/coverage-data
-    # Reset entrypoint from base image in order to run the coverage on the testing stack containers.
-    # uv-created venvs don't include pip, so install pip via ensurepip (standard lib) first
-    # use 'coverage[toml]' instead of just 'coverage' to be able to read the tool.coverage.* configs from pyproject.toml
+    # Reset entrypoint/command from the base image to inject coverage instrumentation.
+    # uv-created venvs exclude pip, so bootstrap it via ensurepip (Python standard library)
+    # before installing coverage[toml]. The [toml] extra lets coverage read pyproject.toml.
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m fastapi run --host 0.0.0.0 /app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"
+      - |
+        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        import atexit, coverage, signal, sys, uvicorn
+        cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
+        cov.start()
+        atexit.register(cov.save)
+        atexit.register(cov.stop)
+        signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
+        uvicorn.run('divbase_api.divbase_api:app', host='0.0.0.0', log_level='info')
+        "
 
   worker-quick:
     environment:
@@ -34,10 +54,24 @@ services:
     volumes:
       - ./coverage-data:/coverage-data
     entrypoint: ["/bin/sh", "-c"]
-    # Coverage.py monitors the main process. --pool=solo: ensure tasks are run in the main process (no fork) to avoid Celery spawning child threads that are not under coverage monitoring.
-    # Celery Beat (-B) runs in a background thread and is unaffected by pool type.
+    # --pool=solo keeps tasks in the main process rather than forking workers. coverage.py
+    # traces the process it starts in; forked children inherit no tracer, so task bodies
+    # would be invisible to coverage with the default prefork pool.
+    # Celery Beat (-B) runs scheduled tasks in a background thread, unaffected by pool type.
     command:
-      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m celery -A divbase_api.worker.tasks worker --loglevel=info -Q quick,celery --hostname=worker-quick@%h --concurrency=1 -B --pool=solo"
+      - |
+        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        import atexit, coverage, signal, sys; from celery.__main__ import main
+        cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
+        cov.start()
+        atexit.register(cov.save)
+        atexit.register(cov.stop)
+        signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
+        sys.argv = ['celery', '-A', 'divbase_api.worker.tasks', 'worker',
+                    '--loglevel=info', '-Q', 'quick,celery',
+                    '--hostname=worker-quick@%h', '--concurrency=1', '-B', '--pool=solo']
+        main()
+        "
 
   worker-long:
     environment:
@@ -46,4 +80,16 @@ services:
       - ./coverage-data:/coverage-data
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && coverage run --parallel-mode -m celery -A divbase_api.worker.tasks worker --loglevel=info -Q long --hostname=worker-long@%h --concurrency=1 --pool=solo"
+      - |
+        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        import atexit, coverage, signal, sys; from celery.__main__ import main
+        cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
+        cov.start()
+        atexit.register(cov.save)
+        atexit.register(cov.stop)
+        signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
+        sys.argv = ['celery', '-A', 'divbase_api.worker.tasks', 'worker',
+                    '--loglevel=info', '-Q', 'long',
+                    '--hostname=worker-long@%h', '--concurrency=1', '--pool=solo']
+        main()
+        "

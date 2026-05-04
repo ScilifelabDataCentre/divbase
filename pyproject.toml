@@ -21,15 +21,22 @@ omit = [
     "*/templates/*",
 ]
 
-# For pytest e2e coverage.py runs: remap container site-packages paths to host source tree so `coverage combine` can merge Docker .coverage.* files with the host-generated .coverage file.
+# For pytest e2e coverage.py runs: remap container site-packages paths to host source tree so
+# `coverage combine` can merge Docker .coverage.* files with the host-generated .coverage file.
+#
+# Two alternatives per package because relative_files=true in [tool.coverage.run] makes the containers store paths
+# relative to /app/ (e.g. .venv/lib/.../divbase_api) while older or differently-configured runs may have stored 
+# the absolute form (/app/.venv/lib/.../divbase_api). Both are listed so either form is accepted by `coverage combine`.
 [tool.coverage.paths]
 divbase_api = [
     "packages/divbase-api/src/divbase_api",
     "/app/.venv/lib/python3.13/site-packages/divbase_api",
+    ".venv/lib/python3.13/site-packages/divbase_api",
 ]
 divbase_lib = [
     "packages/divbase-lib/src/divbase_lib",
     "/app/.venv/lib/python3.13/site-packages/divbase_lib",
+    ".venv/lib/python3.13/site-packages/divbase_lib",
 ]
 
 [dependency-groups]
