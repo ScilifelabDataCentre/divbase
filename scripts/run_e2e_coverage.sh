@@ -20,6 +20,11 @@
 
 set -euo pipefail
 
+# Old failed runs may have left coverage data around, so clean it up first to avoid confusing or error-prone results.
+echo " - Cleaning up previous coverage data"
+rm -f docker/coverage-data/.coverage.*
+rm -f .coverage
+
 echo " - Running e2e tests with Docker coverage instrumentation"
 PYTEST_EXIT=0
 pytest tests/e2e_integration/ \

@@ -47,7 +47,7 @@ Code coverage analysis has been implemented for the testing suite by adding a th
 scripts/run_e2e_coverage.sh
 ```
 
-This runs `pytest tests/e2e_integration --cov --coverage-docker --cov-context=test --cov-report=term-missing` (where `--coverage-docker` is a custom option implemented in the DivBase testing suite), ensures that the docker compose stack stops gracefully to trigger coverage results collection before terminating the containers, collects all intermediate coverage results files, combines them into a single file, and builds a HTML report.
+This runs `pytest tests/e2e_integration --cov --coverage-docker --cov-context=test --cov-report=term-missing` (where `--coverage-docker` is a custom option implemented in the DivBase testing suite), ensures that the docker compose stack stops gracefully to trigger coverage results collection before terminating the containers, ensures all intermediate coverage results files are collected in `docker/coverage-data/`, combines them with `coverage combine` into a single results file (and cleans up the input files), and builds a HTML report.
 
 !!! Note
     The coverage analysis for the e2e-integration tests have deliberately been kept separate from the coverage analysis for the unit tests. Whilst there is no fundamental reason for separating them (`coverage combine` handles deduplication of code coverage results), there is a semantic benefit in separating the coverage analysis of the e2e-integration tests from that of the unit tests.
