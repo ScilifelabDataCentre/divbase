@@ -1,7 +1,7 @@
 """
 Standalone script for cleaning up "expired" soft-deleted S3 objects (aka hard delete).
 
-Run as a K8s CronJob in a seperate namespace to rest of application.
+Run as a K8s CronJob in a separate namespace to rest of application.
 This cron job uses a different S3 service account that has s3:DeleteObjectVersion permissions.
 
 For versioned buckets (which DivBase uses):

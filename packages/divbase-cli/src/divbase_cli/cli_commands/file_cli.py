@@ -483,7 +483,7 @@ def upload_files(
 @file_app.command("rm")
 def remove_files(
     files: list[str] | None = typer.Argument(
-        None, help="Space seperated list of files/objects in the project's store on DivBase to delete."
+        None, help="Space separated list of files/objects in the project's store on DivBase to delete."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to delete."),
     dry_run: bool = typer.Option(
@@ -528,7 +528,7 @@ def remove_files(
 @file_app.command("restore")
 def restore_soft_deleted_files(
     files: list[str] | None = typer.Argument(
-        None, help="Space seperated list of files/objects in the project's store on DivBase to restore."
+        None, help="Space separated list of files/objects in the project's store on DivBase to restore."
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to restore."),
     project: str | None = PROJECT_NAME_OPTION,

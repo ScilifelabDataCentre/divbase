@@ -72,7 +72,7 @@ services:
           target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
-    # NOTE: celery beat runs here ("-B"), in production it is run as a seperate service
+    # NOTE: celery beat runs here ("-B"), in production it is run as a separate service
     # NOTE: Worker quick takes any non-specified tasks (with -Q "celery" being the default queue), 
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=1", "-B"]
     networks: *internal-network
@@ -193,7 +193,7 @@ services:
     - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     depends_on: *worker-api-depends
     networks: *internal-network
-  # in k8s this is run as a seperate cronjob in diff namespace, here we just run it on compose up
+  # in k8s this is run as a separate cronjob in diff namespace, here we just run it on compose up
   cleanup-files-cron:
     build:
       context: ..

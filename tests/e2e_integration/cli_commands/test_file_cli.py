@@ -1166,7 +1166,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
 
     The duplicated file would not be in the 1st batch of files to be uploaded as well, but should prevent any file being uploaded.
 
-    NOTE: files upload "happy path" with pagination is convered by the fixture, so don't need a seperate test.
+    NOTE: files upload "happy path" with pagination is convered by the fixture, so don't need a separate test.
     """
     pagination_project = CONSTANTS["PAGINATION_PROJECT"]
     file_names, files_in_bucket = pagination_files_uploaded
