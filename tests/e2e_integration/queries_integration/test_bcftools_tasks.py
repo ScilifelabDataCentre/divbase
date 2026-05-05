@@ -438,7 +438,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         """
         return [ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures") for file_name in files_to_download]
 
-    def patched_run_bcftools(self, command: str) -> None:
+    def patched_run_bcftools(self, command: str, capture_output: bool = False):
         """
         Patches the working dir used when running bcftools commands inside the Docker container.
         """
@@ -452,21 +452,38 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             where no actual subprocess is started.
             """
 
-            def __init__(self):
+            def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = ""):
                 self.pid = 12345
+                self.returncode = returncode
+                self._stdout = stdout
+                self._stderr = stderr
 
             # Simulate sucessful completion using 0
             def wait(self):
-                return 0
+                return self.returncode
 
             def poll(self):
-                return 0
+                return self.returncode
+
+            def communicate(self):
+                return self._stdout, self._stderr
 
         container_id = self.get_container_id(self.CONTAINER_NAME)
         logger = logging.getLogger("divbase_lib.queries")
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
-        subprocess.run(docker_cmd, check=True)
+        run_result = subprocess.run(
+            docker_cmd,
+            check=not capture_output,
+            capture_output=capture_output,
+            text=True,
+        )
+        if capture_output:
+            return DummyProc(
+                returncode=run_result.returncode,
+                stdout=run_result.stdout or "",
+                stderr=run_result.stderr or "",
+            )
         return DummyProc()
 
     @contextmanager

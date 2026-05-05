@@ -940,7 +940,7 @@ class BcftoolsQueryManager:
 
         return shlex.join(injected_args)
 
-    def run_bcftools(self, command: str) -> subprocess.Popen:
+    def run_bcftools(self, command: str, capture_output: bool = False) -> subprocess.Popen:
         """
         Methid to run a bcftools command inside a Docker container that has bcftools installed.
         This method is specifically designed to with a Celery manager in an upper layer of the architechture.
@@ -959,6 +959,7 @@ class BcftoolsQueryManager:
         bcftools container using the get_container_id() method.
 
         Returns the subprocess.Popen object so the caller can monitor resource usage.
+        If capture_output is True, stdout/stderr are captured and decoded as text.
         """
         logger.info(f"Running: bcftools {command}")
         try:
@@ -973,11 +974,12 @@ class BcftoolsQueryManager:
 
         in_docker = os.path.exists("/.dockerenv")
         in_k8s = self._is_in_kubernetes()
+        popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True} if capture_output else {}
 
         if in_docker or in_k8s:
             logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
             try:
-                proc = subprocess.Popen(["bcftools"] + command_args)
+                proc = subprocess.Popen(["bcftools"] + command_args, **popen_kwargs)
                 return proc
             except Exception as e:
                 logger.error(f"Failed to run bcftools directly: {e}")
@@ -987,7 +989,7 @@ class BcftoolsQueryManager:
                 container_id = self.get_container_id(self.CONTAINER_NAME)
                 logger.debug(f"Executing command in container with ID: {container_id}")
                 docker_cmd = ["docker", "exec", container_id, "bcftools"] + command_args
-                proc = subprocess.Popen(docker_cmd)
+                proc = subprocess.Popen(docker_cmd, **popen_kwargs)
                 return proc
             except BcftoolsEnvironmentError:
                 raise
@@ -999,14 +1001,28 @@ class BcftoolsQueryManager:
         """
         Helper method that ensures that the given VCF file has a .csi index. If not, create it using bcftools.
 
+        Indexing a VCF file will also check if the file is sorted by position. If not, it will raise an error.
+
         (bcftools can sometimes handle VCF files that lack an index file, but for consistency
         it is better to create an index file for all VCF files that are created.)
         """
         index_file = f"{file}.csi"
         if not os.path.exists(index_file):
             index_command = f"index -f {file}"
-            proc = self.run_bcftools(command=index_command)
-            self._wait_proc_and_check_return_code(proc=proc, command=index_command)
+            proc = self.run_bcftools(command=index_command, capture_output=True)
+            _, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                stderr = (stderr or "").strip()
+                if "unsorted positions" in stderr.lower():
+                    raise TaskUserError(
+                        f"VCF file '{file}' is not sorted by position and cannot be indexed by bcftools.\n"
+                        "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
+                        "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
+                    ) from None
+
+                error_details = stderr or f"Process exited with code {proc.returncode}"
+                raise BcftoolsCommandError(command=index_command, error_details=error_details) from None
 
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
         """
@@ -1015,12 +1031,6 @@ class BcftoolsQueryManager:
         This method adds some temp files list used by temp_file_management() for cleanup after processing. Note that
         the results file is not included in this list. Clean up of the results file is handled by tasks.py: only
         after successfull upload to S3 will the results file be deleted.
-
-        # for all sets that have len(files) > 1, perform concat, save the temp filename to a new list
-        # for all sets that have len(files) == 1, save the temp filename to a new list
-        # for all the temp filenames in the new list, perform merge
-
-
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 

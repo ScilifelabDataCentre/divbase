@@ -1,6 +1,6 @@
 """Unit tests for VCF queries modes in tasks.py"""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -437,16 +437,50 @@ class TestBcftoolsReturnCodeHandling:
     def test_ensure_csi_index_raises_on_non_zero_return_code(self):
         """Test that ensure_csi_index raises BcftoolsCommandError with appropriate message when bcftools index command returns non-zero exit code."""
         manager = BcftoolsQueryManager()
+        index_proc = MagicMock()
+        index_proc.returncode = 1
+        index_proc.communicate.return_value = ("", "")
         with (
             patch(
                 "divbase_api.services.queries.os.path.exists", return_value=False
             ),  # Simulate missing index file to trigger indexing
-            patch.object(manager, "run_bcftools", return_value=self.DummyProc(returncode=1)),
+            patch.object(manager, "run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
         ):
             manager.ensure_csi_index("input.vcf.gz")
 
+        mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
         assert "index -f input.vcf.gz" in str(exc_info.value)
+
+    def test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions(self):
+        """
+        Regression test (negative outcome): unsorted VCF coordinates must raise a user-facing TaskUserError.
+        Why: unsorted files cannot be indexed and would break bcftools orchestration with opaque errors otherwise.
+        Reference: docs/development/bcftools_task_constraints.md ("VCF files need to be sorted by position").
+        """
+        manager = BcftoolsQueryManager()
+        unsorted_stderr = (
+            "[E::hts_idx_push] Unsorted positions on sequence #1: 22053057 followed by 17504018\n"
+            'index: failed to create index for "input.vcf.gz"\n'
+        )
+        index_proc = MagicMock()
+        index_proc.returncode = 1
+        index_proc.communicate.return_value = ("", unsorted_stderr)
+
+        with (
+            patch(
+                "divbase_api.services.queries.os.path.exists", return_value=False
+            ),  # Simulate missing index file to trigger indexing
+            patch.object(manager, "run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            pytest.raises(TaskUserError) as exc_info,
+        ):
+            manager.ensure_csi_index("input.vcf.gz")
+
+        mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
+        msg = str(exc_info.value)
+        assert "not sorted by position" in msg
+        assert "bcftools sort" in msg
+        assert "input.vcf.gz" in msg
 
     @pytest.mark.parametrize(
         "sample_names_map,non_overlapping,identifier,failing_prefix",
