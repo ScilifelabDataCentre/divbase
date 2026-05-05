@@ -17,7 +17,9 @@ from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesD
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
     SkippedVCFData,
+    VCFMetadataData,
     create_or_update_skipped_vcf,
+    create_or_update_vcf_metadata,
     delete_skipped_vcf_batch,
     delete_vcf_metadata,
     delete_vcf_metadata_batch,
@@ -25,6 +27,7 @@ from divbase_api.worker.crud_dimensions import (
     get_vcf_metadata_by_project,
 )
 from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import NoVCFFilesFoundError
@@ -172,6 +175,51 @@ def test_get_dimensions_info_returns_empty(
 
     result = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert result.vcf_files == []
+
+
+def test_regression_get_vcf_metadata_by_project_returns_samples_in_stable_header_order(
+    CONSTANTS,
+    project_map,
+):
+    """
+    Regression test (positive outcome): dimensions retrieval must return samples in stable header/index order.
+    Why: non-deterministic sample ordering can hide bcftools concat-incompatible sample sets and break bcftools orchestration.
+    Reference: commit 2fcfb8202f63c69154ed8a05f1789506dfdd437d (Fix non-deterministic output in vcf query results)
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    expected_sample_order = ["S3", "S1", "S2"]
+
+    with SyncSessionLocal() as db:
+        create_or_update_vcf_metadata(
+            db=db,
+            vcf_metadata_data=VCFMetadataData(
+                vcf_file_s3_key="stable-order-regression.vcf.gz",
+                project_id=project_id,
+                s3_version_id="v1",
+                samples=expected_sample_order,
+                scaffolds=["chr1"],
+                variant_count=1,
+                sample_count=len(expected_sample_order),
+                file_size_bytes=123,
+            ),
+        )
+
+    for idx in range(1, 10):
+        with SyncSessionLocal() as db:
+            vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db)
+            # Ensure that the lookup for this test returns 1 dimensions entry.
+            # If it were to return 0 or multiple entries, the sample order assertion could fail for the wrong reason
+            assert len(vcf_dimensions.vcf_files) == 1, (
+                f"{regression_prefix} expected one dimensions entry in repeated lookup #{idx}, "
+                f"got: {len(vcf_dimensions.vcf_files)}"
+            )
+            assert vcf_dimensions.vcf_files[0].samples == expected_sample_order, (
+                f"{regression_prefix} expected stable sample order {expected_sample_order} in repeated lookup "
+                f"#{idx}, got: {vcf_dimensions.vcf_files[0].samples}"
+            )
 
 
 def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
