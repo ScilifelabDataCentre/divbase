@@ -967,6 +967,11 @@ def _check_if_samples_can_be_combined_with_bcftools(
     """
     Check if samples in VCF files can be combined with bcftools merge/concat.
     Raises TaskUserError if samples have incompatible overlaps.
+
+    IMPORTANT! This function ensures that the VCF files are compatible with the DivBase bcftools orchestration logic.
+    It is based on the rules described in docs/development/bcftools_task_constraints.md.
+    Be very careful when changing this function since it can lead to broken or misleading VCF query runs.
+    The test suite includes regression tests and direct unit tests that guard this function and its upstream sample-order contracts.
     """
 
     vcf_lookup = {entry.vcf_file_s3_key: entry for entry in vcf_dimensions_data.vcf_files}
