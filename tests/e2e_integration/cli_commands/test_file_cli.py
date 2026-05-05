@@ -41,10 +41,6 @@ def start_with_clean_project(cleaned_project_bucket):
     """
     For tests that require a project with a clean bucket, this fixture will
     ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before and after running the test.
-
-    Caution:
-    If you modify the approach make sure your implementation does not just add delete markers.
-    The files need to be actually deleted.
     """
     yield
 

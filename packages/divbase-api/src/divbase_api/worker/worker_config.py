@@ -60,7 +60,6 @@ class WorkerCronSettings:
     stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
-    soft_deleted_files_retention_days: int = int(os.getenv("SOFT_DELETED_FILES_RETENTION_DAYS", "30"))
     soft_deleted_project_version_retention_days: int = int(
         os.getenv("SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS", "30")
     )

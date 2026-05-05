@@ -1,7 +1,8 @@
 """
 Definitions of periodic cron tasks for Celery Beat.
 
-TODO - DOCS on how hard deletion is treated differently.
+Hard deletion of soft deleted files is handled by a seperate script: cleanup_expired_files.py
+This includes both results files and soft deleted files
 """
 
 import logging

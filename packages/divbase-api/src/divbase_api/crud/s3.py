@@ -86,9 +86,11 @@ def validate_s3_service_account(
                 "S3 service account does not have the correct permissions or access key and secret key."
             ) from e
         if error_code != "404":
-            logger.error(f"s3.head_object failed but not due to permissions. Error was: {error_code}")
+            logger.error(
+                f"s3.head_object failed but not due to permissions or not found error. Error was: {error_code}"
+            )
             raise RuntimeError(
-                "S3 service account cannot connect to S3 or seems to be missing expected permissions."
+                "S3 service account cannot connect to S3 or seems to not have expected permissions."
             ) from e
 
     try:
