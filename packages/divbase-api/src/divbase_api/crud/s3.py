@@ -72,11 +72,12 @@ def validate_s3_service_account(
         aws_access_key_id=access_key.get_secret_value(),
         aws_secret_access_key=secret_key.get_secret_value(),
     )
-    known_bucket_name = f"{bucket_prefix}1"
+    # does not need to exist as permissions checks will happen before a 404
+    made_up_bucket_name = f"{bucket_prefix}1s2112asa1231"
 
     try:
         _ = s3_client.head_object(
-            Bucket=known_bucket_name,
+            Bucket=made_up_bucket_name,
             Key="a-non-existent-key-for-connection-and-permissions-check",
         )
     except ClientError as e:
@@ -95,7 +96,7 @@ def validate_s3_service_account(
 
     try:
         s3_client.delete_object(
-            Bucket=known_bucket_name,
+            Bucket=made_up_bucket_name,
             Key="a-non-existent-key-for-connection-and-permissions-check",
             VersionId="00000000000000000000000000000000",
         )
