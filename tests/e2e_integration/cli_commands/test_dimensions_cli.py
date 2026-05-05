@@ -191,20 +191,24 @@ def test_update_vcf_dimensions_task_raises_no_vcf_files_error(
         )
 
 
-def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
+def test_regression_update_dimensions_cleans_up_stale_index_when_all_vcfs_deleted_from_bucket(
     CONSTANTS,
     run_update_dimensions,
     db_session_sync,
     project_map,
 ):
     """
-    Test for the case where:
-    1. A user uploads VCFs and runs dimensions update (files get indexed),
-    2. Then deletes all VCFs from the bucket,
-    3. Then runs dimensions update again.
+    Regression test (mixed outcomes): stale dimensions cleanup when a bucket becomes empty.
+    Why: stale DB index entries must be cleaned up safely instead of triggering a hard "no VCF files" failure.
+    Reference: historical regression in `update_vcf_dimensions_task` where `NoVCFFilesFoundError`
+    was raised before stale DB entries were removed.
 
-    This should result in the stale DB entries being deleted and a message indicating the files were deleted being sent in the task results.
+    Contract being guarded:
+    1. Existing indexed VCF entries in DB must be cleaned up if all bucket VCFs disappear.
+    2. The task must complete successfully and report deleted files.
+    3. `NoVCFFilesFoundError` must not be raised in this stale-index cleanup scenario.
     """
+    regression_prefix = "Regression guard failed:"
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -215,13 +219,19 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
     first_result = run_update_dimensions(
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
     )
-    assert first_result["status"] == "completed"
+    assert first_result["status"] == "completed", (
+        f"{regression_prefix} expected first dimensions update run to complete successfully."
+    )
     indexed_files = first_result.get("VCF_files_added") or []
-    assert indexed_files, "Expected at least one indexed VCF file from the first run"
+    assert indexed_files, (
+        f"{regression_prefix} expected at least one indexed VCF file in first run to establish stale state."
+    )
 
     # Verify the index has entries in the DB before the second run
     vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert len(vcf_dimensions_before.vcf_files) > 0, "Expected DB to have indexed entries"
+    assert len(vcf_dimensions_before.vcf_files) > 0, (
+        f"{regression_prefix} expected DB to contain indexed entries before stale cleanup run."
+    )
 
     # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
     mock_empty_s3 = MagicMock()
@@ -236,22 +246,31 @@ def test_update_dimensions_cleans_up_index_when_all_vcfs_deleted_from_bucket(
             )
         except NoVCFFilesFoundError as e:
             raise AssertionError(
-                "NoVCFFilesFoundError should not be raised when cleaning up stale index entries"
+                f"{regression_prefix} NoVCFFilesFoundError should not be raised when stale index entries exist; "
+                "cleanup should run first."
             ) from e
 
-    assert second_result["status"] == "completed", f"Expected completed status, got: {second_result}"
-    assert second_result["VCF_files_added"] is None, "Expected no new files indexed"
-    assert second_result["VCF_files_skipped"] is None, "Expected no skipped files"
+    assert second_result["status"] == "completed", (
+        f"{regression_prefix} expected stale cleanup run to complete successfully, got: {second_result}"
+    )
+    assert second_result["VCF_files_added"] is None, (
+        f"{regression_prefix} expected no new files indexed during stale cleanup run."
+    )
+    assert second_result["VCF_files_skipped"] is None, (
+        f"{regression_prefix} expected no skipped files during stale cleanup run."
+    )
     deleted_files = second_result.get("VCF_files_deleted") or []
-    assert len(deleted_files) > 0, "Expected previously indexed files to be reported as deleted"
+    assert len(deleted_files) > 0, f"{regression_prefix} expected previously indexed files to be reported as deleted."
     for file in indexed_files:
-        assert file in deleted_files, f"Expected {file} to be in VCF_files_deleted: {deleted_files}"
+        assert file in deleted_files, (
+            f"{regression_prefix} expected {file} to be listed in VCF_files_deleted: {deleted_files}"
+        )
 
     # DB index should now be empty for this project
     db_session_sync.expire_all()
     vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions_after.vcf_files == [], (
-        f"Expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
+        f"{regression_prefix} expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
     )
 
 
