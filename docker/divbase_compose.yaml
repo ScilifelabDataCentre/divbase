@@ -193,6 +193,27 @@ services:
     - S3_SERVICE_ACCOUNT_SECRET_KEY=badpassword
     depends_on: *worker-api-depends
     networks: *internal-network
+  # in k8s this is run as a seperate cronjob in diff namespace, here we just run it on compose up
+  cleanup-files-cron:
+    build:
+      context: ..
+      dockerfile: docker/fastapi.dockerfile
+    command: ["python", "-m", "divbase_api.scripts.cleanup_expired_files"]
+    restart: "no" 
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+      db-migrator:
+        condition: service_completed_successfully
+    environment:
+      - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
+      - S3_ENDPOINT_URL=http://host.docker.internal:9000
+      - S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY=s3-cron-service-account
+      - S3_CRON_SERVICE_ACCOUNT_SECRET_KEY=badpassword
+    networks:
+      - internal
   postgres:
     image: postgres:17
     ports:

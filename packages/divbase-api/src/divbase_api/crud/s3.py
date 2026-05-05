@@ -103,7 +103,7 @@ def validate_s3_service_account(
             return None
         else:
             raise RuntimeError(
-                "Permissions check failed: S3 service may have s3:DeleteObjectVersion (hard delete permissions)."
+                "Permissions check failed: S3 service MAY have s3:DeleteObjectVersion (hard delete permissions)."
             ) from e
     raise RuntimeError(
         "Permissions check failed: S3 service account seems to have s3:DeleteObjectVersion (hard delete permissions)."
