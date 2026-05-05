@@ -16,7 +16,6 @@ from divbase_api.scripts.cleanup_expired_files import (
     DEFAULT_SOFT_DELETED_FILES_RETENTION_DAYS,
 )
 from divbase_api.services.s3_client import S3FileManager, create_s3_file_manager
-from divbase_api.worker.worker_config import worker_settings
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 
@@ -49,8 +48,8 @@ def _run_script_with_mocked_time(mocked_now: datetime) -> None:
 @pytest.mark.parametrize(
     "days_offset,expect_deleted",
     [
-        (worker_settings.cron.soft_deleted_files_retention_days + 1, True),
-        (worker_settings.cron.soft_deleted_files_retention_days - 1, False),
+        (DEFAULT_SOFT_DELETED_FILES_RETENTION_DAYS + 1, True),
+        (DEFAULT_SOFT_DELETED_FILES_RETENTION_DAYS - 1, False),
     ],
 )
 def test_hard_delete_expired_files_script(
