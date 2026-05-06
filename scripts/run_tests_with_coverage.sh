@@ -12,6 +12,9 @@
 # Usage:
 #   ./scripts/run_tests_with_coverage.sh
 #
+#   (optional pytest args, e.g. -k "test_some_feature" or --run-slow can be passed through to pytest by including them in the command above)
+#   Example: ./scripts/run_tests_with_coverage.sh --run-slow
+#
 # Output:
 #   htmlcov/index.html   combined HTML coverage report (host + Docker containers)
 #   .coverage            merged coverage data file
@@ -24,7 +27,10 @@ rm -f docker/coverage-data/.coverage.*
 rm -f .coverage
 
 echo " - Running testing stack (e2e, integration, unit tests) with Docker coverage instrumentation"
-PYTEST_EXIT=0
+# Capture pytest's exit code to determine later whether to proceed with coverage report generation or skip it due to a hard error. 
+# Codes 0 and 1 (test pass or fail) both produce coverage data, while codes >=2 indicate hard errors where coverage data may not be reliable or present.
+PYTEST_EXIT=0 
+# "$@" allows passing additional pytest args to this script, e.g. --run-slow
 pytest -s tests/ \
     --coverage-docker \
     --cov \

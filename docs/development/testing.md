@@ -47,9 +47,15 @@ There is some complexity to this setup so the reccomended way to run the coverag
 
 ```bash
 scripts/run_tests_with_coverage.sh
+
+# The wrapper script accepts pytest args
+# Example: ./scripts/run_tests_with_coverage.sh --run-slow
 ```
 
 This runs `pytest -s tests/ --coverage-docker --cov --cov-branch --cov-context=test --cov-report=term-missing` (where `--coverage-docker` is a custom option implemented in the DivBase testing suite to apply the `docker/divbase_compose.tests.coverage.yaml` overlay), ensures that the docker compose stack stops gracefully to trigger coverage results collection before terminating the containers, ensures all intermediate coverage results files are collected in `docker/coverage-data/`, combines them with `coverage combine` into a single results file, and builds an HTML report with per-test context.
+
+!!! Important
+    The wrapper script will print coverage results to the terminal after the pytest run has finished. This is the code coverage of the local machine Python process. For a complete report that includes code coverage of the containers too, please refer to the HTML report created by the wrapper script.
 
 The coverage analysis report is set up to track which tests trigger which line of code. This is displayed to the far right of a code line in the HTML report. However, this feature only works for code that ran on the host machine. All code that ran inside a container will say `(empty)`. This is a limitation of this custom container coverage setup.
 
