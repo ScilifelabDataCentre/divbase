@@ -18,7 +18,7 @@
 # The test suite scripts and conftest files ensures that the testing stack is stopped with SIGTERM first (docker compose stop)
 # before teardown continues with docker compose down (SIGKILL). SIGTERM is needed for coverage to flush is results.
 #
-# source_pkgs overrides .coveragerc's source_pkgs (which includes divbase_cli).
+# source_pkgs overrides .coveragerc.toml's source_pkgs (which includes divbase_cli).
 # divbase_cli is not installed in the api/worker containers so it is excluded here.
 #
 # After tests, combine data from all sources:
