@@ -5,40 +5,6 @@ members = [
     "packages/divbase-api",
 ]
 
-# For pytest e2e coverage.py runs: setup to allow 'coverage combine' to work
-[tool.coverage.run]
-source_pkgs = ["divbase_lib", "divbase_cli", "divbase_api"]
-branch = true
-relative_files = true
-
-# For pytest e2e coverage.py runs: report formatting configuration
-[tool.coverage.report]
-show_missing = true
-skip_empty = true
-omit = [
-    "*/migrations/*",
-    "*/static/*",
-    "*/templates/*",
-]
-
-# For pytest e2e coverage.py runs: remap container site-packages paths to host source tree so
-# `coverage combine` can merge Docker .coverage.* files with the host-generated .coverage file.
-#
-# Two alternatives per package because relative_files=true in [tool.coverage.run] makes the containers store paths
-# relative to /app/ (e.g. .venv/lib/.../divbase_api) while older or differently-configured runs may have stored 
-# the absolute form (/app/.venv/lib/.../divbase_api). Both are listed so either form is accepted by `coverage combine`.
-[tool.coverage.paths]
-divbase_api = [
-    "packages/divbase-api/src/divbase_api",
-    "/app/.venv/lib/python3.13/site-packages/divbase_api",
-    ".venv/lib/python3.13/site-packages/divbase_api",
-]
-divbase_lib = [
-    "packages/divbase-lib/src/divbase_lib",
-    "/app/.venv/lib/python3.13/site-packages/divbase_lib",
-    ".venv/lib/python3.13/site-packages/divbase_lib",
-]
-
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",

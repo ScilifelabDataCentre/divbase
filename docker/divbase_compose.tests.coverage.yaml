@@ -18,7 +18,7 @@
 # The test suite scripts and conftest files ensures that the testing stack is stopped with SIGTERM first (docker compose stop)
 # before teardown continues with docker compose down (SIGKILL). SIGTERM is needed for coverage to flush is results.
 #
-# source_pkgs overrides pyproject.toml's source_pkgs (which includes divbase_cli).
+# source_pkgs overrides .coveragerc's source_pkgs (which includes divbase_cli).
 # divbase_cli is not installed in the api/worker containers so it is excluded here.
 #
 # After tests, combine data from all sources:
@@ -34,11 +34,11 @@ services:
       - ./coverage-data:/coverage-data
     # Reset entrypoint/command from the base image to inject coverage instrumentation.
     # uv-created venvs exclude pip, so bootstrap it via ensurepip (Python standard library)
-    # before installing coverage[toml]. The [toml] extra lets coverage read pyproject.toml.
+    # before installing coverage.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        python -m ensurepip && python -m pip install --quiet 'coverage' && exec python -c "
         import atexit, coverage, signal, sys, uvicorn
         cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
         cov.start()
@@ -60,7 +60,7 @@ services:
     # Celery Beat (-B) runs scheduled tasks in a background thread, unaffected by pool type.
     command:
       - |
-        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        python -m ensurepip && python -m pip install --quiet 'coverage' && exec python -c "
         import atexit, coverage, signal, sys; from celery.__main__ import main
         cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
         cov.start()
@@ -81,7 +81,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        python -m ensurepip && python -m pip install --quiet 'coverage[toml]' && exec python -c "
+        python -m ensurepip && python -m pip install --quiet 'coverage' && exec python -c "
         import atexit, coverage, signal, sys; from celery.__main__ import main
         cov = coverage.Coverage(data_suffix=True, branch=True, source_pkgs=['divbase_api', 'divbase_lib'])
         cov.start()
