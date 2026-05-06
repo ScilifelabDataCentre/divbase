@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Wrapper script to run e2e tests with coverage.py distributed across the testing Docker Compose stack
-# containers and to combine the coverage data into a single HTML report.
+# Wrapper script to run the DivBase testing suite with coverage.py monitoring distributed across the testing Docker Compose stack
+# containers. The script combines the coverage data from the host machine and the containersinto a single HTML report.
 #
 # The coverage overlay is defined in docker/divbase_compose.tests.coverage.yaml, which extends the base test stack
 # to run the FastAPI and Celery worker containers with coverage.py, writing .coverage.* files to a shared docker/coverage-data/ directory.
@@ -10,9 +10,7 @@
 # Finally, the script generates an HTML report with paths remapped to the local source tree using the [paths] config in pyproject.toml.
 #
 # Usage:
-#   ./scripts/run_e2e_coverage.sh                      # all e2e tests (excludes playwright)
-#   ./scripts/run_e2e_coverage.sh -k test_auth_cli     # filter to specific tests
-#   ./scripts/run_e2e_coverage.sh --run-slow           # include slow tests
+#   ./scripts/run_e2e_coverage.sh
 #
 # Output:
 #   htmlcov/index.html   combined HTML coverage report (host + Docker containers)
@@ -25,10 +23,9 @@ echo " - Cleaning up previous coverage data"
 rm -f docker/coverage-data/.coverage.*
 rm -f .coverage
 
-echo " - Running e2e tests with Docker coverage instrumentation"
+echo " - Running testing stack (e2e, integration, unit tests) with Docker coverage instrumentation"
 PYTEST_EXIT=0
-pytest tests/e2e_integration/ \
-    --ignore=tests/e2e_integration/playwright \
+pytest -s tests/ \
     --coverage-docker \
     --cov \
     --cov-branch \
@@ -43,6 +40,7 @@ if [[ $PYTEST_EXIT -ge 2 ]]; then
     exit $PYTEST_EXIT
 fi
 
+# Debug output: if no container coverage data files are found, this will help explain why.
 echo ""
 echo "- Coverage data files before combine:"
 ls -la docker/coverage-data/ || true
@@ -59,5 +57,5 @@ echo ""
 echo "Done! Open htmlcov/index.html to browse coverage."
 echo "  open htmlcov/index.html"
 
-# Re-exit with pytest's exit code so callers (CI) see test failures.
+# Exit with pytest's exit code so test failures are not swallowed by a successful coverage html run.
 exit $PYTEST_EXIT
