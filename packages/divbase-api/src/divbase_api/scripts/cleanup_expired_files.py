@@ -34,9 +34,8 @@ import stamina
 from botocore.exceptions import ConnectionError as BotoCoreConnectionError
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import selectinload, sessionmaker
 
-from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.services.s3_client import S3_BATCH_SIZE, S3FileManager
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -91,15 +90,12 @@ def load_project_contexts(db_url: SecretStr) -> list[ProjectHardDeleteContext]:
 
     contexts = []
     with SyncSessionLocal() as db:
-        projects = db.execute(select(ProjectDB)).scalars().all()
+        stmt = select(ProjectDB).options(selectinload(ProjectDB.project_versions))
+        projects = db.execute(stmt).scalars().all()
         for project in projects:
             protected_versions_map: dict[str, set[str]] = {}
 
-            project_versions = (
-                db.execute(select(ProjectVersionDB).where(ProjectVersionDB.project_id == project.id)).scalars().all()
-            )
-
-            for version in project_versions:
+            for version in project.project_versions:
                 if not version.files:
                     continue
                 for filename, version_details in version.files.items():
