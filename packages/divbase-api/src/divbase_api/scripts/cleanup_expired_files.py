@@ -114,8 +114,36 @@ def load_project_contexts(db_url: SecretStr) -> list[ProjectHardDeleteContext]:
     return contexts
 
 
+@stamina.retry(on=BotoCoreConnectionError, attempts=4)
+def get_expired_soft_deleted_objects(
+    s3_file_manager: S3FileManager,
+    bucket_name: str,
+    cutoff_date: datetime,
+) -> set[str]:
+    """
+    Identify "expired" soft-deleted objects in a bucket. We ignore query results files as they are handled seperately.
+
+    A soft-deleted object is one whose latest S3 object version is a delete marker.
+    A soft-deleted object is considered "expired" if its delete marker's LastModified timestamp is earlier than the provided cutoff_date.
+    """
+    paginator = s3_file_manager.s3_client.get_paginator("list_object_versions")
+    expired_objects = set()
+
+    for page in paginator.paginate(Bucket=bucket_name):
+        # Check for delete markers that are the "Latest" version
+        for marker in page.get("DeleteMarkers", []):
+            if marker.get("IsLatest") and marker["LastModified"] < cutoff_date:
+                object_key = marker["Key"]
+                if object_key.startswith(QUERY_RESULTS_FILE_PREFIX):
+                    continue
+                expired_objects.add(object_key)
+    return expired_objects
+
+
 def hard_delete_objects(
-    s3_file_manager: S3FileManager, bucket_name: str, objects_to_delete: list[dict[str, str]]
+    s3_file_manager: S3FileManager,
+    bucket_name: str,
+    objects_to_delete: list[dict[str, str]],
 ) -> None:
     """
     Hard delete specified objects in batches from a bucket.
@@ -209,10 +237,10 @@ def delete_expired_non_results_files(
     numb_deleted_non_results_files_deletion_markers = 0
     had_errors = False
     for ctx in project_contexts:
-        candidate_objects_to_purge = s3_file_manager.get_expired_soft_deleted_objects(
+        candidate_objects_to_purge = get_expired_soft_deleted_objects(
+            s3_file_manager=s3_file_manager,
             bucket_name=ctx.bucket_name,
             cutoff_date=cutoff_date,
-            prefix_exclude=QUERY_RESULTS_FILE_PREFIX,
         )
         logger.debug(
             f"Project {ctx.project_name} has {len(candidate_objects_to_purge)} candidate non-results files to purge."

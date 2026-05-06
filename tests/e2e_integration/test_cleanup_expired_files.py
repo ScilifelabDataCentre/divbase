@@ -36,12 +36,8 @@ def s3_file_manager(CONSTANTS) -> S3FileManager:
 
 def _run_script_with_mocked_time(mocked_now: datetime) -> None:
     """Run cleanup_expired_files.main() with datetime mocked to mocked_now."""
-    with (
-        patch("divbase_api.scripts.cleanup_expired_files.datetime") as mock_dt_script,
-        patch("divbase_api.services.s3_client.datetime") as mock_dt_s3,
-    ):
+    with patch("divbase_api.scripts.cleanup_expired_files.datetime") as mock_dt_script:
         mock_dt_script.now.return_value = mocked_now
-        mock_dt_s3.now.return_value = mocked_now
         cleanup_expired_files.main()
 
 
@@ -102,12 +98,8 @@ def test_hard_delete_expired_files_script(
 
     # Run the script with time mocked so deletion markers appear old enough (or not).
     mocked_now = datetime.now(timezone.utc) + timedelta(days=days_offset)
-    with (
-        patch("divbase_api.scripts.cleanup_expired_files.datetime") as mock_datetime_script,
-        patch("divbase_api.services.s3_client.datetime") as mock_datetime_s3,
-    ):
+    with patch("divbase_api.scripts.cleanup_expired_files.datetime") as mock_datetime_script:
         mock_datetime_script.now.return_value = mocked_now
-        mock_datetime_s3.now.return_value = mocked_now
         cleanup_expired_files.main()
 
     versions_purge = s3_file_manager.s3_client.list_object_versions(Bucket=bucket_name, Prefix=file_to_purge.name)

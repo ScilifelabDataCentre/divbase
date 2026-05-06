@@ -8,7 +8,6 @@ See the 'docs/development/s3_transfers.md' for more info on how S3 transfers are
 
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -414,28 +413,6 @@ class S3FileManager:
                 )
                 return None
         return response.get("ETag", "").strip('"')
-
-    def get_expired_soft_deleted_objects(
-        self, bucket_name: str, cutoff_date: datetime, prefix_exclude: str | None = None
-    ) -> set[str]:
-        """
-        Identify "expired" soft-deleted objects in a bucket.
-
-        A soft-deleted object is one whose latest S3 object version is a delete marker.
-        A soft-deleted object is considered "expired" if its delete marker's LastModified timestamp is earlier than the provided cutoff_date.
-        """
-        paginator = self.s3_client.get_paginator("list_object_versions")
-        expired_objects = set()
-
-        for page in paginator.paginate(Bucket=bucket_name):
-            # Check for delete markers that are the "Latest" version
-            for marker in page.get("DeleteMarkers", []):
-                if marker.get("IsLatest") and marker["LastModified"] < cutoff_date:
-                    object_key = marker["Key"]
-                    if prefix_exclude and object_key.startswith(prefix_exclude):
-                        continue
-                    expired_objects.add(object_key)
-        return expired_objects
 
     def get_bucket_usage_bytes(self, bucket_name: str) -> int:
         """
