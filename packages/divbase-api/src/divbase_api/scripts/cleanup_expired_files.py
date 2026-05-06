@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import stamina
+from botocore.exceptions import ConnectionError as BotoCoreConnectionError
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -126,11 +127,12 @@ def hard_delete_objects(
 
     objects_to_delete is a list of dicts with keys "Key" and "VersionId".
 
-    We use stamina to retry any failed deletions, S3 reports back failed deletion in response, not via raising errors.
+    We use stamina to retry any failed deletions. S3 reports back failed deletions in the
+    response body (not via exceptions), and transient connection errors are also retried.
     If after all retries there are still failures, an error will be raised.
     """
     pending = list(objects_to_delete)
-    for attempt in stamina.retry_context(on=HardDeletePartialFailureError, attempts=4):
+    for attempt in stamina.retry_context(on=(HardDeletePartialFailureError, BotoCoreConnectionError), attempts=4):
         with attempt:
             failures = []
             for i in range(0, len(pending), S3_BATCH_SIZE):
@@ -282,10 +284,16 @@ def delete_expired_non_results_files(
                 objects_to_re_soft_delete.append(object_name)
 
         if objects_to_re_soft_delete:
-            s3_file_manager.soft_delete_objects(
+            soft_deleted_objects = s3_file_manager.soft_delete_objects(
                 objects=objects_to_re_soft_delete,
                 bucket_name=ctx.bucket_name,
             )
+            if len(soft_deleted_objects) != len(set(objects_to_re_soft_delete)):
+                logger.error(
+                    f"Failed to re-soft delete all protected versions of files that had some versions deleted for project {ctx.project_name}. "
+                    f"Files that should have been re-soft deleted but may not have been are: {set(objects_to_re_soft_delete) - set(soft_deleted_objects)}"
+                )
+                had_errors = True
 
     return numb_deleted_non_results_files, numb_deleted_non_results_files_deletion_markers, had_errors
 
