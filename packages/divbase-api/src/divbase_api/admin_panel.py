@@ -235,6 +235,9 @@ class ProjectView(ModelView):
             help_text="Current storage usage for this project in bytes.",
         ),
         BooleanField("is_active", required=True, label="Is Active", help_text="Mark the project as active or not."),
+        BooleanField(
+            "is_deleted", required=True, label="Is Deleted", help_text="Mark the project as soft deleted or not."
+        ),
         DateTimeField(
             "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
         ),
@@ -246,13 +249,26 @@ class ProjectView(ModelView):
     ]
 
     exclude_fields_from_list = ["description", "storage_used_bytes"]
-    exclude_fields_from_create = ["id", "created_at", "updated_at", "storage_used_bytes", "is_active"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at", "storage_used_bytes", "is_active", "is_deleted"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "storage_used_bytes"]
     exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
         """Disable deletion of projects. Projects can be soft deleted instead."""
         return False
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the default edit method to ensure that the `date_deleted` field is updated
+        when/if a version's soft deletion status is changed.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+
+        return await super().edit(request=request, pk=pk, data=data)
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a project name cannot have spaces and bucket name follows S3 bucket name rules."""
@@ -264,6 +280,15 @@ class ProjectView(ModelView):
 
         if len(data["bucket_name"]) < 3 or len(data["bucket_name"]) > 63:
             raise FormValidationError(errors={"bucket_name": "Bucket name must be between 3 and 63 characters long."})
+
+        # creation route does not set is_active/is_deleted fields, so we skip this check there
+        # (otherwise keyerror)
+        if "is_active" not in data or "is_deleted" not in data:
+            return await super().validate(request=request, data=data)
+
+        if data["is_active"] and data["is_deleted"]:
+            raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
+        return await super().validate(request=request, data=data)
 
         return await super().validate(request=request, data=data)
 

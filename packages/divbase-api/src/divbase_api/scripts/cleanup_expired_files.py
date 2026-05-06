@@ -90,7 +90,10 @@ def load_project_contexts(db_url: SecretStr) -> list[ProjectHardDeleteContext]:
 
     contexts = []
     with SyncSessionLocal() as db:
-        stmt = select(ProjectDB).options(selectinload(ProjectDB.project_versions))
+        stmt = select(ProjectDB)
+        stmt = stmt.where(ProjectDB.is_deleted == False)  # noqa: E712
+        stmt = stmt.options(selectinload(ProjectDB.project_versions))
+
         projects = db.execute(stmt).scalars().all()
         for project in projects:
             protected_versions_map: dict[str, set[str]] = {}
