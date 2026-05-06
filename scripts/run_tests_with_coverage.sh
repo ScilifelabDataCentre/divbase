@@ -7,10 +7,10 @@
 # The script runs pytest with the --coverage-docker flag to trigger this mode. Since pytest invoke tests that use the CLI to speak to the
 # other services in the stack, there will also be a host .coverage file generated for the part of the code that is run on the host machine duriung the test session. 
 # After pytest completes, the script copies the host .coverage file into docker/coverage-data/ and runs 'coverage combine' to merge it with the coverage data from the containers. 
-# Finally, the script generates an HTML report with paths remapped to the local source tree using the [paths] config in pyproject.toml.
+# Finally, the script generates an HTML report with paths remapped to the local source tree using the [paths] config in .coveragerc.
 #
 # Usage:
-#   ./scripts/run_e2e_coverage.sh
+#   ./scripts/run_tests_with_coverage.sh
 #
 # Output:
 #   htmlcov/index.html   combined HTML coverage report (host + Docker containers)
