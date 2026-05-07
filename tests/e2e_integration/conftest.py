@@ -95,7 +95,7 @@ def docker_testing_stack(request):
     """
     Start job system docker stack, and stop after all tests run.
 
-    If the option --coverage-docker is specified, test coverage analysis will be run inside the FastAPI and Celery workers docker containers. 
+    If the option --coverage-docker is specified, test coverage analysis will be run inside the FastAPI and Celery workers docker containers.
     """
     coverage_mode = request.config.getoption("--coverage-docker")
     try:
