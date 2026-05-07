@@ -103,6 +103,7 @@ def validate_s3_service_account(
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "AccessDenied":
+            # we expect the service account to not have hard delete permissions s3:DeleteObjectVersion
             return None
         else:
             raise RuntimeError(
