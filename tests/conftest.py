@@ -15,5 +15,5 @@ def pytest_addoption(parser):
         "--coverage-docker",
         action="store_true",
         default=False,
-        help="Orchestrate coverage.py analysis during e2e tests through a special Docker Compose overlay that runs it in the FastAPI and Celery worker containers.",
+        help="Enable running test coverage analysis for all tests, including those that run code inside docker containers. Do not use this flag directly, use the `scripts/run_tests_with_coverage.sh` to do coverage analysis",
     )

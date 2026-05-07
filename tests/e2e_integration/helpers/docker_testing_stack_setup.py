@@ -143,10 +143,8 @@ def wait_for_docker_stack_healthy(stack_name, timeout=120):
             service = c.get("Service") or c.get("Name")
 
             if state == "exited":
-                if exit_code == 0:
-                    # Init container (e.g. db-migrator, minio-setup) completed successfully — skip.
-                    pass
-                else:
+                if exit_code != 0:
+                    # Init container (e.g. db-migrator, minio-setup) will exit with 0 if completed successfully 
                     raise RuntimeError(f"Service '{service}' exited unexpectedly with code {exit_code}")
             elif state == "running":
                 if not health or health == "healthy":

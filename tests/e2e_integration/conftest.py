@@ -95,15 +95,7 @@ def docker_testing_stack(request):
     """
     Start job system docker stack, and stop after all tests run.
 
-    If the option --coverage-docker is specified, the FastAPI and Celery workers will be run with coverage.py.
-    Coverage data files (.coverage.*) will be flushed to the host-mounted COVERAGE_DATA_DIR when containers are stopped, so they can be combined and reported on after pytest exits.
-
-    NOTE: coverage.py creates the results upon process exit. In the docker compose context, the exit signal needs to first be `docker compose stop` (SIGTERM) and `docker compose down` (SIGKILL),
-    and not directly the latter.
-
-    After pytest exits, combine coverage data:
-        coverage combine .coverage docker/coverage-data/
-        coverage html
+    If the option --coverage-docker is specified, test coverage analysis will be run inside the FastAPI and Celery workers docker containers. 
     """
     coverage_mode = request.config.getoption("--coverage-docker")
     try:
