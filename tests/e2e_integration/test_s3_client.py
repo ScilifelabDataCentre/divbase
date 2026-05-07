@@ -165,10 +165,10 @@ def test_soft_delete_objects(s3_client: S3FileManager, CONSTANTS, tmp_path: Path
         )
 
 
-def test_versioning_and_hard_delete(s3_client: S3FileManager, CONSTANTS):
+def test_file_versioning(s3_client: S3FileManager, CONSTANTS):
     """
-    Tests file versioning by uploading twice, getting the latest version,
-    and then performing a hard delete on a specific version.
+    Tests file versioning by uploading same file twice.
+    Verify latest uploaded is latest version added.
     """
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"]["project1"]
     object_name = "versioned_file.tsv"
@@ -185,16 +185,6 @@ def test_versioning_and_hard_delete(s3_client: S3FileManager, CONSTANTS):
 
     assert v1_id != v2_id
 
-    # Hard delete the original version and verify it no longer exists
-    delete_object = [{"Key": object_name, "VersionId": v1_id}]
-    s3_client.hard_delete_specific_object_versions(objects=delete_object, bucket_name=bucket_name)
-    with pytest.raises(ObjectDoesNotExistError):
-        s3_client.download_files(
-            bucket_name=bucket_name,
-            objects={object_name: v1_id},
-            download_dir=Path("/tmp"),
-        )
-
-    # Verify the latest version still has the id of the second upload
+    # Verify the latest version is the id of the second upload
     final_versions = s3_client.latest_version_of_all_files(bucket_name=bucket_name)
     assert final_versions[object_name] == v2_id

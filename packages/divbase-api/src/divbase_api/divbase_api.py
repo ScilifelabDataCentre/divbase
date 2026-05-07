@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
 from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
+from divbase_api.crud.s3 import validate_s3_service_account
 from divbase_api.db import (
     check_db_migrations_up_to_date,
     create_first_admin_user,
@@ -60,6 +61,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await create_first_admin_user()
     logger.info("DivBase API startup events complete.")
+
+    validate_s3_service_account(
+        endpoint_url=api_settings.s3.endpoint_url,
+        bucket_prefix=api_settings.s3.bucket_prefix,
+        access_key=api_settings.s3.access_key,
+        secret_key=api_settings.s3.secret_key,
+    )
+    # "seems to" because we don't exhaustively check permissions
+    logger.info("S3 service account can connect to S3 and seems to have the expected permissions.")
 
     yield
 
