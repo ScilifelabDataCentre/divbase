@@ -139,6 +139,8 @@ markdown_extensions:
   - pymdownx.mark
   - pymdownx.superfences
   - pymdownx.tilde
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.arithmatex:
       generic: true
 

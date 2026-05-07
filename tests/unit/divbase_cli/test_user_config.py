@@ -8,12 +8,10 @@ from divbase_cli.user_config import ProjectNotInConfigError, create_user_config,
 
 @pytest.fixture(autouse=True)
 def clean_up_user_config() -> Generator[None, None, None]:
-    """Ensure the user config and tokens file do not exist before each test and are removed after each test."""
+    """Clean up user config before + after each test to ensure no test pollution."""
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
     yield
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
 
 def test_config_auto_made_if_no_config_file() -> None:

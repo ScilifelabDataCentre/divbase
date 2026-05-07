@@ -4,7 +4,6 @@ This guide will walk you through everything you need to start managing and query
 
 ## Prerequisites
 
-- Python 3.12 or higher
 - VCF files and sample metadata in TSV format
 
 ## Step 1: Create an account
@@ -29,13 +28,23 @@ To create a new project, you'll need to contact us at <TODO@scilifelab.se> with 
 
 ## Step 3: Install divbase-cli
 
-Install `divbase-cli` using pipx (recommended):
+Install `divbase-cli` using uv, a fast Python package manager:
 
-```bash
-pipx install divbase-cli
-```
+=== "Linux / macOS / Windows Subsystem for Linux"
 
-If you do not have `pipx` installed, you can install it by following [the official instructions from pipx](https://pipx.pypa.io/stable/installation/). Refer to the [Installation Guide](installation.md) for more detailed instructions or other ways to install divbase-cli.
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    uv tool install divbase-cli
+    ```
+
+=== "Windows"
+
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    uv tool install divbase-cli
+    ```
+
+Refer to the [Installation Guide](installation.md) for more detailed instructions and other ways to install divbase-cli.
 
 ## Step 4: Add your project(s) to your divbase-cli config
 

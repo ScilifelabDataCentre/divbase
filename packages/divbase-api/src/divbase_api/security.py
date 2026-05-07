@@ -23,10 +23,9 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import SecretStr
 
 from divbase_api.api_config import api_settings
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
-
-PAT_TOKEN_PREFIX = "divbase_pat_"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

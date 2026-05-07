@@ -11,3 +11,9 @@ def pytest_addoption(parser):
         default=False,
         help="Run slow tests",
     )
+    parser.addoption(
+        "--coverage-docker",
+        action="store_true",
+        default=False,
+        help="Enable running test coverage analysis for all tests, including those that run code inside docker containers. Do not use this flag directly, use the `scripts/run_tests_with_coverage.sh` to do coverage analysis",
+    )

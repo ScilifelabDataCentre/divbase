@@ -1,10 +1,16 @@
 """
 Manage user authentication with the DivBase server.
 
-This includes login/logout and the getting, storing, using, and refreshing of access + refresh tokens
+This includes login/logout and the getting, storing, using, and refreshing of access + refresh JWTs and Personal Access Tokens (PATs).
+
+User JWTs are stored in the device's OS keyring. They fallback to a local file with 0600 permissions if not possible.
+PATs provided via environment variable
 """
 
+import contextlib
+import json
 import logging
+import os
 import time
 import warnings
 from dataclasses import dataclass
@@ -12,8 +18,10 @@ from json import JSONDecodeError
 from pathlib import Path
 
 import httpx
+import keyring
 import stamina
 import yaml
+from keyring.errors import KeyringError
 from pydantic import SecretStr
 
 from divbase_cli import __version__ as cli_version
@@ -31,9 +39,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TokenData:
-    """
-    Class to hold user token information.
-    """
+    """Class to hold user JWT data"""
 
     access_token: SecretStr
     refresh_token: SecretStr
@@ -41,16 +47,31 @@ class TokenData:
     refresh_token_expires_at: int
 
     def dump_tokens(self, output_path: Path = cli_settings.TOKENS_PATH) -> None:
-        """Dump the user token data to the specified output path"""
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
+        """Dump the user token data to the OS keyring. If fails, fall back to a local file."""
         token_dict = {
             "access_token": self.access_token.get_secret_value(),
             "refresh_token": self.refresh_token.get_secret_value(),
             "access_token_expires_at": self.access_token_expires_at,
             "refresh_token_expires_at": self.refresh_token_expires_at,
         }
-        with open(output_path, "w") as file:
+        try:
+            keyring.set_password(
+                service_name=cli_settings.KEYRING_SERVICE,
+                username=cli_settings.KEYRING_USERNAME,
+                password=json.dumps(token_dict),
+            )
+            output_path.unlink(missing_ok=True)
+            logger.debug("JWTs stored in device keyring successfully.")
+            return
+        except KeyringError as e:
+            logger.debug(f"Keyring JWT storage failed with error: {e}\n falling back to file storage.")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Create file with 0600 permissions (user read/write only).
+        # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
+        # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
+        fd = os.open(path=output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
+        with os.fdopen(fd, "w") as file:
             yaml.safe_dump(token_dict, file, sort_keys=False)
 
     def is_access_token_expired(self) -> bool:
@@ -60,6 +81,13 @@ class TokenData:
     def is_refresh_token_expired(self) -> bool:
         """Check if the refresh token is expired"""
         return time.time() >= (self.refresh_token_expires_at - 300)  # 5 minute buffer
+
+
+def _delete_stored_jwts(token_path: Path) -> None:
+    """Attempt to delete user JWTs from both the keyring and the fallback file."""
+    with contextlib.suppress(KeyringError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
+    token_path.unlink(missing_ok=True)
 
 
 def check_existing_session(divbase_url: str, config) -> int | None:
@@ -153,7 +181,7 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     if config.logged_in_url:
         token_data = load_user_tokens(token_path=token_path)
         if not token_data:
-            token_path.unlink(missing_ok=True)
+            _delete_stored_jwts(token_path)
             config.set_login_status(url=None, email=None)
             return None
 
@@ -185,12 +213,33 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
                 category=UserWarning,
             )
 
-    token_path.unlink(missing_ok=True)
+    _delete_stored_jwts(token_path)
     config.set_login_status(url=None, email=None)
 
 
 def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData | None:
-    """Load user tokens from the specified path, return None if no tokens file found"""
+    """
+    Load user tokens from the OS keyring. Fallback for this is a local file with 0600 permissions.
+    Return None if no tokens found or if tokens are malformed/invalid - user logged out.
+    """
+    try:
+        raw = keyring.get_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
+    except KeyringError as e:
+        raw = None
+        logger.debug(f"Keyring read failed with error: {e}, falling back to file storage.")
+
+    if raw is not None:
+        try:
+            token_dict = json.loads(raw)
+            return TokenData(
+                access_token=SecretStr(token_dict["access_token"]),
+                refresh_token=SecretStr(token_dict["refresh_token"]),
+                access_token_expires_at=token_dict["access_token_expires_at"],
+                refresh_token_expires_at=token_dict["refresh_token_expires_at"],
+            )
+        except (KeyError, json.JSONDecodeError) as e:
+            logger.debug(f"Keyring token data malformed: {e}")
+
     if not token_path.exists():
         return None
 
@@ -207,6 +256,7 @@ def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData |
     except KeyError as e:
         logger.debug(f"User tokens file at {token_path} appears to be malformed: {e}")
         return None
+
     return token_data
 
 
@@ -227,13 +277,14 @@ def make_authenticated_request(
         if not cli_settings.DIVBASE_API_PAT:
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
         logger.info("Using personal access token in request to DivBase API.")
-        headers["Authorization"] = f"Bearer {cli_settings.DIVBASE_API_PAT}"
+        headers["Authorization"] = f"Bearer {cli_settings.DIVBASE_API_PAT.get_secret_value()}"
     else:
         if token_data.is_access_token_expired():
             if token_data.is_refresh_token_expired():
                 # Prevents user getting warning about being already logged in when they try to log in again
                 config = load_user_config()
                 config.set_login_status(url=None, email=None)
+                _delete_stored_jwts(token_path)
                 raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
             else:
                 token_data = _refresh_access_token(token_data=token_data, divbase_base_url=divbase_base_url)
@@ -312,6 +363,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
             # Prevents user getting warning about being already logged in when they try to log in again.
             config = load_user_config()
             config.set_login_status(url=None, email=None)
+            _delete_stored_jwts(token_path=cli_settings.TOKENS_PATH)
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE) from None
 
         _handle_divbase_api_error(response=response, http_method="POST", url=refresh_url)

@@ -1,0 +1,32 @@
+[tool.coverage.run]
+source_pkgs = ["divbase_lib", "divbase_cli", "divbase_api"]
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+omit = [
+    "*/migrations/*",
+    "*/static/*",
+    "*/templates/*",
+]
+
+# Remap container site-packages paths to host source tree so `coverage combine`
+# can merge Docker .coverage.* files with the host-generated .coverage file.
+#
+# Two alternatives per package because relative_files=true makes containers store
+# paths relative to /app/ (e.g. .venv/lib/.../divbase_api) while the absolute form
+# (/app/.venv/lib/.../divbase_api) may appear in some runs. Both are listed so either
+# form is accepted by `coverage combine`.
+[tool.coverage.paths]
+divbase_api = [
+    "packages/divbase-api/src/divbase_api",
+    "/app/.venv/lib/python3.13/site-packages/divbase_api",
+    ".venv/lib/python3.13/site-packages/divbase_api",
+]
+divbase_lib = [
+    "packages/divbase-lib/src/divbase_lib",
+    "/app/.venv/lib/python3.13/site-packages/divbase_lib",
+    ".venv/lib/python3.13/site-packages/divbase_lib",
+]

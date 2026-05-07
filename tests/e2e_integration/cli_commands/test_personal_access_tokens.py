@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import delete, select
 from typer.testing import CliRunner
 
@@ -71,7 +72,7 @@ def pat_factory(db_session_sync):
     """Creates a single PAT directly in the DB and deletes it after the test."""
     pat_id: int | None = None
 
-    def create_pat(user_email, permissions=FULL_ACCESS_PAT_PERMISSIONS, expires_at=None):
+    def create_pat(user_email, permissions=FULL_ACCESS_PAT_PERMISSIONS, expires_at=None) -> SecretStr:
         nonlocal pat_id
         user = db_session_sync.execute(select(UserDB).where(UserDB.email == user_email)).scalar_one()
         raw = generate_personal_access_token()
@@ -86,7 +87,7 @@ def pat_factory(db_session_sync):
         db_session_sync.commit()
         db_session_sync.refresh(pat)
         pat_id = pat.id
-        return raw.get_secret_value()
+        return raw
 
     yield create_pat
 
@@ -271,9 +272,9 @@ def test_pat_does_not_work_on_frontend_endpoints(
 
     home_url = "http://localhost:8001/"
     # technically don't need the token here
-    response = httpx.get(home_url, headers={"Authorization": f"Bearer {raw_token}"})
+    response = httpx.get(home_url, headers={"Authorization": f"Bearer {raw_token.get_secret_value()}"})
     assert response.status_code == 200
 
     profile_url = "http://localhost:8001/profile/"
-    response = httpx.get(profile_url, headers={"Authorization": f"Bearer {raw_token}"})
+    response = httpx.get(profile_url, headers={"Authorization": f"Bearer {raw_token.get_secret_value()}"})
     assert response.status_code == 302  # redirected to login, so rejected as expected
