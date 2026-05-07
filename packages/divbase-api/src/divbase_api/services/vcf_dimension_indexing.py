@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
+from divbase_api.services.queries import ensure_csi_index
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +51,8 @@ class VCFDimensionCalculator:
             indexing_path = bgzipped_temp
 
         try:
-            csi_index_path = self._index_vcf_with_csi(vcf_path=indexing_path)
+            ensure_csi_index(str(indexing_path))
+            csi_index_path = Path(str(indexing_path) + ".csi")
             scaffold_names, variant_count = self._extract_scaffold_names_and_variant_count_from_csi_index(
                 csi_index_path=csi_index_path
             )
@@ -110,26 +113,6 @@ class VCFDimensionCalculator:
             logger.info(f"Bgzipped {vcf_path} to {output_path} for CSI indexing.")
         except subprocess.CalledProcessError as e:
             logger.error(f"Error bgzipping {vcf_path}: {e}")
-            raise
-
-    def _index_vcf_with_csi(self, vcf_path: Path) -> Path:
-        """
-        Index the VCF file with CSI index using bcftools.
-        The CSI index is then used to extract dimensions information.
-        Input must be bgzipped (.vcf.gz); use _bgzip_vcf first for plain .vcf files.
-        """
-        csi_index_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
-        logger.info(f"Creating CSI index for {vcf_path}...")
-        try:
-            subprocess.run(
-                ["bcftools", "index", "--csi", str(vcf_path), "-o", str(csi_index_path)],
-                check=True,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.info(f"Successfully indexed {vcf_path} with a CSI index.")
-            return csi_index_path
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error indexing {vcf_path} with CSI index: {e}")
             raise
 
     def _extract_scaffold_names_and_variant_count_from_csi_index(self, csi_index_path: Path) -> tuple[list[str], int]:

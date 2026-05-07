@@ -33,6 +33,9 @@ from divbase_api.services.queries import (
     validate_user_submitted_bcftools_command,
 )
 from divbase_api.services.s3_client import S3FileManager
+from divbase_api.services.vcf_dimension_indexing import (
+    VCFDimensionCalculator,
+)
 from divbase_api.worker.crud_dimensions import (
     ProjectVCFDimensionsData,
     SkippedVCFData,
@@ -50,9 +53,6 @@ from divbase_api.worker.metrics import (
     start_metrics_server,
     store_task_metric_in_cache,
     update_prometheus_gauges_from_cache,
-)
-from divbase_api.worker.vcf_dimension_indexing import (
-    VCFDimensionCalculator,
 )
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal

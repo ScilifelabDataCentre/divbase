@@ -4,11 +4,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import divbase_api.services.queries as queries_module
 from divbase_api.services.queries import (
     BCFToolsCommandConfig,
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
+    ensure_csi_index,
     extract_region_scaffolds_from_command,
     validate_user_submitted_bcftools_command,
 )
@@ -315,12 +317,12 @@ class TestSamplesPlaceholderDetectionAndInjection:
             def poll():
                 return 0
 
-        def fake_run_bcftools(command: str):
+        def fake_run_bcftools(command: str, capture_output: bool = False):
             executed_commands.append(command)
             return DummyProc()
 
-        monkeypatch.setattr(manager, "run_bcftools", fake_run_bcftools)
-        monkeypatch.setattr(manager, "ensure_csi_index", lambda _file_path: None)
+        monkeypatch.setattr(queries_module, "run_bcftools", fake_run_bcftools)
+        monkeypatch.setattr(queries_module, "ensure_csi_index", lambda _file_path: None)
         monkeypatch.setattr(manager, "_log_file_size", lambda _file_path: None)
 
         cmd_config = BCFToolsCommandConfig(
@@ -436,7 +438,6 @@ class TestBcftoolsReturnCodeHandling:
 
     def test_ensure_csi_index_raises_on_non_zero_return_code(self):
         """Test that ensure_csi_index raises BcftoolsCommandError with appropriate message when bcftools index command returns non-zero exit code."""
-        manager = BcftoolsQueryManager()
         index_proc = MagicMock()
         index_proc.returncode = 1
         index_proc.communicate.return_value = ("", "")
@@ -444,10 +445,10 @@ class TestBcftoolsReturnCodeHandling:
             patch(
                 "divbase_api.services.queries.os.path.exists", return_value=False
             ),  # Simulate missing index file to trigger indexing
-            patch.object(manager, "run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
         ):
-            manager.ensure_csi_index("input.vcf.gz")
+            ensure_csi_index("input.vcf.gz")
 
         mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
         assert "index -f input.vcf.gz" in str(exc_info.value)
@@ -458,7 +459,6 @@ class TestBcftoolsReturnCodeHandling:
         Why: unsorted files cannot be indexed and would break bcftools orchestration with opaque errors otherwise.
         Reference: docs/development/bcftools_task_constraints.md ("VCF files need to be sorted by position").
         """
-        manager = BcftoolsQueryManager()
         unsorted_stderr = (
             "[E::hts_idx_push] Unsorted positions on sequence #1: 22053057 followed by 17504018\n"
             'index: failed to create index for "input.vcf.gz"\n'
@@ -471,16 +471,50 @@ class TestBcftoolsReturnCodeHandling:
             patch(
                 "divbase_api.services.queries.os.path.exists", return_value=False
             ),  # Simulate missing index file to trigger indexing
-            patch.object(manager, "run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(TaskUserError) as exc_info,
         ):
-            manager.ensure_csi_index("input.vcf.gz")
+            ensure_csi_index("input.vcf.gz")
 
         mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
         msg = str(exc_info.value)
         assert "not sorted by position" in msg
         assert "bcftools sort" in msg
         assert "input.vcf.gz" in msg
+
+    def test_ensure_csi_index_skips_indexing_when_index_already_exists(self):
+        """Test that ensure_csi_index does not call run_bcftools when a .csi index already exists."""
+        with (
+            patch("divbase_api.services.queries.os.path.exists", return_value=True),
+            patch("divbase_api.services.queries.run_bcftools") as mock_run_bcftools,
+        ):
+            ensure_csi_index("test.vcf.gz")
+
+        mock_run_bcftools.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "filename,expected_command",
+        [
+            ("test.vcf.gz", "index -f test.vcf.gz"),
+            ("test.vcf", "index -f test.vcf"),
+        ],
+    )
+    def test_ensure_csi_index_uses_full_filename_suffix_in_command(self, filename, expected_command):
+        """
+        Test that the .csi index command includes the full filename suffix.
+        e.g. test.vcf.gz → index -f test.vcf.gz (not index -f test.vcf).
+        """
+        index_proc = MagicMock()
+        index_proc.returncode = 0
+        index_proc.communicate.return_value = ("", "")
+
+        with (
+            patch("divbase_api.services.queries.os.path.exists", return_value=False),
+            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
+        ):
+            ensure_csi_index(filename)
+
+        mock_run_bcftools.assert_called_once_with(command=expected_command, capture_output=True)
 
     @pytest.mark.parametrize(
         "sample_names_map,non_overlapping,identifier,failing_prefix",
@@ -524,10 +558,9 @@ class TestBcftoolsReturnCodeHandling:
                 manager, "_log_file_size", return_value=None
             ),  # Patch a None return to skip actual file size logging for this test
             patch("divbase_api.services.queries.os.rename", return_value=None),
-            patch.object(
-                manager,
-                "run_bcftools",
-                side_effect=lambda command: (
+            patch(
+                "divbase_api.services.queries.run_bcftools",
+                side_effect=lambda command, capture_output=False: (
                     self.DummyProc(1)
                     if command.startswith(failing_prefix)
                     and (len(command) == len(failing_prefix) or command[len(failing_prefix)] == " ")

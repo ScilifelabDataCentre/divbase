@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
+from divbase_api.services.vcf_dimension_indexing import VCFDimensionCalculator, VCFDimensions
 from divbase_api.worker.tasks import _remove_stale_dimensions_db_entries
-from divbase_api.worker.vcf_dimension_indexing import VCFDimensionCalculator, VCFDimensions
 from divbase_lib.exceptions import TaskUserError
 
 
@@ -74,43 +74,6 @@ class TestExtractSampleNamesFromVCFHeader:
             calculator._extract_sample_names_from_vcf_header(tmp_path / "bad.vcf.gz")
 
 
-class TestIndexVCFWithCSI:
-    def test_success_returns_correct_csi_path(self, calculator, tmp_path):
-        """
-        Test that the VCFDimensionCalculator returns the correct CSI path.
-        Including that .csi is appended to the full suffix, not just to .vcf
-        e.g. test.vcf.gz → test.vcf.gz.csi (not test.vcf.csi).
-        """
-        vcf_path = tmp_path / "test.vcf.gz"
-        expected_csi_path = tmp_path / "test.vcf.gz.csi"
-
-        with patch("subprocess.run", return_value=MagicMock()):
-            result = calculator._index_vcf_with_csi(vcf_path)
-
-        assert result == expected_csi_path
-
-    def test_plain_vcf_returns_correct_csi_path(self, calculator, tmp_path):
-        """Plain uncompressed .vcf → .vcf.csi (not some other extension)."""
-        vcf_path = tmp_path / "test.vcf"
-        expected_csi_path = tmp_path / "test.vcf.csi"
-
-        with patch("subprocess.run", return_value=MagicMock()):
-            result = calculator._index_vcf_with_csi(vcf_path)
-
-        assert result == expected_csi_path
-
-    def test_called_process_error_propagates(self, calculator, tmp_path):
-        """
-        Test that the VCFDimensionCalculator._index_vcf_with_csi raises errors
-        that are propagated to the task.py layer so that Celery properly marks the task as FAILURE.
-        """
-        with (
-            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "bcftools")),
-            pytest.raises(subprocess.CalledProcessError),
-        ):
-            calculator._index_vcf_with_csi(tmp_path / "bad.vcf.gz")
-
-
 class TestExtractScaffoldNamesAndVariantCount:
     def test_multi_scaffold_output_returns_correct_list_and_summed_count(self, calculator, tmp_path):
         """
@@ -167,7 +130,7 @@ class TestCalculateDimensions:
 
         with (
             patch.object(calculator, "_extract_sample_names_from_vcf_header", return_value=None) as mock_header,
-            patch.object(calculator, "_index_vcf_with_csi") as mock_index,
+            patch("divbase_api.services.vcf_dimension_indexing.ensure_csi_index") as mock_index,
         ):
             result = calculator.calculate_dimensions(vcf_path)
 
@@ -186,7 +149,7 @@ class TestCalculateDimensions:
 
         with (
             patch.object(calculator, "_extract_sample_names_from_vcf_header", return_value=sample_names),
-            patch.object(calculator, "_index_vcf_with_csi", return_value=tmp_path / "test.vcf.gz.csi"),
+            patch("divbase_api.services.vcf_dimension_indexing.ensure_csi_index"),
             patch.object(
                 calculator,
                 "_extract_scaffold_names_and_variant_count_from_csi_index",

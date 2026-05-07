@@ -35,7 +35,7 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scra
 
 **Implementation:**
 
-- Check that all VCF files are sorted before running `bcftools` on the files. Currently implemented on a VCF file-by-file in `BcftoolsQueryManager` in `ensure_csi_index`. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with `bcftools sort` and upload them to their DivBase project and try the query again.
+- Check that all VCF files are sorted before running `bcftools` on the files. Currently implemented in the module-level `ensure_csi_index` function in `services/queries.py`, shared by both `BcftoolsQueryManager` and `VCFDimensionCalculator`. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with `bcftools sort` and upload them to their DivBase project and try the query again.
 
 **Ideas for future improvements:**
 
@@ -64,7 +64,7 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have
 
 **Implementation:**
 
-- The `BcftoolsQueryManager` class has a method `ensure_csi_index` that is run for all the VCF files that are operated on in a given query, including temp files. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalcualted each time a VCF file is subject to a query.
+- The module-level `ensure_csi_index` function in `services/queries.py` is called for all VCF files operated on in a given query (including temp files) and also during VCF dimension calculation. `BcftoolsQueryManager.ensure_csi_index` delegates to it, passing `self.run_bcftools` so Docker-exec routing is preserved. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalculated each time a VCF file is subject to a query.
 
 **Ideas for future improvements:**
 

@@ -37,6 +37,10 @@ from divbase_lib.utils import split_semicolon_bcftools_command_segments
 
 logger = logging.getLogger(__name__)
 
+BCFTOOLS_CONTAINER_NAME = (
+    "divbase-worker-quick-1"  # for synchronous tasks in local dev, use this container name to find the container ID
+)
+
 
 ###
 ### Data structures for the query managers and their helper functions
@@ -548,6 +552,97 @@ def extract_region_scaffolds_from_command(command: str) -> list[str]:
 
 
 ###
+### bcftools helpers (shared by BcftoolsQueryManager and VCFDimensionCalculator)
+###
+
+
+def _is_in_kubernetes() -> bool:
+    return "KUBERNETES_SERVICE_HOST" in os.environ
+
+
+def get_container_id(container_name: str) -> str:
+    """
+    Return the container ID of a running Docker container by name.
+    Raises BcftoolsEnvironmentError if the container is not found or the command fails.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except subprocess.SubprocessError as e:
+        logger.error(f"Docker command failed: {e}")
+        raise BcftoolsEnvironmentError(container_name) from e
+
+
+def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen:
+    """
+    Run a bcftools command, routing through docker exec when called outside a Docker/k8s container.
+    Returns a subprocess.Popen so callers can monitor the process or call communicate().
+    """
+    logger.info(f"Running: bcftools {command}")
+    try:
+        command_args = shlex.split(command)
+    except ValueError as e:
+        raise BcftoolsCommandError(
+            command=command, error_details=f"Could not parse bcftools command arguments: {e}"
+        ) from None
+
+    if not command_args:
+        raise BcftoolsCommandError(command=command, error_details="Empty bcftools command after parsing") from None
+
+    in_docker = os.path.exists("/.dockerenv")
+    in_k8s = _is_in_kubernetes()
+    popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True} if capture_output else {}
+
+    if in_docker or in_k8s:
+        logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
+        try:
+            return subprocess.Popen(["bcftools"] + command_args, **popen_kwargs)
+        except Exception as e:
+            logger.error(f"Failed to run bcftools directly: {e}")
+            raise BcftoolsCommandError(command=command, error_details=str(e)) from e
+    else:
+        try:
+            container_id = get_container_id(BCFTOOLS_CONTAINER_NAME)
+            logger.debug(f"Executing command in container with ID: {container_id}")
+            docker_cmd = ["docker", "exec", container_id, "bcftools"] + command_args
+            return subprocess.Popen(docker_cmd, **popen_kwargs)
+        except BcftoolsEnvironmentError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to run bcftools in container: {e}")
+            raise BcftoolsCommandError(command=command, error_details=str(e)) from e
+
+
+def ensure_csi_index(file: str) -> None:
+    """
+    Ensure a .csi index exists for the given VCF/BCF file, creating it if absent.
+    Used by both BcftoolsQueryManager (query execution) and VCFDimensionCalculator (dimension indexing).
+    """
+    index_file = f"{file}.csi"
+    if not os.path.exists(index_file):
+        index_command = f"index -f {file}"
+        proc = run_bcftools(command=index_command, capture_output=True)
+        _, stderr = proc.communicate()
+
+        if proc.returncode != 0:
+            stderr = (stderr or "").strip()
+            if "unsorted positions" in stderr.lower():
+                raise TaskUserError(
+                    f"VCF file '{file}' is not sorted by position and cannot be indexed by bcftools.\n"
+                    "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
+                    "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
+                ) from None
+
+            error_details = stderr or f"Process exited with code {proc.returncode}"
+            raise BcftoolsCommandError(command=index_command, error_details=error_details) from None
+
+
+###
 ### VCF query manager
 ###
 
@@ -556,10 +651,8 @@ class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
 
-    # TODO - support different file paths for input files.
-
     Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
-    The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container
+    The bottom layer of the class - run_bcftools() - is designed for either being run inside a Celery worker container
     upon receiving a task from the queue (async job), or to be run inside the same Docker container as the Celery worker with
     `docker exec` instead of the queue (synchronous job). Either way, the class expects that the worker container with the
     name defined in CONTAINER_NAME is running.
@@ -594,9 +687,7 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
-
-    # TODO: since we only support `view`, can there be a shortform where we skip `view` in the user input and just have the view flags? i.e. just "-s -r 1:1-100" instead of "view -s -r 1:1-100". ?
+    CONTAINER_NAME = BCFTOOLS_CONTAINER_NAME
 
     def __init__(self, enable_subprocess_monitoring: bool = False):
         # this can be controlled by the worker config
@@ -615,12 +706,12 @@ class BcftoolsQueryManager:
         walltime_start = time.time()
 
         in_docker = os.path.exists("/.dockerenv")
-        in_k8s = self._is_in_kubernetes()
+        in_k8s = _is_in_kubernetes()
         if not in_docker and not in_k8s:
             logger.info("Running outside Docker container, ensuring Docker container is available")
             try:
-                get_container_id = self.get_container_id(self.CONTAINER_NAME)
-                logger.info(f"Found the required {self.CONTAINER_NAME} container running with ID: {get_container_id}")
+                container_id = get_container_id(self.CONTAINER_NAME)
+                logger.info(f"Found the required {self.CONTAINER_NAME} container running with ID: {container_id}")
             except BcftoolsEnvironmentError:
                 raise
 
@@ -816,12 +907,12 @@ class BcftoolsQueryManager:
             # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
 
             # Ensure source VCFs are indexed *before* command execution.
-            self.ensure_csi_index(file)
+            ensure_csi_index(file)
 
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
-            proc = self.run_bcftools(command=formatted_cmd)
+            proc = run_bcftools(command=formatted_cmd)
 
             if self.enable_subprocess_monitoring:
                 current_cpu = 0.0  # Initialize to track CPU usage
@@ -882,7 +973,7 @@ class BcftoolsQueryManager:
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             # Ensure temporary output VCFs are indexed *after* command execution.
-            self.ensure_csi_index(temp_file)
+            ensure_csi_index(temp_file)
             self._log_file_size(temp_file)
 
         # Calculate average memory
@@ -940,90 +1031,6 @@ class BcftoolsQueryManager:
 
         return shlex.join(injected_args)
 
-    def run_bcftools(self, command: str, capture_output: bool = False) -> subprocess.Popen:
-        """
-        Methid to run a bcftools command inside a Docker container that has bcftools installed.
-        This method is specifically designed to with a Celery manager in an upper layer of the architechture.
-        In short, the CLI layer handles the task management and submission to Celery, which can be either synchronous or asynchronous.
-
-        Synchronous tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
-        and runs the command inside it using `docker exec` and `subprocess.Popen`. I.e. the host machine executes the command
-        inside the container.
-
-        Asynchronous tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
-        inside the containter with `subprocess.Popen`. I.e. the container itself executes the command inside itself.
-
-        To identify if the job is running async, the method evaluates if the current process is running inside a docker container by checking
-        for the existence of the /.dockerenv file. If the file exists, it assumes that the command is run asynchronously inside the Celery worker
-        container. If the file does not exist, it assumes that the command is run synchronously and tries to find the container ID of the running
-        bcftools container using the get_container_id() method.
-
-        Returns the subprocess.Popen object so the caller can monitor resource usage.
-        If capture_output is True, stdout/stderr are captured and decoded as text.
-        """
-        logger.info(f"Running: bcftools {command}")
-        try:
-            command_args = shlex.split(command)
-        except ValueError as e:
-            raise BcftoolsCommandError(
-                command=command, error_details=f"Could not parse bcftools command arguments: {e}"
-            ) from None
-
-        if not command_args:
-            raise BcftoolsCommandError(command=command, error_details="Empty bcftools command after parsing") from None
-
-        in_docker = os.path.exists("/.dockerenv")
-        in_k8s = self._is_in_kubernetes()
-        popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True} if capture_output else {}
-
-        if in_docker or in_k8s:
-            logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
-            try:
-                proc = subprocess.Popen(["bcftools"] + command_args, **popen_kwargs)
-                return proc
-            except Exception as e:
-                logger.error(f"Failed to run bcftools directly: {e}")
-                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
-        else:
-            try:
-                container_id = self.get_container_id(self.CONTAINER_NAME)
-                logger.debug(f"Executing command in container with ID: {container_id}")
-                docker_cmd = ["docker", "exec", container_id, "bcftools"] + command_args
-                proc = subprocess.Popen(docker_cmd, **popen_kwargs)
-                return proc
-            except BcftoolsEnvironmentError:
-                raise
-            except Exception as e:
-                logger.error(f"Failed to run bcftools in container: {e}")
-                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
-
-    def ensure_csi_index(self, file: str) -> None:
-        """
-        Helper method that ensures that the given VCF file has a .csi index. If not, create it using bcftools.
-
-        Indexing a VCF file will also check if the file is sorted by position. If not, it will raise an error.
-
-        (bcftools can sometimes handle VCF files that lack an index file, but for consistency
-        it is better to create an index file for all VCF files that are created.)
-        """
-        index_file = f"{file}.csi"
-        if not os.path.exists(index_file):
-            index_command = f"index -f {file}"
-            proc = self.run_bcftools(command=index_command, capture_output=True)
-            _, stderr = proc.communicate()
-
-            if proc.returncode != 0:
-                stderr = (stderr or "").strip()
-                if "unsorted positions" in stderr.lower():
-                    raise TaskUserError(
-                        f"VCF file '{file}' is not sorted by position and cannot be indexed by bcftools.\n"
-                        "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
-                        "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
-                    ) from None
-
-                error_details = stderr or f"Process exited with code {proc.returncode}"
-                raise BcftoolsCommandError(command=index_command, error_details=error_details) from None
-
     def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
@@ -1053,7 +1060,7 @@ class BcftoolsQueryManager:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
-                proc = self.run_bcftools(command=merge_command)
+                proc = run_bcftools(command=merge_command)
                 self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
                 self._log_file_size(unsorted_output_file)
@@ -1068,11 +1075,11 @@ class BcftoolsQueryManager:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
                         concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
-                        proc = self.run_bcftools(command=concat_command)
+                        proc = run_bcftools(command=concat_command)
                         self._wait_proc_and_check_return_code(proc=proc, command=concat_command)
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
-                        self.ensure_csi_index(concat_temp)
+                        ensure_csi_index(concat_temp)
                         self._log_file_size(concat_temp)
                     elif len(files) == 1:
                         logger.debug(
@@ -1081,7 +1088,7 @@ class BcftoolsQueryManager:
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
-                    proc = self.run_bcftools(command=merge_command)
+                    proc = run_bcftools(command=merge_command)
                     self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                     self._log_file_size(unsorted_output_file)
@@ -1101,12 +1108,12 @@ class BcftoolsQueryManager:
         annotate_command = (
             f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
-        proc = self.run_bcftools(command=annotate_command)
+        proc = run_bcftools(command=annotate_command)
         self._wait_proc_and_check_return_code(proc=proc, command=annotate_command)
         self._log_file_size(annotated_unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
-        proc = self.run_bcftools(command=sort_command)
+        proc = run_bcftools(command=sort_command)
         self._wait_proc_and_check_return_code(proc=proc, command=sort_command)
         self._log_file_size(output_file)
         logger.info(
@@ -1129,24 +1136,6 @@ class BcftoolsQueryManager:
                     os.remove(index_file)
             except Exception as e:
                 logger.error(f"Failed to delete temporary file or index {temp_file}: {e}")
-
-    def get_container_id(self, container_name: str) -> str:
-        """
-        Helper method to get the container ID of the running bcftools Docker container.
-        Raises BcftoolsEnvironmentError if the container is not found or if the command fails.
-        The error can the be re-raised be the methods that call this method, e.g. run_bcftools() and execute_pipe().
-        """
-        try:
-            result = subprocess.run(
-                ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            return result.stdout.strip()
-        except subprocess.SubprocessError as e:
-            logger.error(f"Docker command failed: {e}")
-            raise BcftoolsEnvironmentError(container_name) from e
 
     def _get_all_sample_names_from_vcf_files(self, output_temp_files: list[str]) -> dict[str, list[str]]:
         """
@@ -1191,12 +1180,6 @@ class BcftoolsQueryManager:
         Simply put, if any sample set in the input dict has more than one file, samples overlap between files
         """
         return not any(len(files) > 1 for files in sample_set_to_files.values())
-
-    def _is_in_kubernetes(self) -> bool:
-        """
-        Check if k8s environment variable is set in containter.
-        """
-        return "KUBERNETES_SERVICE_HOST" in os.environ
 
     def _prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
         """

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from divbase_api.services.queries import get_container_id, run_bcftools
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -241,7 +242,7 @@ def test_get_container_id_subprocess_error(mock_run, bcftools_manager):
     mock_run.side_effect = subprocess.SubprocessError("Docker command failed")
 
     with pytest.raises(BcftoolsEnvironmentError) as excinfo:
-        bcftools_manager.get_container_id(bcftools_manager.CONTAINER_NAME)
+        get_container_id(bcftools_manager.CONTAINER_NAME)
 
     assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
 
@@ -254,7 +255,7 @@ def test_get_container_id_subprocess_error(mock_run, bcftools_manager):
 
 
 @pytest.mark.unit
-@patch("divbase_api.services.queries.BcftoolsQueryManager.get_container_id")
+@patch("divbase_api.services.queries.get_container_id")
 @patch("os.path.exists")
 def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_container_id, bcftools_manager):
     """
@@ -272,7 +273,7 @@ def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_contai
     mock_get_container_id.side_effect = BcftoolsEnvironmentError(bcftools_manager.CONTAINER_NAME)
 
     with pytest.raises(BcftoolsEnvironmentError) as excinfo:
-        bcftools_manager.run_bcftools("view -h sample.vcf")
+        run_bcftools("view -h sample.vcf")
 
     assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
 
@@ -282,7 +283,7 @@ def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_contai
 
 @pytest.mark.unit
 @patch("subprocess.Popen")
-@patch("divbase_api.services.queries.BcftoolsQueryManager.get_container_id")
+@patch("divbase_api.services.queries.get_container_id")
 @patch("os.path.exists")
 def test_command_failure_exec_into_container(
     mock_exists_in_docker, mock_get_container_id, mock_popen, bcftools_manager
@@ -303,7 +304,7 @@ def test_command_failure_exec_into_container(
     mock_popen.side_effect = OSError("non-zero exit status 1")
 
     with pytest.raises(BcftoolsCommandError) as excinfo:
-        bcftools_manager.run_bcftools("view -h sample.vcf")
+        run_bcftools("view -h sample.vcf")
 
     assert "view -h sample.vcf" in str(excinfo.value)
     assert "non-zero exit status 1" in str(excinfo.value)
@@ -327,7 +328,7 @@ def test_command_failure_async_inside_container(mock_exists_in_docker, mock_pope
     mock_popen.side_effect = OSError("non-zero exit status 1")
 
     with pytest.raises(BcftoolsCommandError) as excinfo:
-        bcftools_manager.run_bcftools("view -h sample.vcf")
+        run_bcftools("view -h sample.vcf")
 
     assert "view -h sample.vcf" in str(excinfo.value)
     assert "non-zero exit status 1" in str(excinfo.value)
@@ -344,7 +345,7 @@ def test_run_bcftools_uses_shlex_split_for_quoted_args(mock_exists_in_docker, mo
     mock_popen.return_value = mock_proc
 
     command = "view -i 'GT=\"het\"' sample.vcf"
-    result = bcftools_manager.run_bcftools(command)
+    result = run_bcftools(command)
 
     assert result == mock_proc
     mock_popen.assert_called_once_with(["bcftools", "view", "-i", 'GT="het"', "sample.vcf"])
@@ -355,7 +356,7 @@ def test_run_bcftools_parse_error_raises_bcftools_command_error(bcftools_manager
     """Test that malformed shell-like command strings raise BcftoolsCommandError."""
 
     with pytest.raises(BcftoolsCommandError) as excinfo:
-        bcftools_manager.run_bcftools('view -i \'GT="het" sample.vcf')
+        run_bcftools('view -i \'GT="het" sample.vcf')
 
     assert "Could not parse bcftools command arguments" in str(excinfo.value)
 

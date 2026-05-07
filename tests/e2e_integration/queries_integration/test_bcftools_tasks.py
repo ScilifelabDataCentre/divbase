@@ -12,7 +12,7 @@ from kombu.connection import Connection
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.services.queries import BcftoolsQueryManager
+from divbase_api.services.queries import BcftoolsQueryManager, get_container_id
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -438,7 +438,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         """
         return [ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures") for file_name in files_to_download]
 
-    def patched_run_bcftools(self, command: str, capture_output: bool = False):
+    def patched_run_bcftools(command: str, capture_output: bool = False):
         """
         Patches the working dir used when running bcftools commands inside the Docker container.
         """
@@ -468,7 +468,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             def communicate(self):
                 return self._stdout, self._stderr
 
-        container_id = self.get_container_id(self.CONTAINER_NAME)
+        container_id = get_container_id("divbase-tests-worker-quick-1")
         logger = logging.getLogger("divbase_lib.queries")
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
@@ -519,7 +519,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             This avoids relying on a host-installed bcftools binary when running eager-mode tests.
             """
             sample_names_per_VCF = {}
-            container_id = self.get_container_id(self.CONTAINER_NAME)
+            container_id = get_container_id("divbase-tests-worker-quick-1")
 
             for vcf_file in output_temp_files:
                 local_fixture_path = ensure_fixture_path(vcf_file)
@@ -599,9 +599,8 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
         with (
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
-            patch("divbase_api.services.queries.BcftoolsQueryManager.CONTAINER_NAME", "divbase-tests-worker-quick-1"),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_api.services.queries.BcftoolsQueryManager.run_bcftools", new=patched_run_bcftools),
+            patch("divbase_api.services.queries.run_bcftools", new=patched_run_bcftools),
             patch(
                 "divbase_api.services.queries.BcftoolsQueryManager.temp_file_management",
                 new=patched_temp_file_management,
