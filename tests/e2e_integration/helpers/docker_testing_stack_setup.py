@@ -15,8 +15,6 @@ import subprocess
 import time
 from pathlib import Path
 
-import httpx
-
 DOCKER_COMPOSE_FILE = "docker/divbase_compose.yaml"
 DOCKER_COMPOSE_OVERIDE_FILE = "docker/divbase_compose.tests.yaml"
 DOCKER_COMPOSE_CI_OVERRIDE = "docker/divbase_compose.tests.ci.yaml"
@@ -47,7 +45,6 @@ def start_compose_stack(coverage_mode: bool = False) -> None:
     print("Waiting for job system docker stack to start and perform healthchecks...")
     time.sleep(2)
     wait_for_docker_stack_healthy(stack_name=TESTING_STACK_NAME, timeout=120)
-    _wait_for_api_ready()
 
 
 def stop_compose_stack(coverage_mode: bool = False) -> None:
@@ -66,30 +63,6 @@ def stop_compose_stack(coverage_mode: bool = False) -> None:
 
     subprocess.run(base + ["down", "-v"], check=True)
     print("\nStopped job system docker stack.")
-
-
-def _wait_for_api_ready(
-    url: str = "http://localhost:8001/api/v1/core/health", retries: int = 20, delay: int = 5
-) -> None:
-    """Confirm the FastAPI server is actually accepting connections.
-
-    Docker health checks confirm the container is responding internally, but there can be a brief
-    window where the external port mapping is not yet ready or the app is still initialising.
-    This provides a second layer of assurance before setup_test_data() is called.
-    """
-    last_error: Exception | None = None
-    for attempt in range(1, retries + 1):
-        try:
-            response = httpx.get(url, timeout=5)
-            if response.status_code == 200:
-                print(f"API ready at {url}")
-                return
-            last_error = RuntimeError(f"Unexpected status {response.status_code}")
-        except httpx.ConnectError as e:
-            last_error = e
-        print(f"API not ready yet (attempt {attempt}/{retries}): {last_error}")
-        time.sleep(delay)
-    raise RuntimeError(f"API at {url} failed to respond after {retries} attempts. Last error: {last_error}")
 
 
 def _pre_create_coverage_data_dir() -> None:
@@ -144,7 +117,7 @@ def wait_for_docker_stack_healthy(stack_name, timeout=120):
 
             if state == "exited":
                 if exit_code != 0:
-                    # Init container (e.g. db-migrator, minio-setup) will exit with 0 if completed successfully 
+                    # Init container (e.g. db-migrator, minio-setup) will exit with 0 if completed successfully
                     raise RuntimeError(f"Service '{service}' exited unexpectedly with code {exit_code}")
             elif state == "running":
                 if not health or health == "healthy":
