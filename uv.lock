@@ -29,7 +29,7 @@ dev = [
     { name = "pymdown-extensions", specifier = ">=10.19.1" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-alembic", specifier = ">=0.12.1" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-env", specifier = ">=1.1.5" },
     { name = "pytest-mock-resources", extras = ["docker"], specifier = ">=2.12.4" },
     { name = "pytest-playwright", specifier = ">=0.7.2" },
