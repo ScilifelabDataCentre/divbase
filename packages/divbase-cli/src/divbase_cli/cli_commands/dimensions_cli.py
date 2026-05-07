@@ -32,7 +32,7 @@ dimensions_app = typer.Typer(
 def update_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
-    """Calculate and add the dimensions of a VCF file to the dimensions index file in the project."""
+    """Calculate and add the dimensions of all VCF files in the project to the dimensions index in the project."""
 
     project_config = resolve_project(project_name=project)
 
@@ -279,7 +279,7 @@ def create_metadata_template_with_project_samples_names(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions areup-to-date.
+    Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions are up-to-date.
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)

@@ -32,6 +32,9 @@
 
 - [Tutorial: Running a query on a public dataset](tutorial-query-on-public-data.md)
 
+## Working with files in DivBase
+
+- [Managing project files](files.md)
 - [Managing Project Versions](project-versioning.md)
 
 ### Troubleshooting

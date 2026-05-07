@@ -48,7 +48,7 @@ DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     "--disable-verify-checksums",
     "-nc",
     help="Turn off checksum verification which is on by default. "
-    "Checksum verification means all downloaded files are verified against their MD5 checksums."
+    "Checksum verification means all downloaded files are verified against their MD5 checksums. "
     "It is recommended to leave checksum verification enabled unless you have a specific reason to disable it.",
 )
 PROJECT_VERSION_OPTION = typer.Option(
@@ -89,7 +89,7 @@ def list_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    list all currently available files in the project's DivBase store.
+    List all currently available files in the project's DivBase store.
 
     You can optionally filter the listed files by providing a prefix.
     By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
@@ -219,7 +219,7 @@ def download_files(
     files: list[str] = typer.Argument(
         None, help="Space separated list of files/objects to download from the project's store on DivBase."
     ),
-    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
+    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to download."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
     dry_run: bool = DRY_RUN_OPTION,
     disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
@@ -235,7 +235,7 @@ def download_files(
 
     To download the latest version of a file, just provide its name. "file1" "file2" etc.
     To download a specific/older version of a file, use the format: "file_name:version_id"
-    You can get a file's version id using the 'divbase-cli file info [FILE_NAME]' command.
+    You can get a file's version id using the 'divbase-cli files info [FILE_NAME]' command.
     You can mix and match latest and specific versions in the same command.
     E.g. to download the latest version of file1 and version "3xcdsdsdiw829x"
     of file2: 'divbase-cli files download file1 file2:3xcdsdsdiw829x'
@@ -385,7 +385,7 @@ def stream_file(
         default=None,
         help="Specify this if you want to look at an older/specific version of the file. "
         "If not provided, the latest version of the file is used. "
-        "To get a file's version ids, use the 'divbase-cli file info [FILE_NAME]' command.",
+        "To get a file's version ids, use the 'divbase-cli files info [FILE_NAME]' command.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ):

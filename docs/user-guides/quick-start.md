@@ -20,7 +20,7 @@ Managers can see the guide on [Account management](account-management.md) for de
 
 ### Option 2: Create a new project
 
-To create a new project, you'll need to contact us at <TODO@scilifelab.se> with the following information:
+To create a new project, you'll need to contact us at <dsn-eb@scilifelab.se> with the following information:
 
 - Desired project name
 - A brief description of the project
@@ -73,10 +73,10 @@ Upload your VCF files to your project:
 
 ```bash
 # Upload a single VCF file
-divbase-cli files upload path/to/your/file.vcf
+divbase-cli files upload path/to/your/file.vcf.gz
 
 # Upload multiple files
-divbase-cli files upload path/to/file1.vcf path/to/file2.vcf
+divbase-cli files upload path/to/file1.vcf.gz path/to/file2.vcf.gz
 
 # Upload all VCF files in a directory
 divbase-cli files upload --upload-dir /path/to/directory/
@@ -240,4 +240,4 @@ If you run into issues:
 2. **Consult and search the docs**: Browse the [Full documentation](../index.md) or look at common issues in the [Troubleshooting](troubleshooting.md) page.
 3. **Get help on the command you're running**: `divbase-cli COMMAND --help`
 
-To get assistance from us you can either send us an email (<TODO@scilifelab.se>) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).
+To get assistance from us you can either send us an email (<dsn-eb@scilifelab.se>) or report an issue on our [GitHub Issues](https://github.com/ScilifelabDataCentre/divbase/issues).
