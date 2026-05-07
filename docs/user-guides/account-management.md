@@ -9,6 +9,26 @@ Projects in DivBase are created by the DivBase team. To request a new project, y
 
 Once your project is created, you will be added as a member with the **Manage** role, which allows you to add and remove other members.
 
+## Project roles and permissions
+
+Each project member is assigned one of three roles. The table below shows what each role can do with the `divbase-cli`.
+
+| CLI Command | Read | Edit | Manage |
+|---|:---:|:---:|:---:|
+| `files ls` | ✓ | ✓ | ✓ |
+| `files download` / `files download-all` | ✓ | ✓ | ✓ |
+| `task-history user` | ✓ | ✓ | ✓ |
+| `files upload` | | ✓ | ✓ |
+| `query vcf` / `query tsv` | | ✓ | ✓ |
+| `dimensions update` | | ✓ | ✓ |
+| `version ls` | | ✓ | ✓ |
+| `version add` / `version rm` | | ✓ | ✓ |
+| `task-history project` | | | ✓ |
+| Add / remove project members | | | ✓ |
+
+!!! note
+    Members management can be done by any project manager using the DivBase web interface, not `divbase-cli`.
+
 ## Adding members to a project
 
 Project members can be added by anyone with the **Manage** role on that project.
