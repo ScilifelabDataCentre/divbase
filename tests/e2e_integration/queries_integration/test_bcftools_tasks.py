@@ -436,7 +436,9 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         """
         Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
         """
-        return [ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures") for file_name in files_to_download]
+        return [
+            Path(ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures")) for file_name in files_to_download
+        ]
 
     def patched_run_bcftools(command: str, capture_output: bool = False):
         """

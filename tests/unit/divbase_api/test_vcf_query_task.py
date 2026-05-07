@@ -436,29 +436,28 @@ class TestBcftoolsReturnCodeHandling:
             command="view -h file.vcf.gz",
         )
 
-    def test_ensure_csi_index_raises_on_non_zero_return_code(self):
+    def test_ensure_csi_index_raises_on_non_zero_return_code(self, tmp_path):
         """Test that ensure_csi_index raises BcftoolsCommandError with appropriate message when bcftools index command returns non-zero exit code."""
+        vcf_path = tmp_path / "input.vcf.gz"  # .csi absent — triggers indexing
         index_proc = MagicMock()
         index_proc.returncode = 1
         index_proc.communicate.return_value = ("", "")
         with (
-            patch(
-                "divbase_api.services.queries.os.path.exists", return_value=False
-            ),  # Simulate missing index file to trigger indexing
             patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
         ):
-            ensure_csi_index("input.vcf.gz")
+            ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
-        assert "index -f input.vcf.gz" in str(exc_info.value)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
+        assert str(vcf_path) in str(exc_info.value)
 
-    def test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions(self):
+    def test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions(self, tmp_path):
         """
         Regression test (negative outcome): unsorted VCF coordinates must raise a user-facing TaskUserError.
         Why: unsorted files cannot be indexed and would break bcftools orchestration with opaque errors otherwise.
         Reference: docs/development/bcftools_task_constraints.md ("VCF files need to be sorted by position").
         """
+        vcf_path = tmp_path / "input.vcf.gz"  # .csi absent — triggers indexing
         unsorted_stderr = (
             "[E::hts_idx_push] Unsorted positions on sequence #1: 22053057 followed by 17504018\n"
             'index: failed to create index for "input.vcf.gz"\n'
@@ -468,53 +467,41 @@ class TestBcftoolsReturnCodeHandling:
         index_proc.communicate.return_value = ("", unsorted_stderr)
 
         with (
-            patch(
-                "divbase_api.services.queries.os.path.exists", return_value=False
-            ),  # Simulate missing index file to trigger indexing
             patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(TaskUserError) as exc_info,
         ):
-            ensure_csi_index("input.vcf.gz")
+            ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command="index -f input.vcf.gz", capture_output=True)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
         msg = str(exc_info.value)
         assert "not sorted by position" in msg
         assert "bcftools sort" in msg
         assert "input.vcf.gz" in msg
 
-    def test_ensure_csi_index_skips_indexing_when_index_already_exists(self):
+    def test_ensure_csi_index_skips_indexing_when_index_already_exists(self, tmp_path):
         """Test that ensure_csi_index does not call run_bcftools when a .csi index already exists."""
-        with (
-            patch("divbase_api.services.queries.os.path.exists", return_value=True),
-            patch("divbase_api.services.queries.run_bcftools") as mock_run_bcftools,
-        ):
-            ensure_csi_index("test.vcf.gz")
+        vcf_path = tmp_path / "test.vcf.gz"
+        (tmp_path / "test.vcf.gz.csi").touch()  # create index so it exists
+        with patch("divbase_api.services.queries.run_bcftools") as mock_run_bcftools:
+            ensure_csi_index(vcf_path)
 
         mock_run_bcftools.assert_not_called()
 
-    @pytest.mark.parametrize(
-        "filename,expected_command",
-        [
-            ("test.vcf.gz", "index -f test.vcf.gz"),
-            ("test.vcf", "index -f test.vcf"),
-        ],
-    )
-    def test_ensure_csi_index_uses_full_filename_suffix_in_command(self, filename, expected_command):
+    @pytest.mark.parametrize("filename", ["test.vcf.gz", "test.vcf"])
+    def test_ensure_csi_index_uses_full_filename_suffix_in_command(self, tmp_path, filename):
         """
         Test that the .csi index command includes the full filename suffix.
-        e.g. test.vcf.gz → index -f test.vcf.gz (not index -f test.vcf).
+        e.g. test.vcf.gz → index -f <path>/test.vcf.gz (not index -f <path>/test.vcf).
         """
+        vcf_path = tmp_path / filename  # .csi absent — triggers indexing
         index_proc = MagicMock()
         index_proc.returncode = 0
         index_proc.communicate.return_value = ("", "")
 
-        with (
-            patch("divbase_api.services.queries.os.path.exists", return_value=False),
-            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
-        ):
-            ensure_csi_index(filename)
+        with patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools:
+            ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command=expected_command, capture_output=True)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
 
     @pytest.mark.parametrize(
         "sample_names_map,non_overlapping,identifier,failing_prefix",

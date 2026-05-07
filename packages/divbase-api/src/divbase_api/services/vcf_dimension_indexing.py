@@ -51,8 +51,8 @@ class VCFDimensionCalculator:
             indexing_path = bgzipped_temp
 
         try:
-            ensure_csi_index(str(indexing_path))
-            csi_index_path = Path(str(indexing_path) + ".csi")
+            ensure_csi_index(indexing_path)
+            csi_index_path = indexing_path.with_suffix(indexing_path.suffix + ".csi")
             scaffold_names, variant_count = self._extract_scaffold_names_and_variant_count_from_csi_index(
                 csi_index_path=csi_index_path
             )

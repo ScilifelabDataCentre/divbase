@@ -581,7 +581,7 @@ def get_container_id(container_name: str) -> str:
 def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen:
     """
     Run a bcftools command, routing through docker exec when called outside a Docker/k8s container.
-    Returns a subprocess.Popen so callers can monitor the process or call communicate().
+    Returns a subprocess.Popen so the metrics server can monitor the process or call communicate().
     """
     logger.info(f"Running: bcftools {command}")
     try:
@@ -618,13 +618,16 @@ def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen
             raise BcftoolsCommandError(command=command, error_details=str(e)) from e
 
 
-def ensure_csi_index(file: str) -> None:
+def ensure_csi_index(file: Path) -> None:
     """
-    Ensure a .csi index exists for the given VCF/BCF file, creating it if absent.
+    Ensure a .csi index exists for the given VCF file, creating it if absent.
     Used by both BcftoolsQueryManager (query execution) and VCFDimensionCalculator (dimension indexing).
+
+    This function also is the main guard against unsorted VCF in DivBase, since 'bcftools index' requires
+    sorted filed and will fail with a specific error if not.
     """
-    index_file = f"{file}.csi"
-    if not os.path.exists(index_file):
+    index_file = file.with_suffix(file.suffix + ".csi")
+    if not index_file.exists():
         index_command = f"index -f {file}"
         proc = run_bcftools(command=index_command, capture_output=True)
         _, stderr = proc.communicate()
@@ -693,7 +696,7 @@ class BcftoolsQueryManager:
         # this can be controlled by the worker config
         self.enable_subprocess_monitoring = enable_subprocess_monitoring
 
-    def execute_pipe(self, command: str, bcftools_inputs: BCFToolsInput, job_id: int) -> tuple[str, dict[str, float]]:
+    def execute_pipe(self, command: str, bcftools_inputs: BCFToolsInput, job_id: int) -> tuple[Path, dict[str, float]]:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
@@ -804,7 +807,7 @@ class BcftoolsQueryManager:
 
     def process_bcftools_commands(
         self, commands_config: list[BCFToolsCommandConfig], identifier: str
-    ) -> tuple[str, dict[str, float]]:
+    ) -> tuple[Path, dict[str, float]]:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
         the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
@@ -907,7 +910,7 @@ class BcftoolsQueryManager:
             # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
 
             # Ensure source VCFs are indexed *before* command execution.
-            ensure_csi_index(file)
+            ensure_csi_index(Path(file))
 
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
@@ -973,7 +976,7 @@ class BcftoolsQueryManager:
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             # Ensure temporary output VCFs are indexed *after* command execution.
-            ensure_csi_index(temp_file)
+            ensure_csi_index(Path(temp_file))
             self._log_file_size(temp_file)
 
         # Calculate average memory
@@ -1031,7 +1034,7 @@ class BcftoolsQueryManager:
 
         return shlex.join(injected_args)
 
-    def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
+    def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> Path:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
 
@@ -1048,7 +1051,7 @@ class BcftoolsQueryManager:
         self.temp_files.append(annotated_unsorted_output_file)
         self.temp_files.append(divbase_header_for_vcf)
 
-        output_file = f"{QUERY_RESULTS_FILE_PREFIX}{identifier}.vcf.gz"
+        output_file = Path(f"{QUERY_RESULTS_FILE_PREFIX}{identifier}.vcf.gz")
         logger.info("Trying to determine if sample names overlap between temp files...")
 
         sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)
@@ -1079,7 +1082,7 @@ class BcftoolsQueryManager:
                         self._wait_proc_and_check_return_code(proc=proc, command=concat_command)
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
-                        ensure_csi_index(concat_temp)
+                        ensure_csi_index(Path(concat_temp))
                         self._log_file_size(concat_temp)
                     elif len(files) == 1:
                         logger.debug(

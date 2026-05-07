@@ -380,7 +380,7 @@ def bcftools_pipe_task(
 
     logger.info("Started downloading VCF files from S3 to worker")
 
-    _ = _download_vcf_files(
+    vcf_paths = _download_vcf_files(
         files_to_download=files_to_download,
         bucket_name=bucket_name,
         s3_file_manager=s3_file_manager,
@@ -404,7 +404,7 @@ def bcftools_pipe_task(
     bcftools_inputs = BCFToolsInput(
         sample_and_filename_subset=sample_and_filename_subset,
         sampleIDs=resolved_sample_mode_results.unique_sample_ids,
-        filenames=files_to_download,
+        filenames=[path.name for path in vcf_paths],
         # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
         auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
     )
@@ -427,8 +427,8 @@ def bcftools_pipe_task(
     bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
     bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
 
-    _upload_results_file(output_file=Path(output_file), bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    _delete_job_files_from_worker(vcf_paths=files_to_download, metadata_path=metadata_path, output_file=output_file)
+    _upload_results_file(output_file=output_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+    _delete_job_files_from_worker(vcf_paths=vcf_paths, metadata_path=metadata_path, output_file=output_file)
 
     if worker_settings.metrics.enabled_per_task:
         memory_stats = memory_monitor.stop()
@@ -456,7 +456,7 @@ def bcftools_pipe_task(
         )
         _record_task_metrics(task_metrics)
 
-    return {"status": "completed", "output_file": output_file}
+    return {"status": "completed", "output_file": str(output_file)}
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
@@ -539,7 +539,7 @@ def update_vcf_dimensions_task(
         )
     ]
 
-    _ = _download_vcf_files(
+    vcf_paths = _download_vcf_files(
         files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
@@ -549,41 +549,42 @@ def update_vcf_dimensions_task(
 
     # Use a single session for all DB writes and post-run reads
     with SyncSessionLocal() as db:
-        for file in non_indexed_vcfs:
+        for vcf_path in vcf_paths:
+            s3_key = vcf_path.name
             try:
-                vcf_dims = calculator.calculate_dimensions(Path(file))
+                vcf_dims = calculator.calculate_dimensions(vcf_path)
 
                 if vcf_dims is None:
                     skipped_vcf_data = SkippedVCFData(
-                        vcf_file_s3_key=file,
+                        vcf_file_s3_key=s3_key,
                         project_id=project_id,
-                        s3_version_id=latest_versions_of_bucket_files.get(file),
+                        s3_version_id=latest_versions_of_bucket_files.get(s3_key),
                         skip_reason="divbase_generated",
                     )
                     create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
-                    divbase_results_files_skipped_by_this_job.append(file)
-                    logger.info(f"Skipping DivBase-generated result file: {file}")
+                    divbase_results_files_skipped_by_this_job.append(s3_key)
+                    logger.info(f"Skipping DivBase-generated result file: {s3_key}")
                     continue
 
                 vcf_metadata_data = VCFMetadataData(
-                    vcf_file_s3_key=file,
+                    vcf_file_s3_key=s3_key,
                     project_id=project_id,
-                    s3_version_id=latest_versions_of_bucket_files.get(file),
+                    s3_version_id=latest_versions_of_bucket_files.get(s3_key),
                     samples=vcf_dims.sample_names,
                     scaffolds=vcf_dims.scaffolds,
                     variant_count=vcf_dims.variants,
                     sample_count=vcf_dims.sample_count,
-                    file_size_bytes=Path(file).stat().st_size if Path(file).exists() else 0,
+                    file_size_bytes=vcf_path.stat().st_size if vcf_path.exists() else 0,
                 )
                 create_or_update_vcf_metadata(db=db, vcf_metadata_data=vcf_metadata_data)
-                files_indexed_by_this_job.append(file)
-                logger.info(f"Indexed VCF metadata for: {file}")
+                files_indexed_by_this_job.append(s3_key)
+                logger.info(f"Indexed VCF metadata for: {s3_key}")
 
             except Exception as e:
-                logger.error(f"Error indexing {file}: {str(e)}")
+                logger.error(f"Error indexing {s3_key}: {str(e)}")
                 return {"status": "error", "error": str(e), "task_id": task_id}
 
-        _delete_job_files_from_worker(vcf_paths=non_indexed_vcfs)
+        _delete_job_files_from_worker(vcf_paths=vcf_paths)
 
         # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
         # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
@@ -931,7 +932,6 @@ def _delete_job_files_from_worker(
 
     vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
-        vcf_path = Path(vcf_path)
         try:
             os.remove(vcf_path)
             logger.info(f"Deleted {vcf_path} from worker.")
