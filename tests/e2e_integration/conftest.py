@@ -91,16 +91,19 @@ def CONSTANTS():
 
 
 @pytest.fixture(autouse=True, scope="session")
-def docker_testing_stack():
+def docker_testing_stack(request):
     """
     Start job system docker stack, and stop after all tests run.
+
+    If the option --coverage-docker is specified, test coverage analysis will be run inside the FastAPI and Celery workers docker containers.
     """
+    coverage_mode = request.config.getoption("--coverage-docker")
     try:
-        start_compose_stack()
+        start_compose_stack(coverage_mode=coverage_mode)
         setup_test_data()
         yield
     finally:
-        stop_compose_stack()
+        stop_compose_stack(coverage_mode=coverage_mode)
 
 
 @pytest.fixture(scope="session")

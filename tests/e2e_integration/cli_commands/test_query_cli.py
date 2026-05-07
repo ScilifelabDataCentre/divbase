@@ -426,6 +426,30 @@ def test_bcftools_pipe_fails_on_project_not_in_config(CONSTANTS, logged_in_edit_
             "Do not provide VCF/BCF input filenames in '--command'",
             "submission_failure",
         ),
+        # -r / --regions with no following value (next_arg is None)
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view -r",
+            "requires a non-empty region selector",
+            "submission_failure",
+        ),
+        # --regions= with an empty value (compact equals form)
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view --regions=",
+            "requires a non-empty value",
+            "submission_failure",
+        ),
+        # compact -r<value> form where the value itself starts with '-'
+        (
+            "DEFAULT",
+            "DEFAULT",
+            "view -r-badvalue",
+            "requires a non-empty region selector",
+            "submission_failure",
+        ),
     ],
 )
 def test_bcftools_pipe_query_errors(
