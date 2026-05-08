@@ -81,7 +81,7 @@ nav:
     - Managing Project Versions: user-guides/project-versioning.md
     - Using DivBase Programmatically: user-guides/using-divbase-programmatically.md
     - Troubleshooting: user-guides/troubleshooting.md      
-  - CLI Command Reference: 
+  - CLI Commands: 
     - Overview: cli/index.md
     - divbase-cli: cli/_auto_generated/divbase-cli.md
     - divbase-cli config: cli/_auto_generated/config.md
@@ -91,7 +91,7 @@ nav:
     - divbase-cli version: cli/_auto_generated/version.md
     - divbase-cli dimensions: cli/_auto_generated/dimensions.md
     - divbase-cli task-history: cli/_auto_generated/task-history.md
-  - Developer Guide: 
+  - Dev Guide: 
     - Overview: development/index.md
     - Setup Guide: development/setup.md
     - API: development/api.md
@@ -111,6 +111,7 @@ nav:
     - "Monitoring: Celery Worker Metrics": development/worker_metrics.md
     - Contributing to DivBase development: CONTRIBUTING.md
     - Security Policy: SECURITY.md
+  - Releases: releases/index.md
   - "Go to DivBase Website": https://divbase.scilifelab-2-prod.sys.kth.se
 
 hooks:
