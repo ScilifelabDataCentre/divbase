@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import divbase_api.services.queries as queries_module
-from divbase_api.services.queries import (
+import divbase_api.services.vcf_queries as queries_module
+from divbase_api.services.vcf_queries import (
     BCFToolsCommandConfig,
     BCFToolsInput,
     BcftoolsQueryManager,
@@ -443,7 +443,7 @@ class TestBcftoolsReturnCodeHandling:
         index_proc.returncode = 1
         index_proc.communicate.return_value = ("", "")
         with (
-            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
         ):
             ensure_csi_index(vcf_path)
@@ -467,7 +467,7 @@ class TestBcftoolsReturnCodeHandling:
         index_proc.communicate.return_value = ("", unsorted_stderr)
 
         with (
-            patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(TaskUserError) as exc_info,
         ):
             ensure_csi_index(vcf_path)
@@ -482,7 +482,7 @@ class TestBcftoolsReturnCodeHandling:
         """Test that ensure_csi_index does not call run_bcftools when a .csi index already exists."""
         vcf_path = tmp_path / "test.vcf.gz"
         (tmp_path / "test.vcf.gz.csi").touch()  # create index so it exists
-        with patch("divbase_api.services.queries.run_bcftools") as mock_run_bcftools:
+        with patch("divbase_api.services.vcf_queries.run_bcftools") as mock_run_bcftools:
             ensure_csi_index(vcf_path)
 
         mock_run_bcftools.assert_not_called()
@@ -498,7 +498,7 @@ class TestBcftoolsReturnCodeHandling:
         index_proc.returncode = 0
         index_proc.communicate.return_value = ("", "")
 
-        with patch("divbase_api.services.queries.run_bcftools", return_value=index_proc) as mock_run_bcftools:
+        with patch("divbase_api.services.vcf_queries.run_bcftools", return_value=index_proc) as mock_run_bcftools:
             ensure_csi_index(vcf_path)
 
         mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
@@ -544,9 +544,9 @@ class TestBcftoolsReturnCodeHandling:
             patch.object(
                 manager, "_log_file_size", return_value=None
             ),  # Patch a None return to skip actual file size logging for this test
-            patch("divbase_api.services.queries.os.rename", return_value=None),
+            patch("divbase_api.services.vcf_queries.os.rename", return_value=None),
             patch(
-                "divbase_api.services.queries.run_bcftools",
+                "divbase_api.services.vcf_queries.run_bcftools",
                 side_effect=lambda command, capture_output=False: (
                     self.DummyProc(1)
                     if command.startswith(failing_prefix)

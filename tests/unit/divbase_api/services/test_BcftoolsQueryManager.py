@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from divbase_api.services.queries import get_container_id, run_bcftools
+from divbase_api.services.vcf_queries import get_container_id, run_bcftools
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -255,7 +255,7 @@ def test_get_container_id_subprocess_error(mock_run, bcftools_manager):
 
 
 @pytest.mark.unit
-@patch("divbase_api.services.queries.get_container_id")
+@patch("divbase_api.services.vcf_queries.get_container_id")
 @patch("os.path.exists")
 def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_container_id, bcftools_manager):
     """
@@ -283,7 +283,7 @@ def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_contai
 
 @pytest.mark.unit
 @patch("subprocess.Popen")
-@patch("divbase_api.services.queries.get_container_id")
+@patch("divbase_api.services.vcf_queries.get_container_id")
 @patch("os.path.exists")
 def test_command_failure_exec_into_container(
     mock_exists_in_docker, mock_get_container_id, mock_popen, bcftools_manager

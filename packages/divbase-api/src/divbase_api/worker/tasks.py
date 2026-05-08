@@ -24,17 +24,17 @@ from divbase_api.exceptions import (
     VCFDimensionsEntryMissingError,
 )
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
-from divbase_api.services.queries import (
+from divbase_api.services.metadata_queries import run_sidecar_metadata_query
+from divbase_api.services.s3_client import S3FileManager
+from divbase_api.services.vcf_dimension_indexing import (
+    VCFDimensionCalculator,
+)
+from divbase_api.services.vcf_queries import (
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
     extract_region_scaffolds_from_command,
-    run_sidecar_metadata_query,
     validate_user_submitted_bcftools_command,
-)
-from divbase_api.services.s3_client import S3FileManager
-from divbase_api.services.vcf_dimension_indexing import (
-    VCFDimensionCalculator,
 )
 from divbase_api.worker.crud_dimensions import (
     ProjectVCFDimensionsData,

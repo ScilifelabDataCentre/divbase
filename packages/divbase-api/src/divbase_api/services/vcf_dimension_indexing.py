@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from divbase_api.services.queries import ensure_csi_index
+from divbase_api.services.vcf_queries import ensure_csi_index
 
 logger = logging.getLogger(__name__)
 

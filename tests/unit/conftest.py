@@ -13,7 +13,8 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from divbase_api.services.queries import BCFToolsInput, BcftoolsQueryManager, SampleFileMapping, SidecarQueryManager
+from divbase_api.services.metadata_queries import SidecarQueryManager
+from divbase_api.services.vcf_queries import BCFToolsInput, BcftoolsQueryManager, SampleFileMapping
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ from kombu.connection import Connection
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.services.queries import BcftoolsQueryManager, get_container_id
+from divbase_api.services.vcf_queries import BcftoolsQueryManager, get_container_id
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -602,19 +602,19 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         with (
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
-            patch("divbase_api.services.queries.run_bcftools", new=patched_run_bcftools),
+            patch("divbase_api.services.vcf_queries.run_bcftools", new=patched_run_bcftools),
             patch(
-                "divbase_api.services.queries.BcftoolsQueryManager.temp_file_management",
+                "divbase_api.services.vcf_queries.BcftoolsQueryManager.temp_file_management",
                 new=patched_temp_file_management,
             ),
             patch(
-                "divbase_api.services.queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
+                "divbase_api.services.vcf_queries.BcftoolsQueryManager.merge_or_concat_bcftools_temp_files",
                 new=patched_merge_or_concat_bcftools_temp_files,
             ),
             patch("divbase_api.worker.tasks._upload_results_file", new=patched_upload_results_file),
             patch("divbase_api.worker.tasks._delete_job_files_from_worker", new=patched_delete_job_files_from_worker),
             patch(
-                "divbase_api.services.queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
+                "divbase_api.services.vcf_queries.BcftoolsQueryManager._prepare_txt_with_divbase_header_for_vcf",
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
             ),
         ):
