@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from divbase_api.services.vcf_queries import ensure_csi_index
-from divbase_lib.exceptions import TaskUserError
+from divbase_api.services.vcf_queries import _raise_task_user_error_from_bcftools_stderr, ensure_csi_index
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +103,11 @@ class VCFDimensionCalculator:
             return []
         except subprocess.CalledProcessError as e:
             stderr = (e.stderr or "").strip()
-            if "duplicated sample name" in stderr.lower():
-                raise TaskUserError(
-                    f"VCF file '{vcf_path}' contains duplicate sample IDs in the header and is not valid for DivBase.\n"
-                    "Please ensure all sample names in the file header are unique, re-upload the corrected file, and run dimensions update again."
-                ) from None
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="extracting sample names from the VCF header",
+                target=f"VCF file '{vcf_path}'",
+            )
             logger.error(f"Error extracting sample names from the VCF header {vcf_path}: {e}")
             raise
 
@@ -121,10 +120,17 @@ class VCFDimensionCalculator:
             subprocess.run(
                 ["bcftools", "view", "-Oz", "-o", str(output_path), str(vcf_path)],
                 check=True,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
             )
             logger.info(f"Bgzipped {vcf_path} to {output_path} for CSI indexing.")
         except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="bgzipping the VCF for indexing",
+                target=f"VCF file '{vcf_path}'",
+            )
             logger.error(f"Error bgzipping {vcf_path}: {e}")
             raise
 
@@ -147,7 +153,7 @@ class VCFDimensionCalculator:
                 check=True,
                 stdout=subprocess.PIPE,
                 text=True,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
             scaffold_names = []
             variant_count = 0
@@ -161,5 +167,11 @@ class VCFDimensionCalculator:
             )
             return scaffold_names, variant_count
         except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="extracting scaffold stats from the CSI index",
+                target=f"VCF file '{indexed_vcf_path_without_csi_suffix}'",
+            )
             logger.error(f"Error extracting scaffold names/variant count from the CSI index {csi_index_path}: {e}")
             raise

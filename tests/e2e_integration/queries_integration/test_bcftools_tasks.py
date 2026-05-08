@@ -440,7 +440,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             Path(ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures")) for file_name in files_to_download
         ]
 
-    def patched_run_bcftools(command: str, capture_output: bool = False):
+    def patched_run_bcftools(command: str, capture_output: bool = False, capture_stderr: bool = False):
         """
         Patches the working dir used when running bcftools commands inside the Docker container.
         """
@@ -476,11 +476,11 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
         run_result = subprocess.run(
             docker_cmd,
-            check=not capture_output,
-            capture_output=capture_output,
+            check=not (capture_output or capture_stderr),
+            capture_output=(capture_output or capture_stderr),
             text=True,
         )
-        if capture_output:
+        if capture_output or capture_stderr:
             return DummyProc(
                 returncode=run_result.returncode,
                 stdout=run_result.stdout or "",

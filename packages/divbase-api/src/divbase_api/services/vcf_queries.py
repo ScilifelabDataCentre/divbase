@@ -552,7 +552,7 @@ def get_container_id(container_name: str) -> str:
         raise BcftoolsEnvironmentError(container_name) from e
 
 
-def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen:
+def run_bcftools(command: str, capture_output: bool = False, capture_stderr: bool = False) -> subprocess.Popen:
     """
     Run a bcftools command, routing through docker exec when called outside a Docker/k8s container.
     Returns a subprocess.Popen so the metrics server can monitor the process or call communicate().
@@ -570,7 +570,12 @@ def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen
 
     in_docker = os.path.exists("/.dockerenv")
     in_k8s = _is_in_kubernetes()
-    popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True} if capture_output else {}
+    if capture_output:
+        popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True}
+    elif capture_stderr:
+        popen_kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.PIPE, "text": True}
+    else:
+        popen_kwargs = {}
 
     if in_docker or in_k8s:
         logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
@@ -592,6 +597,43 @@ def run_bcftools(command: str, capture_output: bool = False) -> subprocess.Popen
             raise BcftoolsCommandError(command=command, error_details=str(e)) from e
 
 
+def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, target: str) -> None:
+    """
+    Raise user-facing TaskUserError for known/important bcftools stderr patterns.
+
+    This centralizes bcftools stderr classification so both dimensions indexing and query orchestration
+    can produce consistent user-facing errors.
+    """
+    stderr_clean = (stderr or "").strip()
+    if not stderr_clean:
+        return
+
+    stderr_lower = stderr_clean.lower()
+
+    if "unsorted positions" in stderr_lower:
+        raise TaskUserError(
+            f"{target} is not sorted by position and cannot be indexed by bcftools.\n"
+            "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
+            "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
+        ) from None
+
+    if "duplicated sample name" in stderr_lower:
+        raise TaskUserError(
+            f"{target} contains duplicate sample IDs in the header and is not valid for DivBase.\n"
+            "Please ensure all sample names in the file header are unique, re-upload the corrected file, and run dimensions update again."
+        ) from None
+
+    if "could not parse header" in stderr_lower:
+        raise TaskUserError(
+            f"bcftools failed while {operation} for {target} due to an invalid VCF header.\n"
+            f"Details from bcftools:\n{stderr_clean}"
+        ) from None
+
+    raise TaskUserError(
+        f"bcftools failed while {operation} for {target}.\nDetails from bcftools:\n{stderr_clean}"
+    ) from None
+
+
 def ensure_csi_index(file: Path) -> None:
     """
     Ensure a .csi index exists for the given VCF file, creating it if absent.
@@ -603,17 +645,16 @@ def ensure_csi_index(file: Path) -> None:
     index_file = file.with_suffix(file.suffix + ".csi")
     if not index_file.exists():
         index_command = f"index -f {file}"
-        proc = run_bcftools(command=index_command, capture_output=True)
+        proc = run_bcftools(command=index_command, capture_stderr=True)
         _, stderr = proc.communicate()
 
         if proc.returncode != 0:
             stderr = (stderr or "").strip()
-            if "unsorted positions" in stderr.lower():
-                raise TaskUserError(
-                    f"VCF file '{file}' is not sorted by position and cannot be indexed by bcftools.\n"
-                    "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
-                    "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
-                ) from None
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="creating a CSI index",
+                target=f"VCF file '{file}'",
+            )
 
             error_details = stderr or f"Process exited with code {proc.returncode}"
             raise BcftoolsCommandError(command=index_command, error_details=error_details) from None
@@ -889,7 +930,7 @@ class BcftoolsQueryManager:
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
-            proc = run_bcftools(command=formatted_cmd)
+            proc = run_bcftools(command=formatted_cmd, capture_stderr=True)
 
             if self.enable_subprocess_monitoring:
                 current_cpu = 0.0  # Initialize to track CPU usage
@@ -1037,7 +1078,7 @@ class BcftoolsQueryManager:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
                 merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
-                proc = run_bcftools(command=merge_command)
+                proc = run_bcftools(command=merge_command, capture_stderr=True)
                 self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
                 self._log_file_size(unsorted_output_file)
@@ -1052,7 +1093,7 @@ class BcftoolsQueryManager:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
                         concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
-                        proc = run_bcftools(command=concat_command)
+                        proc = run_bcftools(command=concat_command, capture_stderr=True)
                         self._wait_proc_and_check_return_code(proc=proc, command=concat_command)
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
@@ -1065,7 +1106,7 @@ class BcftoolsQueryManager:
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
                     merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
-                    proc = run_bcftools(command=merge_command)
+                    proc = run_bcftools(command=merge_command, capture_stderr=True)
                     self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                     self._log_file_size(unsorted_output_file)
@@ -1085,12 +1126,12 @@ class BcftoolsQueryManager:
         annotate_command = (
             f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
-        proc = run_bcftools(command=annotate_command)
+        proc = run_bcftools(command=annotate_command, capture_stderr=True)
         self._wait_proc_and_check_return_code(proc=proc, command=annotate_command)
         self._log_file_size(annotated_unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
-        proc = run_bcftools(command=sort_command)
+        proc = run_bcftools(command=sort_command, capture_stderr=True)
         self._wait_proc_and_check_return_code(proc=proc, command=sort_command)
         self._log_file_size(output_file)
         logger.info(
@@ -1192,9 +1233,23 @@ class BcftoolsQueryManager:
         """
         Wait for a bcftools subprocess and raise if it failed.
         """
-        returncode = proc.wait()
+        proc_stdout = getattr(proc, "stdout", None)
+        proc_stderr = getattr(proc, "stderr", None)
+        if proc_stdout is not None or proc_stderr is not None:
+            _, stderr = proc.communicate()
+            returncode = proc.returncode
+        else:
+            returncode = proc.wait()
+            stderr = ""
+
         if returncode != 0:
+            stderr = (stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation=f"running command 'bcftools {command}'",
+                target="the current query pipeline step",
+            )
             raise BcftoolsCommandError(
                 command=command,
-                error_details=f"Process exited with code {returncode}",
+                error_details=stderr or f"Process exited with code {returncode}",
             ) from None

@@ -317,7 +317,7 @@ class TestSamplesPlaceholderDetectionAndInjection:
             def poll():
                 return 0
 
-        def fake_run_bcftools(command: str, capture_output: bool = False):
+        def fake_run_bcftools(command: str, capture_output: bool = False, capture_stderr: bool = False):
             executed_commands.append(command)
             return DummyProc()
 
@@ -448,7 +448,7 @@ class TestBcftoolsReturnCodeHandling:
         ):
             ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
         assert str(vcf_path) in str(exc_info.value)
 
     def test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions(self, tmp_path):
@@ -472,7 +472,7 @@ class TestBcftoolsReturnCodeHandling:
         ):
             ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
         msg = str(exc_info.value)
         assert "not sorted by position" in msg
         assert "bcftools sort" in msg
@@ -501,7 +501,7 @@ class TestBcftoolsReturnCodeHandling:
         with patch("divbase_api.services.vcf_queries.run_bcftools", return_value=index_proc) as mock_run_bcftools:
             ensure_csi_index(vcf_path)
 
-        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_output=True)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
 
     @pytest.mark.parametrize(
         "sample_names_map,non_overlapping,identifier,failing_prefix",
@@ -547,7 +547,7 @@ class TestBcftoolsReturnCodeHandling:
             patch("divbase_api.services.vcf_queries.os.rename", return_value=None),
             patch(
                 "divbase_api.services.vcf_queries.run_bcftools",
-                side_effect=lambda command, capture_output=False: (
+                side_effect=lambda command, capture_output=False, capture_stderr=False: (
                     self.DummyProc(1)
                     if command.startswith(failing_prefix)
                     and (len(command) == len(failing_prefix) or command[len(failing_prefix)] == " ")

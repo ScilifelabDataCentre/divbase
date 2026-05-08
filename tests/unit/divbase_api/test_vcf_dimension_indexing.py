@@ -68,10 +68,7 @@ class TestExtractSampleNamesFromVCFHeader:
         that are propagated to the task.py layer so that Celery properly marks the task as FAILURE.
         """
         with (
-            patch(
-                "subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "bcftools", stderr="some other bcftools failure"),
-            ),
+            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "bcftools")),
             pytest.raises(subprocess.CalledProcessError),
         ):
             calculator._extract_sample_names_from_vcf_header(tmp_path / "bad.vcf.gz")
@@ -92,6 +89,23 @@ class TestExtractSampleNamesFromVCFHeader:
             pytest.raises(TaskUserError, match="contains duplicate sample IDs in the header"),
         ):
             calculator._extract_sample_names_from_vcf_header(tmp_path / "duplicate_header.vcf.gz")
+
+    def test_called_process_error_with_stderr_maps_to_task_user_error(self, calculator, tmp_path):
+        """
+        Test that non-duplicate bcftools stderr from header parsing is surfaced as TaskUserError.
+        """
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    "bcftools",
+                    stderr="Failed to read from bad.vcf.gz: could not parse header",
+                ),
+            ),
+            pytest.raises(TaskUserError, match="Details from bcftools"),
+        ):
+            calculator._extract_sample_names_from_vcf_header(tmp_path / "bad.vcf.gz")
 
 
 class TestExtractScaffoldNamesAndVariantCount:
@@ -138,6 +152,59 @@ class TestExtractScaffoldNamesAndVariantCount:
             pytest.raises(subprocess.CalledProcessError),
         ):
             calculator._extract_scaffold_names_and_variant_count_from_csi_index(tmp_path / "test.vcf.gz.csi")
+
+    def test_called_process_error_with_stderr_maps_to_task_user_error(self, calculator, tmp_path):
+        """
+        Test that bcftools stderr from index --stats is surfaced as TaskUserError instead of being suppressed.
+        """
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    "bcftools",
+                    stderr="index: failed to open test.vcf.gz",
+                ),
+            ),
+            pytest.raises(TaskUserError, match="Details from bcftools"),
+        ):
+            calculator._extract_scaffold_names_and_variant_count_from_csi_index(tmp_path / "test.vcf.gz.csi")
+
+
+class TestBgzipVCF:
+    def test_bgzip_called_process_error_with_duplicate_sample_maps_to_task_user_error(self, calculator, tmp_path):
+        """
+        Test that duplicate-sample stderr during bgzip is mapped to a clear TaskUserError message.
+        """
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    "bcftools",
+                    stderr="[E::bcf_hdr_add_sample_len] Duplicated sample name 'NA00002'",
+                ),
+            ),
+            pytest.raises(TaskUserError, match="contains duplicate sample IDs in the header"),
+        ):
+            calculator._bgzip_vcf(tmp_path / "bad.vcf", tmp_path / "bad.vcf.gz")
+
+    def test_bgzip_called_process_error_with_stderr_maps_to_task_user_error(self, calculator, tmp_path):
+        """
+        Test that non-duplicate stderr during bgzip is surfaced as TaskUserError.
+        """
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    "bcftools",
+                    stderr="Failed to read from bad.vcf: could not parse header",
+                ),
+            ),
+            pytest.raises(TaskUserError, match="Details from bcftools"),
+        ):
+            calculator._bgzip_vcf(tmp_path / "bad.vcf", tmp_path / "bad.vcf.gz")
 
 
 class TestCalculateDimensions:
