@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from divbase_api.services.vcf_dimension_indexing import VCFDimensionCalculator, VCFDimensions
+from divbase_api.services.vcf_queries import bgzip_vcf_for_indexing
 from divbase_api.worker.tasks import _remove_stale_dimensions_db_entries
 from divbase_lib.exceptions import TaskUserError
 
@@ -176,35 +177,41 @@ class TestBgzipVCF:
         """
         Test that duplicate-sample stderr during bgzip is mapped to a clear TaskUserError message.
         """
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.communicate.return_value = (
+            "",
+            "[E::bcf_hdr_add_sample_len] Duplicated sample name 'NA00002'",
+        )
         with (
-            patch(
-                "subprocess.run",
-                side_effect=subprocess.CalledProcessError(
-                    1,
-                    "bcftools",
-                    stderr="[E::bcf_hdr_add_sample_len] Duplicated sample name 'NA00002'",
-                ),
-            ),
+            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=proc) as mock_run_bcftools,
             pytest.raises(TaskUserError, match="contains duplicate sample IDs in the header"),
         ):
-            calculator._bgzip_vcf(tmp_path / "bad.vcf", tmp_path / "bad.vcf.gz")
+            bgzip_vcf_for_indexing(input_vcf=tmp_path / "bad.vcf", output_vcf_gz=tmp_path / "bad.vcf.gz")
+        mock_run_bcftools.assert_called_once_with(
+            command=f"view -Oz -o {tmp_path / 'bad.vcf.gz'} {tmp_path / 'bad.vcf'}",
+            capture_stderr=True,
+        )
 
     def test_bgzip_called_process_error_with_stderr_maps_to_task_user_error(self, calculator, tmp_path):
         """
         Test that non-duplicate stderr during bgzip is surfaced as TaskUserError.
         """
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.communicate.return_value = (
+            "",
+            "Failed to read from bad.vcf: could not parse header",
+        )
         with (
-            patch(
-                "subprocess.run",
-                side_effect=subprocess.CalledProcessError(
-                    1,
-                    "bcftools",
-                    stderr="Failed to read from bad.vcf: could not parse header",
-                ),
-            ),
+            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=proc) as mock_run_bcftools,
             pytest.raises(TaskUserError, match="Details from bcftools"),
         ):
-            calculator._bgzip_vcf(tmp_path / "bad.vcf", tmp_path / "bad.vcf.gz")
+            bgzip_vcf_for_indexing(input_vcf=tmp_path / "bad.vcf", output_vcf_gz=tmp_path / "bad.vcf.gz")
+        mock_run_bcftools.assert_called_once_with(
+            command=f"view -Oz -o {tmp_path / 'bad.vcf.gz'} {tmp_path / 'bad.vcf'}",
+            capture_stderr=True,
+        )
 
 
 class TestCalculateDimensions:

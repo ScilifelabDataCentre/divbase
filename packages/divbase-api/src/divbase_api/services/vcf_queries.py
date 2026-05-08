@@ -660,6 +660,33 @@ def ensure_csi_index(file: Path) -> None:
             raise BcftoolsCommandError(command=index_command, error_details=error_details) from None
 
 
+def bgzip_vcf_for_indexing(input_vcf: Path, output_vcf_gz: Path) -> None:
+    """
+    Bgzip a plain .vcf file to .vcf.gz using bcftools view.
+    Shared helper for workflows that need CSI indexing, since bcftools index --csi requires bgzipped input.
+
+    The whitelist for file extensions in packages/divbase-lib/src/divbase_lib/divbase_constants.py
+    does currently not allow .vcf but required (bgzipped) .vcf.gz
+    As such, this function is a guard against future changes to the whilelist,
+    since bcftools index requires bgzip-compressed VCFs (https://samtools.github.io/bcftools/bcftools.html#index)
+    """
+    bgzip_command = f"view -Oz -o {shlex.quote(str(output_vcf_gz))} {shlex.quote(str(input_vcf))}"
+    proc = run_bcftools(command=bgzip_command, capture_stderr=True)
+    _, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        stderr = (stderr or "").strip()
+        _raise_task_user_error_from_bcftools_stderr(
+            stderr=stderr,
+            operation="bgzipping the VCF for indexing",
+            target=f"VCF file '{input_vcf}'",
+        )
+        error_details = stderr or f"Process exited with code {proc.returncode}"
+        raise BcftoolsCommandError(command=bgzip_command, error_details=error_details) from None
+
+    logger.info(f"Bgzipped {input_vcf} to {output_vcf_gz} for CSI indexing.")
+
+
 ###
 ### VCF query manager
 ###

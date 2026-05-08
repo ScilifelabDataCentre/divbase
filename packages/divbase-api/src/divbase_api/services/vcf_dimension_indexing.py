@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from divbase_api.services.vcf_queries import _raise_task_user_error_from_bcftools_stderr, ensure_csi_index
+from divbase_api.services.vcf_queries import (
+    _raise_task_user_error_from_bcftools_stderr,
+    bgzip_vcf_for_indexing,
+    ensure_csi_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +51,7 @@ class VCFDimensionCalculator:
 
         if vcf_path.suffix == ".vcf":
             bgzipped_temp = Path(str(vcf_path) + ".gz")
-            self._bgzip_vcf(vcf_path, bgzipped_temp)
+            bgzip_vcf_for_indexing(input_vcf=vcf_path, output_vcf_gz=bgzipped_temp)
             indexing_path = bgzipped_temp
 
         try:
@@ -109,29 +113,6 @@ class VCFDimensionCalculator:
                 target=f"VCF file '{vcf_path}'",
             )
             logger.error(f"Error extracting sample names from the VCF header {vcf_path}: {e}")
-            raise
-
-    def _bgzip_vcf(self, vcf_path: Path, output_path: Path) -> None:
-        """
-        Bgzip a plain .vcf file to a bgzipped .vcf.gz file using bcftools view.
-        Required because bcftools index --csi only accepts bgzipped input.
-        """
-        try:
-            subprocess.run(
-                ["bcftools", "view", "-Oz", "-o", str(output_path), str(vcf_path)],
-                check=True,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            logger.info(f"Bgzipped {vcf_path} to {output_path} for CSI indexing.")
-        except subprocess.CalledProcessError as e:
-            stderr = (e.stderr or "").strip()
-            _raise_task_user_error_from_bcftools_stderr(
-                stderr=stderr,
-                operation="bgzipping the VCF for indexing",
-                target=f"VCF file '{vcf_path}'",
-            )
-            logger.error(f"Error bgzipping {vcf_path}: {e}")
             raise
 
     def _extract_scaffold_names_and_variant_count_from_csi_index(self, csi_index_path: Path) -> tuple[list[str], int]:
