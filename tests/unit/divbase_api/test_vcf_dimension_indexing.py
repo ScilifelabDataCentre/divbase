@@ -68,10 +68,30 @@ class TestExtractSampleNamesFromVCFHeader:
         that are propagated to the task.py layer so that Celery properly marks the task as FAILURE.
         """
         with (
-            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "bcftools")),
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "bcftools", stderr="some other bcftools failure"),
+            ),
             pytest.raises(subprocess.CalledProcessError),
         ):
             calculator._extract_sample_names_from_vcf_header(tmp_path / "bad.vcf.gz")
+
+    def test_duplicate_sample_name_error_maps_to_task_user_error(self, calculator, tmp_path):
+        """
+        Test that duplicate sample IDs in the VCF header are mapped to a clear TaskUserError message.
+        """
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    "bcftools",
+                    stderr="[E::bcf_hdr_add_sample_len] Duplicated sample name 'NA00002'",
+                ),
+            ),
+            pytest.raises(TaskUserError, match="contains duplicate sample IDs in the header"),
+        ):
+            calculator._extract_sample_names_from_vcf_header(tmp_path / "duplicate_header.vcf.gz")
 
 
 class TestExtractScaffoldNamesAndVariantCount:

@@ -322,6 +322,59 @@ def test_regression_update_dimensions_cleans_up_stale_index_when_all_vcfs_delete
     )
 
 
+def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in_header(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for VCFs with duplicate sample IDs in one file header.
+    Why: duplicate sample IDs violate VCF validity and must not be accepted into the dimensions index.
+    Reference: docs/development/bcftools_task_constraints.md ("1.3. There cannot be duplicate sample names ...").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    duplicate_sample_fixture = "vcf_specification_v45_example11_incorrect_duplicate_sample_ids.vcf.gz"
+    fixture_path = (fixtures_dir / duplicate_sample_fixture).resolve()
+    assert fixture_path.exists(), f"Missing fixture file: {fixture_path}"
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={duplicate_sample_fixture: fixture_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for duplicate sample IDs, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "contains duplicate sample ids in the header" in normalized_error_msg, (
+        f"{regression_prefix} expected explicit duplicate-sample header message, got: {error_msg}"
+    )
+    assert "ensure all sample names in the file header are unique" in normalized_error_msg, (
+        f"{regression_prefix} expected corrective guidance for duplicate sample IDs, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for invalid VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
 def test_remove_VCF_and_update_dimension_entry(
     CONSTANTS,
     db_session_sync,

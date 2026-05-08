@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List
 
 from divbase_api.services.vcf_queries import ensure_csi_index
+from divbase_lib.exceptions import TaskUserError
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +78,20 @@ class VCFDimensionCalculator:
         Extract sample names from the VCF header using bcftools. Reads only the header lines, so this is fast even for large VCFs.
 
         Returns None if the VCF turns out to be a is a DivBase-generated result file (Custom header "##DivBase_created").
+
+        This is also the DivBase guard for duplicated sample names in a VCF, which is considered invalid input for bcftools.
+        See details in docs/development/bcftools_task_constraints.md ("1.3. There cannot be duplicate sample names ...").
         """
+
+        # TODO: Future idea: check for erroneously formatteed VCF files on file upload request instead on dimensions calculations. That would involve checking against the VCF specifications.
+
         try:
             result = subprocess.run(
                 ["bcftools", "view", "-h", str(vcf_path)],
                 check=True,
                 stdout=subprocess.PIPE,
                 text=True,
-                stderr=subprocess.DEVNULL,  # Important! Would otherwise need to parse out potential stderr downstream
+                stderr=subprocess.PIPE,
             )
             for line in result.stdout.splitlines():
                 if line.startswith("##DivBase_created"):
@@ -96,6 +103,12 @@ class VCFDimensionCalculator:
                     return sample_names
             return []
         except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            if "duplicated sample name" in stderr.lower():
+                raise TaskUserError(
+                    f"VCF file '{vcf_path}' contains duplicate sample IDs in the header and is not valid for DivBase.\n"
+                    "Please ensure all sample names in the file header are unique, re-upload the corrected file, and run dimensions update again."
+                ) from None
             logger.error(f"Error extracting sample names from the VCF header {vcf_path}: {e}")
             raise
 
