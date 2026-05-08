@@ -224,12 +224,14 @@ class TestCalculateDimensions:
 
         with (
             patch.object(calculator, "_extract_sample_names_from_vcf_header", return_value=None) as mock_header,
+            patch.object(calculator, "_validate_vcf_record_structure") as mock_validate_records,
             patch("divbase_api.services.vcf_dimension_indexing.ensure_csi_index") as mock_index,
         ):
             result = calculator.calculate_dimensions(vcf_path)
 
         assert result is None
         mock_header.assert_called_once_with(vcf_path)
+        mock_validate_records.assert_not_called()
         mock_index.assert_not_called()
 
     def test_normal_vcf_returns_correct_vcf_dimensions_with_sorted_scaffolds(self, calculator, tmp_path):
@@ -243,6 +245,7 @@ class TestCalculateDimensions:
 
         with (
             patch.object(calculator, "_extract_sample_names_from_vcf_header", return_value=sample_names),
+            patch.object(calculator, "_validate_vcf_record_structure") as mock_validate_records,
             patch("divbase_api.services.vcf_dimension_indexing.ensure_csi_index"),
             patch.object(
                 calculator,
@@ -252,6 +255,7 @@ class TestCalculateDimensions:
         ):
             result = calculator.calculate_dimensions(vcf_path)
 
+        mock_validate_records.assert_called_once_with(vcf_path)
         assert isinstance(result, VCFDimensions)
         assert result.sample_names == ["sample_b", "sample_a"]
         assert result.sample_count == 2

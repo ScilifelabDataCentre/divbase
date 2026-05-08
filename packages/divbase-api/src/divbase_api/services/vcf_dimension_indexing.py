@@ -45,6 +45,7 @@ class VCFDimensionCalculator:
         sample_names = self._extract_sample_names_from_vcf_header(vcf_path)
         if sample_names is None:
             return None
+        self._validate_vcf_record_structure(vcf_path)
 
         indexing_path = vcf_path
         bgzipped_temp = None
@@ -75,6 +76,31 @@ class VCFDimensionCalculator:
             scaffolds=sorted(scaffold_names),
             sample_names=sample_names,
         )
+
+    def _validate_vcf_record_structure(self, vcf_path: Path) -> None:
+        """
+        Validate that the VCF records can be parsed by bcftools (beyond header-only checks).
+
+        This catches malformed record-level issues (for example sample column count mismatches)
+        that may not be detected by header parsing or indexing alone.
+        """
+        try:
+            subprocess.run(
+                ["bcftools", "view", "-H", str(vcf_path)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="validating VCF record structure",
+                target=f"VCF file '{vcf_path}'",
+            )
+            logger.error(f"Error validating VCF record structure for {vcf_path}: {e}")
+            raise
 
     def _extract_sample_names_from_vcf_header(self, vcf_path: Path) -> List[str] | None:
         """

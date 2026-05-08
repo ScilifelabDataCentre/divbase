@@ -64,6 +64,12 @@ def _parse_list_from_cli_output(stdout: str) -> list:
     return ast.literal_eval(list_text[list_start:list_end])
 
 
+def _read_text_from_gz_file(path: os.PathLike) -> str:
+    """Read UTF-8 text content from a .gz file."""
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return f.read()
+
+
 def test_update_vcf_dimensions_task_directly(
     CONSTANTS,
     run_update_dimensions,
@@ -372,6 +378,272 @@ def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
         f"{regression_prefix} expected no dimensions entries to be created for invalid VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
+def test_regression_update_dimensions_fails_for_vcf_with_unsorted_positions(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for VCFs with unsorted positions.
+    Why: unsorted coordinates cannot be indexed and break DivBase bcftools orchestration.
+    Reference: docs/development/bcftools_task_constraints.md ("1.1. VCF files need to be sorted by position").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    unsorted_fixture = "HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz"
+    fixture_path = (fixtures_dir / unsorted_fixture).resolve()
+    assert fixture_path.exists(), f"Missing fixture file: {fixture_path}"
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={unsorted_fixture: fixture_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for unsorted positions, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "not sorted by position" in normalized_error_msg, (
+        f"{regression_prefix} expected unsorted-position guidance, got: {error_msg}"
+    )
+    assert "bcftools sort" in normalized_error_msg, (
+        f"{regression_prefix} expected corrective guidance using bcftools sort, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for unsorted VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
+def test_regression_update_dimensions_fails_for_vcf_gz_that_is_not_bgzf(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+    tmp_path,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for .vcf.gz files that are plain gzip and not BGZF.
+    Why: bcftools indexing requires BGZF compression for .vcf.gz random-access indexing.
+    Reference: docs/development/bcftools_task_constraints.md ("1.2. VCF files need to be indexed").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    source_fixture = (fixtures_dir / "vcf_specification_v45_example11.vcf.gz").resolve()
+    assert source_fixture.exists(), f"Missing fixture file: {source_fixture}"
+
+    # Recompress with regular gzip (not bgzip) to exercise the indexing failure path for .vcf.gz.
+    vcf_text = _read_text_from_gz_file(source_fixture)
+    not_bgzf_name = "vcf_specification_v45_example11_incorrect_not_bgzf.vcf.gz"
+    not_bgzf_path = tmp_path / not_bgzf_name
+    with gzip.open(not_bgzf_path, "wt", encoding="utf-8") as f:
+        f.write(vcf_text)
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={not_bgzf_name: not_bgzf_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for non-BGZF .vcf.gz, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "not bgzip-compressed" in normalized_error_msg, (
+        f"{regression_prefix} expected explicit non-BGZF guidance, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for non-BGZF VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
+def test_regression_update_dimensions_fails_for_truncated_vcf_gz(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+    tmp_path,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for truncated/corrupted .vcf.gz files.
+    Why: corrupted compressed input can produce opaque bcftools failures unless explicitly mapped.
+    Reference: docs/development/bcftools_task_constraints.md ("1.2. VCF files need to be indexed").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    source_fixture = (fixtures_dir / "vcf_specification_v45_example11.vcf.gz").resolve()
+    assert source_fixture.exists(), f"Missing fixture file: {source_fixture}"
+
+    truncated_name = "vcf_specification_v45_example11_incorrect_truncated.vcf.gz"
+    truncated_path = tmp_path / truncated_name
+    source_bytes = source_fixture.read_bytes()
+    assert len(source_bytes) > 64, "Fixture file is unexpectedly small; cannot create truncated variant safely."
+    truncated_path.write_bytes(source_bytes[:-64])
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={truncated_name: truncated_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for truncated .vcf.gz, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "corrupted or truncated" in normalized_error_msg, (
+        f"{regression_prefix} expected explicit corrupted/truncated guidance, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for truncated VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
+def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for invalid VCF header content.
+    Why: invalid headers can silently break parsing unless surfaced as explicit user errors.
+    Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    malformed_name = "vcf_specification_v45_example11_incorrect_invalid_header_content.vcf.gz"
+    malformed_path = (fixtures_dir / malformed_name).resolve()
+    assert malformed_path.exists(), f"Missing fixture file: {malformed_path}"
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={malformed_name: malformed_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for malformed header, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "invalid vcf header" in normalized_error_msg or "invalid vcf header/content" in normalized_error_msg, (
+        f"{regression_prefix} expected explicit invalid-header guidance, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for malformed header VCF, got: {vcf_dimensions.vcf_files}"
+    )
+
+
+def test_regression_update_dimensions_fails_for_vcf_with_sample_column_count_mismatch(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for malformed VCF record column counts.
+    Why: malformed data rows can cause low-signal bcftools parse/index failures unless clearly surfaced.
+    Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    mismatch_name = "vcf_specification_v45_example11_incorrect_sample_column_count_mismatch.vcf.gz"
+    mismatch_path = (fixtures_dir / mismatch_name).resolve()
+    assert mismatch_path.exists(), f"Missing fixture file: {mismatch_path}"
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={mismatch_name: mismatch_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for malformed record columns, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "malformed vcf record lines" in normalized_error_msg, (
+        f"{regression_prefix} expected explicit malformed-record guidance, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for malformed-row VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 

@@ -629,6 +629,45 @@ def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, tar
             f"Details from bcftools:\n{stderr_clean}"
         ) from None
 
+    if "unknown file type" in stderr_lower:
+        raise TaskUserError(
+            f"{target} has invalid VCF header/content and could not be parsed by bcftools.\n"
+            "Please validate the file format/header, upload a corrected VCF, and run dimensions update again."
+        ) from None
+
+    if (
+        "wrong number of fields" in stderr_lower
+        or "could not parse the line" in stderr_lower
+        or "number of columns" in stderr_lower
+        and "does not match the number of samples" in stderr_lower
+    ):
+        raise TaskUserError(
+            f"{target} contains malformed VCF record lines and cannot be processed by bcftools.\n"
+            f"Details from bcftools:\n{stderr_clean}"
+        ) from None
+
+    if "not compressed with bgzip" in stderr_lower or "cannot be usefully indexed" in stderr_lower:
+        raise TaskUserError(
+            f"{target} is gzip-compressed but not bgzip-compressed, so bcftools cannot create an index.\n"
+            "Please re-compress the file with bgzip, upload the corrected file to the DivBase project, and run dimensions update again."
+        ) from None
+
+    if (
+        "truncated" in stderr_lower
+        or "bgzf" in stderr_lower
+        and "failed to read" in stderr_lower
+        or "eof marker is absent" in stderr_lower
+    ):
+        raise TaskUserError(
+            f"{target} appears to be corrupted or truncated and cannot be processed by bcftools.\n"
+            "Please re-create/re-upload the file and run dimensions update again."
+        ) from None
+
+    if "failed to create index" in stderr_lower:
+        raise TaskUserError(
+            f"bcftools failed while creating an index for {target}.\nDetails from bcftools:\n{stderr_clean}"
+        ) from None
+
     raise TaskUserError(
         f"bcftools failed while {operation} for {target}.\nDetails from bcftools:\n{stderr_clean}"
     ) from None

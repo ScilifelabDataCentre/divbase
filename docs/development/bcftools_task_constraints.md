@@ -99,15 +99,34 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 
 ### 1.4. What is required in the header?
 
-- All scaffolds that are contained in the VCF have to be defined in the header
+There is no single "one-line rule" for VCF headers across all `bcftools` commands, but for DivBase dimensions indexing and query orchestration there are hard requirements that must be met.
 
-`[W::vcf_parse] Contig '51' is not defined in the header. (Quick workaround: index the file with tabix.)`
+**Hard `bcftools` failure patterns relevant for DivBase:**
 
-adding it to the header as ##contig=<ID=51,length=22053058> will resolve this.
+- Invalid/unparseable header content (for example `unknown file type` or `could not parse header`)
+- Duplicate sample IDs in header (`Duplicated sample name ...`)
+- Malformed record/sample structure that fails parsing (for example sample-column count mismatch: `Number of columns ... does not match the number of samples`)
 
-- TODO: investigate the header requirements further
+**Implementation (current):**
 
-- TODO: what happens if there are coordinate that are outside the is within the stated scaffold length in the header?
+- `services/vcf_dimension_indexing.py` performs both:
+  1. header parsing (`bcftools view -h`) and
+  2. record-structure validation (`bcftools view -H`)
+- Any stderr from these steps is routed through shared classifier logic in `services/vcf_queries.py::_raise_task_user_error_from_bcftools_stderr`.
+- This gives explicit `TaskUserError` messages for header/content failures instead of opaque bcftools errors.
+
+**Regression test coverage:**
+
+- `test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content` in `tests/e2e_integration/cli_commands/test_dimensions_cli.py`.
+- `test_regression_update_dimensions_fails_for_vcf_with_sample_column_count_mismatch` in `tests/e2e_integration/cli_commands/test_dimensions_cli.py`.
+
+**Ideas for future improvements:**
+
+- Missing contig definitions are often warning-level diagnostics in bcftools, for example:
+  `[W::vcf_parse] Contig '51' is not defined in the header. (Quick workaround: index the file with tabix.)`
+  Add explicit DivBase policy checks if we want this to be a strict upload/dimensions error.
+- Add explicit checks for coordinates outside declared contig lengths and decide whether to treat this as a strict DivBase validation failure.
+- Add broader VCF specification validation as a preflight/upload-time job.
 
 ## 2. bcftools merge
 
