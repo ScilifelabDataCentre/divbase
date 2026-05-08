@@ -32,7 +32,7 @@ divbase-cli files upload sample_metadata.tsv
 divbase-cli files info sample_metadata.tsv
 ```
 
-![File info command output](../assets/img/files_info_cmd_output.png)
+![File info command output](../assets/img/files_info_cmd_output.webp)
 
 Here we see both versions of the file are still present in the project.
 

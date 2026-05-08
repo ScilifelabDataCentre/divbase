@@ -5,22 +5,32 @@
 
 ---
 
-Welcome to DivBase. DivBase is a service built by [Scilifelab](https://www.scilifelab.se/) for researchers at Swedish institutions and their collaborators to manage, query, and version VCF files and associated sample metadata.
+DivBase is a service built by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata.
 
 ## Quick Links
 
 - **[Quick Start Guide](user-guides/quick-start.md)**
-
 - **[Tutorial: Running a VCF query on a public dataset](user-guides/tutorial-query-on-public-data.md)**
+- **[CLI Command Reference](cli/index.md)**
 
 ## What is DivBase?
 
-TODO. - Would be good with a diagram here too.
+![Overview of DivBase Features](assets/img/divbase_key_feats_light.webp#only-light)
+![Overview of DivBase Features](assets/img/divbase_key_feats_dark.webp#only-dark)
 
-## Access DivBase
+- **Share & Collaborate:** Import and export VCF and metadata files within project-based workspaces.
+- **High-Scale Querying:** Run complex filters on VCF data using `bcftools` syntax, processed server-side.
+- **Metadata Integration:** Combine VCF queries with sample metadata TSV files for powerful data subsetting.
+- **Version Control:** Snapshot project files to ensure research reproducibility.
+- **Secure Access:** Role-based permissions to protect research data.
 
-Want to use DivBase? Create an account or sign in at [https://divbase.scilifelab-2-prod.sys.kth.se](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"}.
+## Want to try out DivBase?
+
+- If you want to join an existing project, you just need to create an account [https://divbase.scilifelab-2-prod.sys.kth.se](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"} and ask the project manager to add you to the project.
+
+- If you want to create your own project, you can reach out to us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
 
 ## Getting Support
 
-- TODO - decide what to put here? Email, GitHub issues, troubleshooting guide?
+- **Need help?** Contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+- **Found a bug?** Please report it on our [GitHub Issues page](https://github.com/ScilifelabDataCentre/divbase/issues).

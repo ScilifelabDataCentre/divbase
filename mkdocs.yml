@@ -51,7 +51,7 @@ theme:
   - toc.follow
   icon: # footer
     repo: fontawesome/brands/github-alt
-  logo: assets/img/scilifelab_logo.png
+  logo: assets/img/scilifelab_logo.webp
   favicon: assets/img/favicon.png
   language: en
 
