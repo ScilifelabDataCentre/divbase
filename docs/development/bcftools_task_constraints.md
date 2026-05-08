@@ -37,6 +37,10 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scra
 
 - Check that all VCF files are sorted before running `bcftools` on the files. Currently implemented in the module-level `ensure_csi_index` function in `services/vcf_queries.py`, shared by both `BcftoolsQueryManager` and `VCFDimensionCalculator`. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with `bcftools sort` and upload them to their DivBase project and try the query again.
 
+**Regression test coverage:**
+
+- `test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions` in `tests/unit/divbase_api/test_vcf_query_task.py`.
+
 **Ideas for future improvements:**
 
 - Implement a VCF specification checking job to ensure that user-uploaded VCFs adhere to the [VCF specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf).
@@ -66,13 +70,17 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have
 
 - The module-level `ensure_csi_index` function in `services/vcf_queries.py` is called for all VCF files operated on in a given query (including temp files) and also during VCF dimension calculation. `BcftoolsQueryManager.ensure_csi_index` delegates to it, passing `self.run_bcftools` so Docker-exec routing is preserved. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalculated each time a VCF file is subject to a query.
 
+**Regression test coverage:**
+
+- `test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions` in `tests/unit/divbase_api/test_vcf_query_task.py`.
+
 **Ideas for future improvements:**
 
 - An alternative solution would be to store index files in the bucket along with the VCF files. The challenge there is to ensure that the index files are kept up to date with the VCF files. There is risk for drift if the VCF files are updated but not their associated CSI index files.
 
-### 1.3. There cannot be duplicate sample names cannot recur in a single VCF file
+### 1.3. Duplicate sample names cannot recur in a single VCF file
 
-This should not come as a surprise, but if a VCF file is modified so that the exact same sample name ocurrs in two sample columns in the same VCF file, it cannot even be bgzipped:
+If a VCF file is modified so that the same sample name occurs in two sample columns in the same file, it cannot be processed by `bcftools`:
 
 ```bash
 bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf
@@ -81,9 +89,13 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 # Failed to read from tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf: could not parse header
 ```
 
-**Solution:**
+**Implementation (current):**
 
-- It unlikely that users will upload with VCF files to DivBase with this error. But it would be easy to implement a function that checks that this does not occur.
+- This is guarded against during the VCF dimensions indexing. `services/vcf_queries.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
+
+**Regression test coverage:**
+
+- `test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in_header` in `tests/e2e_integration/cli_commands/test_dimensions_cli.py`.
 
 ### 1.4. What is required in the header?
 
