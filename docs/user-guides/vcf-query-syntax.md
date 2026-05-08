@@ -84,7 +84,7 @@ The metadata query is input with `--tsv-filter` argument and uses the TSV format
 divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10" --command "view -r 21:15000000-25000000"
 ```
 
-For example, the system might find that the samples that fulfill the [sample metadata query](docs/user-guides/sidecar-metadata.md) set with `--tsv-filter` are, say, `S2`, `S5`, `S28`, `S108` and that they are described in the files `file1.vcf`, `file3.vcf`, `file4.vcf`. The DivBase server will then act on only these three files and subset based on the four samples.
+For example, the system might find that the samples that fulfill the [sample metadata query](sidecar-metadata.md) set with `--tsv-filter` are, say, `S2`, `S5`, `S28`, `S108` and that they are described in the files `file1.vcf`, `file3.vcf`, `file4.vcf`. The DivBase server will then act on only these three files and subset based on the four samples.
 
 !!! Tip
     Before using `--tsv-filter` in `query vcf`, you can do a dry-run of metadata query to ensure that the metadata query returns the expected samples and VCF files:
