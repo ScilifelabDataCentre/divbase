@@ -1,0 +1,4 @@
+This is a test fixture that, at the time of implementation, can be uploaded
+to a DivBase project since it has the extension .vcf.gz. It will, however, 
+cause errors in the VCF logic. It will be caught by the dimensions update task
+since that is a required step to be able to run VCF queries.

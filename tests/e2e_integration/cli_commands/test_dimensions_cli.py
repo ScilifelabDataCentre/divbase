@@ -597,6 +597,61 @@ def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
     )
 
 
+def test_regression_update_dimensions_fails_for_non_vcf_file_disguised_as_vcf_gz(
+    CONSTANTS,
+    run_update_dimensions,
+    db_session_sync,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): dimensions update must fail for a non-VCF file uploaded with a .vcf.gz extension.
+    Why: bcftools does not parse non-VCF files. At the time of implementation, users can upload non-VCF files to DivBase if disguised with the extension .vcf.gz.
+    Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
+
+    The bcftools stderr for this fixture: `unknown file type`.
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    fixture_name = "txt_file_with_extension_that_allows_it_to_be_uploaded.vcf.gz"
+    fixture_path = (fixtures_dir / fixture_name).resolve()
+    assert fixture_path.exists(), f"Missing fixture file: {fixture_path}"
+
+    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
+    s3_file_manager.upload_files(to_upload={fixture_name: fixture_path}, bucket_name=bucket_name)
+
+    result = run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    assert result["status"] == "error", (
+        f"{regression_prefix} expected dimensions update to fail for non-VCF file with .vcf.gz extension, got: {result}"
+    )
+    error_msg = str(result.get("error", ""))
+    normalized_error_msg = error_msg.lower()
+    assert "invalid vcf header/content" in normalized_error_msg, (
+        f"{regression_prefix} expected 'invalid vcf header/content' in error message, got: {error_msg}"
+    )
+    assert "validate the file format" in normalized_error_msg, (
+        f"{regression_prefix} expected corrective guidance to validate the file format, got: {error_msg}"
+    )
+
+    db_session_sync.expire_all()
+    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
+    assert vcf_dimensions.vcf_files == [], (
+        f"{regression_prefix} expected no dimensions entries to be created for non-VCF file, got: {vcf_dimensions.vcf_files}"
+    )
+
+
 def test_remove_VCF_and_update_dimension_entry(
     CONSTANTS,
     db_session_sync,
