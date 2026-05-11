@@ -24,10 +24,10 @@ Each project member is assigned one of three roles. The table below shows what e
 | `version ls` | | ✓ | ✓ |
 | `version add` / `version rm` | | ✓ | ✓ |
 | `task-history project` | | | ✓ |
-| Add / remove project members | | | ✓ |
+| Add / remove project members <sup>1</sup>| | | ✓ |
 
 !!! note
-    Members management can be done by any project manager using the DivBase web interface, not `divbase-cli`.
+    <sup>1</sup> Members management can be done by any project manager using the DivBase web interface, not `divbase-cli`.
 
 ## Adding members to a project
 

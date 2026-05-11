@@ -78,4 +78,7 @@ divbase-cli config show-default
 2. When you log into DivBase your recieve an access and refresh JSON web token (JWT). These JWTs let you stay authenticated with DivBase for up to 1 week. We store these tokens in your operating systems credential store. The next time you run a command that requires authentication, `divbase-cli` will retrieve the tokens from the credential store and use them to authenticate with the server. In the event that you don't have a working credentials store (e.g. on some HPCs) we store the secrets in local file and set the file permissions to be only readable/writable by the user.
 
 !!! info "Access from multiple workstations"
-    If you plan to access divbase from say both your laptop and HPC, you will need to install `divbase-cli` in both places and set up the config and login into both places separately.
+    If you plan to access DivBase from, for example both your laptop and HPC, you will need to install `divbase-cli` in both places and set up the config and login into both places separately. For using DivBase in pipelines/scripts/HPCs, you may want to check out our guide on [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically)
+
+!!! tip "Use DivBase Programmatically"
+    If you want to authenticate with DivBaseprogrammatically (e.g. in a script, pipeline or HPC job) without having to log in via `divbase-cli auth login` you can use Personal Access Tokens (PATs). See the [our guide on how to use PATs with DivBase](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).

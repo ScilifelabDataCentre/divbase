@@ -21,15 +21,15 @@ DivBase is a service built and maintained by [SciLifeLab Data Centre](https://ww
 ![Overview of DivBase Features](docs/assets/img/divbase_key_feats_light.webp#gh-light-mode-only)
 ![Overview of DivBase Features](docs/assets/img/divbase_key_feats_dark.webp#gh-dark-mode-only)
 
-## Why use DivBase?
+## DivBase allows you to
 
-- A **single, centralised store** of your project's variant data and metadata.
-- Easy to **collaborate and share data** with your colleagues and collaborators - and **control who has access** to what.
-- Queries are run on **all (or a subset of your choosing) VCF files** stored in the project.
-- Possible to **filter both on variant data and sample metadata** in the same query.
-- You can use **DivBase programmatically** in for example **pipelines/HPC jobs**.
-- Files are **versioned and backed up**.
-- You can **version/checkpoint the state of your project's files** to refer back to at a later date - **making your research more easily reproducible**.
+- **Store all your variant data and metadata in one place** - a single, centralised store for all VCF files and sample metadata from your research project.
+- **Collaborate and share data** with colleagues and collaborators, with full **control over who has access** to what.
+- **Query across all your VCF files at once**, or narrow down to a subset of your choosing.
+- **Filter on variant data and sample metadata in the same query** - no need to join results together manually.
+- **Integrate the system into your pipelines and HPC jobs** - use DivBase programmatically wherever your workflow needs it.
+- **Keep all files under version control and backed up**.
+- **Checkpoint the state of your project's files** to refer back to at a later date - **making your research more easily reproducible**.
 
 ## Documentation
 
@@ -94,4 +94,4 @@ This will submit a job to DivBase and once the job is complete, a new vcf.gz fil
 
 ## Developers/Contributing
 
-We welcome contributions! See our [Contributing Guide](docs/CONTRIBUTING.md) and [Developer Setup Guide](docs/development/setup.md) to get started, or view the [developer documentation](https://scilifelabdatacentre.github.io/divbase/development/setup/) online. Feel free to reach out if you have questions or aren't sure where to start.
+We welcome contributions! See our [Contributing](https://scilifelabdatacentre.github.io/divbase/CONTRIBUTING/) and [Developer Setup](https://scilifelabdatacentre.github.io/divbase/development/setup/) guides to get started. Feel free to reach out if you have questions or aren't sure where to start.

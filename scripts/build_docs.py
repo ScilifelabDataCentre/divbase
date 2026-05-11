@@ -44,11 +44,11 @@ def _fetch_releases() -> list[dict]:
     return resp.json()
 
 
-# pagination rules of API mean up to 100, I think that is enough for this mirror.
+# pagination rules of API mean up to 100 per request with default of up to 30, I think that is enough for this mirror.
 # aka no need to loop through pages here...
 _RELEASES_INTRO = f"""# DivBase Releases
 
-Releases are managed on GitHub — the content below is a replica containing up to the 100 latest pulled from the [GitHub releases page]({DIVBASE_RELEASES_URL}) at build time.
+Releases are managed on GitHub — the content below is a replica containing up to the 30 latest pulled from the [GitHub releases page]({DIVBASE_RELEASES_URL}) at build time.
 
 """
 
