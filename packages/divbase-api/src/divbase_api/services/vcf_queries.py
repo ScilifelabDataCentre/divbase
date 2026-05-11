@@ -1231,18 +1231,24 @@ class BcftoolsQueryManager:
         """
         sample_names_per_VCF = {}
         for vcf_file in output_temp_files:
-            try:
-                result = subprocess.run(
-                    ["bcftools", "query", "-l", vcf_file],
-                    capture_output=True,
-                    text=True,
-                    check=True,
+            sample_extraction_command = f"query -l {vcf_file}"
+            proc = run_bcftools(command=sample_extraction_command, capture_output=True)
+            stdout, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                stderr = (stderr or "").strip()
+                _raise_task_user_error_from_bcftools_stderr(
+                    stderr=stderr,
+                    operation="extracting sample names from a temporary BCF file",
+                    target=f"temporary file '{vcf_file}'",
                 )
-                sample_names = result.stdout.strip().split("\n")
-                sample_names_per_VCF[vcf_file] = sample_names if sample_names != [""] else []
-            except subprocess.SubprocessError as e:
-                logger.error(f"Failed to get sample names from {vcf_file}: {e}")
-                raise
+                raise BcftoolsCommandError(
+                    command=sample_extraction_command,
+                    error_details=stderr or f"Process exited with code {proc.returncode}",
+                ) from None
+
+            sample_names = (stdout or "").strip().split("\n")
+            sample_names_per_VCF[vcf_file] = sample_names if sample_names != [""] else []
 
         return sample_names_per_VCF
 
