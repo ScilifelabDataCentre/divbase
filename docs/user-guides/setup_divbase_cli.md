@@ -70,7 +70,7 @@ divbase-cli config show-default
 1. `divbase-cli` relies on a config file to store your state between commands/sessions:
 
     A config file stored in your home directory at `~/.config/divbase-cli/config.yaml`.
-    This config contains information about your DivBase projects and which divbase server (if any) you're logged into.
+    This config contains information about your DivBase projects and which DivBase server (if any) you're logged into.
     Running `divbase-cli config show` will pretty print the contents of this file. You can also just look at the file directly.
 
     *You should never need to manually modify your config files. The commands above will create and update them for you as needed.*

@@ -57,7 +57,7 @@ divbase-cli config add PROJECT_NAME --default
 By setting this as the default project, you won't need to specify the project name in future commands. To select a different project in any future command, you can add the `--project` flag to any command. Note that the rest of the example commands in this quick start guide will omit the `--project` flag for brevity.
 
 !!! note
-    On the divbase website you can see your project's name(s) under the "Projects" tab after logging in.
+    On the DivBase website you can see your project's name(s) under the "Projects" tab after logging in.
 
 ## Step 5: Log in
 

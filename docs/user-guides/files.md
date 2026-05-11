@@ -28,7 +28,7 @@ This is perhaps easiest to understand with an example. Lets upload 2 different v
 divbase-cli files upload sample_metadata.tsv
 # now edit the sample_metadata.tsv and upload it again
 divbase-cli files upload sample_metadata.tsv
-# we can see the versions stored in divbase with the command:
+# we can see the versions stored in DivBase with the command:
 divbase-cli files info sample_metadata.tsv
 ```
 
