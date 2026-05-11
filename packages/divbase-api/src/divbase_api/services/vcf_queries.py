@@ -993,6 +993,7 @@ class BcftoolsQueryManager:
             # Ensure source VCFs are indexed *before* command execution.
             ensure_csi_index(Path(file))
 
+            # Output goes to temp_file (-Ou -o), not stdout, so the stdout pipe stays empty — no deadlock risk.
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess

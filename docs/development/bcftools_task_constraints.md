@@ -113,6 +113,7 @@ There is no single "one-line rule" for VCF headers across all `bcftools` command
 **Regression test coverage:**
 
 - `test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content` in `tests/e2e_integration/cli_commands/test_dimensions_cli.py`.
+- `test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_columns` in `tests/e2e_integration/cli_commands/test_query_cli.py`.
 
 **Ideas for future improvements:**
 

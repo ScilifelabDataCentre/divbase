@@ -895,3 +895,69 @@ class TestQueryTSVContentValidation:
 
         assert cli_result.exit_code == 0, f"Query should succeed with comma warning. Output: {cli_result.output}"
         assert "comma" in cli_result.output.lower(), "Expected warning message about comma in metadata value"
+
+
+def test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_columns(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): test that a VCF query run against a malformed VCF file where one variant row has
+    fewer sample columns than the header, fails at task time with a descriptive TaskUserError and not just with
+    BcftoolsCommandError("Process exited with code 1").
+
+    Why: bcftools index is used a guard against several VCF formatting issues in DivBase, but this
+    particular malformation is not caught by bcftools index. Until another VCF validation system is
+    implemented in DivBase, this test checks that the error is user-friendly and propagated.
+
+    Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
+    The bcftools stderr (exit code 8):
+    [E::vcf_parse_format_check7] Number of columns at 20:14370 does not match the number of samples (2 vs 3)
+    Error: VCF parse error
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    fixture_name = "vcf_specification_v45_example11_incorrect_sample_column_count_mismatch.vcf.gz"
+    fixture_path = (fixtures_dir / fixture_name).resolve()
+    assert fixture_path.exists(), f"Missing fixture file: {fixture_path}"
+
+    upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+    assert upload_result.exit_code == 0, f"Upload failed: {upload_result.stdout}"
+
+    run_update_dimensions(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        project_name=project_name,
+        user_id=user_id,
+    )
+
+    query_result = runner.invoke(
+        app,
+        f'query vcf --samples "NA00001,NA00002,NA00003" --command "view -s" --project {project_name}',
+    )
+    assert query_result.exit_code == 0, (
+        f"{regression_prefix} query submission should succeed even for a malformed VCF "
+        f"(column mismatches are not detectable before task execution): {query_result.stdout}"
+    )
+    assert "Job submitted" in query_result.stdout
+
+    user_task_id = query_result.stdout.strip().split()[-1]
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+
+    assert task_state == "FAILURE", (
+        f"{regression_prefix} expected task FAILURE for malformed VCF column mismatch, got {task_state}. "
+        f"task-history output:\n{task_stdout}"
+    )
+    assert "malformed VCF record lines" in task_stdout, (
+        f"{regression_prefix} expected descriptive 'malformed VCF record lines' message in task-history "
+        f"instead of the opaque 'Process exited with code' error. task-history output:\n{task_stdout}"
+    )
