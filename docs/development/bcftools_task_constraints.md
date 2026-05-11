@@ -207,77 +207,168 @@ It gives the error: `Error: Duplicate sample names (5a_HOM-I7), use --force-samp
 
 ### 3.3. What about the order of the scaffolds?
 
-from `bcftools merge -help`:
+As long as the VCF files have a CSI index, `bcftools merge` will use the it to parse each file by region and does not therefore not require variants to to appear in any particular order.
 
-```text
---no-index  Merge unindexed files, the same chromosomal order is required and -r/-R are not allowed
-```
+It is possible to attempt to merge VCF files that do not have CSI indexes with `bcftools merge --no-index`. This is not used in DivBase (since indexing and sorting of files is a prerequisite, as described in [Section 1](#1-general-rules)).
 
-This is not allowed:
+!!! Example
+    This is a small example that illustrate what happens when trying to use `--no-index` and unindexed VCFs:
+
+    Docstring from `bcftools merge -help`:
+
+    ```text
+    --no-index  Merge unindexed files, the same chromosomal order is required and -r/-R are not allowed
+    ```
+
+    This is not allowed:
+
+    ```bash
+    bcftools merge --no-index  -Ov -o test3.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+    ```
+
+    and gives this warning from using `--no-index`:
+
+    ```text
+    [W::bcf_sr_add_reader] Using multiple unindexed files may produce errors, make sure chromosomes are in the same order!
+    ```
+
+    and this error from the incorrect scaffold order:
+
+    ```text
+    [E::_reader_fill_buffer] Sequences out of order, cannot stream multiple unindexed files: tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+    ```
+
+    If we ensure that the files are indexed and run the command without the `--no-index` flag, it works, however:
+
+    ```bash
+    bcftools merge -Ov -o test3.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+    ```
+
+**Implementation:**
+
+- DivBase never passes `--no-index` to any `bcftools merge` call. All files are indexed with a CSI index before the merge step runs, via the same `ensure_csi_index` function in `services/vcf_queries.py` described in [Section 1.2](#12-vcf-files-need-to-be-indexed). The scaffold record order of the input files is therefore irrelevant to the merge.
+
+**Regression test coverage:**
+
+- No dedicated test for this case. The indexing guarantee that makes it a non-issue is covered by `test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions` in `tests/unit/divbase_api/test_vcf_query_task.py` (see [Section 1.2](#12-vcf-files-need-to-be-indexed)).
+
+### 3.4. How does merge handle overlapping and non-overlapping variant positions and scaffolds?
+
+`bcftools merge` operates at the variant level: for each unique CHROM/POS across all input files it produces one output record, combining genotype columns from all samples. This is the key behavioral difference from `bcftools concat`, which simply stacks records from each file without any position-level merging.
+
+The following three examples use VCF files with non-overlapping sample sets (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat)) and show how `bcftools merge` handles varying degrees of variant and scaffold overlap.
+
+**Example 1 — Same variant coordinates in both files (the common case):**
+
+`HOM_20ind_17SNPs_first_10_samples.vcf.gz` and `HOM_20ind_17SNPs_last_10_samples.vcf.gz` share all 17 variant positions but have non-overlapping sample sets. Merging them produces 17 output records (not 34), with genotype data from all 20 samples present in each row:
 
 ```bash
-bcftools merge --no-index  -Ov -o test3.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+bcftools merge -Ov -o test5a.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
 ```
 
-and gives this warning from using `--no-index`:
+**Example 2 — Non-overlapping variant coordinates, same scaffolds:**
 
-```text
-[W::bcf_sr_add_reader] Using multiple unindexed files may produce errors, make sure chromosomes are in the same order!
-```
+`HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz` has all coordinates shifted by +1 relative to `HOM_20ind_17SNPs_first_10_samples.vcf.gz`, so no positions are shared. Merging them produces 34 output records (17 from each file). For each record, samples from the file that does not contain that position receive missing genotypes (`./.`).
 
-and this error from the incorrect scaffold order:
-
-```text
-[E::_reader_fill_buffer] Sequences out of order, cannot stream multiple unindexed files: tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
-```
-
-If we ensure that the files are indexed and run the command without the `--no-index` flag, it works, however:
-
-````bash
-bcftools merge -Ov -o test3.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
-````
-
-**Solution:**
-
-- As long as the VCF files are indexed and that the `--no-index`  is not used, the order of the scaffolds is not a problem.
-
-### 3.4. Can there be different variants in the VCF files?
-
-Yes! This was probably to be expected, but this example shows it:
+`bcftools concat` cannot be used to avoid the missing genotypes here: concat requires identical sample sets in the same column order, which is the opposite precondition from merge. Because these two files have non-overlapping sample sets they must be merged, and the missing genotypes are the correct biological output — those samples have no data at those positions.
 
 ```bash
-bcftools merge -Ov -o test5.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz
+bcftools merge -Ov -o test5b.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz
 ```
 
-**Solution:**
+**Example 3 — Completely different scaffold names:**
 
-- Not much to solve here, so this is more of a conclusion: as long as the sample names do not overlap, the VCF files can have different variant positions and still combine fine.
-
-### 3.5. Can there be different scaffolds in the VCF files?
-
-Yes! `bcftools merge` works even if there are no overlapping scaffolds:
+`HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz` has all scaffold IDs prefixed with `5` (e.g. chromosome `1` → `51`, `4` → `54`, `21` → `521`), so there is no scaffold overlap. This is the same mechanism as Example 2: because no CHROM/POS in one file matches any CHROM/POS in the other, the merge produces 34 output records (17 per file) and non-represented samples receive missing genotypes (`./.`).
 
 ```bash
-bcftools merge -Ov -o test4.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
+bcftools merge -Ov -o test5c.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
 ```
 
-**Solution:**
+**Implementation:**
 
-- Again, more of a conclusion of a non-issue: as long as the sample names do not overlap, the VCF files do not need to share any scaffolds between them.
+- More of a conclusion than a problem: no special handling is needed in DivBase. `merge_or_concat_bcftools_temp_files` in `services/vcf_queries.py` passes the temp files directly to `bcftools merge` without any variant-level flags. The position-merging and missing-genotype-filling is `bcftools` default behaviour: shared positions are merged into single records; positions unique to one file get missing genotypes for samples from the other file. This applies regardless of whether the position differences arise from shifted coordinates or entirely different scaffold names.
 
-### 3.6. What about the headers? Do they need to be the same?
+**Regression test coverage:**
 
-TODO: investigate this further
+- No dedicated test for this case. It is implicitly covered by the checksum-based query result tests in `tests/e2e_integration/cli_commands/test_query_cli.py`, which assert on stable output across multi-file merge queries.
 
-### 3.7. What if one file contains different INFO column values than the other?
+### 3.5. What about the headers? Do they need to be the same?
 
-from `bcftools merge -help`:
+No, the headers do not need to be identical. `bcftools merge` builds the output header by computing a union of all input file headers. Deduplication is performed bason on header lines (`FILTER`, `INFO`, `FORMAT`, and `contig`) whose `ID` does not yet appear in the output header; lines whose `ID` is already present are silently skipped (first-seen wins tie-breaks).
+
+No error or warning is emitted for structural differences such as different sets of `contig` lines or different `FILTER` definitions. The only header-related warning is for `INFO` or `FORMAT` fields that appear in two files with a different `Number` or `Type` attribute: `bcftools` emits a warning to stderr but continues the merge, keeping the first file's definition. There seem to be no `bcftools`option to control this behaviour.
+
+There is a `--use-header FILE` option to bypass the header union logic and load the output header from a user-supplied file. DivBase does not use this option.
+
+!!! Example
+    The `--print-header` flag prints the merged header without processing any records, which is useful for inspection. For example, merging files with completely different scaffold names (see Example 3 in [Section 3.4](#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds)) produces a header that is the union of both files' `contig` lines:
+
+    ```bash
+    bcftools merge --print-header tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
+    ```
+
+    The merged header contains `contig` entries from the first file (`1`, `4`, `5`, `6`, `7`, `8`, `13`, `18`, `20`, `21`, `22`, `24`) followed by entries from the second file (`51`, `54`, `55`, `56`, `57`, `58`, `513`, `518`, `520`, `521`, `522`, `524`). The `INFO`, `FORMAT`, and `FILTER` definitions are identical in these two fixtures (both derive from the same source VCF), so the deduplication is a no-op for those lines.
+
+**Implementation:**
+
+- No special handling is needed in DivBase. `merge_or_concat_bcftools_temp_files` in `services/vcf_queries.py` does not pass any header-related flags to `bcftools merge`.
+
+**Regression test coverage:**
+
+- No dedicated test for this case. The default union header behaviour is exercised implicitly by every multi-file merge query in `tests/e2e_integration/cli_commands/test_query_cli.py`.
+
+### 3.6. What if one file contains different INFO column values than the other?
+
+When merging files with non-overlapping sample sets, the `INFO` column values at a shared position typically differ between files: each file's `AC`, `AN`, `DP`, etc. reflect only the samples in that file. `bcftools merge` handles this differently depending on whether not the merged values can be recalculated from the values in the input VCFs:
+
+**Standard fields derivable from genotype data (e.g. `AC`, `AN`):**
+
+`bcftools` recalculates these from the merged genotype columns rather than combining the input values. For example, the `AC` and `AN` values for all positions in the merged output correctly reflect all 20 samples, i.e. it took the 10 samples in each input file into account:
+
+```bash
+bcftools query -f '%POS\t%INFO/AC\t%INFO/AN\n' tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz | head -3
+# 17504018    7    20
+# 22053057    10   20
+# 13086614    1    20
+
+bcftools query -f '%POS\t%INFO/AC\t%INFO/AN\n' tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz | head -3
+# 17504018    0    20
+# 22053057    10   18
+# 13086614    0    20
+
+bcftools merge -Ov -o test_info.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+bcftools query -f '%POS\t%INFO/AC\t%INFO/AN\n' test_info.vcf | head -3
+# 17504018    7    40
+# 22053057    20   38
+# 13086614    1    40
+```
+
+**Non-derivable fields (e.g. `DP` for read depth, custom annotations):**
+
+For fields that cannot be computed from genotype data, `bcftools` applies the `-i, --info-rules` mechanism:
 
 ```text
 -i, --info-rules TAG:METHOD,..    Rules for merging INFO fields (method is one of sum,avg,min,max,join) or "-" to turn off the default [DP:sum,DP4:sum]
 ```
 
-TODO: investigate this further
+DP and DP4 are the only two fields with default sum rules. Every other field not covered by an explicit `-i` rule takes its value from the first input file at the shared positions (same CHROM/POS in both files). This has the following implications:
+
+- **Both files have the field but with different values:** the merged record uses the first file's value; the second file's value is silently discarded.
+- **Only the second (or later) file has the field:** the merged record takes the first file's "value" — which is absent — so the field is missing in the output even though the second file had data there.
+
+Both cases apply only at positions shared by both files. At positions unique to one file (as in Examples 2 and 3 in [Section 3.4](#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds), where variant coordinates do not overlap), there is no conflict and the single file's `INFO` values pass through unchanged.
+
+**Implementation:**
+
+- DivBase does not pass `-i` to `bcftools merge`. This means that the default `bcftools` behavior is used. Currently, users who rely on custom `INFO` fields being correctly combined across files need to post-process the query output themselves, which might not be optimal.
+
+**Regression test coverage:**
+
+- No dedicated test for this case. The standard `AC`/`AN` recalculation behaviour is implicitly included in every multi-file merge query in `tests/e2e_integration/cli_commands/test_query_cli.py`.
+
+**Ideas for future improvements:**
+
+Gather feedback from users regarding the `-i` rules to learn if this is a pain point. One solution to this would be to allow users to control the merge rules in `divbase-cli query vcf`
 
 ## 4. bcftools concat
 
