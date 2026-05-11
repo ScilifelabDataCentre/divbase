@@ -11,6 +11,7 @@ from math import ceil
 
 import boto3
 from botocore.config import Config
+from fastapi import HTTPException, status
 
 from divbase_api.api_config import api_settings
 from divbase_lib.api_schemas.s3 import (
@@ -229,4 +230,7 @@ class S3PreSignedService:
 
     def raise_if_invalid_content_length(self, content_length: int) -> None:
         if content_length <= 0:
-            raise ValueError("Cannot upload a file of size zero or less...")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot upload a file of size zero or less...",
+            )
