@@ -961,3 +961,65 @@ def test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_
         f"{regression_prefix} expected descriptive 'malformed VCF record lines' message in task-history "
         f"instead of the opaque 'Process exited with code' error. task-history output:\n{task_stdout}"
     )
+
+
+def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    fixtures_dir,
+    cleaned_project_bucket,
+):
+    """
+    Regression test (negative outcome): test that a VCF query against two files with partially overlapping
+    sample sets fail with a descriptive TaskUserError before any VCF files are downloaded.
+
+    Why: bcftools merge does not accept partially overlapping samples between VCF files. DivBase deliberately
+    omits --force-samples from its bcftools merge calls, since that could result in undesired renaming of
+    conflicting samples (e.g. S3 → 2:S3).
+
+    Reference: docs/development/bcftools_task_constraints.md ("3.2. Sample names must be unique
+    across all input files" and "2. How DivBase chooses between bcftools merge and concat").
+    """
+    regression_prefix = "Regression guard failed:"
+
+    project_name, bucket_name = cleaned_project_bucket
+    assert project_name == CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+    user_id = 1
+
+    # Both files contain '5a_HOM-I7' but have different remaining samples — a partial overlap.
+    fixture_names = [
+        "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+        "HOM_20ind_17SNPs_last_10_samples_with_edit_to_break_merge.vcf.gz",
+    ]
+    for fixture_name in fixture_names:
+        fixture_path = (fixtures_dir / fixture_name).resolve()
+        upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+        assert upload_result.exit_code == 0, f"Upload failed for {fixture_name}: {upload_result.stdout}"
+
+    run_update_dimensions(bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id)
+
+    # '5a_HOM-I7' appears in both fixtures, so call a sample selection on that to trigger the overlap validation.
+    query_result = runner.invoke(
+        app,
+        f'query vcf --samples "5a_HOM-I7" --command "view -s" --project {project_name}',
+    )
+    assert query_result.exit_code == 0, (
+        f"{regression_prefix} query submission should succeed even for incompatible sample sets "
+        f"(incompatibility is only detectable once the task runs): {query_result.stdout}"
+    )
+    assert "Job submitted" in query_result.stdout
+
+    user_task_id = query_result.stdout.strip().split()[-1]
+    task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+
+    assert task_state == "FAILURE", (
+        f"{regression_prefix} expected task FAILURE for partly overlapping sample sets, got {task_state}. "
+        f"task-history output:\n{task_stdout}"
+    )
+    assert "Sample sets that are partly overlapping" in task_stdout, (
+        f"{regression_prefix} expected descriptive 'Sample sets that are partly overlapping' message "
+        f"in task-history. task-history output:\n{task_stdout}"
+    )

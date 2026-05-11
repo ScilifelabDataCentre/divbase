@@ -161,8 +161,6 @@ As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#
 
 > Merge multiple VCF/BCF files from non-overlapping sample sets to create one multi-sample file. For example, when merging file A.vcf.gz containing samples S1, S2 and S3 and file B.vcf.gz containing samples S3 and S4, the output file will contain four samples named S1, S2, S3, 2:S3 and S4.
 
-Note that it is responsibility of the user to ensure that the sample names are unique across all files. If they are not, the program will exit with an error unless the option --force-samples is given. Note that sample names can be also given explicitly using the --print-header and --use-header options.
-
 ### 3.1. Only records from different VCF files can be merged
 
 `bcftools merge` combines records across different input files — it does not transform or reshape records within a single file. If the query only involves a single source VCF file, `merge_or_concat_bcftools_temp_files` will receive a list of one temp file and skip the merge/concat step entirely, renaming that file to the output path instead (`len(output_temp_files) == 1` branch in `services/vcf_queries.py`).
@@ -179,15 +177,15 @@ TODO: exact duplicate variants in to VCF files with different filename are curre
 
 ### 3.2. Sample names must be unique across all input files
 
-`--force-samples` can be used to override this, but it gives undesireable results for DivBase
+This covers the partially overlapping case in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat). `bcftools merge` has a `--force-samples` flag that overrides the duplicate-sample-name error, but DivBase deliberately does not use it: when triggered, it silently renames conflicting samples by prepending the file index (e.g. `S3` becomes `2:S3`), which would corrupt the sample columns in the query results without any visible error. DivBase instead rejects incompatible sample sets before the merge step runs.
 
-This is allowed since the VCF files have different samples names:
+The following fixtures can be merged the VCF files have different samples names:
 
 ```bash
 bcftools merge -Ov -o test1.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
 ```
 
-This is not allowed since the second VCF file contains one sample name that is also in the first VCF:
+The following fixtures cannot be merged since the second VCF file contains one sample name that is also in the first VCF:
 
 ```bash
 bcftools merge -Ov -o test2.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_break_merge.vcf.gz
@@ -197,9 +195,11 @@ It gives the error: `Error: Duplicate sample names (5a_HOM-I7), use --force-samp
 
 **Implementation:**
 
-- The VCF dimensions index stores all sample names for all VCF files in the bucket. When a query is submitted, `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py` reads these from the dimensions index and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the two blocked cases (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) for all four cases).
+- The VCF dimensions index stores all sample names for all VCF files in the bucket. When a query is submitted, `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py` reads these from the dimensions index and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the blocked cases (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat)).
 
-- A VCF with sample set `S1,S2,S3` cannot be combined with a VCF containing `S3,S4,S5`: not with `merge` (overlapping samples would require `--force-samples`, which produces undesirable results for DivBase) and not with `concat` (only partial overlap, not complete). `_calculate_pairwise_overlap_types_for_sample_sets` in `worker/tasks.py` classifies this as `partly_overlapping`, and `_check_if_samples_can_be_combined_with_bcftools` raises a `TaskUserError` naming the conflicting sample sets.
+**Regression test coverage:**
+
+- `test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets` in `tests/e2e_integration/cli_commands/test_query_cli.py`.
 
 ### 3.3. What about the order of the scaffolds?
 

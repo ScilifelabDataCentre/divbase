@@ -1143,8 +1143,7 @@ class BcftoolsQueryManager:
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
-                merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
-                # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
+                merge_command = f"merge -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
                 proc = run_bcftools(command=merge_command, capture_stderr=True)
                 self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
@@ -1172,7 +1171,7 @@ class BcftoolsQueryManager:
                         )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
-                    merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
+                    merge_command = f"merge -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
                     proc = run_bcftools(command=merge_command, capture_stderr=True)
                     self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")

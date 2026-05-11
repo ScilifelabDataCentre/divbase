@@ -510,7 +510,7 @@ class TestBcftoolsReturnCodeHandling:
                 {"file1.bcf": ["S1"], "file2.bcf": ["S2"]},
                 True,
                 "job1",
-                "merge --force-samples",
+                "merge -Ou",
             ),
             (
                 {"file1.bcf": ["S1"], "file2.bcf": ["S1"]},
