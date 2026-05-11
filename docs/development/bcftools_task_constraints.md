@@ -4,7 +4,8 @@ DivBase uses `bcftools` for several VCF parsing steps, including VCF dimensions 
 
 What sets DivBase apart from regular `bcftools` scripting is that the DivBase server dynamically orchestrates `bcftools` workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed ([as described in e.g. the VCF query user guide](../user-guides/vcf-query-syntax.md/#53-how-does-divbase-process-the-vcf-files)). There are two ways to combine VCF files with `bcftools`: `bcftools merge` and `bcftools concat`. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined. An overview of the possible sample column overlap cases and are found in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) and described in detail in [Section 3 (`bcftools merge`)](#3-bcftools-merge) and [Section 4 (`bcftools concat`)](#4-bcftools-concat).
 
-The rules described in this document are considered a system contract for the design of the DivBase `bcftools` orchestration logic. Be very careful when refactoring code that touches upon these rules. Several regression tests (prefixed with `test_regression_*`) have been implemented to guard the parts of the codebase that rely on these rules.
+!!! Important
+    The rules described in this document are considered a system contract for the design of the DivBase `bcftools` orchestration logic. Be very careful when refactoring code that touches upon these rules. Several regression tests (prefixed with `test_regression_*`) have been implemented to guard the parts of the codebase that rely on these rules.
 
 ## 1. General rules
 
@@ -161,6 +162,9 @@ As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#
 
 > Merge multiple VCF/BCF files from non-overlapping sample sets to create one multi-sample file. For example, when merging file A.vcf.gz containing samples S1, S2 and S3 and file B.vcf.gz containing samples S3 and S4, the output file will contain four samples named S1, S2, S3, 2:S3 and S4.
 
+!!! Note
+    The bash examples throughout Sections 3 and 4 use `-Ov -o *.vcf` (uncompressed VCF text) so that output is human-readable when running the commands manually. `BcftoolsQueryManager` in `services/vcf_queries.py` uses `-Ou -o *.bcf` (uncompressed BCF binary) for all intermediate temp files, which avoids compression and decompression overhead between pipeline steps. Only the final `bcftools sort` step writes `-Oz -o *.vcf.gz` (bgzipped VCF) as the query result file.
+
 ### 3.1. Only records from different VCF files can be merged
 
 `bcftools merge` combines records across different input files — it does not transform or reshape records within a single file. If the query only involves a single source VCF file, `merge_or_concat_bcftools_temp_files` will receive a list of one temp file and skip the merge/concat step entirely, renaming that file to the output path instead (`len(output_temp_files) == 1` branch in `services/vcf_queries.py`).
@@ -282,6 +286,8 @@ This section covers a few specific requirements for `bcftools concat`, other tha
 As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#concat), `bcftools concat` is used to:
 
 > Concatenate or combine VCF/BCF files. All source files must have the same sample columns appearing in the same order. Can be used, for example, to concatenate chromosome VCFs into one VCF, or combine a SNP VCF and an indel VCF into one. The input files must be sorted by chr and position. The files must be given in the correct order to produce sorted VCF on output unless the -a, --allow-overlaps option is specified.
+!!! Note
+    As with Section 3, the bash examples below use `-Ov -o *.vcf` for readability. DivBase uses `-Ou -o *.bcf` for the actual concat temp files (see the note on output formats at the start of [Section 3](#3-bcftools-merge)).
 
 ### 4.1. Sample names must be identical across all files
 
