@@ -47,6 +47,7 @@ docker/coverage-data/
 .cache/
 # mkdocs auto generated files
 docs/cli/_auto_generated/*.md
+docs/releases/index.md
 
 # pypi 
 dist/

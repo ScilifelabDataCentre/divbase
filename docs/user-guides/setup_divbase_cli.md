@@ -13,7 +13,8 @@ This section covers how to configure divbase-cli to know which projects you're a
 After installing `divbase-cli`, you can add a new project to your user config file by running:
 
 ```bash
-divbase-cli config add [PROJECT_NAME] # append `--default` to make it the default project
+divbase-cli config add [PROJECT_NAME]
+# add the flag `--default` if you want it to be the default project
 ```
 
 !!! info
@@ -22,8 +23,10 @@ divbase-cli config add [PROJECT_NAME] # append `--default` to make it the defaul
 If you want to change your default project later, you can run the same command with the `--default` flag again or:
 
 ```bash
-divbase-cli config set-default [PROJECT_NAME] # This must be a project that is already in your config file
+divbase-cli config set-default [PROJECT_NAME]
 ```
+
+(This must be a project that is already in your config file.)
 
 To view the contents of your user config file, you can run:
 
@@ -64,14 +67,18 @@ divbase-cli config show-default
 
 (You don't need to read this section unless you're curious!)
 
-`divbase-cli` relies on 2 files stored locally to preserve state between commands/sessions:
+1. `divbase-cli` relies on a config file to store your state between commands/sessions:
 
-1. A config file stored in your home directory at `~/.config/divbase/config.yaml`.
-    This config contains information about your DivBase projects and which divbase server (if any) you're logged into.
-2. A secrets file stored in your home directory at `~/.config/divbase/.secrets`.
-    This file contains your personal tokens for the DivBase server you're logged into that grant access for up to 1 week. You should never share this file with anyone.
+    A config file stored in your home directory at `~/.config/divbase-cli/config.yaml`.
+    This config contains information about your DivBase projects and which DivBase server (if any) you're logged into.
+    Running `divbase-cli config show` will pretty print the contents of this file. You can also just look at the file directly.
 
-*You do not need to manually modify these files. The commands above will create and update them for you as needed.*
+    *You should never need to manually modify your config files. The commands above will create and update them for you as needed.*
+
+2. When you log into DivBase your recieve an access and refresh JSON web token (JWT). These JWTs let you stay authenticated with DivBase for up to 1 week. We store these tokens in your operating systems credential store. The next time you run a command that requires authentication, `divbase-cli` will retrieve the tokens from the credential store and use them to authenticate with the server. In the event that you don't have a working credentials store (e.g. on some HPCs) we store the secrets in local file and set the file permissions to be only readable/writable by the user.
 
 !!! info "Access from multiple workstations"
-    If you plan to access divbase from say both your laptop and HPC, you will need to install `divbase-cli` in both places and set up the config and login in both places separately.
+    If you plan to access DivBase from, for example both your laptop and HPC, you will need to install `divbase-cli` in both places and set up the config and login into both places separately. For using DivBase in pipelines/scripts/HPCs, you may want to check out our guide on [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically)
+
+!!! tip "Use DivBase Programmatically"
+    If you want to authenticate with DivBaseprogrammatically (e.g. in a script, pipeline or HPC job) without having to log in via `divbase-cli auth login` you can use Personal Access Tokens (PATs). See the [our guide on how to use PATs with DivBase](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).
