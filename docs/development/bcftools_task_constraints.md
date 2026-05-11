@@ -1,12 +1,10 @@
 # Bcftools Celery Task Constraints
 
-DivBase uses `bcftools` to perform queries that subset VCF files based on user input. Thus, DivBase needs to adhere to the syntax and requirements for the different `bcftools` commands it uses as described in the [`bcftools` manual](https://samtools.github.io/bcftools/bcftools.html).
+DivBase uses `bcftools` for several VCF parsing steps, including VCF dimensions caching and VCF queries. This document outlines the rules and constraints of different `bcftools` commands used in the DivBase backend. The main reference for this is the [`bcftools` manual](https://samtools.github.io/bcftools/bcftools.html).
 
-What sets DivBase apart from regular `bcftools` scripting is that the DivBase server dynamically orchestrates `bcftools` workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed ([as described in e.g. the VCF query user guide](../user-guides/vcf-query-syntax.md/#53-how-does-divbase-process-the-vcf-files)). There are two ways to combine VCF files with `bcftools`: `bcftools merge` and `bcftools concat`. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined and are described in [Section 2](#2-bcftools-merge) and [Section 3](#3-bcftools-concat), respectively.
+What sets DivBase apart from regular `bcftools` scripting is that the DivBase server dynamically orchestrates `bcftools` workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed ([as described in e.g. the VCF query user guide](../user-guides/vcf-query-syntax.md/#53-how-does-divbase-process-the-vcf-files)). There are two ways to combine VCF files with `bcftools`: `bcftools merge` and `bcftools concat`. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined. An overview of the possible sample column overlap cases and are found in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) and described in detail in [Section 3 (`bcftools merge`)](#3-bcftools-merge) and [Section 4 (`bcftools concat`)](#4-bcftools-concat).
 
-Several of the findings from this document has been implemented in the `_check_if_samples_can_be_combined_with_bcftools` helper function in `tasks.py`. It uses the VCF dimensions index for the DivBase project to analyse whether or not the input VCFs of a given query fullfil the rules for processing by the bcftools logic in `tasks.bcftools_query`. If not, the task exits to save on compute resources. The exit happens before the transfer of VCF files to the worker containers from S3 is started.
-
-These rules are considered a system contract for the design of the DivBase `bcftools` orchestration logic. Be very careful when refactoring code that touches upon these rules. Several regression tests (prefixed with `test_regression_*`) have been implemented to guard the parts of the codebase that rely on these rules.
+The rules described in this document are considered a system contract for the design of the DivBase `bcftools` orchestration logic. Be very careful when refactoring code that touches upon these rules. Several regression tests (prefixed with `test_regression_*`) have been implemented to guard the parts of the codebase that rely on these rules.
 
 ## 1. General rules
 
@@ -89,7 +87,7 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 # Failed to read from tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf: could not parse header
 ```
 
-**Implementation (current):**
+**Implementation:**
 
 - This is guarded against during the VCF dimensions indexing. `services/vcf_queries.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
 
@@ -104,7 +102,7 @@ There is no single "one-line rule" for VCF headers across all `bcftools` command
 - Invalid/unparseable header content (for example `unknown file type` or `could not parse header`)
 - Duplicate sample IDs in header (`Duplicated sample name ...`)
 
-**Implementation (current):**
+**Implementation:**
 
 - `services/vcf_dimension_indexing.py` performs header parsing (`bcftools view --header-only`).
 - Any stderr from this step is routed through shared classifier logic in `services/vcf_queries.py::_raise_task_user_error_from_bcftools_stderr`.
@@ -125,7 +123,39 @@ There is no single "one-line rule" for VCF headers across all `bcftools` command
 - Add broader VCF specification validation as a preflight/upload-time job.
 - Add a validation step (e.g. at file upload or at dimensions update) to check for header-data mismatches, e.g. sample-column count mismatches (`Number of columns ... does not match the number of samples`). A full test would require passing over every variant line in the VCF file, which is an O(n) process. Another idea would be to validate only the first e.g. 1000 lines and assume that potential systematic formatting errors caused by the upstream VCF generation workflow would be caught in that subsubset of variants.
 
-## 2. bcftools merge
+## 2. How DivBase chooses between bcftools merge and concat
+
+`bcfools merge` and `concat` are designed to consider so-called "sample sets", i.e. ["sample columns appearing in the same order"](https://samtools.github.io/bcftools/bcftools.html#concat) in the `#CHROM` header of the VCF file. For example, if `S1`- `S6` are names of different samples, a sample set is an ordered combination of samples in a given VCF file, such as `S1,S3,S4`.
+
+The relationship between sample sets across the input files to a DivBase query determines which `bcftools` command (`merge` or `concat`) — or whether the query is rejected before bcftools is called at all.
+
+DivBase handles five cases of sample set overlap:
+
+- **Completely non-overlapping sample sets**
+
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S4,S5,S6`. Handled with `bcftools merge` (see [Section 3](#3-bcftools-merge)).
+
+- **Identical sample sets (same sample column order)**
+
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S1,S2,S3`. Handled with `bcftools concat` (see [Section 4](#4-bcftools-concat)).
+
+- **Mixed identical-sample set and non-overlapping sample set**
+
+    E.g. VCF file 1: `S1,S2,S3`, VCF file 2: `S1,S2,S3`, and VCF file 3: `S4,S5,S6`. The identical-sample set files (`S1,S2,S3`) are concatenated first, then the output file from the concatenation (`S1,S2,S3`) is merged with the non-overlapping file `S4,S5,S6`. Handled with `bcftools concat` followed by `bcftools merge`.
+
+- **Same samples but different sample column order**
+
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S2,S1,S3`. Violates `bctools` contstrains, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
+
+- **Partially overlapping sample sets**
+
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S3,S4,S5` (`S3` is in both sample sets). Violates `bctools` contstrains, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
+
+This classification is performed by `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py`, using sample names stored in the dimensions index to determine whether the input VCFs fulfil the rules for the bcftools orchestration in `tasks.bcftools_query`. If they do not, the task exits before VCF files are downloaded from S3, saving compute resources.
+
+## 3. bcftools merge
+
+This section covers a few specific requirements for `bcftools merge`, other than the sample set overlap cases described in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat).
 
 As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#merge), `bcftools merge` is used to:
 
@@ -133,11 +163,21 @@ As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#
 
 Note that it is responsibility of the user to ensure that the sample names are unique across all files. If they are not, the program will exit with an error unless the option --force-samples is given. Note that sample names can be also given explicitly using the --print-header and --use-header options.
 
-### 2.1. Only records from different VCF files can merged
+### 3.1. Only records from different VCF files can be merged
 
-there is a command called `bcftools norm` that can do melt operations within a file, but that is not needed for DivBase.
+`bcftools merge` combines records across different input files — it does not transform or reshape records within a single file. If the query only involves a single source VCF file, `merge_or_concat_bcftools_temp_files` will receive a list of one temp file and skip the merge/concat step entirely, renaming that file to the output path instead (`len(output_temp_files) == 1` branch in `services/vcf_queries.py`).
 
-### 2.2. Sample names must be unique across all input files
+For intra-file normalization such as splitting multiallelic variants into biallelic records, `bcftools norm` is the relevant command, but that is not part of the current scope of DivBase. Users should perform such file operations prior to uploading files to a DivBase project.
+
+**Implementation:**
+
+No real need to guard or enforce this, much thanks to the single source VCF file handling described above.
+
+**Ideas for future improvements:**
+
+TODO: exact duplicate variants in to VCF files with different filename are currently not guarded against. That is a potentially big refactoring of the VCF dimensions caching. (marked as TODO since it is important)
+
+### 3.2. Sample names must be unique across all input files
 
 `--force-samples` can be used to override this, but it gives undesireable results for DivBase
 
@@ -155,13 +195,13 @@ bcftools merge -Ov -o test2.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples
 
 It gives the error: `Error: Duplicate sample names (5a_HOM-I7), use --force-samples to proceed anyway.`
 
-**Solution:**
+**Implementation:**
 
-- The VCF dimensions file could store all sample names for all VCF files in the bucket, and then when a query is submitted, a function should check if there are overlapping samples in a manner that cannot be handled by `bcftools concat` either.
+- The VCF dimensions index stores all sample names for all VCF files in the bucket. When a query is submitted, `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py` reads these from the dimensions index and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the two blocked cases (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) for all four cases).
 
-- A VCF with sample set "S1,S2,S3" cannot be combined with `bcftools merge` or `bcftools concat` with a VCF that contains "S3,S4,S5". It cannot use `merge` since there are overlapping samples. It cannot use `concat` since there is only a partial overlap and not a complete overlap.
+- A VCF with sample set `S1,S2,S3` cannot be combined with a VCF containing `S3,S4,S5`: not with `merge` (overlapping samples would require `--force-samples`, which produces undesirable results for DivBase) and not with `concat` (only partial overlap, not complete). `_calculate_pairwise_overlap_types_for_sample_sets` in `worker/tasks.py` classifies this as `partly_overlapping`, and `_check_if_samples_can_be_combined_with_bcftools` raises a `TaskUserError` naming the conflicting sample sets.
 
-### 2.3. What about the order of the scaffolds?
+### 3.3. What about the order of the scaffolds?
 
 from `bcftools merge -help`:
 
@@ -197,7 +237,7 @@ bcftools merge -Ov -o test3.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples
 
 - As long as the VCF files are indexed and that the `--no-index`  is not used, the order of the scaffolds is not a problem.
 
-### 2.4. Can there be different variants in the VCF files?
+### 3.4. Can there be different variants in the VCF files?
 
 Yes! This was probably to be expected, but this example shows it:
 
@@ -209,7 +249,7 @@ bcftools merge -Ov -o test5.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples
 
 - Not much to solve here, so this is more of a conclusion: as long as the sample names do not overlap, the VCF files can have different variant positions and still combine fine.
 
-### 2.5. Can there be different scaffolds in the VCF files?
+### 3.5. Can there be different scaffolds in the VCF files?
 
 Yes! `bcftools merge` works even if there are no overlapping scaffolds:
 
@@ -221,11 +261,11 @@ bcftools merge -Ov -o test4.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_samples
 
 - Again, more of a conclusion of a non-issue: as long as the sample names do not overlap, the VCF files do not need to share any scaffolds between them.
 
-### 2.6. What about the headers? Do they need to be the same?
+### 3.6. What about the headers? Do they need to be the same?
 
 TODO: investigate this further
 
-### 2.7. What if one file contains different INFO column values than the other?
+### 3.7. What if one file contains different INFO column values than the other?
 
 from `bcftools merge -help`:
 
@@ -235,13 +275,15 @@ from `bcftools merge -help`:
 
 TODO: investigate this further
 
-## 3. bcftools concat
+## 4. bcftools concat
+
+This section covers a few specific requirements for `bcftools concat`, other than the sample set overlap cases described in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat).
 
 As stated in the [bcftools manual](https://www.htslib.org/doc/1.1/bcftools.html#concat), `bcftools concat` is used to:
 
 > Concatenate or combine VCF/BCF files. All source files must have the same sample columns appearing in the same order. Can be used, for example, to concatenate chromosome VCFs into one VCF, or combine a SNP VCF and an indel VCF into one. The input files must be sorted by chr and position. The files must be given in the correct order to produce sorted VCF on output unless the -a, --allow-overlaps option is specified.
 
-### 3.1. Sample names must be identical across all files
+### 4.1. Sample names must be identical across all files
 
 This is allowed:
 
@@ -264,7 +306,7 @@ bcftools concat -Ov -o test6.vcf tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz tests/
 
 - However, anything that deviates from the requirements of just `merge`, just `concat`, or the specific mixed concat-merge case described in the previous bullet, should raise an error to the user to ask them to change their query or even how they have arranged their samples in their bucket.
 
-### 3.2. Sample names must be in the same order
+### 4.2. Sample names must be in the same order
 
 This is not allowed:
 
@@ -279,14 +321,14 @@ bcftools concat -Ov -o test6.vcf tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz tests/
 
 - As proposed earlier in the document, the VCF dimensions file could store all sample names for all VCF files in the bucket, but it should also store them in immutable order so that it is possible to check not only that they sample names overlap, but that that the sample name order is preserved.
 
-### 3.3. Does the bcftools concat input files be sorted by chr and position?
+### 4.3. Does the bcftools concat input files be sorted by chr and position?
 
 For `bcftools concat`, yes.
 
 > Concatenate or combine VCF/BCF files. All source files must have the same sample columns appearing in the same order. Can be used, for example, to concatenate chromosome VCFs into one VCF, or combine a SNP VCF and an indel VCF into one. The input files must be sorted by chr and position. [bcftools concat manual](https://samtools.github.io/bcftools/bcftools.html#concat)
 
-### 3.4. Does the files stritcly be given in the correct order to produce sorted VCFs with bcftools concat?
+### 4.4. Does the files stritcly be given in the correct order to produce sorted VCFs with bcftools concat?
 
 Yes, if the intent is to get sorted output from `bcftools concat`, the files need to be given in genomic/chromosomal order.
 
-TODO: investigate if incorrect order, e.g. if the next file “goes backward” relative to the previous one can actually break the concat operation!
+TODO: investigate if incorrect order, e.g. if the next file "goes backward" relative to the previous one can actually break the concat operation!
