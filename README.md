@@ -4,36 +4,40 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/divbase-cli.svg)](https://pypi.org/project/divbase-cli/)
 
-DivBase is a service that enables life science researchers at Swedish research institutions and their collaborators to easily manage, explore, and query genomic variants in VCF format, along with associated sample metadata.
+DivBase is a service built and maintained by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata. The service provides a secure platform for managing genomic variants and metadata files for non-human and non-sensitive data.
 
 > [!NOTE]
-> This service is built and maintained by [SciLifeLab Data Centre](https://www.scilifelab.se/) and is currently in pre-release for a limited number of users for testing and feedback collection. We are actively seeking feedback from the community to help shape DivBase. If you would like to be involved in testing, have suggestions, or want to contribute, please reach out to us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+> DivBase is currently in pre-release for a limited number of users. We are actively seeking feedback to help shape the service. If you would like to be involved in testing or have suggestions, please reach out at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
 
 ---
 
-## Table of Contents
+## Want to try out DivBase?
 
-1. [What is DivBase?](#what-is-divbase)
-2. [Documentation](#documentation)
-3. [Install `divbase-cli`](#install-divbase-cli)
-4. [(Very) Quick Start Guide](#very-quick-start-guide)
-5. [Get support](#get-support)
-6. [Developers/Contributing](#developerscontributing)
+- **Join an existing project:** Create an account at the [DivBase web interface](https://divbase.scilifelab-2-prod.sys.kth.se) and ask your project manager to add you.
+- **Start your own project:** Reach out to us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
 
-## What is DivBase?
-
-TODO - Explain what divbase looks like, aka cli, web interface, and how it works at a high level.
+## Key Features
 
 ![Overview of DivBase Features](docs/assets/img/divbase_key_feats_light.webp#gh-light-mode-only)
 ![Overview of DivBase Features](docs/assets/img/divbase_key_feats_dark.webp#gh-dark-mode-only)
 
+## Why use DivBase?
+
+- A **single, centralised store** of your project's variant data and metadata.
+- Easy to **collaborate and share data** with your colleagues and collaborators - and **control who has access** to what.
+- Queries are run on **all (or a subset of your choosing) VCF files** stored in the project.
+- Possible to **filter both on variant data and sample metadata** in the same query.
+- You can use **DivBase programmatically** in for example **pipelines/HPC jobs**.
+- Files are **versioned and backed up**.
+- You can **version/checkpoint the state of your project's files** to refer back to at a later date - **making your research more easily reproducible**.
+
 ## Documentation
 
-For full guides, tutorials, and command references, [visit our documentation website](https://scilifelabdatacentre.github.io/divbase/).
+For guides, tutorials, and command references, [visit our documentation website](https://scilifelabdatacentre.github.io/divbase/).
 
 ## Install `divbase-cli`
 
-To manage files, submit queries, and interact with DivBase, you can use our command line tool `divbase-cli`. The recommended way to install the `divbase-cli` is using [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/stable/). To install with uv or pipx, run:
+To manage files, submit queries, and interact with DivBase, install our command line tool `divbase-cli` using [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/stable/):
 
 ```bash
 uv tool install divbase-cli
@@ -41,15 +45,16 @@ uv tool install divbase-cli
 pipx install divbase-cli
 ```
 
-For detailed instructions and alternative methods, see the [Installation Guide](https://scilifelabdatacentre.github.io/divbase/user-guides/installation/).
+For detailed instructions and alternative methods, see our [Installation Guide](https://scilifelabdatacentre.github.io/divbase/user-guides/installation/).
 
-## (Very) Quick Start Guide
+## Quick Start Guide
 
 > [!TIP]
-> Go to our documentation website for a proper quick start guide [Quick Start Guide](https://scilifelabdatacentre.github.io/divbase/user-guides/quick-start/).
+> Go to our documentation website for the proper [Quick Start Guide](https://scilifelabdatacentre.github.io/divbase/user-guides/quick-start/).
 
 1. **Create an Account:** Sign up at the [DivBase Web Interface](https://divbase.scilifelab-2-prod.sys.kth.se).
-2. **Configure:** Add your project to the CLI:
+
+2. **Configure:** Add your project to your CLI config and set it as default:
 
    ```bash
    divbase-cli config add MY_PROJECT_NAME --default
@@ -61,31 +66,32 @@ For detailed instructions and alternative methods, see the [Installation Guide](
    divbase-cli auth login your.email@example.com
    ```
 
-4. **Upload Data:**
+4. **Upload Data and sync your data**
 
    ```bash
    divbase-cli files upload data/my_samples.vcf.gz
+   divbase-cli files upload --upload-dir data/
+   divbase-cli dimensions update
    ```
 
 5. **Run a Query:**
 
    ```bash
-   # Subset a chromosomal region
-   divbase-cli query vcf --command "view -r 21:15000000-25000000"
+   # Filter samples based on metadata and subset a chromosomal region in one
+   divbase-cli query vcf \
+      --tsv-filter "Area:Northern Portugal" \
+      --command "view -r 21:15000000-25000000"
    ```
 
-## Get support
+This will submit a job to DivBase and once the job is complete, a new vcf.gz file containing the subset of data you requested will be available for download/streaming in your downstream analysis.
+
+## Get Support
 
 - **Need help?** Contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
-
-- **Have feedback or spotted a bug?** Please report any issues or suggestions on our [GitHub Issues page](https://github.com/ScilifelabDataCentre/divbase/issues).
-
-We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.md) and [Security Policy](docs/SECURITY.md) to get started.
+- **Found a bug?** Please report it on our [GitHub Issues page](https://github.com/ScilifelabDataCentre/divbase/issues).
 
 ---
 
 ## Developers/Contributing
 
-We welcome contributions! Feel free to checkout our contributing guide and developer setup guide to get started. You are welcome to reach out to us if you have any questions or want to contribute but are not sure where to start.
-
-See the [Developer Setup Guide](docs/development/setup.md) (or view the developer documentation live at <https://scilifelabdatacentre.github.io/divbase/development/setup/>) to get started.
+We welcome contributions! See our [Contributing Guide](docs/CONTRIBUTING.md) and [Developer Setup Guide](docs/development/setup.md) to get started, or view the [developer documentation](https://scilifelabdatacentre.github.io/divbase/development/setup/) online. Feel free to reach out if you have questions or aren't sure where to start.

@@ -1,34 +1,46 @@
 # DivBase
 
-!!! warning "DivBase and its documentation is under development and is not yet released"
-    **DivBase is currently in active development. Features, commands, and documentation will change before the official release.**
+!!! warning "DivBase is in pre-release stage and under active development. Expect changes to features, commands, and documentation before the official release. If you want to be involved in testing or have suggestions, please reach out at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues)."
 
 ---
 
-DivBase is a service built by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata.
+DivBase is a service built and maintained by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata. The service provides a secure platform for managing genomic variants and metadata files for non-human and non-sensitive data.
 
-## Quick Links
+## Want to access DivBase?
 
-- **[Quick Start Guide](user-guides/quick-start.md)**
-- **[Tutorial: Running a VCF query on a public dataset](user-guides/tutorial-query-on-public-data.md)**
-- **[CLI Command Reference](cli/index.md)**
+- **Join an existing project:** Create an account at the [DivBase web interface](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"} and ask the project manager to add you (tell them the email you used to sign up with).
+- **Start your own project:** contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
 
-## What is DivBase?
+## Key Features
 
 ![Overview of DivBase Features](assets/img/divbase_key_feats_light.webp#only-light)
 ![Overview of DivBase Features](assets/img/divbase_key_feats_dark.webp#only-dark)
 
-- **Share & Collaborate:** Import and export VCF and metadata files within project-based workspaces.
-- **High-Scale Querying:** Run complex filters on VCF data using `bcftools` syntax, processed server-side.
-- **Metadata Integration:** Combine VCF queries with sample metadata TSV files for powerful data subsetting.
-- **Version Control:** Snapshot project files to ensure research reproducibility.
-- **Secure Access:** Role-based permissions to protect research data.
+## Why use DivBase?
 
-## Want to try out DivBase?
+- A **single, centralised store** of your project's variant data and metadata.
+- Easy to **collaborate and share data** with your colleagues and collaborators - and **control who has access** to what.
+- Queries are run on **all (or a subset of your choosing) VCF files** stored in the project.
+- Possible to **filter both on variant data and sample metadata** in the same query.
+- You can use **DivBase programmatically** in for example **pipelines/HPC jobs**.
+- Files are **versioned and backed up**.
+- You can **version/checkpoint the state of your project's files** to refer back to at a later date - **making your research more easily reproducible**.
 
-- If you want to join an existing project, you just need to create an account [https://divbase.scilifelab-2-prod.sys.kth.se](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"} and ask the project manager to add you to the project.
+## Install the CLI tool
 
-- If you want to create your own project, you can reach out to us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
+Interact with DivBase using the `divbase-cli` command line tool. Install it with [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/stable/):
+
+```bash
+uv tool install divbase-cli
+# or with pipx
+pipx install divbase-cli
+```
+
+See the [Installation Guide](user-guides/installation.md) for detailed instructions and alternative methods.
+
+## Getting Started
+
+See our [Quick Start Guide](user-guides/quick-start.md) to get up and running in minutes or follow our tutorial on [Running a query on a public dataset](user-guides/tutorial-query-on-public-data.md).
 
 ## Getting Support
 
