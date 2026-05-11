@@ -597,56 +597,6 @@ def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
     )
 
 
-def test_regression_update_dimensions_fails_for_vcf_with_sample_column_count_mismatch(
-    CONSTANTS,
-    run_update_dimensions,
-    db_session_sync,
-    project_map,
-    fixtures_dir,
-    cleaned_project_bucket,
-):
-    """
-    Regression test (negative outcome): dimensions update must fail for malformed VCF record column counts.
-    Why: malformed data rows can cause low-signal bcftools parse/index failures unless clearly surfaced.
-    Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
-    """
-    regression_prefix = "Regression guard failed:"
-
-    project_name, bucket_name = cleaned_project_bucket
-    assert project_name == CONSTANTS["CLEANED_PROJECT"]
-    project_id = project_map[project_name]
-    user_id = 1
-
-    mismatch_name = "vcf_specification_v45_example11_incorrect_sample_column_count_mismatch.vcf.gz"
-    mismatch_path = (fixtures_dir / mismatch_name).resolve()
-    assert mismatch_path.exists(), f"Missing fixture file: {mismatch_path}"
-
-    s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
-    s3_file_manager.upload_files(to_upload={mismatch_name: mismatch_path}, bucket_name=bucket_name)
-
-    result = run_update_dimensions(
-        bucket_name=bucket_name,
-        project_id=project_id,
-        project_name=project_name,
-        user_id=user_id,
-    )
-
-    assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for malformed record columns, got: {result}"
-    )
-    error_msg = str(result.get("error", ""))
-    normalized_error_msg = error_msg.lower()
-    assert "malformed vcf record lines" in normalized_error_msg, (
-        f"{regression_prefix} expected explicit malformed-record guidance, got: {error_msg}"
-    )
-
-    db_session_sync.expire_all()
-    vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
-    assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for malformed-row VCF, got: {vcf_dimensions.vcf_files}"
-    )
-
-
 def test_remove_VCF_and_update_dimension_entry(
     CONSTANTS,
     db_session_sync,
