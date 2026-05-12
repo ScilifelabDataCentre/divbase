@@ -1,0 +1,40 @@
+sequenceDiagram
+    title divbase-cli task-history id
+    participant User
+    participant CLI
+    participant API
+    participant DB as PostgreSQL
+
+    User->>CLI: Run "divbase-cli task-history id TASK_ID"
+    Note over CLI: TASK_ID is the DivBase Job ID (int)
+
+    CLI->>CLI: Load user config from config file
+    CLI->>CLI: Check if logged in (logged_in_url exists)
+
+    alt Not logged in
+        CLI->>User: Raise AuthenticationError
+    else Logged in
+        CLI->>API: HTTP GET /api/v1/task-history/tasks/{user_task_id}
+
+        API->>DB: Query TaskHistoryDB by user_task_id
+        Note over API: Permission check:<br/>- Admin can view any task<br/>- Non-admin can view own tasks<br/>- Non-admin can view project tasks if MANAGE role
+
+        alt Task not found or no permission
+            API-->>CLI: Raise AuthorizationError
+            CLI->>User: Display error message
+        else Task found and authorized
+            DB-->>API: Return task history record
+
+            API->>API: Deserialize task metadata to TaskHistoryResult
+            API-->>CLI: Return list[TaskHistoryResult]
+
+            CLI->>CLI: TaskHistoryDisplayManager processes results
+            CLI->>User: Display formatted task history table
+        end
+    end
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/task_history_id_sequence_diagram.mermaid \
+%%      -o docs/assets/diagrams/task_history_id_sequence_diagram.svg \
+%%      -t dark \
+%%      --backgroundColor "#22272e"

@@ -1,0 +1,47 @@
+flowchart TB
+    start([Start]):::green
+    command_list[Make a list of all input commands<br/> command_list]:::white
+    check_image{Check if bcftools<br/>Docker image exists}:::white
+    build_image[Build Docker image]:::white
+    process_commands{Commands in command_list<br/>left to process?}:::white
+    init_loop{Processing the first command<br/>in command_list?}:::white
+    input_vcf[Set current_inputs<br/>as the VCF files]:::white
+    input_temp[Set current_inputs<br/>as the latest temp_files]:::white
+    process_files{Files in current_inputs<br/>left to process}:::white
+    generate_temp[Generate temp file name]:::white
+    format_command[Build bcftools command<br/>from current state of the loops]:::white
+    run_command[Run command run_bcftools_docker]:::white
+    temp_output[Output: temp files]:::white
+    ensure_index[Ensure .csi index exists]:::white
+    merge_files[Merge the final temp files<br/> bcftools merge --force-samples]:::white
+    cleanup[Delete temp files]:::white
+    end_node([End]):::green
+
+    start --> command_list
+    command_list --> check_image
+    check_image -->|No| build_image
+    build_image --> process_commands
+    check_image -->|Yes| process_commands
+    process_commands -->|Yes| init_loop
+    init_loop -->|Yes| input_vcf
+    init_loop -->|No| input_temp
+    input_vcf --> process_files
+    input_temp --> process_files
+    process_files -->|Yes| generate_temp
+    generate_temp --> format_command
+    format_command --> run_command
+    run_command --> temp_output
+    temp_output --> ensure_index
+    ensure_index --> process_files
+    process_files -->|No| process_commands
+    process_commands -->|No| merge_files
+    merge_files --> cleanup
+    cleanup --> end_node
+
+    classDef green fill:#90EE90,stroke:#333,stroke-width:2px
+    classDef white fill:#FFFFFF,stroke:#333,stroke-width:2px
+    classDef blue fill:#ADD8E6,stroke:#333,stroke-width:2px
+
+%% Exported to white theme SVG (dark mode did not render text color correctly agaist colored box backgrounds) with:
+%% mmdc -i docs/assets/diagrams/bcftools_task_logic_flow_simplified.mermaid \
+%%      -o docs/assets/diagrams/bcftools_task_logic_flow_simplified.svg \
