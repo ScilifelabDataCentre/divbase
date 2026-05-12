@@ -11,7 +11,7 @@ networks:
     driver: bridge
 services:
   rabbitmq:
-    image: "rabbitmq:4.2.1-management-alpine"
+    image: "rabbitmq:4.3.0-management-alpine@sha256:1a43764bdcf116542e7c8c794adc67c79461727da16d474e9e21483fe7f716d3"
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 5s
@@ -36,7 +36,12 @@ services:
       context: .. 
       dockerfile: docker/worker.dockerfile
     healthcheck: &worker-healthcheck
-      test: ["CMD", "celery", "inspect", "ping"]
+      test:
+        # we pipe to grep to validate we got a pong back
+        [
+          "CMD-SHELL",
+          "celery -A divbase_api.worker.tasks inspect ping -d \"$$HOSTNAME@$$HOSTNAME\" | grep -q pong",
+        ]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -215,7 +220,7 @@ services:
     networks:
       - internal
   postgres:
-    image: postgres:17
+    image: "postgres:17.9-alpine@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609"
     ports:
       - "5432:5432"
     restart: always

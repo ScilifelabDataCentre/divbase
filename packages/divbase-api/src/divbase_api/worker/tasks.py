@@ -112,11 +112,17 @@ class SampleSetOverlapResults:
 # Celery results backend config
 app.conf.update(
     task_track_started=True,
+    task_acks_late=False,  # tasks are not redelivered if a worker dies mid-execution.
+    task_default_delivery_mode="persistent",
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
     result_extended=True,
     timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
+    worker_cancel_long_running_tasks_on_connection_loss=True,  # silence warning as will become default in celery 6
+    control_queue_durable=True,
+    event_queue_durable=True,
+    broker_transport_options={"confirm_publish": True},
     # let celery auto-create db tables (alembic is configured to not manage changes to these tables)
     database_table_names={
         "task": CELERY_TASKMETA_TABLE_NAME,
