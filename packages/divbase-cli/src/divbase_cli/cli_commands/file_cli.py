@@ -7,11 +7,11 @@ from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
+from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
-from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
@@ -612,10 +612,25 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
             unsupported_chars.append(file_path)
 
     if unsupported_file_types:
-        raise UnsupportedFileTypeError(unsupported_files=unsupported_file_types)
+        err_console = Console(stderr=True)
+        err_console.print(
+            f"[red bold]Error: The following files' types are not supported by DivBase and therefore cannot be uploaded: [/red bold] \n"
+            f"[red]{'\n'.join(str(file) for file in unsupported_file_types)}\n\n[/red]"
+            f"DivBase currently supports the following file types: '{', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}'\n"
+            "Note that while you can upload '.tbi' and '.csi' files they are not used by DivBase in queries, we create our own index files instead. \n"
+            "If you want us to support another file type, please let us know.",
+        )
+        raise typer.Exit(1)
 
     if unsupported_chars:
-        raise UnsupportedFileNameError(unsupported_files=unsupported_chars)
+        err_console = Console(stderr=True)
+        err_console.print(
+            f"[red bold]Error: The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: [/red bold]\n"
+            f"[red]{'\n'.join(str(file) for file in unsupported_chars)}\n\n[/red]"
+            f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"
+            "Please rename the files and try again.",
+        )
+        raise typer.Exit(1)
 
 
 def _pretty_print_download_results(download_results):

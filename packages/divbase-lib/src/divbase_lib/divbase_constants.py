@@ -32,7 +32,7 @@ LARGEST_FILE_UPLOADABLE_TO_DIVBASE_BYTES = 10_000 * S3_MULTIPART_CHUNK_SIZE
 # File types that DivBase supports
 # Whilst we can't realistically limit what file types a user actually uploads,
 # this is here to say what we know should work in DivBase.
-SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi")
+SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi", ".txt", ".md")
 
 # Characters that are not allowed in file names uploaded to DivBase
 # This is to prevent issues when users try to filter/query files on DivBase using these characters

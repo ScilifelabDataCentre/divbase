@@ -19,8 +19,6 @@ from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
 from divbase_cli.cli_exceptions import (
     DivBaseAPIError,
     FilesAlreadyInProjectError,
-    UnsupportedFileNameError,
-    UnsupportedFileTypeError,
 )
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
@@ -410,21 +408,21 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
 
 
 @pytest.mark.parametrize(
-    "file_names, expected_exception",
+    "file_names, expected_error",
     [
-        (["data.tsv", "variants.vcf.gz", "index.csi", "index.tbi"], None),
-        (["unsupported.txt"], UnsupportedFileTypeError),
-        (["archive.zip"], UnsupportedFileTypeError),
+        (["data.tsv", "variants.vcf.gz", "index.csi", "index.tbi", "README.md", "supported.txt"], None),
+        (["unsupported.rst"], "file_type"),
+        (["archive.zip"], "file_type"),
         (["data.tsv", "variants.mine.vcf.gz"], None),
-        (["data.tsv", "unsupported.txt", "unsupported2.txt"], UnsupportedFileTypeError),
+        (["data.tsv", "unsupported.txt", "unsupported2.txt"], "file_type"),
         (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], None),
-        (["unsupported.txt", "another_unsupported.zip", "supported.vcf.gz"], UnsupportedFileTypeError),
-        (["dat:a.tsv"], UnsupportedFileNameError),
-        (["variants2.vcf.gz", "invalid:file.tsv"], UnsupportedFileNameError),
+        (["unsupported.rst", "another_unsupported.zip", "supported.vcf.gz"], "file_type"),
+        (["dat:a.tsv"], "file_chars"),
+        (["variants2.vcf.gz", "invalid:file.tsv"], "file_chars"),
     ],
 )
 def test_upload_non_supported_files(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_exception
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_error
 ):
     """
     Tests that the upload command correctly handles
@@ -440,15 +438,15 @@ def test_upload_non_supported_files(
     command = f"files upload {' '.join(test_files)} --project {clean_project}"
     result = runner.invoke(app, command)
 
-    if expected_exception is None:
+    if expected_error is None:
         assert result.exit_code == 0
         assert "successfully uploaded" in result.stdout.lower()
-    elif expected_exception == UnsupportedFileTypeError:
+    elif expected_error == "file_type":
         assert result.exit_code != 0
-        assert isinstance(result.exception, UnsupportedFileTypeError)
-    elif expected_exception == UnsupportedFileNameError:
+        assert "types are not supported" in result.stderr.lower()
+    elif expected_error == "file_chars":
         assert result.exit_code != 0
-        assert isinstance(result.exception, UnsupportedFileNameError)
+        assert "unsupported characters" in result.stderr.lower()
 
 
 def test_safe_mode_fails_with_large_file_duplicate(
