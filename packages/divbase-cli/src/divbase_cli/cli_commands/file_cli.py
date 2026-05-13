@@ -2,6 +2,7 @@
 Command line interface for managing files in a DivBase project's store on DivBase.
 """
 
+from glob import glob
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -412,8 +413,7 @@ def stream_file(
 
 @file_app.command("upload")
 def upload_files(
-    files: list[Path] | None = typer.Argument(None, help="Space separated list of files to upload."),
-    upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
+    files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
     disable_safe_mode: Annotated[
         bool,
@@ -428,25 +428,39 @@ def upload_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Upload files to your project's store on DivBase:
+    Upload files to your project's store on DivBase.
 
-    To provide files to upload you can either:
-        1. provide a list of files paths directly in the command line
-        2. provide a directory to upload
-        3. provide a text file with or a file list.
+    You can specify files directly as arguments (including glob patterns) or use --file-list.
+
+    Examples:
+        # Upload a single file
+        divbase-cli files upload path/to/file.vcf.gz
+
+        # Upload multiple files by specifying them one after another
+        divbase-cli files upload file1.vcf.gz file2.tsv
+
+        # Upload all .vcf.gz files in the current directory using a glob
+        divbase-cli files upload *.vcf.gz
+
+        # Upload all files in a directory using a glob
+        divbase-cli files upload /path/to/data/*
+
+        # Upload from a text file list (one file path per line)
+        divbase-cli files upload --file-list files_to_upload.txt
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    if bool(files) + bool(upload_dir) + bool(file_list) > 1:
-        print("Please specify only one of --files, --upload_dir, or --file-list.")
+    if bool(files) + bool(file_list) > 1:
+        print("Please specify only space separated files or provide a --file-list.")
         raise typer.Exit(1)
 
     all_files: set[Path] = set()
     if files:
-        all_files.update(files)
-    if upload_dir:
-        all_files.update([p for p in upload_dir.iterdir() if p.is_file()])
+        for pattern in files:
+            matched = [Path(p) for p in glob(pattern) if Path(p).is_file()]
+            if matched:
+                all_files.update(matched)
     if file_list:
         with open(file_list) as f:
             for line in f:

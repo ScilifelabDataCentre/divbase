@@ -332,16 +332,54 @@ def test_upload_multiple_files_at_once(logged_in_edit_user_with_existing_config,
 
 
 def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
-    """Test upload all files in a directory."""
+    """Test upload all files in a directory using a glob pattern."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
-    command = f"files upload --upload-dir {fixtures_dir.resolve()} --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload {fixtures_dir.resolve()}/* --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
     clean_stdout = result.stdout.replace("\n", "")  # newlines can cause issues in the assert below
     for file in files:
         assert str(file.resolve()) in clean_stdout
+
+
+@pytest.mark.parametrize(
+    "glob_pattern_template, expected_file_names",
+    [
+        # All .vcf.gz files in a flat directory
+        ("{data_dir}/*.vcf.gz", ["a.vcf.gz", "b.vcf.gz"]),
+        # All .tsv files in current directory
+        ("{data_dir}/*.tsv", ["meta.tsv", "another_metadata.tsv", "one_more.tsv"]),
+        # Nested:
+        ("{data_dir}/*/sub/*.vcf.gz", ["nested.vcf.gz"]),
+    ],
+)
+def test_upload_glob_patterns(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, glob_pattern_template, expected_file_names
+):
+    """Test that glob patterns are correctly expanded when specifying files to upload."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    # Create the temp directory structure expected by each pattern
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "a.vcf.gz").write_bytes(b"vcf content a")
+    (data_dir / "b.vcf.gz").write_bytes(b"vcf content b")
+    (data_dir / "meta.tsv").write_text("col1\tcol2\n")
+    (data_dir / "another_metadata.tsv").write_text("col1\tcol2\n")
+    (data_dir / "one_more.tsv").write_text("col1\tcol2\n")
+    nested_dir = data_dir / "group" / "sub"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "nested.vcf.gz").write_bytes(b"nested vcf content")
+
+    glob_pattern = glob_pattern_template.format(data_dir=data_dir)
+    command = f"files upload '{glob_pattern}' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0, result.output
+    for file_name in expected_file_names:
+        assert file_name in result.stdout
 
 
 def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
@@ -404,7 +442,7 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert isinstance(result.exception, FileNotFoundError)
+    assert "no files specified" in result.stdout.lower()
 
 
 @pytest.mark.parametrize(
@@ -414,7 +452,7 @@ def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_p
         (["unsupported.rst"], "file_type"),
         (["archive.zip"], "file_type"),
         (["data.tsv", "variants.mine.vcf.gz"], None),
-        (["data.tsv", "unsupported.txt", "unsupported2.txt"], "file_type"),
+        (["data.tsv", "supported.txt", "unsupported1.vcf", "unsupported2.gzip"], "file_type"),
         (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], None),
         (["unsupported.rst", "another_unsupported.zip", "supported.vcf.gz"], "file_type"),
         (["dat:a.tsv"], "file_chars"),
@@ -1059,7 +1097,7 @@ def pagination_files_uploaded(
     already_uploaded = all(name in list_result.stdout for name in file_names)
 
     if not already_uploaded:
-        upload_command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
+        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project}"
         upload_result = runner.invoke(app, upload_command)
         assert upload_result.exit_code == 0
 
@@ -1181,7 +1219,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     duplicate_file = files_in_bucket[S3_PAGINATION_LIMIT + 1]
     shutil.copy(src=duplicate_file, dst=upload_dir)
 
-    command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
+    command = f"files upload '{upload_dir}/*' --project {pagination_project}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, FilesAlreadyInProjectError)
@@ -1195,7 +1233,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
         assert file_name not in result.stdout
 
     # Now run the upload again without safe_mode, should work
-    command = f"files upload --upload-dir {upload_dir} --project {pagination_project} --disable-safe-mode"
+    command = f"files upload '{upload_dir}/*' --project {pagination_project} --disable-safe-mode"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for file_name in safe_mode_files:
