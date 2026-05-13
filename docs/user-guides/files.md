@@ -111,18 +111,21 @@ This will show you information about a specific version of the file that has bee
 
 ### Uploading files
 
-You can upload files to your project's store using the `upload` command. There are three ways to specify which files to upload:
+You can upload files to your project's store using the `upload` command. Use spaces to seperate file paths or use a glob pattern (e.g. `*.vcf.gz`) to specify multiple files. You can also provide a text file with a list of file paths (one per line) using the `--file-list` flag.
 
-    ```bash
-    # 1. space separated list of file paths
-    divbase-cli files upload path/to/file1.txt path/to/another/file2.csv
+```bash
+# Upload multiple files by specifying them one after another
+divbase-cli files upload file1.vcf.gz path/to/file2.tsv
 
-    # 2. A whole directory
-    divbase-cli files upload --upload-dir /path/to/my_data_dir
+# Upload all .vcf.gz files in the current directory using a glob
+divbase-cli files upload *.vcf.gz
 
-    # 3. From a text file (with one file path per line)
-    divbase-cli files upload --file-list files_to_upload.txt
-    ```
+# Upload all files in a directory using a glob
+divbase-cli files upload /path/to/data/*
+
+# Upload from a text file list (one file path per line)
+divbase-cli files upload --file-list files_to_upload.txt
+```
 
 !!! warning "Safe Mode"
     By default, the `upload` command is performed in "safe mode". This mode calculates the MD5 checksum of your local files before uploading to:
