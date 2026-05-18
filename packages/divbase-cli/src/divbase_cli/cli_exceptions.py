@@ -79,27 +79,6 @@ class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
         super().__init__(error_message)
 
 
-class FilesAlreadyInProjectError(DivBaseCLIError):
-    """
-    Raised when trying to upload file(s) that already exists in the project
-    and the user does not want to accidently create a new version of any file.
-    """
-
-    def __init__(self, existing_files: dict[Path, str], project_name: str):
-        files_list = "\n".join(
-            f"'{file_path}' (Checksum: {checksum})" for file_path, checksum in existing_files.items()
-        )
-        self.existing_files = existing_files
-        self.project_name = project_name
-
-        error_message = (
-            f"For the project: '{project_name}'\n"
-            "The exact version of the following file(s) that you're trying to upload already exist inside the project:\n"
-            f"{files_list}."
-        )
-        super().__init__(error_message)
-
-
 class ProjectNameNotSpecifiedError(DivBaseCLIError):
     """
     Raised when the project name is not specified in the command line arguments, and

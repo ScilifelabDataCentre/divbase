@@ -414,7 +414,24 @@ def stream_file(
 @file_app.command("upload")
 def upload_files(
     files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
-    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
+    file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        "-r",
+        help="If set, will skip already uploaded files, from the files you provided in the command. "
+        "Already uploaded files are determined by checking if a file with the same name and MD5 checksum already exists in the project's store on DivBase. ",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-R",
+        help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
+        "Without this flag, patterns only match files in the specified directory.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-d", help="If set, will show what files would be uploaded, but not actually upload them."
+    ),
     disable_safe_mode: Annotated[
         bool,
         typer.Option(
@@ -429,21 +446,23 @@ def upload_files(
 ):
     """
     Upload files to your project's store on DivBase.
+    NOTE that directory structure is not preserved on upload, only the file name is used as the object name.
 
     You can specify files directly as arguments (including glob patterns) or use --file-list.
+    Use --recursive / -R to expand glob patterns into subdirectories.
 
     Examples:
-        # Upload a single file
-        divbase-cli files upload path/to/file.vcf.gz
-
         # Upload multiple files by specifying them one after another
         divbase-cli files upload file1.vcf.gz file2.tsv
 
-        # Upload all .vcf.gz files in the current directory using a glob
+        # Upload all .vcf.gz files in the current directory
         divbase-cli files upload *.vcf.gz
 
-        # Upload all files in a directory using a glob
+        # Upload all files in a directory (non-recursive)
         divbase-cli files upload /path/to/data/*
+
+        # Upload all files in a directory and its subdirectories (yes, wrap the path in quotes to guaratee the right behaviour)
+        divbase-cli files upload --recursive "/path/to/data/**"
 
         # Upload from a text file list (one file path per line)
         divbase-cli files upload --file-list files_to_upload.txt
@@ -458,7 +477,7 @@ def upload_files(
     all_files: set[Path] = set()
     if files:
         for pattern in files:
-            matched = [Path(p) for p in glob(pattern) if Path(p).is_file()]
+            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
             if matched:
                 all_files.update(matched)
     if file_list:
@@ -472,6 +491,7 @@ def upload_files(
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
 
+    _check_for_duplicate_file_names(all_files)
     _check_for_unsupported_files(all_files)
 
     uploaded_results = upload_files_command(
@@ -479,19 +499,27 @@ def upload_files(
         divbase_base_url=logged_in_url,
         all_files=list(all_files),
         safe_mode=not disable_safe_mode,
+        resume_upload=resume,
+        dry_run=dry_run,
     )
+
+    if uploaded_results.skipped:
+        print("[yellow bold]\nThe following files were skipped: [/yellow bold]")
+        for object in uploaded_results.skipped:
+            print(f"[yellow]- '{object.object_name}' reason: {object.reason}[/yellow]")
 
     if uploaded_results.successful:
         print("[green bold]\nThe following files were successfully uploaded: [/green bold]")
         for object in uploaded_results.successful:
-            print(f"- '{object.object_name}' created from file at: '{object.file_path.resolve()}'")
+            print(f"[green]- '{object.object_name}' created from file at: '{object.file_path.resolve()}'[/green]")
 
     if uploaded_results.failed:
         print("[red bold]\nERROR: Failed to upload the following files:[/red bold]")
         for failed in uploaded_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
-
         raise typer.Exit(1)
+    else:
+        print("\n[green bold]All files uploaded successfully![/green bold]")
 
 
 @file_app.command("rm")
@@ -603,6 +631,32 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
     return list(all_files)
+
+
+def _check_for_duplicate_file_names(all_files: set[Path]) -> None:
+    """
+    Helper fn to check if any two files in the upload set share the same file name.
+    Since directory structure is not preserved on upload, duplicate names would overwrite each other.
+    """
+    name_to_paths: dict[str, list[Path]] = {}
+    for f in all_files:
+        if f.name not in name_to_paths:
+            name_to_paths[f.name] = []
+        name_to_paths[f.name].append(f)
+
+    duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
+    if duplicates:
+        err_console = Console(stderr=True)
+        err_console.print(
+            "[red bold]Error: The following file names appear more than once in the upload list.[/red bold]\n"
+            "[red]Since directory structure is not preserved on upload, these files would collide:[/red]\n"
+        )
+        for name, paths in duplicates.items():
+            err_console.print(f"[red bold]'{name}':[/red bold]")
+            for p in paths:
+                err_console.print(f"[red]- {p.resolve()}[/red]")
+        err_console.print("\nPlease rename the files so each has a unique name before uploading.")
+        raise typer.Exit(1)
 
 
 def _check_for_unsupported_files(all_files: set[Path]) -> None:

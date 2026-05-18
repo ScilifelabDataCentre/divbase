@@ -245,19 +245,29 @@ class FailedUpload:
 
 
 @dataclass
+class SkippedUpload:
+    """Represents a skipped upload attempt."""
+
+    object_name: str
+    file_path: Path
+    reason: str
+
+
+@dataclass
 class UploadOutcome:
     """Outcome of attempting to upload multiple files."""
 
     successful: list[SuccessfulUpload]
     failed: list[FailedUpload]
+    skipped: list[SkippedUpload]
 
 
 def upload_multiple_singlepart_pre_signed_urls(
     pre_signed_urls: list[PreSignedSinglePartUploadResponse], all_files: list[Path]
-) -> UploadOutcome:
+) -> tuple[list[SuccessfulUpload], list[FailedUpload]]:
     """
     Upload singlepart files using pre-signed PUT URLs.
-    Returns a UploadResults object containing the results of the upload attempts.
+    Returns a tuple of both the successful and failed uploads
     """
     file_map = {file.name: file for file in all_files}
 
@@ -280,7 +290,7 @@ def upload_multiple_singlepart_pre_signed_urls(
                 print("[bold red]Failed[/bold red]")
                 failed_uploads.append(result)
 
-    return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
+    return successful_uploads, failed_uploads
 
 
 @stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)

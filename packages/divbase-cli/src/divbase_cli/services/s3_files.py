@@ -12,11 +12,11 @@ from rich import print
 
 from divbase_cli.cli_exceptions import (
     FileDoesNotExistInSpecifiedVersionError,
-    FilesAlreadyInProjectError,
 )
 from divbase_cli.services.pre_signed_urls import (
     DownloadOutcome,
     FailedUpload,
+    SkippedUpload,
     SuccessfulUpload,
     UploadOutcome,
     download_multiple_pre_signed_urls,
@@ -61,6 +61,16 @@ class ToDownload:
     etag: str
     size_bytes: int
     version_id: str | None = None  # latest version if None
+
+
+@dataclass
+class ToUpload:
+    """
+    Represents a file to be uploaded in the files upload command.
+    """
+
+    file_path: Path
+    checksum_local: str | None = None  # None if not uploaded with "safe-mode"
 
 
 def list_files_command(
@@ -291,34 +301,63 @@ def stream_file_command(
 
 
 def upload_files_command(
-    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool
+    project_name: str,
+    divbase_base_url: str,
+    all_files: list[Path],
+    safe_mode: bool,
+    resume_upload: bool = False,
 ) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
-    Returns an UploadOutcome object containing details of which files were successfully uploaded and which failed.
+    Returns an UploadOutcome object containing details about how uploading went for each file.
 
     - Safe mode:
         1. checks if any of the files that are to be uploaded already exist in the bucket (by comparing checksums)
         2. Adds checksum to upload request to allow server to verify upload.
     """
+    all_successful_uploads: list[SuccessfulUpload] = []
+    all_failed_uploads: list[FailedUpload] = []
+    all_skipped_uploads: list[SkippedUpload] = []
+
     if safe_mode:
         print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
-        # mapping of file name to hex-encoded checksum
-        file_checksums_hex = compare_local_to_s3_checksums(
+        to_upload, already_uploaded = filter_already_uploaded_files(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
             all_files=all_files,
         )
 
-    files_below_threshold, files_above_threshold = [], []
-    for file in all_files:
-        if file.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
+        if already_uploaded:
+            if not resume_upload:
+                files_str = "\n".join(f"'{f.file_path}' (Checksum: {f.checksum_local})" for f in already_uploaded)
+                print(
+                    f"\n[red bold]Error: For the project: '{project_name}'\n"
+                    "The exact version of the following files that you're trying to upload already exist inside the project:\n[/red bold]"
+                    f"[red]{files_str}[/red]\n"
+                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--resume' flag.[/bold green]"
+                )
+                raise typer.Exit(1)
+            else:
+                for file in already_uploaded:
+                    all_skipped_uploads.append(
+                        SkippedUpload(
+                            object_name=file.file_path.name,
+                            file_path=file.file_path,
+                            reason=f"The file with checksum {file.checksum_local} already exists in the project",
+                        )
+                    )
+    else:
+        # we skip checksum validation when uploading
+        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
+
+    # Split files into those that need single vs multipart upload
+    files_below_threshold: list[ToUpload] = []
+    files_above_threshold: list[ToUpload] = []
+    for file in to_upload:
+        if file.file_path.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
             files_below_threshold.append(file)
         else:
             files_above_threshold.append(file)
-
-    all_successful_uploads: list[SuccessfulUpload] = []
-    all_failed_uploads: list[FailedUpload] = []
 
     # P1. Process all single-part uploads in batches of max size allowed by divbase server.
     for i in range(0, len(files_below_threshold), MAX_S3_API_BATCH_SIZE):
@@ -326,12 +365,12 @@ def upload_files_command(
         batch_of_objects_to_upload = []
         for file in batch_files:
             upload_object = {
-                "name": file.name,
-                "content_length": file.stat().st_size,
+                "name": file.file_path.name,
+                "content_length": file.file_path.stat().st_size,
             }
-            if safe_mode:
-                hex_checksum = file_checksums_hex[file.name]
-                upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum)
+            if safe_mode and file.checksum_local:
+                # server expects base64 encoded checksum when provided
+                upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum=file.checksum_local)
             batch_of_objects_to_upload.append(upload_object)
 
         response = make_authenticated_request(
@@ -341,18 +380,20 @@ def upload_files_command(
             json=batch_of_objects_to_upload,
         )
         pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
-        single_part_upload_outcome = upload_multiple_singlepart_pre_signed_urls(
-            pre_signed_urls=pre_signed_urls, all_files=batch_files
+
+        batch_to_upload = [file.file_path for file in batch_files]
+        successful_uploads, failed_uploads = upload_multiple_singlepart_pre_signed_urls(
+            pre_signed_urls=pre_signed_urls, all_files=batch_to_upload
         )
-        all_successful_uploads.extend(single_part_upload_outcome.successful)
-        all_failed_uploads.extend(single_part_upload_outcome.failed)
+        all_successful_uploads.extend(successful_uploads)
+        all_failed_uploads.extend(failed_uploads)
 
     # P2. process all multipart uploads.
-    for file_path in files_above_threshold:
+    for file in files_above_threshold:
         outcome = perform_multipart_upload(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
-            file_path=file_path,
+            file_path=file.file_path,
             safe_mode=safe_mode,
         )
 
@@ -361,23 +402,27 @@ def upload_files_command(
         else:
             all_failed_uploads.append(outcome)
 
-    return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads)
+    return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads, skipped=all_skipped_uploads)
 
 
-def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_files: list[Path]) -> dict[str, str]:
+def filter_already_uploaded_files(
+    project_name: str,
+    divbase_base_url: str,
+    all_files: list[Path],
+) -> tuple[list[ToUpload], list[ToUpload]]:
     """
-    Calculate the checksums of all local files (to be uploaded) and compares them to the checksums of all files in the project's S3 bucket.
-    Raises error if any files already exist in the project's S3 bucket with identical checksums.
+    Seperate files into whether they are already in the projects bucket or not.
+    (1st list to be uploaded, 2nd list is files already in projects bucket)
 
-    Here, we are catching an attempt to upload an identical file twice.
-    This is only ran if 'safe_mode' is enabled for uploads.
+    For a file to be considered already in the project,
+    there must be a file with the same name and checksum in the project's S3 bucket.
     We do not catch an attempt to upload an identical object if it has a different name.
 
-    Return a dict of file names with hex-encoded checksums for all files to be uploaded (including those that are not in S3).
+    This is only ran if 'safe_mode' is enabled for uploads.
     These checksums are later used when uploading to the server so the server can verify the upload.
     """
-    already_uploaded_files: dict[Path, str] = {}  # files that already exist in S3 with identical checksum
-    local_checksums: dict[str, str] = {}  # all local files checksums
+    already_uploaded: list[ToUpload] = []
+    to_be_uploaded: list[ToUpload] = []
 
     # have to batch requests if above max number allowed by divbase server
     for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
@@ -394,15 +439,17 @@ def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_
         server_checksums = {item.object_name: item.md5_checksum for item in server_checksum_responses}
 
         for file in batch_files:
-            local_checksums[file.name] = _calc_local_checksum(file_path=file)
-            if server_checksums.get(file.name) and server_checksums[file.name] == local_checksums[file.name]:
-                already_uploaded_files[file] = local_checksums[file.name]
+            local_checksum = _calc_local_checksum(file_path=file)
+            file_to_upload = ToUpload(file_path=file, checksum_local=local_checksum)
+
+            if server_checksums.get(file.name) and server_checksums[file.name] == local_checksum:
+                already_uploaded.append(file_to_upload)
+            else:
+                to_be_uploaded.append(file_to_upload)
+
             print(f"MD5 Checksum calculated for file: '{file.name}'")
 
-    if already_uploaded_files:
-        raise FilesAlreadyInProjectError(existing_files=already_uploaded_files, project_name=project_name)
-
-    return local_checksums
+    return to_be_uploaded, already_uploaded
 
 
 def filter_out_already_downloaded_files(
