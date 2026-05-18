@@ -148,7 +148,7 @@ def _checksum_vcf_skip_double_hash_headers(vcf_gz_file: Path, tmp_path: Path) ->
     kept_lines = [line for line in text.splitlines() if not line.startswith("##")]
     normalized_bytes = ("\n".join(kept_lines) + "\n").encode("utf-8")
 
-    normalized_file = tmp_path / "vcf_stream_skip_double_hash_headers.vcf"
+    normalized_file = tmp_path / "vcf_skip_double_hash_headers.vcf"
     normalized_file.write_bytes(normalized_bytes)
 
     return calculate_md5_checksum(

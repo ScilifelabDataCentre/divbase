@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from divbase_api.services.vcf_queries import (
+from divbase_api.services.bcftools_helpers import (
     _raise_task_user_error_from_bcftools_stderr,
     bgzip_vcf_for_indexing,
     ensure_csi_index,

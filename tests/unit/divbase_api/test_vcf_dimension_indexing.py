@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
+from divbase_api.services.bcftools_helpers import bgzip_vcf_for_indexing
 from divbase_api.services.vcf_dimension_indexing import VCFDimensionCalculator, VCFDimensions
-from divbase_api.services.vcf_queries import bgzip_vcf_for_indexing
 from divbase_api.worker.tasks import _remove_stale_dimensions_db_entries
 from divbase_lib.exceptions import TaskUserError
 
@@ -184,7 +184,7 @@ class TestBgzipVCF:
             "[E::bcf_hdr_add_sample_len] Duplicated sample name 'NA00002'",
         )
         with (
-            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=proc) as mock_run_bcftools,
+            patch("divbase_api.services.bcftools_helpers.run_bcftools", return_value=proc) as mock_run_bcftools,
             pytest.raises(TaskUserError, match="contains duplicate sample IDs in the header"),
         ):
             bgzip_vcf_for_indexing(input_vcf=tmp_path / "bad.vcf", output_vcf_gz=tmp_path / "bad.vcf.gz")
@@ -204,7 +204,7 @@ class TestBgzipVCF:
             "Failed to read from bad.vcf: could not parse header",
         )
         with (
-            patch("divbase_api.services.vcf_queries.run_bcftools", return_value=proc) as mock_run_bcftools,
+            patch("divbase_api.services.bcftools_helpers.run_bcftools", return_value=proc) as mock_run_bcftools,
             pytest.raises(TaskUserError, match="Details from bcftools"),
         ):
             bgzip_vcf_for_indexing(input_vcf=tmp_path / "bad.vcf", output_vcf_gz=tmp_path / "bad.vcf.gz")

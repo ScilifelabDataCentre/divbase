@@ -12,7 +12,8 @@ from kombu.connection import Connection
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
-from divbase_api.services.vcf_queries import BcftoolsQueryManager, get_container_id
+from divbase_api.services.bcftools_helpers import get_container_id
+from divbase_api.services.vcf_queries import BcftoolsQueryManager
 from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -603,6 +604,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             patch("divbase_api.worker.tasks._download_sample_metadata", new=patched_download_sample_metadata),
             patch("divbase_api.worker.tasks._download_vcf_files", side_effect=patched_download_vcf_files),
             patch("divbase_api.services.vcf_queries.run_bcftools", new=patched_run_bcftools),
+            patch("divbase_api.services.bcftools_helpers.run_bcftools", new=patched_run_bcftools),
             patch(
                 "divbase_api.services.vcf_queries.BcftoolsQueryManager.temp_file_management",
                 new=patched_temp_file_management,

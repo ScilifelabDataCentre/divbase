@@ -34,7 +34,7 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scra
 
 **Implementation:**
 
-- Check that all VCF files are sorted before running `bcftools` on the files. Currently implemented in the module-level `ensure_csi_index` function in `services/vcf_queries.py`, shared by both `BcftoolsQueryManager` and `VCFDimensionCalculator`. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with `bcftools sort` and upload them to their DivBase project and try the query again.
+- Check that all VCF files are sorted before running `bcftools` on the files. Currently implemented in the module-level `ensure_csi_index` function in `services/bcftools_helpers.py`, shared by both `BcftoolsQueryManager` and `VCFDimensionCalculator`. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with `bcftools sort` and upload them to their DivBase project and try the query again.
 
 **Regression test coverage:**
 
@@ -67,7 +67,7 @@ bcftools index tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have
 
 **Implementation:**
 
-- The module-level `ensure_csi_index` function in `services/vcf_queries.py` is called for all VCF files operated on in a given query (including temp files) and also during VCF dimension calculation. `BcftoolsQueryManager.ensure_csi_index` delegates to it, passing `self.run_bcftools` so Docker-exec routing is preserved. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalculated each time a VCF file is subject to a query.
+- The module-level `ensure_csi_index` function in `services/bcftools_helpers.py` is called for all VCF files operated on in a given query (including temp files) and also during VCF dimension calculation. Docker-exec routing is preserved because `ensure_csi_index` calls `run_bcftools`, which handles the Docker/k8s dispatch. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalculated each time a VCF file is subject to a query.
 
 **Regression test coverage:**
 
@@ -90,7 +90,7 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 
 **Implementation:**
 
-- This is guarded against during the VCF dimensions indexing. `services/vcf_queries.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
+- This is guarded against during the VCF dimensions indexing. `services/bcftools_helpers.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
 
 **Regression test coverage:**
 
@@ -106,7 +106,7 @@ There is no single "one-line rule" for VCF headers across all `bcftools` command
 **Implementation:**
 
 - `services/vcf_dimension_indexing.py` performs header parsing (`bcftools view --header-only`).
-- Any stderr from this step is routed through shared classifier logic in `services/vcf_queries.py::_raise_task_user_error_from_bcftools_stderr`.
+- Any stderr from this step is routed through shared classifier logic in `services/bcftools_helpers.py::_raise_task_user_error_from_bcftools_stderr`.
 - This gives explicit `TaskUserError` messages for header/content failures instead of opaque bcftools errors.
 
 **Regression test coverage:**
@@ -246,7 +246,7 @@ It is possible to attempt to merge VCF files that do not have CSI indexes with `
 
 **Implementation:**
 
-- DivBase never passes `--no-index` to any `bcftools merge` call. All files are indexed with a CSI index before the merge step runs, via the same `ensure_csi_index` function in `services/vcf_queries.py` described in [Section 1.2](#12-vcf-files-need-to-be-indexed). The scaffold record order of the input files is therefore irrelevant to the merge.
+- DivBase never passes `--no-index` to any `bcftools merge` call. All files are indexed with a CSI index before the merge step runs, via the same `ensure_csi_index` function in `services/bcftools_helpers.py` described in [Section 1.2](#12-vcf-files-need-to-be-indexed). The scaffold record order of the input files is therefore irrelevant to the merge.
 
 **Regression test coverage:**
 
@@ -436,7 +436,7 @@ bcftools view --samples-file order_of_samples_in_file1.txt input_file_2.vcf -o i
 
 `bcftools concat` requires that a) each VCF file is sorted by chromosome and position (same requirement as for `bcftools merge`), and b) that the input files are supplied to the `concat` command such that the same chromosome does not appear non-contiguously across files.
 
-The requirement in a) is handled by the `ensure_csi_index` function in `services/vcf_queries.py` (see [Section 1.1](#11-vcf-files-need-to-be-sorted-by-position) and [Section 1.2](#12-vcf-files-need-to-be-indexed)).
+The requirement in a) is handled by the `ensure_csi_index` function in `services/bcftools_helpers.py` (see [Section 1.1](#11-vcf-files-need-to-be-sorted-by-position) and [Section 1.2](#12-vcf-files-need-to-be-indexed)).
 
 For requirement b): if a chromosome that has already been processed in an earlier file reappears in a later file after a different chromosome has appeared in between, `bcftools` exits with a hard error:
 
