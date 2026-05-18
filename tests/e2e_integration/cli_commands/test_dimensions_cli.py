@@ -31,6 +31,7 @@ from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.exceptions import NoVCFFilesFoundError
+from tests.conftest import REGRESSION_GUARD_PREFIX
 
 runner = CliRunner()
 
@@ -192,7 +193,6 @@ def test_regression_get_vcf_metadata_by_project_returns_samples_in_stable_header
     Why: non-deterministic sample ordering can hide bcftools concat-incompatible sample sets and break bcftools orchestration.
     Reference: commit 2fcfb8202f63c69154ed8a05f1789506dfdd437d (Fix non-deterministic output in vcf query results)
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name = CONSTANTS["CLEANED_PROJECT"]
     project_id = project_map[project_name]
@@ -219,11 +219,11 @@ def test_regression_get_vcf_metadata_by_project_returns_samples_in_stable_header
             # Ensure that the lookup for this test returns 1 dimensions entry.
             # If it were to return 0 or multiple entries, the sample order assertion could fail for the wrong reason
             assert len(vcf_dimensions.vcf_files) == 1, (
-                f"{regression_prefix} expected one dimensions entry in repeated lookup #{idx}, "
+                f"{REGRESSION_GUARD_PREFIX} expected one dimensions entry in repeated lookup #{idx}, "
                 f"got: {len(vcf_dimensions.vcf_files)}"
             )
             assert vcf_dimensions.vcf_files[0].samples == expected_sample_order, (
-                f"{regression_prefix} expected stable sample order {expected_sample_order} in repeated lookup "
+                f"{REGRESSION_GUARD_PREFIX} expected stable sample order {expected_sample_order} in repeated lookup "
                 f"#{idx}, got: {vcf_dimensions.vcf_files[0].samples}"
             )
 
@@ -262,7 +262,6 @@ def test_regression_update_dimensions_cleans_up_stale_index_when_all_vcfs_delete
     2. The task must complete successfully and report deleted files.
     3. `NoVCFFilesFoundError` must not be raised in this stale-index cleanup scenario.
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -274,17 +273,17 @@ def test_regression_update_dimensions_cleans_up_stale_index_when_all_vcfs_delete
         bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
     )
     assert first_result["status"] == "completed", (
-        f"{regression_prefix} expected first dimensions update run to complete successfully."
+        f"{REGRESSION_GUARD_PREFIX} expected first dimensions update run to complete successfully."
     )
     indexed_files = first_result.get("VCF_files_added") or []
     assert indexed_files, (
-        f"{regression_prefix} expected at least one indexed VCF file in first run to establish stale state."
+        f"{REGRESSION_GUARD_PREFIX} expected at least one indexed VCF file in first run to establish stale state."
     )
 
     # Verify the index has entries in the DB before the second run
     vcf_dimensions_before = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert len(vcf_dimensions_before.vcf_files) > 0, (
-        f"{regression_prefix} expected DB to contain indexed entries before stale cleanup run."
+        f"{REGRESSION_GUARD_PREFIX} expected DB to contain indexed entries before stale cleanup run."
     )
 
     # Second run: simulate all VCFs deleted from the bucket by returning an empty S3
@@ -300,31 +299,33 @@ def test_regression_update_dimensions_cleans_up_stale_index_when_all_vcfs_delete
             )
         except NoVCFFilesFoundError as e:
             raise AssertionError(
-                f"{regression_prefix} NoVCFFilesFoundError should not be raised when stale index entries exist; "
+                f"{REGRESSION_GUARD_PREFIX} NoVCFFilesFoundError should not be raised when stale index entries exist; "
                 "cleanup should run first."
             ) from e
 
     assert second_result["status"] == "completed", (
-        f"{regression_prefix} expected stale cleanup run to complete successfully, got: {second_result}"
+        f"{REGRESSION_GUARD_PREFIX} expected stale cleanup run to complete successfully, got: {second_result}"
     )
     assert second_result["VCF_files_added"] is None, (
-        f"{regression_prefix} expected no new files indexed during stale cleanup run."
+        f"{REGRESSION_GUARD_PREFIX} expected no new files indexed during stale cleanup run."
     )
     assert second_result["VCF_files_skipped"] is None, (
-        f"{regression_prefix} expected no skipped files during stale cleanup run."
+        f"{REGRESSION_GUARD_PREFIX} expected no skipped files during stale cleanup run."
     )
     deleted_files = second_result.get("VCF_files_deleted") or []
-    assert len(deleted_files) > 0, f"{regression_prefix} expected previously indexed files to be reported as deleted."
+    assert len(deleted_files) > 0, (
+        f"{REGRESSION_GUARD_PREFIX} expected previously indexed files to be reported as deleted."
+    )
     for file in indexed_files:
         assert file in deleted_files, (
-            f"{regression_prefix} expected {file} to be listed in VCF_files_deleted: {deleted_files}"
+            f"{REGRESSION_GUARD_PREFIX} expected {file} to be listed in VCF_files_deleted: {deleted_files}"
         )
 
     # DB index should now be empty for this project
     db_session_sync.expire_all()
     vcf_dimensions_after = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions_after.vcf_files == [], (
-        f"{regression_prefix} expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected DB index to be empty after cleanup, got: {vcf_dimensions_after.vcf_files}"
     )
 
 
@@ -341,7 +342,6 @@ def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in
     Why: duplicate sample IDs violate VCF validity and must not be accepted into the dimensions index.
     Reference: docs/development/bcftools_task_constraints.md ("1.3. There cannot be duplicate sample names ...").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -363,21 +363,21 @@ def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for duplicate sample IDs, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for duplicate sample IDs, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "contains duplicate sample ids in the header" in normalized_error_msg, (
-        f"{regression_prefix} expected explicit duplicate-sample header message, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected explicit duplicate-sample header message, got: {error_msg}"
     )
     assert "ensure all sample names in the file header are unique" in normalized_error_msg, (
-        f"{regression_prefix} expected corrective guidance for duplicate sample IDs, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected corrective guidance for duplicate sample IDs, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for invalid VCF, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for invalid VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 
@@ -394,7 +394,6 @@ def test_regression_update_dimensions_fails_for_vcf_with_unsorted_positions(
     Why: unsorted coordinates cannot be indexed and break DivBase bcftools orchestration.
     Reference: docs/development/bcftools_task_constraints.md ("1.1. VCF files need to be sorted by position").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -416,21 +415,21 @@ def test_regression_update_dimensions_fails_for_vcf_with_unsorted_positions(
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for unsorted positions, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for unsorted positions, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "not sorted by position" in normalized_error_msg, (
-        f"{regression_prefix} expected unsorted-position guidance, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected unsorted-position guidance, got: {error_msg}"
     )
     assert "bcftools sort" in normalized_error_msg, (
-        f"{regression_prefix} expected corrective guidance using bcftools sort, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected corrective guidance using bcftools sort, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for unsorted VCF, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for unsorted VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 
@@ -448,7 +447,6 @@ def test_regression_update_dimensions_fails_for_vcf_gz_that_is_not_bgzf(
     Why: bcftools indexing requires BGZF compression for .vcf.gz random-access indexing.
     Reference: docs/development/bcftools_task_constraints.md ("1.2. VCF files need to be indexed").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -476,18 +474,18 @@ def test_regression_update_dimensions_fails_for_vcf_gz_that_is_not_bgzf(
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for non-BGZF .vcf.gz, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for non-BGZF .vcf.gz, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "not bgzip-compressed" in normalized_error_msg, (
-        f"{regression_prefix} expected explicit non-BGZF guidance, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected explicit non-BGZF guidance, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for non-BGZF VCF, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for non-BGZF VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 
@@ -505,7 +503,6 @@ def test_regression_update_dimensions_fails_for_truncated_vcf_gz(
     Why: corrupted compressed input can produce opaque bcftools failures unless explicitly mapped.
     Reference: docs/development/bcftools_task_constraints.md ("1.2. VCF files need to be indexed").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -532,18 +529,18 @@ def test_regression_update_dimensions_fails_for_truncated_vcf_gz(
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for truncated .vcf.gz, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for truncated .vcf.gz, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "corrupted or truncated" in normalized_error_msg, (
-        f"{regression_prefix} expected explicit corrupted/truncated guidance, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected explicit corrupted/truncated guidance, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for truncated VCF, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for truncated VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 
@@ -560,7 +557,6 @@ def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
     Why: invalid headers can silently break parsing unless surfaced as explicit user errors.
     Reference: docs/development/bcftools_task_constraints.md ("1.4. What is required in the header?").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -582,18 +578,18 @@ def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for malformed header, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for malformed header, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "invalid vcf header" in normalized_error_msg or "invalid vcf header/content" in normalized_error_msg, (
-        f"{regression_prefix} expected explicit invalid-header guidance, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected explicit invalid-header guidance, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for malformed header VCF, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for malformed header VCF, got: {vcf_dimensions.vcf_files}"
     )
 
 
@@ -612,7 +608,6 @@ def test_regression_update_dimensions_fails_for_non_vcf_file_disguised_as_vcf_gz
 
     The bcftools stderr for this fixture: `unknown file type`.
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -634,21 +629,21 @@ def test_regression_update_dimensions_fails_for_non_vcf_file_disguised_as_vcf_gz
     )
 
     assert result["status"] == "error", (
-        f"{regression_prefix} expected dimensions update to fail for non-VCF file with .vcf.gz extension, got: {result}"
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for non-VCF file with .vcf.gz extension, got: {result}"
     )
     error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "invalid vcf header/content" in normalized_error_msg, (
-        f"{regression_prefix} expected 'invalid vcf header/content' in error message, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected 'invalid vcf header/content' in error message, got: {error_msg}"
     )
     assert "validate the file format" in normalized_error_msg, (
-        f"{regression_prefix} expected corrective guidance to validate the file format, got: {error_msg}"
+        f"{REGRESSION_GUARD_PREFIX} expected corrective guidance to validate the file format, got: {error_msg}"
     )
 
     db_session_sync.expire_all()
     vcf_dimensions = get_vcf_metadata_by_project(project_id=project_id, db=db_session_sync)
     assert vcf_dimensions.vcf_files == [], (
-        f"{regression_prefix} expected no dimensions entries to be created for non-VCF file, got: {vcf_dimensions.vcf_files}"
+        f"{REGRESSION_GUARD_PREFIX} expected no dimensions entries to be created for non-VCF file, got: {vcf_dimensions.vcf_files}"
     )
 
 

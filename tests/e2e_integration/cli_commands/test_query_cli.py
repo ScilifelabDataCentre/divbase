@@ -22,6 +22,7 @@ from divbase_cli.cli_exceptions import ProjectNotInConfigError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
+from tests.conftest import REGRESSION_GUARD_PREFIX
 
 logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
@@ -919,7 +920,6 @@ def test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_
     [E::vcf_parse_format_check7] Number of columns at 20:14370 does not match the number of samples (2 vs 3)
     Error: VCF parse error
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -945,7 +945,7 @@ def test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_
         f'query vcf --samples "NA00001,NA00002,NA00003" --command "view -s" --project {project_name}',
     )
     assert query_result.exit_code == 0, (
-        f"{regression_prefix} query submission should succeed even for a malformed VCF "
+        f"{REGRESSION_GUARD_PREFIX} query submission should succeed even for a malformed VCF "
         f"(column mismatches are not detectable before task execution): {query_result.stdout}"
     )
     assert "Job submitted" in query_result.stdout
@@ -954,11 +954,11 @@ def test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_
     task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
 
     assert task_state == "FAILURE", (
-        f"{regression_prefix} expected task FAILURE for malformed VCF column mismatch, got {task_state}. "
+        f"{REGRESSION_GUARD_PREFIX} expected task FAILURE for malformed VCF column mismatch, got {task_state}. "
         f"task-history output:\n{task_stdout}"
     )
     assert "malformed VCF record lines" in task_stdout, (
-        f"{regression_prefix} expected descriptive 'malformed VCF record lines' message in task-history "
+        f"{REGRESSION_GUARD_PREFIX} expected descriptive 'malformed VCF record lines' message in task-history "
         f"instead of the opaque 'Process exited with code' error. task-history output:\n{task_stdout}"
     )
 
@@ -982,7 +982,6 @@ def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
     Reference: docs/development/bcftools_task_constraints.md ("3.2. Sample names must be unique
     across all input files" and "2. How DivBase chooses between bcftools merge and concat").
     """
-    regression_prefix = "Regression guard failed:"
 
     project_name, bucket_name = cleaned_project_bucket
     assert project_name == CONSTANTS["CLEANED_PROJECT"]
@@ -1007,7 +1006,7 @@ def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
         f'query vcf --samples "5a_HOM-I7" --command "view -s" --project {project_name}',
     )
     assert query_result.exit_code == 0, (
-        f"{regression_prefix} query submission should succeed even for incompatible sample sets "
+        f"{REGRESSION_GUARD_PREFIX} query submission should succeed even for incompatible sample sets "
         f"(incompatibility is only detectable once the task runs): {query_result.stdout}"
     )
     assert "Job submitted" in query_result.stdout
@@ -1016,10 +1015,10 @@ def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
     task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
 
     assert task_state == "FAILURE", (
-        f"{regression_prefix} expected task FAILURE for partly overlapping sample sets, got {task_state}. "
+        f"{REGRESSION_GUARD_PREFIX} expected task FAILURE for partly overlapping sample sets, got {task_state}. "
         f"task-history output:\n{task_stdout}"
     )
     assert "Sample sets that are partly overlapping" in task_stdout, (
-        f"{regression_prefix} expected descriptive 'Sample sets that are partly overlapping' message "
+        f"{REGRESSION_GUARD_PREFIX} expected descriptive 'Sample sets that are partly overlapping' message "
         f"in task-history. task-history output:\n{task_stdout}"
     )

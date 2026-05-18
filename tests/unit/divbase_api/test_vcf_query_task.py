@@ -24,6 +24,7 @@ from divbase_api.worker.tasks import (
     _resolve_inputs_for_cli_samples_mode,
 )
 from divbase_lib.exceptions import BcftoolsCommandError, TaskUserError
+from tests.conftest import REGRESSION_GUARD_PREFIX
 
 
 class TestDetermineSampleSelectionMode:
@@ -474,9 +475,15 @@ class TestBcftoolsReturnCodeHandling:
 
         mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
         msg = str(exc_info.value)
-        assert "not sorted by position" in msg
-        assert "bcftools sort" in msg
-        assert "input.vcf.gz" in msg
+        assert "not sorted by position" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must mention 'not sorted by position' to guide the user."
+        )
+        assert "bcftools sort" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must include 'bcftools sort' as corrective guidance."
+        )
+        assert "input.vcf.gz" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must include the offending VCF filename."
+        )
 
     def test_ensure_csi_index_skips_indexing_when_index_already_exists(self, tmp_path):
         """Test that ensure_csi_index does not call run_bcftools when a .csi index already exists."""

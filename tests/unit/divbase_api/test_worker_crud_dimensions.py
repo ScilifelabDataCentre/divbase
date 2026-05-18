@@ -7,9 +7,8 @@ import pytest
 from divbase_api.worker.crud_dimensions import get_vcf_metadata_by_project
 from divbase_api.worker.tasks import _check_if_samples_can_be_combined_with_bcftools
 from divbase_lib.exceptions import TaskUserError
+from tests.conftest import REGRESSION_GUARD_PREFIX
 
-# Shared regression guard messages
-REGRESSION_GUARD_PREFIX = "Regression guard failed:"
 ORDER_MUST_BE_PRESERVED_MSG = (
     f"{REGRESSION_GUARD_PREFIX} sample order must be preserved exactly from dimensions DB entries. "
     "Changing this can break bcftools concat compatibility checks downstream."
