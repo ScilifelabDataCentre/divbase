@@ -66,9 +66,13 @@ def remove_project_command(
 
 @config_app.command("set-default")
 def set_default_project_command(
-    name: str = typer.Argument(..., help="Name of the project to add to the user configuration file."),
+    name: str = typer.Argument(..., help="Name of the project to set as the default."),
 ):
-    """Set your default project to use in all divbase-cli commands."""
+    """
+    Set the default project to use in all divbase-cli commands.
+
+    The project must already be added to your config file using the 'add' command.
+    """
     config = load_user_config()
     default_project_name = config.set_default_project(name=name)
     print(f"Default project is now set to '{default_project_name}'.")
@@ -89,13 +93,16 @@ def show_default_project_command() -> None:
 def set_default_dload_dir_command(
     download_dir: str = typer.Argument(
         ...,
-        help="""Set the default directory to download files to. 
-        By default files are downloaded to the current working directory.
-        You can specify an absolute path. 
-        You can use '.' to refer to the directory you run the command from.""",
+        help="Set the default directory to download files to. "
+        "By default files are downloaded to the current working directory. "
+        "Do not use a relative path. To use the current working directory (where each command is run from), use '.' as the argument.",
     ),
 ):
-    """Set the default download dir"""
+    """
+    Set the default download directory in your user configuration file.
+
+    This is by default unset, meaning files will be downloaded to the current working directory.
+    """
     config = load_user_config()
     dload_dir = config.set_default_download_dir(download_dir=download_dir)
     if dload_dir == ".":

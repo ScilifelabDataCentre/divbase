@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build fastapi image, no push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           push: false
           load: true
@@ -33,7 +33,7 @@ jobs:
           tags: divbase-fastapi:test
 
       - name: Build worker image, no push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           push: false
           load: true
@@ -82,7 +82,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push fastapi image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           push: true
           context: .
@@ -92,7 +92,7 @@ jobs:
             ghcr.io/scilifelabdatacentre/divbase-fastapi:${{ github.sha }}
             ghcr.io/scilifelabdatacentre/divbase-fastapi:latest
       - name: Push worker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           push: true
           context: .

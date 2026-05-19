@@ -101,7 +101,7 @@ divbase-cli task-history user
 ## 4. Download the results file
 
 ```bash
-divbase-cli file download result_of_job_<THE_JOB_ID_OF_THE_QUERY>.vcf.gz--project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli files download result_of_job_<THE_JOB_ID_OF_THE_QUERY>.vcf.gz --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
 We can now run some quick sanity-checks on the result file.
@@ -118,7 +118,7 @@ If you want, you can compare this to the original file:
 
 ```bash
 # Note! This will take a little time since this file has many rows
-zzcat mgp.v3.snps.rsIDdbSNPv137.vcf.gz | grep -v "^#" |wc -l
+zcat mgp.v3.snps.rsIDdbSNPv137.vcf.gz | grep -v "^#" |wc -l
 
 # Expected terminal output:
 66007044

@@ -48,7 +48,7 @@ divbase-cli files download my_data.vcf.gz
 ```
 
 !!! tip "Scope your token to what the job needs and when you need it for"
-    When creating the PAT, restrict it to the specific project(s) you need it for. Consider also setting an appropriate expiry date for the token. You can always revoke the token immediately if needed from the divbase website.
+    When creating the PAT, restrict it to the specific project(s) you need it for. Consider also setting an appropriate expiry date for the token. You can always revoke the token immediately if needed from the DivBase website.
 
 ## Parse divbase-cli files ls/info output programmatically
 
