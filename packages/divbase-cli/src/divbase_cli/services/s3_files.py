@@ -306,6 +306,7 @@ def upload_files_command(
     all_files: list[Path],
     safe_mode: bool,
     resume_upload: bool = False,
+    dry_run: bool = False,
 ) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
@@ -319,8 +320,16 @@ def upload_files_command(
     all_failed_uploads: list[FailedUpload] = []
     all_skipped_uploads: list[SkippedUpload] = []
 
-    if safe_mode:
-        print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
+    if not safe_mode:
+        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
+    else:
+        if not dry_run:
+            print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
+        else:
+            print(
+                "[green]Dry run enabled, calculating the checksums of all files to upload to determine which would be uploaded vs skipped...[/green]"
+            )
+
         to_upload, already_uploaded = filter_already_uploaded_files(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
@@ -329,6 +338,11 @@ def upload_files_command(
 
         if already_uploaded:
             if not resume_upload:
+                if dry_run:
+                    print(
+                        "[red bold]Error: The following upload attempt would have failed due to the below error:\n[/red bold]"
+                    )
+
                 files_str = "\n".join(f"'{f.file_path}' (Checksum: {f.checksum_local})" for f in already_uploaded)
                 print(
                     f"\n[red bold]Error: For the project: '{project_name}'\n"
@@ -336,7 +350,7 @@ def upload_files_command(
                     f"[red]{files_str}[/red]\n"
                     "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--resume' flag.[/bold green]"
                 )
-                raise typer.Exit(1)
+                raise typer.Exit(0 if dry_run else 1)
             else:
                 for file in already_uploaded:
                     all_skipped_uploads.append(
@@ -346,9 +360,18 @@ def upload_files_command(
                             reason=f"The file with checksum {file.checksum_local} already exists in the project",
                         )
                     )
-    else:
-        # we skip checksum validation when uploading
-        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
+
+    if dry_run:
+        if to_upload:
+            print("\n[green bold]The following files would have been uploaded:[/green bold]")
+            for file in to_upload:
+                print(f"- '{file.file_path}' -> would be stored as: '{file.file_path.name}' in the project")
+        if all_skipped_uploads:
+            print("\n[yellow bold]The following files would have been skipped from upload:[/yellow bold]")
+            for file in all_skipped_uploads:
+                print(f"- [yellow]'{file.file_path}' Reason: {file.reason}[/yellow]")
+
+        raise typer.Exit(0)
 
     # Split files into those that need single vs multipart upload
     files_below_threshold: list[ToUpload] = []
