@@ -229,9 +229,9 @@ def _check_if_view_option_is_supported(arg: str) -> str | None:
         return "Option '-R/--regions-file' is not supported in DivBase queries because external filter files are not supported."
     if _check_if_arg_matches_short_or_long_option(arg, "-T", "--targets-file"):
         return "Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported."
-    if _check_if_arg_matches_short_or_long_option(arg, "--threads", "--threads"):
+    if arg == "--threads" or arg.startswith("--threads="):
         return "Option '--threads' is handled by the DivBase server."
-    if _check_if_arg_matches_short_or_long_option(arg, "--verbosity", "--verbosity"):
+    if arg == "--verbosity" or arg.startswith("--verbosity="):
         return "Option '--verbosity' is handled by the DivBase server."
     if _check_if_arg_matches_short_or_long_option(arg, "-W", "--write-index"):
         return "Option '-W/--write-index' is handled by the DivBase server."
@@ -541,7 +541,7 @@ class BcftoolsQueryManager:
     The bottom layer of the class - run_bcftools() - is designed for either being run inside a Celery worker container
     upon receiving a task from the queue (async job), or to be run inside the same Docker container as the Celery worker with
     `docker exec` instead of the queue (synchronous job). Either way, the class expects that the worker container with the
-    name defined in CONTAINER_NAME is running.
+    name defined in BCFTOOLS_CONTAINER_NAME is running.
 
     NOTE! The current implementation does not handle starting the container.
 
@@ -573,7 +573,6 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = BCFTOOLS_CONTAINER_NAME
 
     def __init__(self, enable_subprocess_monitoring: bool = False):
         # this can be controlled by the worker config
@@ -596,8 +595,8 @@ class BcftoolsQueryManager:
         if not in_docker and not in_k8s:
             logger.info("Running outside Docker container, ensuring Docker container is available")
             try:
-                container_id = get_container_id(self.CONTAINER_NAME)
-                logger.info(f"Found the required {self.CONTAINER_NAME} container running with ID: {container_id}")
+                container_id = get_container_id(BCFTOOLS_CONTAINER_NAME)
+                logger.info(f"Found the required {BCFTOOLS_CONTAINER_NAME} container running with ID: {container_id}")
             except BcftoolsEnvironmentError:
                 raise
 
@@ -684,7 +683,7 @@ class BcftoolsQueryManager:
             current_inputs = output_temp_files
 
         if not commands_config_structure:
-            logger.error("No valid commands provided in input string")
+            raise BcftoolsPipeEmptyCommandError()
 
         return commands_config_structure
 
@@ -1053,12 +1052,12 @@ class BcftoolsQueryManager:
 
         return sample_names_per_VCF
 
-    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple, list[str]]:
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple[str, ...], list[str]]:
         """
         Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
         (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
-        Here, frozenset is used to create an immutable set of sample names for each VCF file.
-        sample_set_to_files then stores all files that contain the same sample set.
+        Each sample set is represented as a tuple of sample names (preserving order) that acts as a hashable dict key.
+        sample_set_to_files stores all files that share the same ordered sample set.
         """
         sample_set_to_files = {}
         for vcf_file, sample_list in sample_names_per_VCF.items():
@@ -1066,7 +1065,7 @@ class BcftoolsQueryManager:
             sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
         return sample_set_to_files
 
-    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[frozenset, list[str]]) -> bool:
+    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[tuple[str, ...], list[str]]) -> bool:
         """
         Helper method that looks at a mapping of sample set to VCF files and checks for non-overlapping sample names.
         Simply put, if any sample set in the input dict has more than one file, samples overlap between files

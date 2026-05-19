@@ -39,8 +39,8 @@ class NumericFilterContext:
 
 def run_sidecar_metadata_query(
     file: Path,
-    filter_string: str = None,
-    project_id: int = None,
+    filter_string: str | None = None,
+    project_id: int | None = None,
     vcf_dimensions_data: ProjectVCFDimensionsData | None = None,
 ) -> SampleMetadataQueryTaskResult:
     """
@@ -49,11 +49,14 @@ def run_sidecar_metadata_query(
     Takes vcf_dimensions_data fetched by an API call in the task layer and extracts the unique sample names.
 
     """
+    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
+        error_msg = f"No VCF dimensions data provided for project {project_id}. "
+        error_msg += "Please run 'divbase-cli dimensions update' first."
+        raise ValueError(error_msg)
+
     project_samples = set()
-    if vcf_dimensions_data and vcf_dimensions_data.vcf_files:
-        for vcf_entry in vcf_dimensions_data.vcf_files:
-            sample_names = vcf_entry.samples
-            project_samples.update(sample_names)
+    for vcf_entry in vcf_dimensions_data.vcf_files:
+        project_samples.update(vcf_entry.samples)
 
     sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
         filter_string=filter_string
@@ -63,11 +66,6 @@ def run_sidecar_metadata_query(
     unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
 
     logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
-
-    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
-        error_msg = f"No VCF dimensions data provided for project {project_id}. "
-        error_msg += "Please run 'divbase-cli dimensions update' first."
-        raise ValueError(error_msg)
 
     # sets are useful for uniqueness but they are not ordered. The sample-order in bcftools results files becomes non-derterministic if unique_filenames is a set.
     # This was discovered by the results file checksum e2e tests. Use an itermediate set seen_filenames for uniqueness and unique_filenames for as an ordered list.
@@ -194,7 +192,7 @@ class SidecarQueryManager:
         else:
             raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
 
-    def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
+    def run_query(self, filter_string: str | None = None) -> "SidecarQueryManager":
         """
         Method to run a query against the TSV data loaded by self.load_file(). The filter_string should be a semicolon-separated list of key:value pairs,
         where key is a column name and value is a comma-separated list of filter values.

@@ -127,8 +127,7 @@ def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, tar
     if (
         "wrong number of fields" in stderr_lower
         or "could not parse the line" in stderr_lower
-        or "number of columns" in stderr_lower
-        and "does not match the number of samples" in stderr_lower
+        or ("number of columns" in stderr_lower and "does not match the number of samples" in stderr_lower)
     ):
         raise TaskUserError(
             f"{target} contains malformed VCF record lines and cannot be processed by bcftools.\n"
@@ -143,8 +142,7 @@ def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, tar
 
     if (
         "truncated" in stderr_lower
-        or "bgzf" in stderr_lower
-        and "failed to read" in stderr_lower
+        or ("bgzf" in stderr_lower and "failed to read" in stderr_lower)
         or "eof marker is absent" in stderr_lower
     ):
         raise TaskUserError(

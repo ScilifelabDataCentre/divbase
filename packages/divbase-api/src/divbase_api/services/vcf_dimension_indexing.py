@@ -2,7 +2,6 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
 from divbase_api.services.bcftools_helpers import (
     _raise_task_user_error_from_bcftools_stderr,
@@ -17,8 +16,8 @@ logger = logging.getLogger(__name__)
 class VCFDimensions:
     variants: int
     sample_count: int
-    scaffolds: List[str]
-    sample_names: List[str]
+    scaffolds: list[str]
+    sample_names: list[str]
 
 
 class VCFDimensionCalculator:
@@ -76,7 +75,7 @@ class VCFDimensionCalculator:
             sample_names=sample_names,
         )
 
-    def _extract_sample_names_from_vcf_header(self, vcf_path: Path) -> List[str] | None:
+    def _extract_sample_names_from_vcf_header(self, vcf_path: Path) -> list[str] | None:
         """
         Extract sample names from the VCF header using bcftools. Reads only the header lines, so this is fast even for large VCFs.
 
