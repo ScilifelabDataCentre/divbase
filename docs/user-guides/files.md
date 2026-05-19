@@ -5,9 +5,13 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 !!! info "What is the project's file store?"
     - Each project in DivBase has its own separate, file store.
     - Files are versioned, so uploading a new file with the same name does not delete the existing file.
-    - You can access and restore previous versions of a file at any time.
+    - You can access and restore previous versions of a file at any time ([unless you hard deleted the file](#what-if-i-want-to-delete-a-file-permanently)).
     - When you view/download/stream files, you are always working with the latest version of that file by default, but you can also specify older versions if needed.
     - Every file uploaded to your project gets a unique `Version ID`. These IDs are used internally by DivBase to keep track of files and their versions, but you can also use them to access specific versions of files if needed
+
+!!! warning "Your Project's file store is not the same as a traditional file system"
+    - All files are stored in a flat structure (there is no concept of directories) and are accessed by their file name (and optionally version ID).
+    - If you upload a file from a path that includes directories the full path will NOT be included in the file name in DivBase. For example, `divbase-cli files upload path/to/data/sample_metadata.tsv`), becomes `sample_metadata.tsv` in the project file store.
 
 ## Quick links to each `divbase-cli files` subcommand
 
