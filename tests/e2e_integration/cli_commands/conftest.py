@@ -10,7 +10,6 @@ it is autoused, so it does not need to be specified in each test.
 import contextlib
 import logging
 
-import boto3
 import keyring
 import pytest
 from keyring.errors import KeyringError
@@ -144,28 +143,3 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.TOKENS_PATH.unlink(missing_ok=True)
 
     return factory
-
-
-@pytest.fixture
-def cleaned_project_bucket(CONSTANTS):
-    """
-    Ensure cleaned-project bucket is empty before and after test.
-
-    Use this for tests that require deterministic project bucket contents.
-    """
-    s3_resource = boto3.resource(
-        "s3",
-        endpoint_url=CONSTANTS["MINIO_URL"],
-        aws_access_key_id=CONSTANTS["BAD_ACCESS_KEY"],
-        aws_secret_access_key=CONSTANTS["BAD_SECRET_KEY"],
-    )
-
-    project_name = CONSTANTS["CLEANED_PROJECT"]
-    bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
-    # pylance does not understand boto3 resource return types.
-    bucket = s3_resource.Bucket(bucket_name)  # type: ignore
-    bucket.object_versions.delete()
-
-    yield project_name, bucket_name
-
-    bucket.object_versions.delete()
