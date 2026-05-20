@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from divbase_api.services.bcftools_helpers import get_container_id, run_bcftools
+from divbase_api.services.bcftools_helpers import BCFTOOLS_CONTAINER_NAME, get_container_id, run_bcftools
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
@@ -242,12 +242,12 @@ def test_get_container_id_subprocess_error(mock_run, bcftools_manager):
     mock_run.side_effect = subprocess.SubprocessError("Docker command failed")
 
     with pytest.raises(BcftoolsEnvironmentError) as excinfo:
-        get_container_id(bcftools_manager.CONTAINER_NAME)
+        get_container_id(BCFTOOLS_CONTAINER_NAME)
 
-    assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
+    assert BCFTOOLS_CONTAINER_NAME in str(excinfo.value)
 
     mock_run.assert_called_with(
-        ["docker", "ps", "--filter", f"name={bcftools_manager.CONTAINER_NAME}", "--format", "{{.ID}}"],
+        ["docker", "ps", "--filter", f"name={BCFTOOLS_CONTAINER_NAME}", "--format", "{{.ID}}"],
         capture_output=True,
         text=True,
         check=True,
@@ -270,15 +270,15 @@ def test_run_bcftools_container_not_found(mock_exists_in_docker, mock_get_contai
     Together, this should raise a BcftoolsEnvironmentError.
     """
     mock_exists_in_docker.return_value = False
-    mock_get_container_id.side_effect = BcftoolsEnvironmentError(bcftools_manager.CONTAINER_NAME)
+    mock_get_container_id.side_effect = BcftoolsEnvironmentError(BCFTOOLS_CONTAINER_NAME)
 
     with pytest.raises(BcftoolsEnvironmentError) as excinfo:
         run_bcftools("view -h sample.vcf")
 
-    assert bcftools_manager.CONTAINER_NAME in str(excinfo.value)
+    assert BCFTOOLS_CONTAINER_NAME in str(excinfo.value)
 
     mock_exists_in_docker.assert_called_with("/.dockerenv")
-    mock_get_container_id.assert_called_with(bcftools_manager.CONTAINER_NAME)
+    mock_get_container_id.assert_called_with(BCFTOOLS_CONTAINER_NAME)
 
 
 @pytest.mark.unit

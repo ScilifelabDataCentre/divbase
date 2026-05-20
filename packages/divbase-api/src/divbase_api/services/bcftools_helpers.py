@@ -19,7 +19,7 @@ BCFTOOLS_CONTAINER_NAME = (
 )
 
 
-def _is_in_kubernetes() -> bool:
+def is_in_kubernetes() -> bool:
     return "KUBERNETES_SERVICE_HOST" in os.environ
 
 
@@ -58,7 +58,7 @@ def run_bcftools(command: str, capture_output: bool = False, capture_stderr: boo
         raise BcftoolsCommandError(command=command, error_details="Empty bcftools command after parsing") from None
 
     in_docker = os.path.exists("/.dockerenv")
-    in_k8s = _is_in_kubernetes()
+    in_k8s = is_in_kubernetes()
     if capture_output:
         popen_kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True}
     elif capture_stderr:

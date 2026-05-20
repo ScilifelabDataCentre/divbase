@@ -6,7 +6,6 @@ and divbase_api unit tests without cross-file imports (which are unreliable unde
 pytest's --import-mode=importlib).
 """
 
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -463,10 +462,8 @@ def tsv_with_hash_headers(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_tsv_path():
+def valid_tsv_path(tmp_path):
     """Temporary valid TSV for query/filter tests."""
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".tsv") as tmp:
-        tmp.write("#Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
-        tmp_path = Path(tmp.name)
-    yield tmp_path
-    tmp_path.unlink()
+    tsv_file = tmp_path / "valid_filter_test.tsv"
+    tsv_file.write_text("#Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
+    return tsv_file

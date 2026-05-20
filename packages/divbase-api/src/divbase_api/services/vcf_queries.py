@@ -12,10 +12,10 @@ import psutil
 
 from divbase_api.services.bcftools_helpers import (
     BCFTOOLS_CONTAINER_NAME,
-    _is_in_kubernetes,
     _raise_task_user_error_from_bcftools_stderr,
     ensure_csi_index,
     get_container_id,
+    is_in_kubernetes,
     run_bcftools,
 )
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
@@ -591,7 +591,7 @@ class BcftoolsQueryManager:
         walltime_start = time.time()
 
         in_docker = os.path.exists("/.dockerenv")
-        in_k8s = _is_in_kubernetes()
+        in_k8s = is_in_kubernetes()
         if not in_docker and not in_k8s:
             logger.info("Running outside Docker container, ensuring Docker container is available")
             try:
@@ -702,7 +702,7 @@ class BcftoolsQueryManager:
         with self.temp_file_management() as temp_file_manager:
             logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
 
-            final_output_temp_files = None
+            final_output_temp_files: list[str] = []
 
             # Accumulate metrics across all commands
             total_cpu_seconds = 0.0
