@@ -49,7 +49,7 @@ def test_get_task_status_by_task_id_uses_results_backend(
                 stmt = (
                     select(CeleryTaskMeta.status)
                     .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
-                    .where(TaskHistoryDB.id == task_id)
+                    .where(TaskHistoryDB.id == int(task_id))
                 )
                 result = db.execute(stmt).scalar_one_or_none()
 
