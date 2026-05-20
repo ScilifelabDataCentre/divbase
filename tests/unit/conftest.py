@@ -427,7 +427,7 @@ def example_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
         SampleFileMapping(sample_id="S2", filename="sample1.vcf.gz"),
         SampleFileMapping(sample_id="S3", filename="sample2.vcf.gz"),
     ]
-    expected_temp_files = ["temp_subset_0_0.vcf.gz", "temp_subset_0_1.vcf.gz"]
+    expected_temp_files = ["temp_subset_0_0.bcf", "temp_subset_0_1.bcf"]
     return {
         "bcftools_inputs": BCFToolsInput(
             filenames=test_filenames,
