@@ -26,7 +26,7 @@ from rich import print
 from divbase_cli.cli_commands.file_cli import DOWNLOAD_DIR_OPTION, _pretty_print_download_results
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import PolledTaskNotFinalError, UnsupportedTaskTypeError
+from divbase_cli.cli_exceptions import PolledTaskNotFinalError
 from divbase_cli.config_resolver import (
     ensure_logged_in,
     resolve_download_dir,
@@ -256,13 +256,7 @@ def get_results_from_query_job_by_task_id(
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    try:
-        task_status = poll_task_until_final_state_reached(divbase_url=logged_in_url, task_id=task_id)
-    except UnsupportedTaskTypeError as e:
-        # BadParamter raises exit code 2
-        raise typer.BadParameter(
-            f"Task {task_id} has unsupported task type '{e.task_name}'. Only VCF query jobs are supported for this CLI command."
-        ) from e
+    task_status = poll_task_until_final_state_reached(divbase_url=logged_in_url, task_id=task_id)
 
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
@@ -312,7 +306,9 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> TaskH
     task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
 
     if task_results.name not in SUPPORTED_TASK_NAMES:
-        raise UnsupportedTaskTypeError(task_results.name)
+        raise typer.BadParameter(
+            f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."
+        )
 
     if task_results.status in FINAL_STATES:
         return task_results.status
