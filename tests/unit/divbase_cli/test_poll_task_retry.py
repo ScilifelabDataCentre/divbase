@@ -26,7 +26,7 @@ DIVBASE_URL = "http://localhost:8001/api"
 def _make_task_response(task_id: int, status: str) -> MagicMock:
     """Build a mock HTTP response as returned by make_authenticated_request for a task-history lookup."""
     mock = MagicMock()
-    mock.json.return_value = [{"id": task_id, "status": status}]
+    mock.json.return_value = [{"id": task_id, "status": status, "name": "tasks.bcftools_query"}]
     return mock
 
 
