@@ -23,8 +23,8 @@ import stamina
 import typer
 from rich import print
 
-from divbase_cli.cli_commands.file_cli import DOWNLOAD_DIR_OPTION, _pretty_print_download_results
-from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.file_cli import _pretty_print_download_results
+from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import PolledTaskNotFinalError
 from divbase_cli.config_resolver import (
@@ -241,7 +241,7 @@ def vcf_query(
 @query_app.command("get-vcf-results", help=GET_RESULTS_HELP_TEXT)
 def get_results_from_query_job_by_task_id(
     task_id: int = typer.Argument(..., help="Task ID of the query job to poll for results from."),
-    download_dir: Path = DOWNLOAD_DIR_OPTION,
+    download_dir: str = DOWNLOAD_DIR_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
