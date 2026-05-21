@@ -2,6 +2,8 @@
 Top-level pytest configuration for DivBase
 """
 
+REGRESSION_GUARD_PREFIX = "Regression guard failed:"
+
 
 def pytest_addoption(parser):
     """Custom command-line options to pytest. In this case to run tests marked as slow"""

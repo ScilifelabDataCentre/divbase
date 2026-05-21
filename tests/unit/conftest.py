@@ -6,7 +6,14 @@ and divbase_api unit tests without cross-file imports (which are unreliable unde
 pytest's --import-mode=importlib).
 """
 
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
 import pytest
+
+from divbase_api.services.metadata_queries import SidecarQueryManager
+from divbase_api.services.vcf_queries import BCFToolsInput, BcftoolsQueryManager, SampleFileMapping
 
 
 @pytest.fixture
@@ -394,3 +401,69 @@ def empty_list_tsv(tmp_path):
     p = tmp_path / "empty_list.tsv"
     p.write_text(content)
     return p
+
+
+@pytest.fixture
+def bcftools_manager() -> BcftoolsQueryManager:
+    """Return a BcftoolsQueryManager instance for unit testing."""
+    return BcftoolsQueryManager()
+
+
+@pytest.fixture
+def create_sidecar_manager():
+    def create_manager(file: Path):
+        return SidecarQueryManager(file=file)
+
+    return create_manager
+
+
+@pytest.fixture
+def example_sidecar_metadata_inputs_outputs() -> dict[str, Any]:
+    """Return sample bcftools inputs/outputs for manager config tests."""
+    test_filenames = ["sample1.vcf.gz", "sample2.vcf.gz"]
+    test_samples = [
+        SampleFileMapping(sample_id="S1", filename="sample1.vcf.gz"),
+        SampleFileMapping(sample_id="S2", filename="sample1.vcf.gz"),
+        SampleFileMapping(sample_id="S3", filename="sample2.vcf.gz"),
+    ]
+    expected_temp_files = ["temp_subset_0_0.bcf", "temp_subset_0_1.bcf"]
+    return {
+        "bcftools_inputs": BCFToolsInput(
+            filenames=test_filenames,
+            sample_and_filename_subset=test_samples,
+            sampleIDs=["S1", "S2", "S3"],
+        ),
+        "output_temp_files": expected_temp_files,
+    }
+
+
+@pytest.fixture
+def sample_tsv_file(tmp_path: Path) -> Path:
+    """Create a sample TSV file for SidecarQueryManager tests."""
+    data = {
+        "#Sample_ID": ["S1", "S2", "S3", "S4", "S5"],
+        "Population": ["Pop1", "Pop1", "Pop2", "Pop2", "Pop3"],
+        "Sex": ["M", "F", "M", "F", "M"],
+    }
+    df = pd.DataFrame(data)
+    file_path = tmp_path / "test_samples.tsv"
+    df.to_csv(file_path, sep="\t", index=False)
+    return file_path
+
+
+@pytest.fixture
+def tsv_with_hash_headers(tmp_path: Path) -> Path:
+    """Create a TSV file with # prefix in headers."""
+    data = {"#Sample_ID": ["S1", "S2"], "Population": ["Pop1", "Pop2"], "Filename": ["file1.vcf.gz", "file2.vcf.gz"]}
+    df = pd.DataFrame(data)
+    file_path = tmp_path / "hash_header.tsv"
+    df.to_csv(file_path, sep="\t", index=False)
+    return file_path
+
+
+@pytest.fixture
+def valid_tsv_path(tmp_path):
+    """Temporary valid TSV for query/filter tests."""
+    tsv_file = tmp_path / "valid_filter_test.tsv"
+    tsv_file.write_text("#Sample_ID\tFilename\tcol1\tcol2\nS1\tS1.vcf\tA\t1\nS2\tS2.vcf\tB\t2\nS3\tS3.vcf\tB\t3\n")
+    return tsv_file
