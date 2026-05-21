@@ -4,8 +4,6 @@ Below is a set of tips for users who want to use DivBase in scripts/pipelines/pr
 
 If you have any tips or suggestions to add to this page or any desired features, please let us know!
 
-TODO: E.G. how to wait for a query to be complete, and download the query results programmatically.
-
 ## Use Personal Access Tokens to Authenticate programmatically
 
 For scripts, pipelines, and HPC jobs the recommended approach is to use a **Personal Access Token (PAT)**. A PAT is a static bearer token that you create once via the website and pass to `divbase-cli` via an environment variable. When using a PAT, there is no login step and no password storage required.
