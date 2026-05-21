@@ -72,3 +72,7 @@ services:
       - /data/
     networks: !override
       - internal
+  cleanup-files-cron:
+    # workaround to disable this from running in tests as is it waste of resources
+    profiles:
+      - hard-delete

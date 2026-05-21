@@ -8,6 +8,7 @@ members = [
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",
+    "pytest-cov>=7.1.0",
     "pre-commit>=3.7.0",
     "pytest-env>=1.1.5",
     "pytest-playwright>=0.7.2",
@@ -16,7 +17,6 @@ dev = [
     "mkdocs>=1.6.1,<2.0", # 2.0.0 will break mkdocs-material
     "pymdown-extensions>=10.19.1",
     "mkdocs-material[imaging]>=9.7.0",
-    "virtualenv>=20.36.1", # state explictly to bump version for security reasons
 ]
 benchmarking = [
     "scipy>=1.16.0",

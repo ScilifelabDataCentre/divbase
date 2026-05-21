@@ -1,25 +1,30 @@
 """Unit tests for VCF queries modes in tasks.py"""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from divbase_api.services.queries import (
+import divbase_api.services.vcf_queries as queries_module
+from divbase_api.services.vcf_queries import (
     BCFToolsCommandConfig,
     BCFToolsInput,
     BcftoolsQueryManager,
     SampleFileMapping,
+    ensure_csi_index,
     extract_region_scaffolds_from_command,
     validate_user_submitted_bcftools_command,
 )
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData, ProjectVCFDimensionsEntry
 from divbase_api.worker.tasks import (
     VCFQuerySampleSelectionMode,
+    _calculate_pairwise_overlap_types_for_sample_sets,
+    _check_if_samples_can_be_combined_with_bcftools,
     _determine_sample_selection_mode,
     _resolve_inputs_for_all_samples_mode,
     _resolve_inputs_for_cli_samples_mode,
 )
 from divbase_lib.exceptions import BcftoolsCommandError, TaskUserError
+from tests.conftest import REGRESSION_GUARD_PREFIX
 
 
 class TestDetermineSampleSelectionMode:
@@ -313,12 +318,12 @@ class TestSamplesPlaceholderDetectionAndInjection:
             def poll():
                 return 0
 
-        def fake_run_bcftools(command: str):
+        def fake_run_bcftools(command: str, capture_output: bool = False, capture_stderr: bool = False):
             executed_commands.append(command)
             return DummyProc()
 
-        monkeypatch.setattr(manager, "run_bcftools", fake_run_bcftools)
-        monkeypatch.setattr(manager, "ensure_csi_index", lambda _file_path: None)
+        monkeypatch.setattr(queries_module, "run_bcftools", fake_run_bcftools)
+        monkeypatch.setattr(queries_module, "ensure_csi_index", lambda _file_path: None)
         monkeypatch.setattr(manager, "_log_file_size", lambda _file_path: None)
 
         cmd_config = BCFToolsCommandConfig(
@@ -432,19 +437,78 @@ class TestBcftoolsReturnCodeHandling:
             command="view -h file.vcf.gz",
         )
 
-    def test_ensure_csi_index_raises_on_non_zero_return_code(self):
+    def test_ensure_csi_index_raises_on_non_zero_return_code(self, tmp_path):
         """Test that ensure_csi_index raises BcftoolsCommandError with appropriate message when bcftools index command returns non-zero exit code."""
-        manager = BcftoolsQueryManager()
+        vcf_path = tmp_path / "input.vcf.gz"  # .csi absent — triggers indexing
+        index_proc = MagicMock()
+        index_proc.returncode = 1
+        index_proc.communicate.return_value = ("", "")
         with (
-            patch(
-                "divbase_api.services.queries.os.path.exists", return_value=False
-            ),  # Simulate missing index file to trigger indexing
-            patch.object(manager, "run_bcftools", return_value=self.DummyProc(returncode=1)),
+            patch("divbase_api.services.bcftools_helpers.run_bcftools", return_value=index_proc) as mock_run_bcftools,
             pytest.raises(BcftoolsCommandError, match="Process exited with code 1") as exc_info,
         ):
-            manager.ensure_csi_index("input.vcf.gz")
+            ensure_csi_index(vcf_path)
 
-        assert "index -f input.vcf.gz" in str(exc_info.value)
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
+        assert str(vcf_path) in str(exc_info.value)
+
+    def test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions(self, tmp_path):
+        """
+        Regression test (negative outcome): unsorted VCF coordinates must raise a user-facing TaskUserError.
+        Why: unsorted files cannot be indexed and would break bcftools orchestration with opaque errors otherwise.
+        Reference: docs/development/bcftools_task_constraints.md ("VCF files need to be sorted by position").
+        """
+        vcf_path = tmp_path / "input.vcf.gz"  # .csi absent — triggers indexing
+        unsorted_stderr = (
+            "[E::hts_idx_push] Unsorted positions on sequence #1: 22053057 followed by 17504018\n"
+            'index: failed to create index for "input.vcf.gz"\n'
+        )
+        index_proc = MagicMock()
+        index_proc.returncode = 1
+        index_proc.communicate.return_value = ("", unsorted_stderr)
+
+        with (
+            patch("divbase_api.services.bcftools_helpers.run_bcftools", return_value=index_proc) as mock_run_bcftools,
+            pytest.raises(TaskUserError) as exc_info,
+        ):
+            ensure_csi_index(vcf_path)
+
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
+        msg = str(exc_info.value)
+        assert "not sorted by position" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must mention 'not sorted by position' to guide the user."
+        )
+        assert "bcftools sort" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must include 'bcftools sort' as corrective guidance."
+        )
+        assert "input.vcf.gz" in msg, (
+            f"{REGRESSION_GUARD_PREFIX} TaskUserError must include the offending VCF filename."
+        )
+
+    def test_ensure_csi_index_skips_indexing_when_index_already_exists(self, tmp_path):
+        """Test that ensure_csi_index does not call run_bcftools when a .csi index already exists."""
+        vcf_path = tmp_path / "test.vcf.gz"
+        (tmp_path / "test.vcf.gz.csi").touch()  # create index so it exists
+        with patch("divbase_api.services.bcftools_helpers.run_bcftools") as mock_run_bcftools:
+            ensure_csi_index(vcf_path)
+
+        mock_run_bcftools.assert_not_called()
+
+    @pytest.mark.parametrize("filename", ["test.vcf.gz", "test.vcf"])
+    def test_ensure_csi_index_uses_full_filename_suffix_in_command(self, tmp_path, filename):
+        """
+        Test that the .csi index command includes the full filename suffix.
+        e.g. test.vcf.gz → index -f <path>/test.vcf.gz (not index -f <path>/test.vcf).
+        """
+        vcf_path = tmp_path / filename  # .csi absent — triggers indexing
+        index_proc = MagicMock()
+        index_proc.returncode = 0
+        index_proc.communicate.return_value = ("", "")
+
+        with patch("divbase_api.services.bcftools_helpers.run_bcftools", return_value=index_proc) as mock_run_bcftools:
+            ensure_csi_index(vcf_path)
+
+        mock_run_bcftools.assert_called_once_with(command=f"index -f {vcf_path}", capture_stderr=True)
 
     @pytest.mark.parametrize(
         "sample_names_map,non_overlapping,identifier,failing_prefix",
@@ -453,7 +517,7 @@ class TestBcftoolsReturnCodeHandling:
                 {"file1.bcf": ["S1"], "file2.bcf": ["S2"]},
                 True,
                 "job1",
-                "merge --force-samples",
+                "merge -Ou",
             ),
             (
                 {"file1.bcf": ["S1"], "file2.bcf": ["S1"]},
@@ -487,11 +551,10 @@ class TestBcftoolsReturnCodeHandling:
             patch.object(
                 manager, "_log_file_size", return_value=None
             ),  # Patch a None return to skip actual file size logging for this test
-            patch("divbase_api.services.queries.os.rename", return_value=None),
-            patch.object(
-                manager,
-                "run_bcftools",
-                side_effect=lambda command: (
+            patch("divbase_api.services.vcf_queries.os.rename", return_value=None),
+            patch(
+                "divbase_api.services.vcf_queries.run_bcftools",
+                side_effect=lambda command, capture_output=False, capture_stderr=False: (
                     self.DummyProc(1)
                     if command.startswith(failing_prefix)
                     and (len(command) == len(failing_prefix) or command[len(failing_prefix)] == " ")
@@ -503,3 +566,145 @@ class TestBcftoolsReturnCodeHandling:
             manager.merge_or_concat_bcftools_temp_files(list(sample_names_map.keys()), identifier=identifier)
 
         assert failing_prefix in str(exc_info.value)
+
+
+class TestSampleSetOverlapHelpers:
+    @pytest.mark.parametrize(
+        "sample_sets_dict,expected_identical_diff_order,expected_partly,expected_non_overlap",
+        [
+            (
+                {
+                    tuple(["S1", "S2", "S3"]): [],
+                    tuple(["S3", "S4"]): [],
+                    tuple(["S5", "S6"]): [],
+                },
+                [],
+                [(tuple(["S1", "S2", "S3"]), tuple(["S3", "S4"]))],
+                [(tuple(["S1", "S2", "S3"]), tuple(["S5", "S6"]))],
+            ),
+            (
+                {
+                    tuple(["A"]): [],
+                    tuple(["B"]): [],
+                    tuple(["C"]): [],
+                },
+                [],
+                [],
+                [
+                    (tuple(["A"]), tuple(["B"])),
+                    (tuple(["A"]), tuple(["C"])),
+                    (tuple(["B"]), tuple(["C"])),
+                ],
+            ),
+            (
+                {
+                    tuple(["X", "Y"]): [],
+                    tuple(["Y", "X"]): [],
+                },
+                [(tuple(["X", "Y"]), tuple(["Y", "X"]))],
+                [],
+                [],
+            ),
+        ],
+    )
+    def test_calculate_pairwise_overlap_types_for_sample_sets(
+        self,
+        sample_sets_dict,
+        expected_identical_diff_order,
+        expected_partly,
+        expected_non_overlap,
+    ):
+        """Test that _calculate_pairwise_overlap_types_for_sample_sets correctly calculates the pairwise overlap types for sample sets."""
+
+        result = _calculate_pairwise_overlap_types_for_sample_sets(sample_sets_dict)
+
+        assert isinstance(result.identical_elements_different_order, list)
+        assert isinstance(result.partly_overlapping, list)
+        assert isinstance(result.non_overlapping, list)
+
+        for expected in expected_identical_diff_order:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.identical_elements_different_order
+            )
+
+        for expected in expected_partly:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.partly_overlapping
+            )
+
+        for expected in expected_non_overlap:
+            assert any(
+                (expected[0], expected[1]) == pair or (expected[1], expected[0]) == pair
+                for pair in result.non_overlapping
+            )
+
+    @pytest.mark.parametrize(
+        "files_to_download,dimensions_index,should_raise_error,expected_message_part",
+        [
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B", "A"]},
+                    ]
+                },
+                True,
+                "identical elements but different order",
+            ),
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B", "C"]},
+                    ]
+                },
+                True,
+                "partly overlapping",
+            ),
+            (
+                ["file1.vcf.gz", "file2.vcf.gz"],
+                {
+                    "vcf_files": [
+                        {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A"]},
+                        {"vcf_file_s3_key": "file2.vcf.gz", "samples": ["B"]},
+                    ]
+                },
+                False,
+                "No unsupported sample sets found. Proceeding with bcftools pipeline.",
+            ),
+        ],
+    )
+    def test_check_if_samples_can_be_combined_with_bcftools_param(
+        self,
+        files_to_download,
+        dimensions_index,
+        should_raise_error,
+        expected_message_part,
+        caplog,
+    ):
+        """Test that check_if_samples_can_be_combined_with_bcftools raises TaskUserError when samples have incompatible overlaps."""
+        vcf_dimensions_data = ProjectVCFDimensionsData(
+            project_id=1,
+            vcf_file_count=len(dimensions_index["vcf_files"]),
+            vcf_files=[
+                ProjectVCFDimensionsEntry(
+                    vcf_file_s3_key=entry["vcf_file_s3_key"],
+                    s3_version_id=None,
+                    samples=entry.get("samples", []),
+                )
+                for entry in dimensions_index["vcf_files"]
+            ],
+        )
+
+        if should_raise_error:
+            with pytest.raises(TaskUserError) as excinfo:
+                _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
+            assert expected_message_part in str(excinfo.value)
+        else:
+            with caplog.at_level("INFO"):
+                _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
+            assert expected_message_part in caplog.text

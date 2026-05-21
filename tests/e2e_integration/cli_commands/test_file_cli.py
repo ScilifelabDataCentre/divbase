@@ -41,10 +41,6 @@ def start_with_clean_project(cleaned_project_bucket):
     """
     For tests that require a project with a clean bucket, this fixture will
     ensure that the CONSTANTS["CLEANED_PROJECT"]'s bucket is empty before and after running the test.
-
-    Caution:
-    If you modify the approach make sure your implementation does not just add delete markers.
-    The files need to be actually deleted.
     """
     yield
 
@@ -1170,7 +1166,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
 
     The duplicated file would not be in the 1st batch of files to be uploaded as well, but should prevent any file being uploaded.
 
-    NOTE: files upload "happy path" with pagination is convered by the fixture, so don't need a seperate test.
+    NOTE: files upload "happy path" with pagination is convered by the fixture, so don't need a separate test.
     """
     pagination_project = CONSTANTS["PAGINATION_PROJECT"]
     file_names, files_in_bucket = pagination_files_uploaded

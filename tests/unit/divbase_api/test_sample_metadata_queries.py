@@ -9,8 +9,8 @@ tests/unit/conftest.py.
 import pandas as pd
 import pytest
 
-from divbase_api.services import queries as queries_module
-from divbase_api.services.queries import SidecarQueryManager
+from divbase_api.services import metadata_queries as queries_module
+from divbase_api.services.metadata_queries import SidecarQueryManager
 from divbase_lib.exceptions import (
     SidecarColumnNotFoundError,
     SidecarMetadataFormatError,

@@ -93,7 +93,7 @@ class PreSignedDownloadResponse(BaseModel):
 class UploadSinglePartObjectRequest(BaseModel):
     """Request model to upload a single object as a single part using a pre-signed URL."""
 
-    name: str = Field(..., description="Name of the object to be uploaded")
+    name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
     content_length: int = Field(..., description="Size of the file in bytes")
     md5_hash: str | None = Field(None, description="Optional MD5 hash of the object for integrity check")
 
@@ -110,7 +110,7 @@ class PreSignedSinglePartUploadResponse(BaseModel):
 class CreateMultipartUploadRequest(BaseModel):
     """Request model to create a multipart upload using pre-signed URLs."""
 
-    name: str = Field(..., description="Name of the object to be uploaded")
+    name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
     content_length: int = Field(..., description="Size of the file in bytes")
 
 

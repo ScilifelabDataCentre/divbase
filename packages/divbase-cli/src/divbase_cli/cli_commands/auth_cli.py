@@ -73,6 +73,8 @@ def login(
 def logout():
     """
     Log out of the DivBase server.
+
+    Removes your locally stored credentials and invalidates the server-side refresh token.
     """
     logout_of_divbase()
     print("Logged out successfully.")

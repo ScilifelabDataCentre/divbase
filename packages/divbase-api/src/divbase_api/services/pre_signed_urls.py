@@ -11,6 +11,7 @@ from math import ceil
 
 import boto3
 from botocore.config import Config
+from fastapi import HTTPException, status
 
 from divbase_api.api_config import api_settings
 from divbase_lib.api_schemas.s3 import (
@@ -108,6 +109,7 @@ class S3PreSignedService:
         upload_args["ContentType"] = "application/octet-stream"
         put_headers["Content-Type"] = "application/octet-stream"
 
+        self.raise_if_invalid_content_length(content_length)
         upload_args["ContentLength"] = content_length  # boto3 expects this as an int.
         put_headers["Content-Length"] = str(content_length)
 
@@ -134,8 +136,10 @@ class S3PreSignedService:
 
         This action is performed by service account so we use the s3_client not the presigning client.
         """
-        response = self.s3_client.create_multipart_upload(Bucket=bucket_name, Key=object_name)
+        self.raise_if_invalid_content_length(content_length)
         number_of_parts = ceil(content_length / part_size)
+
+        response = self.s3_client.create_multipart_upload(Bucket=bucket_name, Key=object_name)
         return CreateMultipartUploadResponse(
             name=object_name,
             upload_id=response["UploadId"],
@@ -223,3 +227,10 @@ class S3PreSignedService:
                 "Continuing without error."
             )
         return AbortMultipartUploadResponse(name=object_name, upload_id=upload_id)
+
+    def raise_if_invalid_content_length(self, content_length: int) -> None:
+        if content_length <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot upload a file of size zero or less...",
+            )

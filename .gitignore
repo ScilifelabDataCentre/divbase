@@ -34,6 +34,12 @@ split_scaffold_files.txt
 scripts/benchmarking/*.yaml
 scripts/benchmarking/results
 
+# pytest-cov generate files
+.coverage
+.coverage.*
+htmlcov/
+docker/coverage-data/
+
 #MacOS artifacts
 .DS_Store
 
@@ -41,6 +47,7 @@ scripts/benchmarking/results
 .cache/
 # mkdocs auto generated files
 docs/cli/_auto_generated/*.md
+docs/releases/index.md
 
 # pypi 
 dist/

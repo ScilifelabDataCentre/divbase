@@ -30,7 +30,8 @@ class WorkerGeneralSettings:
 class WorkerS3Settings:
     """S3 configuration settings for the worker."""
 
-    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://host.docker.internal:9000")
+    endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "NOT_SET")
+    bucket_prefix: str = os.getenv("S3_BUCKET_PREFIX", "NOT_SET")
     access_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_ACCESS_KEY", "NOT_SET"))
     secret_key: SecretStr = SecretStr(os.getenv("S3_SERVICE_ACCOUNT_SECRET_KEY", "NOT_SET"))
 
@@ -59,7 +60,6 @@ class WorkerCronSettings:
     stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
-    soft_deleted_files_retention_days: int = int(os.getenv("SOFT_DELETED_FILES_RETENTION_DAYS", "30"))
     soft_deleted_project_version_retention_days: int = int(
         os.getenv("SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS", "30")
     )
@@ -81,6 +81,8 @@ class WorkerSettings:
             "SYNC_DATABASE_URL": self.general.sync_url,
             "CELERY_BROKER_URL": self.general.broker_url,
             "CELERY_RESULT_BACKEND": self.general.result_backend,
+            "S3_ENDPOINT_URL": self.s3.endpoint_url,
+            "S3_BUCKET_PREFIX": self.s3.bucket_prefix,
             "S3_SERVICE_ACCOUNT_ACCESS_KEY": self.s3.access_key,
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
