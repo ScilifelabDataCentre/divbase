@@ -429,7 +429,7 @@ def upload_files(
         "Without this flag, patterns only match files in the specified directory.",
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", "-d", help="If set, will show what files would be uploaded, but not actually upload them."
+        False, "--dry-run", "-n", help="If set, will show what files would be uploaded, but not actually upload them."
     ),
     disable_safe_mode: Annotated[
         bool,
@@ -447,20 +447,21 @@ def upload_files(
     Upload files to your project's store on DivBase.
     NOTE that directory structure is not preserved on upload, only the file name is used as the object name.
 
-    You can specify files directly as arguments (including glob patterns) or use --file-list.
-    Use --recursive / -R to expand glob patterns into subdirectories.
+    You can specify files directly as arguments including glob patterns (aka * or **) or use the --file-list option.
+    Use the flag --recursive / -R to expand glob patterns into subdirectories.
+    We recommend wrapping the glob pattern in quotes when using --recursive to ensure the correct behavior across different shells.
 
     Examples:
         # Upload multiple files by specifying them one after another
         divbase-cli files upload file1.vcf.gz file2.tsv
 
         # Upload all .vcf.gz files in the current directory
-        divbase-cli files upload *.vcf.gz
+        divbase-cli files upload "*.vcf.gz"
 
         # Upload all files in a directory (non-recursive)
-        divbase-cli files upload /path/to/data/*
+        divbase-cli files upload "/path/to/data/*"
 
-        # Upload all files in a directory and its subdirectories (yes, wrap the path in quotes to guarantee the right behaviour)
+        # Upload all files in a directory and its subdirectories
         divbase-cli files upload --recursive "/path/to/data/**"
 
         # Upload from a text file list (one file path per line)
@@ -488,11 +489,21 @@ def upload_files(
             if matched:
                 all_files.update(matched)
     if file_list:
+        missing_files = []
         with open(file_list) as f:
             for line in f:
                 path = Path(line.strip())
                 if path.is_file():
                     all_files.add(path)
+                else:
+                    missing_files.append(path)
+        if missing_files:
+            print(
+                "[red bold]Error: The following file paths provided in the --file-list do not exist or are not files:[/red bold]"
+            )
+            for path in missing_files:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
 
     if not all_files:
         print(NO_FILES_SPECIFIED_MSG)
@@ -525,6 +536,8 @@ def upload_files(
         for failed in uploaded_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
         raise typer.Exit(1)
+    elif not uploaded_results.successful:
+        print("\nNo files were uploaded.")
     else:
         print("\n[green bold]All files uploaded successfully![/green bold]")
 
@@ -693,7 +706,6 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
             "Note that while you can upload '.tbi' and '.csi' files they are not used by DivBase in queries, we create our own index files instead. \n"
             "If you want us to support another file type, please let us know.",
         )
-        raise typer.Exit(1)
 
     if unsupported_chars:
         print(
@@ -702,6 +714,8 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
             f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"
             "Please rename the files and try again.",
         )
+
+    if unsupported_file_types or unsupported_chars:
         raise typer.Exit(1)
 
 

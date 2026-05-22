@@ -122,10 +122,15 @@ You can upload files to your project's store using the `upload` command. Use spa
 divbase-cli files upload file1.vcf.gz path/to/file2.tsv
 
 # Upload all .vcf.gz files in the current directory using a glob
-divbase-cli files upload *.vcf.gz
+divbase-cli files upload "*.vcf.gz"
 
 # Upload all files in a directory using a glob
-divbase-cli files upload /path/to/data/*
+divbase-cli files upload "/path/to/data/*"
+
+# Upload all files in a directory and its subdirectories
+# Note that the folders in each file's path will be removed on upload.
+# for example: /path/to/data/sample_metadata.tsv will be uploaded as sample_metadata.tsv
+divbase-cli files upload --recursive "/path/to/data/**"
 
 # Upload from a text file list (one file path per line)
 divbase-cli files upload --file-list files_to_upload.txt

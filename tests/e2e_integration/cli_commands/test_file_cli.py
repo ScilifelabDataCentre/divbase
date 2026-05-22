@@ -454,9 +454,7 @@ def test_upload_recursive_duplicate_names_rejected(logged_in_edit_user_with_exis
     assert "samples.tsv" in result.stdout
 
 
-def test_upload_resume_skips_already_uploaded_and_uploads_new(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
-):
+def test_upload_resume_skips_already_uploaded_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that --resume skips files already in the project and uploads only new ones."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -477,31 +475,20 @@ def test_upload_resume_skips_already_uploaded_and_uploads_new(
     # with --resume flag, new should be uploaded, old should be skipped
     command = f"files upload --resume {existing_file} {new_file} --project {clean_project}"
     result = runner.invoke(app, command)
-
     assert result.exit_code == 0, result.output
     assert "skipped" in result.stdout.lower()
     assert "existing.tsv" in result.stdout
     assert "new.tsv" in result.stdout
     assert "successfully uploaded" in result.stdout.lower()
 
-
-def test_upload_resume_all_already_uploaded(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """Test that --resume with all files already uploaded exits successfully with all files skipped."""
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-
-    file = tmp_path / "already_there.tsv"
-    file.write_text("some content")
-
-    result = runner.invoke(app, f"files upload {file} --project {clean_project}")
-    assert result.exit_code == 0
-
-    # Re-run with --resume — should skip everything and still exit 0
-    result = runner.invoke(app, f"files upload --resume {file} --project {clean_project}")
-
+    # now run again with --resume, should skip both as they are now both uploaded, but not fail
+    command = f"files upload --resume {existing_file} {new_file} --project {clean_project}"
+    result = runner.invoke(app, command)
     assert result.exit_code == 0, result.output
     assert "skipped" in result.stdout.lower()
-    assert "already_there.tsv" in result.stdout
-    assert "would have been uploaded" not in result.stdout.lower()
+    assert "existing.tsv" in result.stdout
+    assert "new.tsv" in result.stdout
+    assert "no files were uploaded" in result.stdout.lower()
 
 
 def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
