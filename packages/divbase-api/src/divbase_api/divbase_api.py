@@ -31,7 +31,7 @@ from divbase_api.frontend_routes.projects import fr_projects_router
 from divbase_api.middleware import register_middleware
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
-from divbase_api.routes.core import core_router
+from divbase_api.routes.core import HealthCheckFilter, core_router
 from divbase_api.routes.project_versions import project_version_router
 from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
@@ -47,7 +47,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager that handles startup and shutdown of API server"""
     # startup
-    logger.info("Starting up DivBase API...")
+    logger.info(f"Starting up DivBase API in environment: {api_settings.general.environment}")
+
+    if api_settings.general.environment not in LOCAL_DEV_ENVIRONMENTS:
+        logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+        logger.info("Non-development environment detected, 200 health check logs will be filtered out.")
 
     api_settings.validate_api_settings()
     logger.info("All API settings are correctly set.")
