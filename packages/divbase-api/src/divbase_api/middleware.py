@@ -18,9 +18,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
+from divbase_api.api_config import api_settings
 from divbase_api.services.validate_cli_versions import cli_version_outdated
-from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
+from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY, LOCAL_DEV_ENVIRONMENTS
 
 IMAGE_FONT_EXTENSIONS = [".webp", ".svg", ".jpg", ".jpeg", ".png", ".woff", ".woff2", ".ttf"]
 CSS_JS_EXTENSIONS = [".css", ".js"]

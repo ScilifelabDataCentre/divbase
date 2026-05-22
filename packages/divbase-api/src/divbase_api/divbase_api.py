@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from divbase_api import __version__ as divbase_version
 from divbase_api.admin_panel import register_admin_panel
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
+from divbase_api.api_config import api_settings
 from divbase_api.crud.s3 import validate_s3_service_account
 from divbase_api.db import (
     check_db_migrations_up_to_date,
@@ -37,6 +37,7 @@ from divbase_api.routes.queries import query_router
 from divbase_api.routes.s3 import s3_router
 from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
+from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
 logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 

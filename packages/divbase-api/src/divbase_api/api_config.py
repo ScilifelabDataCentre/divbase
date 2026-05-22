@@ -14,8 +14,7 @@ from dataclasses import dataclass, field
 from pydantic import EmailStr, SecretStr
 
 from divbase_lib import __version__ as lib_version
-
-LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
+from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
 
 @dataclass

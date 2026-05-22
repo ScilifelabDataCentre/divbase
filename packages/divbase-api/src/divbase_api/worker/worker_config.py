@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 
 from pydantic import SecretStr
 
+from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
+
 
 @dataclass
 class WorkerGeneralSettings:
@@ -93,7 +95,7 @@ class WorkerSettings:
                 if setting.get_secret_value() == "NOT_SET":
                     raise ValueError(f"A required environment variable was not set: {setting_name=}")
                 if (
-                    self.general.environment not in ["local_dev", "test"]
+                    self.general.environment not in LOCAL_DEV_ENVIRONMENTS
                     and setting.get_secret_value() == "badpassword"
                 ):
                     raise ValueError(
