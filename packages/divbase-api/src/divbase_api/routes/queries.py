@@ -20,7 +20,7 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.services.queries import validate_user_submitted_bcftools_command
+from divbase_api.services.vcf_queries import validate_user_submitted_bcftools_command
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,

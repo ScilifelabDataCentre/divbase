@@ -1,42 +1,34 @@
-"""
-TODO - consider split metadata query and bcftools query into two separate modules.
-"""
-
 import contextlib
 import datetime
 import logging
 import os
-import re
 import shlex
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-import pandas as pd
 import psutil
 
-from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData
-from divbase_lib.api_schemas.queries import SampleFileMappingResult, SampleMetadataQueryTaskResult
+from divbase_api.services.bcftools_helpers import (
+    BCFTOOLS_CONTAINER_NAME,
+    _raise_task_user_error_from_bcftools_stderr,
+    ensure_csi_index,
+    get_container_id,
+    is_in_kubernetes,
+    run_bcftools,
+)
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
     BcftoolsEnvironmentError,
     BcftoolsPipeEmptyCommandError,
     BcftoolsPipeUnsupportedCommandError,
-    SidecarColumnNotFoundError,
-    SidecarInvalidFilterError,
-    SidecarMetadataFormatError,
-    SidecarNoDataLoadedError,
-    SidecarSampleIDError,
     TaskUserError,
 )
-from divbase_lib.metadata_validator import SharedMetadataValidator, ValidationCategory
 from divbase_lib.utils import split_semicolon_bcftools_command_segments
 
 logger = logging.getLogger(__name__)
-
 
 ###
 ### Data structures for the query managers and their helper functions
@@ -71,17 +63,6 @@ class BCFToolsCommandConfig:
     pipe_has_sample_placeholder: bool
     command_has_sample_placeholder: bool
     auto_sample_injection: bool
-
-
-@dataclass
-class NumericFilterContext:
-    """
-    Context for parsing numeric filter values in SidecarQueryManager.
-    """
-
-    key: str
-    filter_string_values: str
-    is_negated: bool
 
 
 @dataclass
@@ -248,9 +229,9 @@ def _check_if_view_option_is_supported(arg: str) -> str | None:
         return "Option '-R/--regions-file' is not supported in DivBase queries because external filter files are not supported."
     if _check_if_arg_matches_short_or_long_option(arg, "-T", "--targets-file"):
         return "Option '-T/--targets-file' is not supported in DivBase queries because external filter files are not supported."
-    if _check_if_arg_matches_short_or_long_option(arg, "--threads", "--threads"):
+    if arg == "--threads" or arg.startswith("--threads="):
         return "Option '--threads' is handled by the DivBase server."
-    if _check_if_arg_matches_short_or_long_option(arg, "--verbosity", "--verbosity"):
+    if arg == "--verbosity" or arg.startswith("--verbosity="):
         return "Option '--verbosity' is handled by the DivBase server."
     if _check_if_arg_matches_short_or_long_option(arg, "-W", "--write-index"):
         return "Option '-W/--write-index' is handled by the DivBase server."
@@ -556,13 +537,11 @@ class BcftoolsQueryManager:
     """
     A class that manages the execution of querys that require bcftools.
 
-    # TODO - support different file paths for input files.
-
     Intended for use with a Celery architechture to run the queries as synchronous or asynchronous jobs.
-    The bottom layer of the class - self.run_bcftools() - is designed for either being run inside a Celery worker container
+    The bottom layer of the class - run_bcftools() - is designed for either being run inside a Celery worker container
     upon receiving a task from the queue (async job), or to be run inside the same Docker container as the Celery worker with
     `docker exec` instead of the queue (synchronous job). Either way, the class expects that the worker container with the
-    name defined in CONTAINER_NAME is running.
+    name defined in BCFTOOLS_CONTAINER_NAME is running.
 
     NOTE! The current implementation does not handle starting the container.
 
@@ -594,15 +573,12 @@ class BcftoolsQueryManager:
     """
 
     VALID_BCFTOOLS_COMMANDS = ["view"]  # white-list of valid bcftools commands to run in the pipe.
-    CONTAINER_NAME = "divbase-worker-quick-1"  # for synchronous tasks, use this container name to find the container ID
-
-    # TODO: since we only support `view`, can there be a shortform where we skip `view` in the user input and just have the view flags? i.e. just "-s -r 1:1-100" instead of "view -s -r 1:1-100". ?
 
     def __init__(self, enable_subprocess_monitoring: bool = False):
         # this can be controlled by the worker config
         self.enable_subprocess_monitoring = enable_subprocess_monitoring
 
-    def execute_pipe(self, command: str, bcftools_inputs: BCFToolsInput, job_id: int) -> tuple[str, dict[str, float]]:
+    def execute_pipe(self, command: str, bcftools_inputs: BCFToolsInput, job_id: int) -> tuple[Path, dict[str, float]]:
         """
         Main entrypoint for executing executing divbase queries that require bcftools.
         First calls on a method to build a structure of input parameters for bcftools, and then
@@ -615,12 +591,12 @@ class BcftoolsQueryManager:
         walltime_start = time.time()
 
         in_docker = os.path.exists("/.dockerenv")
-        in_k8s = self._is_in_kubernetes()
+        in_k8s = is_in_kubernetes()
         if not in_docker and not in_k8s:
             logger.info("Running outside Docker container, ensuring Docker container is available")
             try:
-                get_container_id = self.get_container_id(self.CONTAINER_NAME)
-                logger.info(f"Found the required {self.CONTAINER_NAME} container running with ID: {get_container_id}")
+                container_id = get_container_id(BCFTOOLS_CONTAINER_NAME)
+                logger.info(f"Found the required {BCFTOOLS_CONTAINER_NAME} container running with ID: {container_id}")
             except BcftoolsEnvironmentError:
                 raise
 
@@ -707,13 +683,13 @@ class BcftoolsQueryManager:
             current_inputs = output_temp_files
 
         if not commands_config_structure:
-            logger.error("No valid commands provided in input string")
+            raise BcftoolsPipeEmptyCommandError()
 
         return commands_config_structure
 
     def process_bcftools_commands(
         self, commands_config: list[BCFToolsCommandConfig], identifier: str
-    ) -> tuple[str, dict[str, float]]:
+    ) -> tuple[Path, dict[str, float]]:
         """
         Method that handles the outer loop of the merge-last strategy: it loops over each of commands in
         the input and passes them to the command runner run_current_command() (which in turn handles the inner loop:
@@ -726,7 +702,7 @@ class BcftoolsQueryManager:
         with self.temp_file_management() as temp_file_manager:
             logger.info(f"Loaded configuration with {len(commands_config)} commands in the pipe")
 
-            final_output_temp_files = None
+            final_output_temp_files: list[str] = []
 
             # Accumulate metrics across all commands
             total_cpu_seconds = 0.0
@@ -816,12 +792,13 @@ class BcftoolsQueryManager:
             # TODO: ensure backend strips `-s LIST_OF_SAMPLES` to just `-s`
 
             # Ensure source VCFs are indexed *before* command execution.
-            self.ensure_csi_index(file)
+            ensure_csi_index(Path(file))
 
+            # Output goes to temp_file (-Ou -o), not stdout, so the stdout pipe stays empty — no deadlock risk.
             formatted_cmd = f"{cmd_with_samples} {file} -Ou -o {temp_file}"
 
             # Run bcftools and optionally monitor the subprocess
-            proc = self.run_bcftools(command=formatted_cmd)
+            proc = run_bcftools(command=formatted_cmd, capture_stderr=True)
 
             if self.enable_subprocess_monitoring:
                 current_cpu = 0.0  # Initialize to track CPU usage
@@ -882,7 +859,7 @@ class BcftoolsQueryManager:
                 logger.info("Bcftools subprocess finished (monitoring disabled)")
 
             # Ensure temporary output VCFs are indexed *after* command execution.
-            self.ensure_csi_index(temp_file)
+            ensure_csi_index(Path(temp_file))
             self._log_file_size(temp_file)
 
         # Calculate average memory
@@ -940,87 +917,13 @@ class BcftoolsQueryManager:
 
         return shlex.join(injected_args)
 
-    def run_bcftools(self, command: str) -> subprocess.Popen:
-        """
-        Methid to run a bcftools command inside a Docker container that has bcftools installed.
-        This method is specifically designed to with a Celery manager in an upper layer of the architechture.
-        In short, the CLI layer handles the task management and submission to Celery, which can be either synchronous or asynchronous.
-
-        Synchronous tasks (submitted with .apply()) skips the queue and tries to find the container id of the running container
-        and runs the command inside it using `docker exec` and `subprocess.Popen`. I.e. the host machine executes the command
-        inside the container.
-
-        Asynchronous tasks (submitted with .apply_async()) are queued, picked up by the celery worker container and then execeuted
-        inside the containter with `subprocess.Popen`. I.e. the container itself executes the command inside itself.
-
-        To identify if the job is running async, the method evaluates if the current process is running inside a docker container by checking
-        for the existence of the /.dockerenv file. If the file exists, it assumes that the command is run asynchronously inside the Celery worker
-        container. If the file does not exist, it assumes that the command is run synchronously and tries to find the container ID of the running
-        bcftools container using the get_container_id() method.
-
-        Returns the subprocess.Popen object so the caller can monitor resource usage.
-        """
-        logger.info(f"Running: bcftools {command}")
-        try:
-            command_args = shlex.split(command)
-        except ValueError as e:
-            raise BcftoolsCommandError(
-                command=command, error_details=f"Could not parse bcftools command arguments: {e}"
-            ) from None
-
-        if not command_args:
-            raise BcftoolsCommandError(command=command, error_details="Empty bcftools command after parsing") from None
-
-        in_docker = os.path.exists("/.dockerenv")
-        in_k8s = self._is_in_kubernetes()
-
-        if in_docker or in_k8s:
-            logger.debug("Running inside Celery worker Docker container, executing bcftools directly")
-            try:
-                proc = subprocess.Popen(["bcftools"] + command_args)
-                return proc
-            except Exception as e:
-                logger.error(f"Failed to run bcftools directly: {e}")
-                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
-        else:
-            try:
-                container_id = self.get_container_id(self.CONTAINER_NAME)
-                logger.debug(f"Executing command in container with ID: {container_id}")
-                docker_cmd = ["docker", "exec", container_id, "bcftools"] + command_args
-                proc = subprocess.Popen(docker_cmd)
-                return proc
-            except BcftoolsEnvironmentError:
-                raise
-            except Exception as e:
-                logger.error(f"Failed to run bcftools in container: {e}")
-                raise BcftoolsCommandError(command=command, error_details=str(e)) from e
-
-    def ensure_csi_index(self, file: str) -> None:
-        """
-        Helper method that ensures that the given VCF file has a .csi index. If not, create it using bcftools.
-
-        (bcftools can sometimes handle VCF files that lack an index file, but for consistency
-        it is better to create an index file for all VCF files that are created.)
-        """
-        index_file = f"{file}.csi"
-        if not os.path.exists(index_file):
-            index_command = f"index -f {file}"
-            proc = self.run_bcftools(command=index_command)
-            self._wait_proc_and_check_return_code(proc=proc, command=index_command)
-
-    def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> str:
+    def merge_or_concat_bcftools_temp_files(self, output_temp_files: list[str], identifier: str) -> Path:
         """
         Helper method that merges the final temporary files produced by pipe_query_command into a single output file.
 
         This method adds some temp files list used by temp_file_management() for cleanup after processing. Note that
         the results file is not included in this list. Clean up of the results file is handled by tasks.py: only
         after successfull upload to S3 will the results file be deleted.
-
-        # for all sets that have len(files) > 1, perform concat, save the temp filename to a new list
-        # for all sets that have len(files) == 1, save the temp filename to a new list
-        # for all the temp filenames in the new list, perform merge
-
-
         """
         # TODO handle naming of output file better, e.g. by using a timestamp or a unique identifier
 
@@ -1031,7 +934,7 @@ class BcftoolsQueryManager:
         self.temp_files.append(annotated_unsorted_output_file)
         self.temp_files.append(divbase_header_for_vcf)
 
-        output_file = f"{QUERY_RESULTS_FILE_PREFIX}{identifier}.vcf.gz"
+        output_file = Path(f"{QUERY_RESULTS_FILE_PREFIX}{identifier}.vcf.gz")
         logger.info("Trying to determine if sample names overlap between temp files...")
 
         sample_names_per_VCF = self._get_all_sample_names_from_vcf_files(output_temp_files)
@@ -1041,9 +944,8 @@ class BcftoolsQueryManager:
         if len(output_temp_files) > 1:
             if non_overlapping_sample_names:
                 logger.info("Sample names do not overlap between temp files, will continue with 'bcftools merge'")
-                merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
-                # TODO double check if this should use output_temp_files or if that is an old remnant. the code below uses sample_set_to_files but that is perhaps to decide between concat and merge
-                proc = self.run_bcftools(command=merge_command)
+                merge_command = f"merge -Ou -o {unsorted_output_file} {' '.join(output_temp_files)}"
+                proc = run_bcftools(command=merge_command, capture_stderr=True)
                 self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                 logger.info(f"Merged all temporary files into '{unsorted_output_file}'.")
                 self._log_file_size(unsorted_output_file)
@@ -1058,11 +960,11 @@ class BcftoolsQueryManager:
                         logger.debug("Sample set occurs in multiple files, will concat these files.")
                         concat_temp = f"concat_{identifier}_{hash(sample_set)}.bcf"
                         concat_command = f"concat -Ou -o {concat_temp} {' '.join(files)}"
-                        proc = self.run_bcftools(command=concat_command)
+                        proc = run_bcftools(command=concat_command, capture_stderr=True)
                         self._wait_proc_and_check_return_code(proc=proc, command=concat_command)
                         temp_concat_files.append(concat_temp)
                         self.temp_files.append(concat_temp)
-                        self.ensure_csi_index(concat_temp)
+                        ensure_csi_index(Path(concat_temp))
                         self._log_file_size(concat_temp)
                     elif len(files) == 1:
                         logger.debug(
@@ -1070,8 +972,8 @@ class BcftoolsQueryManager:
                         )
                         temp_concat_files.append(files[0])
                 if len(temp_concat_files) > 1:
-                    merge_command = f"merge --force-samples -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
-                    proc = self.run_bcftools(command=merge_command)
+                    merge_command = f"merge -Ou -o {unsorted_output_file} {' '.join(temp_concat_files)}"
+                    proc = run_bcftools(command=merge_command, capture_stderr=True)
                     self._wait_proc_and_check_return_code(proc=proc, command=merge_command)
                     logger.info(f"Merged all files (including concatenated files) into '{unsorted_output_file}'.")
                     self._log_file_size(unsorted_output_file)
@@ -1091,12 +993,12 @@ class BcftoolsQueryManager:
         annotate_command = (
             f"annotate -h {divbase_header_for_vcf} -Ou -o {annotated_unsorted_output_file} {unsorted_output_file}"
         )
-        proc = self.run_bcftools(command=annotate_command)
+        proc = run_bcftools(command=annotate_command, capture_stderr=True)
         self._wait_proc_and_check_return_code(proc=proc, command=annotate_command)
         self._log_file_size(annotated_unsorted_output_file)
 
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
-        proc = self.run_bcftools(command=sort_command)
+        proc = run_bcftools(command=sort_command, capture_stderr=True)
         self._wait_proc_and_check_return_code(proc=proc, command=sort_command)
         self._log_file_size(output_file)
         logger.info(
@@ -1120,24 +1022,6 @@ class BcftoolsQueryManager:
             except Exception as e:
                 logger.error(f"Failed to delete temporary file or index {temp_file}: {e}")
 
-    def get_container_id(self, container_name: str) -> str:
-        """
-        Helper method to get the container ID of the running bcftools Docker container.
-        Raises BcftoolsEnvironmentError if the container is not found or if the command fails.
-        The error can the be re-raised be the methods that call this method, e.g. run_bcftools() and execute_pipe().
-        """
-        try:
-            result = subprocess.run(
-                ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.ID}}"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            return result.stdout.strip()
-        except subprocess.SubprocessError as e:
-            logger.error(f"Docker command failed: {e}")
-            raise BcftoolsEnvironmentError(container_name) from e
-
     def _get_all_sample_names_from_vcf_files(self, output_temp_files: list[str]) -> dict[str, list[str]]:
         """
         Helper method that is used to determine if there are any sample names that recur across the temp files.
@@ -1147,27 +1031,33 @@ class BcftoolsQueryManager:
         """
         sample_names_per_VCF = {}
         for vcf_file in output_temp_files:
-            try:
-                result = subprocess.run(
-                    ["bcftools", "query", "-l", vcf_file],
-                    capture_output=True,
-                    text=True,
-                    check=True,
+            sample_extraction_command = f"query -l {vcf_file}"
+            proc = run_bcftools(command=sample_extraction_command, capture_output=True)
+            stdout, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                stderr = (stderr or "").strip()
+                _raise_task_user_error_from_bcftools_stderr(
+                    stderr=stderr,
+                    operation="extracting sample names from a temporary BCF file",
+                    target=f"temporary file '{vcf_file}'",
                 )
-                sample_names = result.stdout.strip().split("\n")
-                sample_names_per_VCF[vcf_file] = sample_names if sample_names != [""] else []
-            except subprocess.SubprocessError as e:
-                logger.error(f"Failed to get sample names from {vcf_file}: {e}")
-                raise
+                raise BcftoolsCommandError(
+                    command=sample_extraction_command,
+                    error_details=stderr or f"Process exited with code {proc.returncode}",
+                ) from None
+
+            sample_names = (stdout or "").strip().split("\n")
+            sample_names_per_VCF[vcf_file] = sample_names if sample_names != [""] else []
 
         return sample_names_per_VCF
 
-    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple, list[str]]:
+    def _group_vcfs_by_sample_set(self, sample_names_per_VCF: dict[str, list[str]]) -> dict[tuple[str, ...], list[str]]:
         """
         Helper method that groups VCF files by their sample sets. VCF files that contain the same sample set
         (=completely overlapping samples) need to be combined using bcftools concat instead of bcftools merge.
-        Here, frozenset is used to create an immutable set of sample names for each VCF file.
-        sample_set_to_files then stores all files that contain the same sample set.
+        Each sample set is represented as a tuple of sample names (preserving order) that acts as a hashable dict key.
+        sample_set_to_files stores all files that share the same ordered sample set.
         """
         sample_set_to_files = {}
         for vcf_file, sample_list in sample_names_per_VCF.items():
@@ -1175,18 +1065,12 @@ class BcftoolsQueryManager:
             sample_set_to_files.setdefault(sample_set, []).append(vcf_file)
         return sample_set_to_files
 
-    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[frozenset, list[str]]) -> bool:
+    def _check_non_overlapping_sample_names(self, sample_set_to_files: dict[tuple[str, ...], list[str]]) -> bool:
         """
         Helper method that looks at a mapping of sample set to VCF files and checks for non-overlapping sample names.
         Simply put, if any sample set in the input dict has more than one file, samples overlap between files
         """
         return not any(len(files) > 1 for files in sample_set_to_files.values())
-
-    def _is_in_kubernetes(self) -> bool:
-        """
-        Check if k8s environment variable is set in containter.
-        """
-        return "KUBERNETES_SERVICE_HOST" in os.environ
 
     def _prepare_txt_with_divbase_header_for_vcf(self, header_filename: str) -> None:
         """
@@ -1222,711 +1106,23 @@ class BcftoolsQueryManager:
         """
         Wait for a bcftools subprocess and raise if it failed.
         """
-        returncode = proc.wait()
+        proc_stdout = getattr(proc, "stdout", None)
+        proc_stderr = getattr(proc, "stderr", None)
+        if proc_stdout is not None or proc_stderr is not None:
+            _, stderr = proc.communicate()
+            returncode = proc.returncode
+        else:
+            returncode = proc.wait()
+            stderr = ""
+
         if returncode != 0:
+            stderr = (stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation=f"running command 'bcftools {command}'",
+                target="the current query pipeline step",
+            )
             raise BcftoolsCommandError(
                 command=command,
-                error_details=f"Process exited with code {returncode}",
+                error_details=stderr or f"Process exited with code {returncode}",
             ) from None
-
-
-###
-### Sample metadadata query manager and helper functions
-###
-
-
-def run_sidecar_metadata_query(
-    file: Path,
-    filter_string: str = None,
-    project_id: int = None,
-    vcf_dimensions_data: ProjectVCFDimensionsData | None = None,
-) -> SampleMetadataQueryTaskResult:
-    """
-    Run a query on a sidecar metadata TSV file and map samples to VCF files.
-
-    Takes vcf_dimensions_data fetched by an API call in the task layer and extracts the unique sample names.
-
-    """
-    project_samples = set()
-    if vcf_dimensions_data and vcf_dimensions_data.vcf_files:
-        for vcf_entry in vcf_dimensions_data.vcf_files:
-            sample_names = vcf_entry.samples
-            project_samples.update(sample_names)
-
-    sidecar_manager = SidecarQueryManager(file=file, project_samples=project_samples).run_query(
-        filter_string=filter_string
-    )
-    query_message = sidecar_manager.query_message
-    warnings = sidecar_manager.warnings
-    unique_sample_ids = sidecar_manager.get_unique_values("Sample_ID")
-
-    logger.info(f"Metadata query returned {len(unique_sample_ids)} unique sample IDs")
-
-    if not vcf_dimensions_data or not vcf_dimensions_data.vcf_files:
-        error_msg = f"No VCF dimensions data provided for project {project_id}. "
-        error_msg += "Please run 'divbase-cli dimensions update' first."
-        raise ValueError(error_msg)
-
-    sample_and_filename_subset: list[SampleFileMapping] = []
-    unique_filenames = set()
-
-    for vcf_entry in vcf_dimensions_data.vcf_files:
-        filename = vcf_entry.vcf_file_s3_key
-        sample_names = vcf_entry.samples
-
-        for sample_id in sample_names:
-            if sample_id in unique_sample_ids:
-                sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
-                unique_filenames.add(filename)
-
-    return SampleMetadataQueryTaskResult(
-        sample_and_filename_subset=[
-            SampleFileMappingResult(sample_id=entry.sample_id, filename=entry.filename)
-            for entry in sample_and_filename_subset
-        ],
-        unique_sample_ids=list(unique_sample_ids),
-        unique_filenames=list(unique_filenames),
-        query_message=query_message,
-        warnings=warnings,
-    )
-
-
-class SidecarQueryManager:
-    """
-    A class that manages the execution queries on sidecar metadata files.
-
-    Expects a TSV file with a header row and tab-separated values.
-    The class provides methods to load the TSV file into a pandas DataFrame, run queries against the data,
-    and retrieve unique values from specific columns.
-
-    TODO - consider seperation of concerns: this class currently handles both loading the TSV file and running queries on it.
-    TODO - some of the __init__ params are perhaps better as properties?
-    """
-
-    def __init__(self, file: Path, project_samples: set[str] | None = None):
-        self.file = file
-        self.project_samples = project_samples
-        self.filter_string = None
-        self.df = None
-        self.metadata_validator = None
-        self.query_result = None
-        self.query_message: str = ""
-        self.numeric_columns: list[str] = []
-        self.string_columns: list[str] = []
-        self.mixed_type_columns: list[str] = []
-        self.warnings: list[str] = []
-        self.load_file()
-
-    def load_file(self) -> "SidecarQueryManager":
-        """
-        Method that loads the TSV file into a pandas DataFrame. Assumes that the first row is a header row, and that the file is tab-separated.
-        Also removes any leading '#' characters from the column names.
-
-        Uses the warning and error category Enums from SharedMetadataValidator logic to raise errors or send warnings to the user.
-        """
-        try:
-            logger.info(f"Loading sidecar metadata file: {self.file}")
-
-            # Note! The SharedMetadataValidator is for checks on the contents of the TSV file. The logic is shared between this class and the client-side ClientSideMetadataTSVValidator.
-            # There are several helper methods for the filtering logic in this class, but they are for the query filters and are not related to the validation of the TSV file contents.
-            self.metadata_validator = SharedMetadataValidator(
-                file_path=self.file,
-                project_samples=self.project_samples,
-                skip_dimensions_check=(self.project_samples is None),
-            )
-            result = self.metadata_validator.load_and_validate()
-
-            if result.errors:
-                # Note! The order of these errors matters. The first error in the list is the one that is raised, so more critical errors should be placed higher in the order than less critical errors.
-                first_encountered_error = result.errors[0]
-                if first_encountered_error.category == ValidationCategory.FILE_READ:
-                    raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file")
-                elif first_encountered_error.category == ValidationCategory.SAMPLE_ID_COLUMN:
-                    raise SidecarColumnNotFoundError(first_encountered_error.message)
-                elif first_encountered_error.category == ValidationCategory.SAMPLE_ID_VALUE:
-                    raise SidecarSampleIDError(first_encountered_error.message)
-                else:
-                    raise SidecarMetadataFormatError(first_encountered_error.message)
-
-            if result.warnings:
-                self.warnings.extend(
-                    w.message
-                    for w in result.warnings
-                    if w.category in (ValidationCategory.DIMENSIONS, ValidationCategory.FORMAT)
-                )
-
-            self.df = result.df
-            self.numeric_columns = result.numeric_columns
-            self.string_columns = result.string_columns
-            self.mixed_type_columns = result.mixed_type_columns
-
-        except (
-            SidecarSampleIDError,
-            SidecarColumnNotFoundError,
-            SidecarInvalidFilterError,
-            SidecarMetadataFormatError,
-            SidecarNoDataLoadedError,
-        ):
-            # Let validation errors propagate directly to user with specific error messages
-            raise
-        except Exception as e:
-            # Only wrap unexpected errors (file I/O, pandas errors, etc.)
-            raise SidecarNoDataLoadedError(file_path=self.file, submethod="load_file") from e
-        return self
-
-    def get_unique_values(self, column: str) -> list:
-        """
-        Method to fetch unique values from a specific column in the query result. Intended to be invoked on a SidecarQueryManager
-        instance after a query has been run with run_query().
-        """
-        if self.query_result is None:
-            raise SidecarColumnNotFoundError("No query result available. Run run_query() first.")
-
-        if column in self.query_result.columns:
-            return self.query_result[column].unique().tolist()
-        else:
-            raise SidecarColumnNotFoundError(f"Column '{column}' not found in query result")
-
-    def run_query(self, filter_string: str = None) -> "SidecarQueryManager":
-        """
-        Method to run a query against the TSV data loaded by self.load_file(). The filter_string should be a semicolon-separated list of key:value pairs,
-        where key is a column name and value is a comma-separated list of filter values.
-        For example: "key1:value1,value2;key2:value3,value4".
-
-        The TSV that is loaded into the pandas DataFrame can have both string and numeric columns.
-        - String columns are matched to filter string values with OR logic: if ANY value in a cell matches ANY filter value, the row matches.
-        - Numeric columns support:
-            - Inequalities: ">25", "<=40" (checks if any cell value satisfies the condition)
-            - Ranges: "20-40" (checks if any cell value is within the range)
-            - Discrete values: "25,30,50" (checks if any cell value matches any filter value)
-            - All are combined with OR logic
-
-        Filtering using the ! (NOT) operator:
-        - "!" must prefix the filter value, e.g. "key:!value" means that rows with "value" in the "key" column should be excluded.
-        - Numeric examples: "Population:!2" (exclude 2), "Age:<30,!25" (less than 30 but not 25), "Weight:!20-40" (exclude range 20-40)
-        - String examples: "Area:!North" (exclude North), "Region:East,West,!South" (East or West but not South)
-        - NOT conditions are applied with AND logic after positive conditions have been applied: rows must NOT match any negated value
-
-        Filter string values in the query vs. cell values in the TSV:
-        - Filter strings are handled per semicolon-separated key-value pair: in "key1:value1,value2;key2:value3,value4"
-          "key1:value1,value2" is handled separately from "key2:value3,value4".
-        - Filter string values can be comma-separated, e.g. "value1,value2" in "key1:value1,value2" and each filter string value is handled separately.
-        - Cells can have multi-values as long as Python list syntax is used in the TSV cell, e.g. [25, 30, 35].
-        - Matching of filter string to cell values uses OR logic: if ANY value in a cell matches ANY filter value, the row matches.
-
-        Note:
-        Even though multi-value cells now use Python list syntax (e.g., [1, 2, 3]), the validator and query logic still check for semicolons and commas in plain string cells.
-        This is  because: semicolons and commas have special meaning in the query filter syntax (semicolon separates key-value pairs, comma separates filter values).
-        If a user enters a semicolon or comma in a plain string cell (not a list), it may cause confusion or unexpected query results, as the query parser may split on these characters and thus will not be able to match against them.
-        Warnings are issued to help users avoid ambiguous or unintended filter behavior.
-
-        Summary of how different input filter values are handled:
-        - If the filter_string is empty, all records are returned.
-        - If the filter_string is None, an error is raised.
-        - If the filter_string is not empty, the method filters the dataframe based on the provided filter_string.
-        - If any of the keys in the filter_string are not found in the dataframe columns, a warning is logged and those conditions are skipped.
-        - If none of the filter string values match any cell values in the dataframe, a warning is logged and all records are returned.
-        - If the filter_string is invalid, a SidecarInvalidFilterError is raised.
-
-        The method returns the SidecarQueryManager instance with the query_result and query_message. The former is the filtered DataFrame results,
-        and the latter is filter_string used for the query.
-        """
-
-        if self.df is None:
-            raise SidecarNoDataLoadedError(
-                file_path=self.file, submethod="run_query", error_details="No data loaded. Call load_file() first."
-            )
-
-        if filter_string is not None:
-            self.filter_string = filter_string
-
-        if self.filter_string == "":
-            logger.warning("Empty filter provided - returning ALL records. This may be a large result set.")
-            self.query_result = self.df
-            self.query_message = "ALL RECORDS (no filter)"
-            return self
-
-        if self.filter_string is None:
-            raise SidecarInvalidFilterError("Filter cannot be None. Use an empty string ('') if you want all records.")
-
-        key_values = self.filter_string.split(";")
-        filter_conditions = []
-
-        # 1. Parse the input filter string and build a list of boolean conditions to apply to the dataframe
-        for key_value in key_values:
-            if not key_value.strip():
-                continue
-            try:
-                key, filter_string_values = key_value.split(":", 1)
-                key = key.strip()
-                filter_string_values = filter_string_values.strip()
-
-                if key not in self.df.columns:
-                    warning_msg = f"Column '{key}' not found in the TSV file. Skipping this filter condition."
-                    logger.warning(warning_msg)
-                    self.warnings.append(warning_msg)
-                    continue
-
-                is_numeric = key in self.numeric_columns
-
-                # Check if type consistency and return warnings to users if applicable.
-                # If the column is treated as string, check for potential user mistakes (e.g. using numeric filter syntax on a string column that contains numeric-looking values):
-                # 1. Warn if the column has mixed types (some values look numeric) and that the column will be treat as string type.
-                # 2. Warn if the filter uses numeric syntax on this string column. Do not raise error.
-                if not is_numeric:
-                    is_mixed = key in self.mixed_type_columns
-
-                    problematic_filter_values = self._detect_numeric_filter_syntax_on_string_column(
-                        key, filter_string_values
-                    )
-
-                    if is_mixed or problematic_filter_values:
-                        warning_lines = [f"Column '{key}':"]
-                        if is_mixed:
-                            warning_lines.append("      - Contains mixed types (both numeric and non-numeric values).")
-                            warning_lines.append("        This column is treated as a string column.")
-                        if problematic_filter_values:
-                            warning_lines.append(
-                                f"      - Your filter contains comparison operators {problematic_filter_values}, "
-                                "which are not supported on string columns."
-                            )
-                            warning_lines.append(
-                                "        DivBase comparison operators (>, <, >=, <=) only work on numeric columns."
-                            )
-                            warning_lines.append(
-                                f"        Use exact string matching instead (e.g., '{key}:value1,value2')."
-                            )
-                        warning_msg = "\n".join(warning_lines)
-                        logger.warning(warning_msg)
-                        self.warnings.append(warning_msg)
-
-                # Handle numeric filtering: inequalities, ranges, and discrete values (all with OR logic)
-                # e.g., "Weight:>25,<30,50" or "Weight:20-40,50,>100"
-                # Supports filtering on semicolon-separated values in cells in the TSV: e.g. "25;30;35"
-                # Also handles columns that pandas infers as strings but contain numeric values with semicolons (e.g., "1;2;3")
-                # Also supports NOT operator with ! prefix: e.g., "Weight:!25" or "Weight:<4,!2"
-                if is_numeric:
-                    filter_string_values_list = self._split_filter_values(filter_string_values)
-
-                    # Negated values are those that start with "!" in the filter string
-                    positive_values, negated_values = self._separate_positive_and_negated_values(
-                        filter_values=filter_string_values_list
-                    )
-
-                    positive_filter_context = NumericFilterContext(
-                        key=key,
-                        filter_string_values=filter_string_values,
-                        is_negated=False,
-                    )
-
-                    inequality_conditions, range_conditions, discrete_values = self._parse_numeric_filter_values(
-                        values_to_process=positive_values,
-                        context=positive_filter_context,
-                    )
-
-                    negated_filter_context = NumericFilterContext(
-                        key=key,
-                        filter_string_values=filter_string_values,
-                        is_negated=True,
-                    )
-                    negated_inequality_conditions, negated_range_conditions, negated_discrete_values = (
-                        self._parse_numeric_filter_values(
-                            values_to_process=negated_values,
-                            context=negated_filter_context,
-                        )
-                    )
-
-                    # Combine multiple conditions (inequality, range, discrete values) with OR logic
-                    conditions = self._build_condition_list(
-                        inequality_conditions=inequality_conditions,
-                        range_conditions=range_conditions,
-                        discrete_values=discrete_values,
-                        key=key,
-                    )
-
-                    negated_conditions = self._build_condition_list(
-                        inequality_conditions=negated_inequality_conditions,
-                        range_conditions=negated_range_conditions,
-                        discrete_values=negated_discrete_values,
-                        key=key,
-                    )
-
-                    if conditions or negated_conditions:
-                        # First combine all positive conditions with OR logic. Can be None if there are no positive conditions, e.g. if the filter string only contains negated conditions like "Weight:!20-40"
-                        base_condition = self._combine_conditions_with_or(conditions=conditions) if conditions else None
-                        # Then apply negated conditions with AND logic: rows must NOT match any negated condition.
-                        combined = self._apply_not_conditions(
-                            base_condition=base_condition, negated_conditions=negated_conditions
-                        )
-
-                        if not combined.any():
-                            warning_msg = f"No values in column '{key}' match the filter: {filter_string_values}"
-                            logger.warning(warning_msg)
-                            self.warnings.append(warning_msg)
-                        filter_conditions.append(combined)
-
-                    else:
-                        warning_msg = f"No valid numeric values, ranges, or inequalities provided for column '{key}'. Filter condition will not match any rows."
-                        logger.warning(warning_msg)
-                        self.warnings.append(warning_msg)
-                else:
-                    # Non-numeric column: handle as discrete string values
-                    # Supports NOT operator with ! prefix: e.g., "Area:!North" or "Area:North,!South"
-                    # Supports quoted values with commas: e.g., 'Area:"North,South"' matches the literal string
-                    filter_string_values_list = self._split_filter_values(filter_string_values)
-
-                    positive_values, negated_values = self._separate_positive_and_negated_values(
-                        filter_values=filter_string_values_list
-                    )
-
-                    # Build condition
-                    if positive_values or negated_values:
-                        base_condition = (
-                            self._create_string_condition(key=key, target_values=positive_values)
-                            if positive_values
-                            else None
-                        )
-                        negated_conditions = (
-                            [self._create_string_condition(key=key, target_values=negated_values)]
-                            if negated_values
-                            else []
-                        )
-
-                        condition = self._apply_not_conditions(
-                            base_condition=base_condition, negated_conditions=negated_conditions
-                        )
-
-                        if not condition.any():
-                            warning_msg = (
-                                f"No results for the filter {filter_string_values_list} were found in column '{key}'."
-                            )
-                            logger.warning(warning_msg)
-                            self.warnings.append(warning_msg)
-                        filter_conditions.append(condition)
-            except SidecarInvalidFilterError:
-                # Allow specific validation errors (like "contains commas") to propagate unchanged.
-                # This preserves detailed error messages for user-facing exceptions.
-                raise
-            except Exception as e:
-                raise SidecarInvalidFilterError(
-                    f"Invalid filter format: '{key_value}'. Expected format 'key:value1,value2' or 'key:min-max' for numeric ranges"
-                ) from e
-
-        # 2. Apply the final boolean filters on the dataframe
-        if filter_conditions:
-            combined_condition = pd.Series(True, index=self.df.index)
-            # Iteratively combine each condition in filter_conditions to create a final combined condition where each row must satisfy all filter conditions to be included.
-            for condition in filter_conditions:
-                # The ampersand (&) is pandas syntax for element-wise AND between boolean Series.
-                combined_condition = combined_condition & condition
-
-            self.query_result = self.df[combined_condition].copy()
-            self.query_message = self.filter_string
-        else:
-            raise SidecarInvalidFilterError(
-                f"Invalid filter conditions: no valid filter conditions could be parsed from '{self.filter_string}'. "
-                "Please check your filter keys, value spelling, and syntax. "
-                "Expected format: 'Key:Value1,Value2' or 'Key:min-max' for numeric ranges."
-            )
-
-        return self
-
-    def _detect_numeric_filter_syntax_on_string_column(self, key: str, filter_string_values: str) -> list[str]:
-        """
-        Helper method for the filtering logic to detect when a user's filter string contains inequality operators
-        (e.g. ">25", ">=10", "<North", "<=abc") on a column that is treated as string.
-
-        Detects any use of inequality operators (>, <, >=, <=) as a prefix, regardless of whether the
-        value after the operator is numeric or not. E.g. ">5" and ">North".
-
-
-        Doesn't flag range-like filter values like "1-2" since these are common string values
-        (e.g., hyphenated IDs or names) and will correctly match via string matching.
-
-        Returns a list of the problematic filter values for use in a warning messages.
-        """
-        problematic_filter_values = []
-        values = self._split_filter_values(filter_string_values)
-        for filter_value in values:
-            filter_value = filter_value.strip().lstrip("!")  # strip negation prefix for checking
-            if not filter_value:
-                continue
-            # Check for inequality operators:
-            if re.match(r"^(>=|<=|>|<).+$", filter_value):
-                problematic_filter_values.append(filter_value)
-        return problematic_filter_values
-
-    def _split_filter_values(self, filter_values_str: str) -> list[str]:
-        """
-        Split comma-separated filter-value strings.
-
-        Designed to handle cases with filter values that contain commas or other special characters by allowing users to wrap such values in double quotes.
-        For example, if a TSV cell contains the literal string: `North, South`, the CLI filter must be wrapped in double quotes so the comma is not
-        treated as a value separator:
-
-            divbase-cli query tsv 'Area:"North, South"'
-
-        Additionally, the filter string itself must be wrapped in single quotes to prevent the shell from interpreting the inner double quotes.
-        Only double-quote quoting is supported inside filter values; single quotes inside the filter string are treated as literal characters
-        (i.e. ``"Area:'North, South'"`` is not supported.).
-
-        The ``!`` NOT operator is preserved as part of the string and is handled later by ``_separate_positive_and_negated_values``.
-
-        Examples:
-            "North,South"        -> ["North", "South"]
-            '"North,South",East' -> ["North,South", "East"]
-            '!"North,South"'    -> ["!North,South"]
-        """
-        values = []
-        current = []
-        in_quotes = False
-
-        # Iterate through the filter values string character by character to handle double-quoted strings correctly.
-        for char in filter_values_str:
-            if char == '"':
-                in_quotes = not in_quotes
-            elif char == "," and not in_quotes:
-                values.append("".join(current).strip())
-                current = []
-            else:
-                current.append(char)
-
-        values.append("".join(current).strip())
-        return [v for v in values if v]
-
-    def _get_cell_values(self, cell_value: Any) -> list:
-        """Return cell value as a list of values for filtering.
-
-        Checks for list type before pd.isna() because pd.isna() raises
-        ValueError on list/array inputs.
-        """
-        if isinstance(cell_value, list):
-            return cell_value
-        if pd.isna(cell_value):
-            return []
-        return [cell_value]
-
-    def _parse_numeric_value(self, value_str: str) -> float | int:
-        """Helper method for the filtering logic to parse a string value to int or float. To be used when other checks have already confirmed that the value can be parsed as numeric."""
-        return float(value_str) if "." in value_str else int(value_str)
-
-    def _create_inequality_condition(self, key: str, operator: str, threshold: float) -> pd.Series:
-        """
-        Helper method for the filtering logic to create a condition for inequality filtering on a column.
-        Uses a named nested function instead of a lambda to improve readability to defined the
-        logic that will be applied to the Pandas dataframe.
-        """
-
-        def check_inequality(cell_value):
-            cell_values = self._get_cell_values(cell_value)
-            if not cell_values:
-                return False
-            for val in cell_values:
-                try:
-                    val_num = float(val)
-                    if (
-                        (operator == ">" and val_num > threshold)
-                        or (operator == ">=" and val_num >= threshold)
-                        or (operator == "<" and val_num < threshold)
-                        or (operator == "<=" and val_num <= threshold)
-                    ):
-                        return True
-                except ValueError:
-                    continue
-            return False
-
-        return self.df[key].apply(check_inequality)
-
-    def _create_range_condition(self, key: str, min_val: float, max_val: float) -> pd.Series:
-        """
-        Helper method for the filtering logic to create a condition for range filtering on a column.
-        Uses a named nested function instead of a lambda to improve readability to define the
-        logic that will be applied to the Pandas dataframe.
-        """
-
-        def check_range(cell_value):
-            cell_values = self._get_cell_values(cell_value)
-            if not cell_values:
-                return False
-            for val in cell_values:
-                try:
-                    val_num = float(val)
-                    if min_val <= val_num <= max_val:
-                        return True
-                except ValueError:
-                    continue
-            return False
-
-        return self.df[key].apply(check_range)
-
-    def _create_discrete_numeric_condition(self, key: str, target_values: list[float | int]) -> pd.Series:
-        """
-        Helper method for the filtering logic to create a condition for discrete numeric value filtering on a column.
-        Uses a named nested function instead of a lambda to improve readability to define the
-        logic that will be applied to the Pandas dataframe.
-        """
-
-        def check_discrete(cell_value):
-            cell_values = self._get_cell_values(cell_value)
-            if not cell_values:
-                return False
-            for val in cell_values:
-                try:
-                    val_num = float(val)
-                    if val_num in target_values:
-                        return True
-                except ValueError:
-                    continue
-            return False
-
-        return self.df[key].apply(check_discrete)
-
-    def _create_string_condition(self, key: str, target_values: list[str]) -> pd.Series:
-        """
-        Helper method for the filtering logic to create a condition for string value filtering on a column.
-        Uses a named nested function instead of a lambda to improve readability to define the
-        logic that will be applied to the Pandas dataframe.
-        """
-
-        def check_string(cell_value):
-            cell_values = self._get_cell_values(cell_value)
-            return any(str(val) in target_values for val in cell_values)
-
-        return self.df[key].apply(check_string)
-
-    def _combine_conditions_with_or(self, conditions: list[pd.Series]) -> pd.Series:
-        """
-        Helper method for the filtering logic to combine multiple Pandas boolean Series with OR logic.
-        Returns a single boolean Series that is True if any of the input conditions is True for each row.
-
-        The resulting Series is used at the end of self.run_query() to filter the DataFrame values.
-        """
-        if not conditions:
-            return pd.Series(False, index=self.df.index)
-        combined = conditions[0]
-        for cond in conditions[1:]:
-            # The bar (|) is pandas syntax for element-wise OR between boolean Series.
-            combined = combined | cond
-        return combined
-
-    def _build_condition_list(
-        self,
-        inequality_conditions: list[pd.Series],
-        range_conditions: list[pd.Series],
-        discrete_values: list[float | int],
-        key: str,
-    ) -> list[pd.Series]:
-        """
-        Helper method for the filtering logic to build a list of conditions from inequality, range, and discrete value filters.
-        """
-        conditions = []
-
-        if inequality_conditions:
-            conditions.append(self._combine_conditions_with_or(conditions=inequality_conditions))
-
-        if range_conditions:
-            conditions.append(self._combine_conditions_with_or(conditions=range_conditions))
-
-        if discrete_values:
-            discrete_condition = self._create_discrete_numeric_condition(key=key, target_values=discrete_values)
-            conditions.append(discrete_condition)
-
-        return conditions
-
-    def _parse_numeric_filter_values(
-        self, values_to_process: list[str], context: NumericFilterContext
-    ) -> tuple[list[pd.Series], list[pd.Series], list[float | int]]:
-        """
-        Helper method for the filtering logic to identify if a numeric filter values is an inequality, range, or discrete value and process it accordingly.
-
-        The context dataclass is intended to keep the kwargs manageable when passing positive and negative values back-to-back:
-            - key: Column name being filtered
-            - filter_string_values: Original filter string (for error messages)
-            - is_negated: Whether these are negated (NOT) conditions
-        """
-        key = context.key
-        filter_string_values = context.filter_string_values
-        is_negated = context.is_negated
-
-        inequality_conditions = []
-        range_conditions = []
-        discrete_values = []
-
-        for filter_string_value in values_to_process:
-            # Check for common mistakes: =< or => instead of <= or >=
-            if re.match(r"^=<-?\d+\.?\d*$", filter_string_value) or re.match(r"^=>-?\d+\.?\d*$", filter_string_value):
-                raise SidecarInvalidFilterError(
-                    f"Invalid operator format '{filter_string_value[:2]}' in filter '{key}:{filter_string_values}'."
-                    f"Use standard operators: '<=' (not '=<') or '>=' (not '=>')"
-                )
-
-            # Check if it's an inequality (e.g., ">25", "<=40", "<-5")
-            inequality_match = re.match(r"^(>=|<=|>|<)(-?\d+\.?\d*)$", filter_string_value)
-            if inequality_match:
-                operator = inequality_match.group(1)
-                threshold = float(inequality_match.group(2))
-                condition = self._create_inequality_condition(key, operator, threshold)
-                inequality_conditions.append(condition)
-                prefix = "NOT " if is_negated else ""
-                logger.debug(
-                    f"Applied {'negated ' if is_negated else ''}inequality filter on '{key}': {prefix}{operator} {threshold}"
-                )
-                continue
-
-            # Check if it's a range (e.g., "20-40", "-100--50", "10-20")
-            range_match = re.match(r"^(-?\d+\.?\d*)-(-?\d+\.?\d*)$", filter_string_value)
-            if range_match:
-                min_val = float(range_match.group(1))
-                max_val = float(range_match.group(2))
-                condition = self._create_range_condition(key, min_val, max_val)
-                range_conditions.append(condition)
-                prefix = "NOT " if is_negated else ""
-                logger.debug(
-                    f"Applied {'negated ' if is_negated else ''}range filter on '{key}': {prefix}{min_val} to {max_val}"
-                )
-                continue
-
-            # Otherwise, treat as discrete value
-            try:
-                numeric_value = float(filter_string_value) if "." in filter_string_value else int(filter_string_value)
-                discrete_values.append(numeric_value)
-            except ValueError:
-                logger.warning(
-                    f"Cannot convert '{filter_string_value}' to numeric for column '{key}'. Skipping this value."
-                )
-
-        return inequality_conditions, range_conditions, discrete_values
-
-    def _separate_positive_and_negated_values(self, filter_values: list[str]) -> tuple[list[str], list[str]]:
-        """
-        Helper method for the filtering logic to separate filter values into positive and negated lists.
-        Values prefixed with '!' are negated (NOT conditions).
-        """
-        positive_values = []
-        negated_values = []
-
-        for value in filter_values:
-            value = value.strip()
-            if value.startswith("!"):
-                negated_values.append(value[1:].strip())
-            else:
-                positive_values.append(value)
-
-        return positive_values, negated_values
-
-    def _apply_not_conditions(self, base_condition: pd.Series | None, negated_conditions: list[pd.Series]) -> pd.Series:
-        """
-        Helper method for the filtering logic to apply NOT conditions to a base condition. The base condition contains positive filters combined with OR, or None if there were only negations
-        in the input filter string from the CLI. Returns a combined condition where rows must match base_condition AND NOT match any negated condition
-        """
-        if base_condition is None:
-            # If only negated conditions (no positive conditions), start with all True
-            combined = pd.Series(True, index=self.df.index)
-        else:
-            combined = base_condition
-
-        # Apply negated conditions (must NOT match any negated condition)
-        for negated_condition in negated_conditions:
-            combined = combined & ~negated_condition
-
-        return combined

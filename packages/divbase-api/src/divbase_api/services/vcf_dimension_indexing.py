@@ -2,7 +2,12 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+
+from divbase_api.services.bcftools_helpers import (
+    _raise_task_user_error_from_bcftools_stderr,
+    bgzip_vcf_for_indexing,
+    ensure_csi_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +16,8 @@ logger = logging.getLogger(__name__)
 class VCFDimensions:
     variants: int
     sample_count: int
-    scaffolds: List[str]
-    sample_names: List[str]
+    scaffolds: list[str]
+    sample_names: list[str]
 
 
 class VCFDimensionCalculator:
@@ -45,11 +50,12 @@ class VCFDimensionCalculator:
 
         if vcf_path.suffix == ".vcf":
             bgzipped_temp = Path(str(vcf_path) + ".gz")
-            self._bgzip_vcf(vcf_path, bgzipped_temp)
+            bgzip_vcf_for_indexing(input_vcf=vcf_path, output_vcf_gz=bgzipped_temp)
             indexing_path = bgzipped_temp
 
         try:
-            csi_index_path = self._index_vcf_with_csi(vcf_path=indexing_path)
+            ensure_csi_index(indexing_path)
+            csi_index_path = indexing_path.with_suffix(indexing_path.suffix + ".csi")
             scaffold_names, variant_count = self._extract_scaffold_names_and_variant_count_from_csi_index(
                 csi_index_path=csi_index_path
             )
@@ -69,19 +75,30 @@ class VCFDimensionCalculator:
             sample_names=sample_names,
         )
 
-    def _extract_sample_names_from_vcf_header(self, vcf_path: Path) -> List[str] | None:
+    def _extract_sample_names_from_vcf_header(self, vcf_path: Path) -> list[str] | None:
         """
         Extract sample names from the VCF header using bcftools. Reads only the header lines, so this is fast even for large VCFs.
 
         Returns None if the VCF turns out to be a is a DivBase-generated result file (Custom header "##DivBase_created").
+
+        This is also the DivBase guard for duplicated sample names in a VCF, which is considered invalid input for bcftools.
+        See details in docs/development/bcftools_task_constraints.md ("1.3. There cannot be duplicate sample names ...").
         """
+
+        # TODO: Future idea: check for erroneously formatted VCF files on file upload request instead on dimensions calculations. That would involve checking against the VCF specifications.
+
         try:
             result = subprocess.run(
-                ["bcftools", "view", "-h", str(vcf_path)],
+                [
+                    "bcftools",
+                    "view",
+                    "--header-only",
+                    str(vcf_path),
+                ],
                 check=True,
                 stdout=subprocess.PIPE,
                 text=True,
-                stderr=subprocess.DEVNULL,  # Important! Would otherwise need to parse out potential stderr downstream
+                stderr=subprocess.PIPE,
             )
             for line in result.stdout.splitlines():
                 if line.startswith("##DivBase_created"):
@@ -93,43 +110,13 @@ class VCFDimensionCalculator:
                     return sample_names
             return []
         except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="extracting sample names from the VCF header",
+                target=f"VCF file '{vcf_path}'",
+            )
             logger.error(f"Error extracting sample names from the VCF header {vcf_path}: {e}")
-            raise
-
-    def _bgzip_vcf(self, vcf_path: Path, output_path: Path) -> None:
-        """
-        Bgzip a plain .vcf file to a bgzipped .vcf.gz file using bcftools view.
-        Required because bcftools index --csi only accepts bgzipped input.
-        """
-        try:
-            subprocess.run(
-                ["bcftools", "view", "-Oz", "-o", str(output_path), str(vcf_path)],
-                check=True,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.info(f"Bgzipped {vcf_path} to {output_path} for CSI indexing.")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error bgzipping {vcf_path}: {e}")
-            raise
-
-    def _index_vcf_with_csi(self, vcf_path: Path) -> Path:
-        """
-        Index the VCF file with CSI index using bcftools.
-        The CSI index is then used to extract dimensions information.
-        Input must be bgzipped (.vcf.gz); use _bgzip_vcf first for plain .vcf files.
-        """
-        csi_index_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
-        logger.info(f"Creating CSI index for {vcf_path}...")
-        try:
-            subprocess.run(
-                ["bcftools", "index", "--csi", str(vcf_path), "-o", str(csi_index_path)],
-                check=True,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.info(f"Successfully indexed {vcf_path} with a CSI index.")
-            return csi_index_path
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error indexing {vcf_path} with CSI index: {e}")
             raise
 
     def _extract_scaffold_names_and_variant_count_from_csi_index(self, csi_index_path: Path) -> tuple[list[str], int]:
@@ -151,7 +138,7 @@ class VCFDimensionCalculator:
                 check=True,
                 stdout=subprocess.PIPE,
                 text=True,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
             scaffold_names = []
             variant_count = 0
@@ -165,5 +152,11 @@ class VCFDimensionCalculator:
             )
             return scaffold_names, variant_count
         except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            _raise_task_user_error_from_bcftools_stderr(
+                stderr=stderr,
+                operation="extracting scaffold stats from the CSI index",
+                target=f"VCF file '{indexed_vcf_path_without_csi_suffix}'",
+            )
             logger.error(f"Error extracting scaffold names/variant count from the CSI index {csi_index_path}: {e}")
             raise

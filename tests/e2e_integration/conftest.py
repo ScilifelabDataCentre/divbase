@@ -7,6 +7,8 @@ It also collects fixtures and constants that are needed across multiple test mod
 
 import contextlib
 import logging
+import time
+from pathlib import Path
 
 import boto3
 import keyring
@@ -23,6 +25,7 @@ from divbase_api.worker.crud_dimensions import (
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.divbase_cli import app
 from tests.e2e_integration.helpers.docker_testing_stack_setup import start_compose_stack, stop_compose_stack
 from tests.e2e_integration.helpers.setup_test_data import (
     API_ADMIN_CREDENTIALS,
@@ -179,14 +182,62 @@ def clean_vcf_dimensions():
 @pytest.fixture
 def run_update_dimensions(CONSTANTS):
     """
-    Factory fixture that runs update_vcf_dimensions_task.
+    Factory fixture that submits update_vcf_dimensions_task to Celery and waits for completion.
+    This ensures bcftools-dependent indexing runs in the worker container, not the host pytest process.
     Usage: run_update_dimensions(bucket_name, project_id, project_name)
     """
 
-    def _update(bucket_name="split-scaffold-project", project_id=None, project_name=None, user_id=None):
-        return update_vcf_dimensions_task(
-            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
-        )
+    def _update(
+        bucket_name="split-scaffold-project",
+        project_id=None,
+        project_name=None,
+        user_id=None,
+        max_wait_seconds: int = 120,
+        max_timeout_retries: int = 1,
+    ):
+        kwargs = {
+            "bucket_name": bucket_name,
+            "project_id": project_id,
+            "project_name": project_name,
+            "user_id": user_id,
+        }
+
+        def _wait_for_completion(async_result):
+            start_time = time.time()
+            while True:
+                if async_result.state == "FAILURE":
+                    raise AssertionError(
+                        "update_vcf_dimensions_task failed in worker.\n"
+                        f"task_id={async_result.id}, project_name={project_name}, bucket_name={bucket_name}\n"
+                        f"result={async_result.result!r}"
+                    )
+
+                if async_result.ready():
+                    return async_result.get()
+
+                if time.time() - start_time > max_wait_seconds:
+                    raise TimeoutError(
+                        f"update_vcf_dimensions_task timed out after {max_wait_seconds}s "
+                        f"(task_id={async_result.id}, project_name={project_name}, bucket_name={bucket_name})"
+                    )
+                time.sleep(1)
+
+        for attempt in range(1, max_timeout_retries + 2):
+            async_result = update_vcf_dimensions_task.apply_async(kwargs=kwargs)
+            try:
+                return _wait_for_completion(async_result)
+            except TimeoutError:
+                if attempt > max_timeout_retries:
+                    raise
+                logger.warning(
+                    "update_vcf_dimensions_task timed out (attempt %d/%d). Retrying once with same kwargs. "
+                    "task_id=%s project_name=%s bucket_name=%s",
+                    attempt,
+                    max_timeout_retries + 1,
+                    async_result.id,
+                    project_name,
+                    bucket_name,
+                )
 
     return _update
 
@@ -210,3 +261,36 @@ def clean_all_projects_dimensions(clean_vcf_dimensions, db_session_sync, project
     for project_id in project_map.values():
         clean_vcf_dimensions(db_session_sync, project_id)
     yield
+
+
+@pytest.fixture
+def logged_in_edit_user_with_existing_config(CONSTANTS):
+    """Shared fixture: logged-in edit user with existing CLI config."""
+    # ensure no config or tokens file exist before test
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+    for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
+        add_command = f"config add {project}"
+        result = runner.invoke(app, add_command)
+        assert result.exit_code == 0
+
+    set_default_command = f"config set-default {CONSTANTS['DEFAULT_PROJECT']}"
+    result = runner.invoke(app, set_default_command)
+    assert result.exit_code == 0
+
+    user_creds = CONSTANTS["TEST_USERS"]["edit user"]
+    login_command = f"auth login {user_creds['email']}"
+    result = runner.invoke(app=app, args=login_command, input=f"{user_creds['password']}\n")
+    assert result.exit_code == 0, f"Login failed: {result.output}"
+
+    yield
+
+    cli_settings.CONFIG_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+
+
+@pytest.fixture
+def fixtures_dir():
+    """Path to shared tests fixtures directory."""
+    return Path(__file__).parent.parent / "fixtures"

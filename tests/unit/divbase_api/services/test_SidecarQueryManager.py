@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from divbase_api.services.queries import SidecarQueryManager
+from divbase_api.services.metadata_queries import SidecarQueryManager
 from divbase_lib.exceptions import SidecarColumnNotFoundError, SidecarInvalidFilterError, SidecarNoDataLoadedError
 
 
@@ -19,7 +19,7 @@ def test_sidecar_manager_SidecarNoDataLoadedError_for_non_existent_file(create_s
 
 
 @pytest.mark.unit
-@patch("divbase_api.services.queries.SidecarQueryManager.load_file")
+@patch("divbase_api.services.metadata_queries.SidecarQueryManager.load_file")
 def test_sidecar_manager_no_data_loaded(mock_load_file, create_sidecar_manager):
     """
     Test that SidecarNoDataLoadedError is raised when no data (self.df=None) is loaded in the SidecarQueryManager.
