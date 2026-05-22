@@ -305,7 +305,7 @@ def upload_files_command(
     divbase_base_url: str,
     all_files: list[Path],
     safe_mode: bool,
-    resume_upload: bool = False,
+    skip_existing: bool = False,
     dry_run: bool = False,
 ) -> UploadOutcome:
     """
@@ -335,8 +335,8 @@ def upload_files_command(
         )
 
         if already_uploaded:
-            # resume means we just skip those we have already uploaded.
-            if not resume_upload:
+            # skip_existing means we just skip uploading those files that are already there
+            if not skip_existing:
                 if dry_run:
                     print(
                         "[red bold]Error: The following upload attempt would have failed due to the below error:\n[/red bold]"
@@ -347,7 +347,7 @@ def upload_files_command(
                     f"\n[red bold]Error: For the project: '{project_name}'\n"
                     "The exact version of the following files that you're trying to upload already exist inside the project:\n[/red bold]"
                     f"[red]{files_str}[/red]\n"
-                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--resume' flag.[/bold green]"
+                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--skip-existing' flag.[/bold green]"
                 )
                 raise typer.Exit(1)
             else:

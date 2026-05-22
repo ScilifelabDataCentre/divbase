@@ -405,16 +405,17 @@ def stream_file(
 def upload_files(
     files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
-    resume: bool = typer.Option(
+    skip_existing: bool = typer.Option(
         False,
-        "--resume",
-        "-r",
+        "--skip-existing",
+        "-s",
         help="If set, will skip already uploaded files, from the files you provided in the command. "
         "Already uploaded files are determined by checking if a file with the same name and MD5 checksum already exists in the project's store on DivBase. ",
     ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
+        "-r",
         "-R",
         help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
         "Without this flag, patterns only match files in the specified directory.",
@@ -465,11 +466,11 @@ def upload_files(
         print("Please specify only space separated files or provide a --file-list.")
         raise typer.Exit(1)
 
-    if resume and disable_safe_mode:
+    if skip_existing and disable_safe_mode:
         print(
-            "The --resume and --disable-safe-mode options cannot be used together.\n"
+            "The --skip-existing and --disable-safe-mode options cannot be used together.\n"
             "Safe mode calculates file checksums, "
-            "and these checksums are needed for --resume to know what files to skip uploading."
+            "and these checksums are needed for --skip-existing to know what files to skip uploading."
         )
         raise typer.Exit(1)
 
@@ -514,7 +515,7 @@ def upload_files(
         divbase_base_url=logged_in_url,
         all_files=all_files,
         safe_mode=not disable_safe_mode,
-        resume_upload=resume,
+        skip_existing=skip_existing,
         dry_run=dry_run,
     )
 
