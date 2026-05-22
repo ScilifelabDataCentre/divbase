@@ -83,6 +83,8 @@ VCF_QUERY_HELP_TEXT = (
     "--tsv-filter | --samples | --samples-file | --all-samples."
 )
 
+MAX_WAIT_MINS_HARD_LIMIT = 600  # 10 hours
+
 GET_RESULTS_HELP_TEXT = (
     "Poll for completion of a query job and download (or print) the results. "
     "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the "
@@ -243,6 +245,11 @@ def get_results_from_query_job_by_task_id(
     task_id: int = typer.Argument(..., help="Task ID of the query job to poll for results from."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
+    max_wait_mins: int = typer.Option(
+        120,
+        "--max-wait-mins",
+        help=f"Maximum number of minutes to poll for task completion. Must be between 1 and {MAX_WAIT_MINS_HARD_LIMIT}.",
+    ),
 ) -> None:
     """
     Get results from a VCF query job by its task ID by first polling for the final state of the task and then downloading the results file.
@@ -253,10 +260,17 @@ def get_results_from_query_job_by_task_id(
     2 — unsupported task type
     """
 
+    if not 1 <= max_wait_mins <= MAX_WAIT_MINS_HARD_LIMIT:
+        raise typer.BadParameter(
+            f"--max-wait-mins must be between 1 and {MAX_WAIT_MINS_HARD_LIMIT} minutes, got {max_wait_mins}."
+        )
+
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    task_status = poll_task_until_final_state_reached(divbase_url=logged_in_url, task_id=task_id)
+    task_status = poll_task_until_final_state_reached(
+        divbase_url=logged_in_url, task_id=task_id, timeout_mins=max_wait_mins
+    )
 
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
@@ -275,16 +289,7 @@ def get_results_from_query_job_by_task_id(
         raise typer.Exit(code=1)
 
 
-@stamina.retry(
-    on=retry_polling_until_final_or_retryable_api_errors,
-    wait_initial=1.0,  # seconds. Some overhead time is required to init the Celery task even with idle workers, so wait a bit before first poll.
-    wait_exp_base=2,  # exponential backoff factor
-    wait_max=60.0,  # cap exponential backoff at once per 60 seconds if it reaches that far.
-    timeout=60
-    * 60
-    * 12,  # To avoid infinite polling in case of unforeseen errors. This needs to include time in the queue and time to process the task
-)
-def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> str:
+def poll_task_until_final_state_reached(divbase_url: str, task_id: int, timeout_mins: int) -> str:
     """
     Poll for the final state (SUCCESS/FAILURE) of a celery task by task ID.
 
@@ -295,25 +300,36 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> str:
     FINAL_STATES = {"SUCCESS", "FAILURE"}
     SUPPORTED_TASK_NAMES = {"tasks.bcftools_query"}
 
-    response = make_authenticated_request(
-        method="GET",
-        divbase_base_url=divbase_url,
-        api_route=f"v1/task-history/tasks/{task_id}",
-    )
-    # Endpoint returns 403 if the task is not found or the user does not have permission to view it. So item should not be empty.
-    items = response.json()
+    # inline retry_context instead of using @stamina.retry decorator because timeout_mins is a runtime value input from the CLI, not a constant (which the decorator needs)
+    for attempt in stamina.retry_context(
+        on=retry_polling_until_final_or_retryable_api_errors,
+        attempts=None,  # no attempt cap — rely solely on timeout_mins
+        wait_initial=1.0,  # seconds. Some overhead time is required to init the Celery task even with idle workers, so wait a bit before first poll.
+        wait_exp_base=2,  # exponential backoff factor
+        wait_max=60.0,  # cap exponential backoff at once per 60 seconds if it reaches that far.
+        wait_jitter=0.0,
+        timeout=timeout_mins * 60,
+    ):
+        with attempt:
+            response = make_authenticated_request(
+                method="GET",
+                divbase_base_url=divbase_url,
+                api_route=f"v1/task-history/tasks/{task_id}",
+            )
+            # Endpoint returns 403 if the task is not found or the user does not have permission to view it. So item should not be empty.
+            items = response.json()
 
-    task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
+            task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
 
-    if task_results.name not in SUPPORTED_TASK_NAMES:
-        raise typer.BadParameter(
-            f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."
-        )
+            if task_results.name not in SUPPORTED_TASK_NAMES:
+                raise typer.BadParameter(
+                    f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."
+                )
 
-    if task_results.status in FINAL_STATES:
-        return task_results.status
+            if task_results.status in FINAL_STATES:
+                return task_results.status
 
-    raise PolledTaskNotFinalError(f"Task {task_id} state is {task_results.status}")
+            raise PolledTaskNotFinalError(f"Task {task_id} state is {task_results.status}")
 
 
 def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:

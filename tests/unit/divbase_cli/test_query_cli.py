@@ -102,4 +102,4 @@ class TestPollTaskUntilFinalStateReached:
         ]
 
         with pytest.raises(typer.BadParameter, match="unsupported task type"):
-            poll_task_until_final_state_reached(divbase_url="http://localhost:8001/api", task_id=7)
+            poll_task_until_final_state_reached(divbase_url="http://localhost:8001/api", task_id=7, timeout_mins=1)
