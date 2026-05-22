@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
-from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
 
@@ -461,7 +460,7 @@ def upload_files(
         # Upload all files in a directory (non-recursive)
         divbase-cli files upload /path/to/data/*
 
-        # Upload all files in a directory and its subdirectories (yes, wrap the path in quotes to guaratee the right behaviour)
+        # Upload all files in a directory and its subdirectories (yes, wrap the path in quotes to guarantee the right behaviour)
         divbase-cli files upload --recursive "/path/to/data/**"
 
         # Upload from a text file list (one file path per line)
@@ -472,6 +471,14 @@ def upload_files(
 
     if bool(files) + bool(file_list) > 1:
         print("Please specify only space separated files or provide a --file-list.")
+        raise typer.Exit(1)
+
+    if resume and disable_safe_mode:
+        print(
+            "The --resume and --disable-safe-mode options cannot be used together.\n"
+            "Safe mode calculates file checksums, "
+            "and these checksums are needed for --resume to know what files to skip uploading."
+        )
         raise typer.Exit(1)
 
     all_files: set[Path] = set()
@@ -505,13 +512,13 @@ def upload_files(
 
     if uploaded_results.skipped:
         print("[yellow bold]\nThe following files were skipped: [/yellow bold]")
-        for object in uploaded_results.skipped:
-            print(f"[yellow]- '{object.object_name}' reason: {object.reason}[/yellow]")
+        for file in uploaded_results.skipped:
+            print(f"[yellow]- '{file.object_name}' reason: {file.reason}[/yellow]")
 
     if uploaded_results.successful:
         print("[green bold]\nThe following files were successfully uploaded: [/green bold]")
-        for object in uploaded_results.successful:
-            print(f"[green]- '{object.object_name}' created from file at: '{object.file_path.resolve()}'[/green]")
+        for file in uploaded_results.successful:
+            print(f"[green]- '{file.object_name}' created from file at: '{file.file_path.resolve()}'[/green]")
 
     if uploaded_results.failed:
         print("[red bold]\nERROR: Failed to upload the following files:[/red bold]")
@@ -646,16 +653,15 @@ def _check_for_duplicate_file_names(all_files: set[Path]) -> None:
 
     duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
     if duplicates:
-        err_console = Console(stderr=True)
-        err_console.print(
+        print(
             "[red bold]Error: The following file names appear more than once in the upload list.[/red bold]\n"
             "[red]Since directory structure is not preserved on upload, these files would collide:[/red]\n"
         )
         for name, paths in duplicates.items():
-            err_console.print(f"[red bold]'{name}':[/red bold]")
+            print(f"[red bold]'{name}':[/red bold]")
             for p in paths:
-                err_console.print(f"[red]- {p.resolve()}[/red]")
-        err_console.print("\nPlease rename the files so each has a unique name before uploading.")
+                print(f"[red]- {p.resolve()}[/red]")
+        print("\nPlease rename the files so each has a unique name before uploading.")
         raise typer.Exit(1)
 
 
@@ -680,8 +686,7 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
             unsupported_chars.append(file_path)
 
     if unsupported_file_types:
-        err_console = Console(stderr=True)
-        err_console.print(
+        print(
             f"[red bold]Error: The following files' types are not supported by DivBase and therefore cannot be uploaded: [/red bold] \n"
             f"[red]{'\n'.join(str(file) for file in unsupported_file_types)}\n\n[/red]"
             f"DivBase currently supports the following file types: '{', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}'\n"
@@ -691,8 +696,7 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
         raise typer.Exit(1)
 
     if unsupported_chars:
-        err_console = Console(stderr=True)
-        err_console.print(
+        print(
             f"[red bold]Error: The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: [/red bold]\n"
             f"[red]{'\n'.join(str(file) for file in unsupported_chars)}\n\n[/red]"
             f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"

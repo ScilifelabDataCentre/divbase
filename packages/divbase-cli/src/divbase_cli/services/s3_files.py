@@ -320,15 +320,13 @@ def upload_files_command(
     all_failed_uploads: list[FailedUpload] = []
     all_skipped_uploads: list[SkippedUpload] = []
 
-    if not safe_mode:
-        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
-    else:
-        if not dry_run:
-            print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
-        else:
+    if safe_mode:
+        if dry_run:
             print(
                 "[green]Dry run enabled, calculating the checksums of all files to upload to determine which would be uploaded vs skipped...[/green]"
             )
+        else:
+            print("[green]Preparing to upload files, calculating the checksums of all files to upload...[/green]")
 
         to_upload, already_uploaded = filter_already_uploaded_files(
             project_name=project_name,
@@ -337,6 +335,7 @@ def upload_files_command(
         )
 
         if already_uploaded:
+            # resume means we just skip those we have already uploaded.
             if not resume_upload:
                 if dry_run:
                     print(
@@ -350,7 +349,7 @@ def upload_files_command(
                     f"[red]{files_str}[/red]\n"
                     "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--resume' flag.[/bold green]"
                 )
-                raise typer.Exit(0 if dry_run else 1)
+                raise typer.Exit(1)
             else:
                 for file in already_uploaded:
                     all_skipped_uploads.append(
@@ -360,6 +359,9 @@ def upload_files_command(
                             reason=f"The file with checksum {file.checksum_local} already exists in the project",
                         )
                     )
+    else:
+        # we don't provide checksums to server
+        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
 
     if dry_run:
         if to_upload:
@@ -434,7 +436,7 @@ def filter_already_uploaded_files(
     all_files: list[Path],
 ) -> tuple[list[ToUpload], list[ToUpload]]:
     """
-    Seperate files into whether they are already in the projects bucket or not.
+    Separate files into whether they are already in the projects bucket or not.
     (1st list to be uploaded, 2nd list is files already in projects bucket)
 
     For a file to be considered already in the project,

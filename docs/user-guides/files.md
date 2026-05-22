@@ -11,7 +11,7 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 
 !!! warning "Your Project's file store is not the same as a traditional file system"
     - All files are stored in a flat structure (there is no concept of directories) and are accessed by their file name (and optionally version ID).
-    - If you upload a file from a path that includes directories the full path will NOT be included in the file name in DivBase. For example, `divbase-cli files upload path/to/data/sample_metadata.tsv`), becomes `sample_metadata.tsv` in the project file store.
+    - If you upload a file from a path that includes directories the full path will NOT be included in the file name in DivBase. For example, `divbase-cli files upload path/to/data/sample_metadata.tsv`, becomes `sample_metadata.tsv` in the project file store.
 
 ## Quick links to each `divbase-cli files` subcommand
 
@@ -115,7 +115,7 @@ This will show you information about a specific version of the file that has bee
 
 ### Uploading files
 
-You can upload files to your project's store using the `upload` command. Use spaces to seperate file paths or use a glob pattern (e.g. `*.vcf.gz`) to specify multiple files. You can also provide a text file with a list of file paths (one per line) using the `--file-list` flag.
+You can upload files to your project's store using the `upload` command. Use spaces to separate file paths or use a glob pattern (e.g. `*.vcf.gz`) to specify multiple files. You can also provide a text file with a list of file paths (one per line) using the `--file-list` flag.
 
 ```bash
 # Upload multiple files by specifying them one after another
