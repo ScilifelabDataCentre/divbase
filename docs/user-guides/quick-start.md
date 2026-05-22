@@ -72,14 +72,13 @@ divbase-cli auth login EMAIL_ADDRESS
 Upload your VCF files to your project:
 
 ```bash
-# Upload a single VCF file
-divbase-cli files upload path/to/your/file.vcf.gz
-
-# Upload multiple files
+# Upload VCF files one by one (spaced seperated)
 divbase-cli files upload path/to/file1.vcf.gz path/to/file2.vcf.gz
 
 # Upload all VCF files in a directory
-divbase-cli files upload --upload-dir /path/to/directory/
+divbase-cli files upload path/to/directory/*.vcf.gz
+
+# run 'divbase-cli files upload -h' for more examples
 ```
 
 Check your uploaded files:

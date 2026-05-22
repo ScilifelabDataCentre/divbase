@@ -482,19 +482,25 @@ def upload_files(
         )
         raise typer.Exit(1)
 
-    all_files: set[Path] = set()
+    # (to preserve order of files provided by user, but ensure no duplicates)
+    all_files: list[Path] = []
+    _seen: set[Path] = set()
     if files:
         for pattern in files:
             matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
-            if matched:
-                all_files.update(matched)
+            for file in matched:
+                if file not in _seen:
+                    _seen.add(file)
+                    all_files.append(file)
     if file_list:
         missing_files = []
         with open(file_list) as f:
             for line in f:
                 path = Path(line.strip())
                 if path.is_file():
-                    all_files.add(path)
+                    if path not in _seen:
+                        _seen.add(path)
+                        all_files.append(path)
                 else:
                     missing_files.append(path)
         if missing_files:
@@ -515,7 +521,7 @@ def upload_files(
     uploaded_results = upload_files_command(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
-        all_files=list(all_files),
+        all_files=all_files,
         safe_mode=not disable_safe_mode,
         resume_upload=resume,
         dry_run=dry_run,
@@ -653,7 +659,7 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     return list(all_files)
 
 
-def _check_for_duplicate_file_names(all_files: set[Path]) -> None:
+def _check_for_duplicate_file_names(all_files: list[Path]) -> None:
     """
     Helper fn to check if any two files in the upload set share the same file name.
     Since directory structure is not preserved on upload, duplicate names would overwrite each other.
@@ -678,7 +684,7 @@ def _check_for_duplicate_file_names(all_files: set[Path]) -> None:
         raise typer.Exit(1)
 
 
-def _check_for_unsupported_files(all_files: set[Path]) -> None:
+def _check_for_unsupported_files(all_files: list[Path]) -> None:
     """
     Helper fn to check if any of the files to be uploaded are not supported by DivBase.
     Raises error if so.

@@ -508,7 +508,7 @@ def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_e
 
     # Confirm nothing was actually uploaded
     ls_result = runner.invoke(app, f"files ls --project {clean_project}")
-    assert result.exit_code == 0
+    assert ls_result.exit_code == 0
     assert "dry1.tsv" not in ls_result.stdout
     assert "dry2.tsv" not in ls_result.stdout
 
