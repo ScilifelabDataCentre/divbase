@@ -3,13 +3,16 @@ CRUD operations for task history.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.crud.crud_constants import ACTIVE_CELERY_STATUSES, CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS
 from divbase_api.models.projects import ProjectMembershipDB, ProjectRoles
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
+from divbase_api.worker.task_names import TaskName
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,7 @@ async def create_task_history_entry(
     user_id: int,
     project_id: int,
     task_id: str | None = None,
+    task_name: str | None = None,
 ) -> int:
     """
     Create a new task history entry. Returns the primary key ID from the table, which is the DivBase job ID
@@ -88,7 +92,7 @@ async def create_task_history_entry(
     The task_id parameter is optional to allow creating entries before the celery task is created (e.g., for bcftools pipe tasks).
 
     """
-    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=user_id, project_id=project_id)
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=user_id, project_id=project_id, task_name=task_name)
     db.add(task_history_entry)
     await db.commit()
     await db.refresh(task_history_entry)
@@ -110,3 +114,44 @@ async def update_task_history_entry_with_celery_task_id(
     if result.rowcount == 0:
         raise ValueError(f"TaskHistoryDB entry with id={job_id} not found")
     await db.commit()
+
+
+async def get_active_dimensions_contenders(
+    db: AsyncSession,
+    project_id: int,
+    celerytaskmeta_entry_gap_ttl_seconds: int = CELERYTASKMETA_ENTRY_GAP_TTL_SECONDS,
+) -> list[int]:
+    """
+    Get active dimensions-update job IDs for a project.
+
+    A job is considered active if:
+    - Its Celery task is in an active status (PENDING, STARTED, RETRY), or
+    - It was enqueued recently but the CeleryTaskMeta entry has not yet been written by the worker
+      (celerytaskmeta_entry_gap_ttl_seconds covers this window, defaulting to 1 hour).
+
+    Returns job IDs ordered ascending (lowest = oldest = the one to reuse).
+    """
+    now = datetime.now(timezone.utc)
+    celery_taskmeta_entry_gap_cutoff = now - timedelta(seconds=celerytaskmeta_entry_gap_ttl_seconds)
+
+    stmt = (
+        select(TaskHistoryDB.id)
+        .outerjoin(CeleryTaskMeta, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .where(
+            TaskHistoryDB.project_id == project_id,
+            TaskHistoryDB.task_name == TaskName.UPDATE_VCF_DIMENSIONS.value,
+            TaskHistoryDB.task_id.is_not(None),
+            or_(
+                CeleryTaskMeta.status.in_(ACTIVE_CELERY_STATUSES),
+                and_(
+                    CeleryTaskMeta.task_id.is_(None),
+                    TaskHistoryDB.created_at >= celery_taskmeta_entry_gap_cutoff,
+                ),
+            ),
+        )
+        .order_by(TaskHistoryDB.id.asc())
+        .limit(1)
+    )
+
+    result = await db.execute(stmt)
+    return result.scalars().all()

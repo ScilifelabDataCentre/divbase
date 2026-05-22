@@ -2,7 +2,7 @@
 Schemas for VCF dimensions routes.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +28,16 @@ class DimensionUpdateTaskResult(BaseModel):
     )
     VCF_files_deleted: Optional[list[str]] = Field(
         None, description="VCF files that have been deleted from the project and thus have been dropped from the index"
+    )
+
+
+class DimensionsUpdateSubmitResult(BaseModel):
+    """Result model for submitting a dimensions update job."""
+
+    job_id: int
+    outcome: Literal["new", "existing"] = Field(
+        ...,
+        description="Whether a new job was enqueued or an existing active job was reused.",
     )
 
 

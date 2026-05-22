@@ -3,9 +3,12 @@ Tests for the "divbase-cli dimensions" subcommand
 """
 
 import ast
+import concurrent.futures
 import gzip
 import os
 import re
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +16,7 @@ import yaml
 from sqlalchemy import delete, select
 from typer.testing import CliRunner
 
+from divbase_api.models.task_history import TaskHistoryDB
 from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -29,7 +33,9 @@ from divbase_api.worker.crud_dimensions import (
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
+from divbase_cli.config_resolver import resolve_project
 from divbase_cli.divbase_cli import app
+from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.exceptions import NoVCFFilesFoundError
 from tests.conftest import REGRESSION_GUARD_PREFIX
 
@@ -69,6 +75,55 @@ def _read_text_from_gz_file(path: os.PathLike) -> str:
     """Read UTF-8 text content from a .gz file."""
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return f.read()
+
+
+def test_dimensions_update_endpoint_deduplicates_two_concurrent_submissions(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    Two near-simultaneous dimensions update submissions for the same project should hit Gate 1
+    and resolve to the same DivBase job id — at least one response must have outcome="existing".
+
+    Uses threading.Barrier(2) to align both threads before sending the PUT request, maximising
+    the chance that both requests arrive at the endpoint at the same time.
+    """
+    project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
+    project_config = resolve_project(project_name=project_name)
+
+    barrier = threading.Barrier(2)
+
+    def submit_dimensions_update() -> dict:
+        barrier.wait(timeout=2.0)
+        response = make_authenticated_request(
+            method="PUT",
+            divbase_base_url=project_config.divbase_url,
+            api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
+        )
+        return response.json()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(submit_dimensions_update) for _ in range(2)]
+        payloads = [future.result(timeout=10.0) for future in futures]
+
+    job_ids = [payload["job_id"] for payload in payloads]
+    outcomes = [payload["outcome"] for payload in payloads]
+
+    assert len(set(job_ids)) == 1, f"Expected both submissions to resolve to the same job id, got {job_ids}"
+    assert all(outcome in {"new", "existing"} for outcome in outcomes), f"Unexpected outcomes: {outcomes}"
+    assert "existing" in outcomes, f"Expected at least one deduplicated submission, got outcomes={outcomes}"
+
+    # Wait for the submitted task to finish before returning so the autouse cleanup fixture
+    # gets a settled DB — without this the background Celery task can still be writing
+    # dimension entries when the next test's task starts, causing spurious "already indexed" results.
+    job_id = job_ids[0]
+    with SyncSessionLocal() as db:
+        row = db.execute(select(TaskHistoryDB).where(TaskHistoryDB.id == job_id)).scalar_one_or_none()
+    if row and row.task_id:
+        async_result = update_vcf_dimensions_task.AsyncResult(row.task_id)
+        deadline = time.time() + 120
+        while not async_result.ready() and time.time() < deadline:
+            time.sleep(1)
 
 
 def test_update_vcf_dimensions_task_directly(

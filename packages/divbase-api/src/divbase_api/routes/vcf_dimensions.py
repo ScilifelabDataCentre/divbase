@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
-from divbase_api.crud.task_history import create_task_history_entry
+from divbase_api.crud.task_history import create_task_history_entry, get_active_dimensions_contenders
 from divbase_api.crud.vcf_dimensions import (
     get_skipped_vcfs_by_project_async,
     get_unique_samples_by_project_async,
@@ -22,11 +22,13 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
+from divbase_api.worker.task_names import TaskName
 from divbase_api.worker.tasks import update_vcf_dimensions_task
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
+    DimensionsUpdateSubmitResult,
     DimensionsVCFFilesResult,
     DimensionUpdateKwargs,
 )
@@ -81,12 +83,14 @@ async def list_vcf_metadata_by_project_name_user_endpoint(
     )
 
 
-@vcf_dimensions_router.put("/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED)
+@vcf_dimensions_router.put(
+    "/projects/{project_name}", status_code=status.HTTP_202_ACCEPTED, response_model=DimensionsUpdateSubmitResult
+)
 async def update_vcf_dimensions_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-) -> int:
+) -> DimensionsUpdateSubmitResult:
     """
     Update the VCF dimensions files for the specified project
     """
@@ -95,6 +99,10 @@ async def update_vcf_dimensions_endpoint(
     if not has_required_role(role, ProjectRoles.EDIT):
         raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
+
+    active_contenders = await get_active_dimensions_contenders(db=db, project_id=project.id)
+    if active_contenders:
+        return DimensionsUpdateSubmitResult(job_id=active_contenders[0], outcome="existing")
 
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,
@@ -109,10 +117,11 @@ async def update_vcf_dimensions_endpoint(
         user_id=current_user.id,
         project_id=project.id,
         task_id=results.id,
+        task_name=TaskName.UPDATE_VCF_DIMENSIONS.value,
         db=db,
     )
 
-    return job_id
+    return DimensionsUpdateSubmitResult(job_id=job_id, outcome="new")
 
 
 @vcf_dimensions_router.get(

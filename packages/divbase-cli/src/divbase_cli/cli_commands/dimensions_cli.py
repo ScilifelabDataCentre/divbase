@@ -15,6 +15,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
     DimensionsShowResult,
+    DimensionsUpdateSubmitResult,
     DimensionsVCFFilesResult,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator
@@ -42,9 +43,17 @@ def update_dimensions_index(
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}",
     )
 
-    task_id = response.json()
+    submission_result = DimensionsUpdateSubmitResult(**response.json())
+    if submission_result.outcome == "existing":
+        print(
+            f"There is already an active dimensions update job for this project. Job id: {submission_result.job_id}. "
+            f"To check the status of your job, use the command: divbase-cli task-history id {submission_result.job_id}"
+        )
+        return
+
     print(
-        f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
+        f"Job submitted successfully with job id: {submission_result.job_id}. "
+        f"To check the status of your job, use the command: divbase-cli task-history id {submission_result.job_id}"
     )
 
 
