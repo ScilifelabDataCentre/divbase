@@ -362,6 +362,8 @@ def perform_multipart_upload(
             uploaded_parts.extend(batch_uploads)
 
         # 3. Complete multipart upload
+        # must be uploaded in part order otherwise InvalidPartOrder error from S3
+        uploaded_parts.sort(key=lambda part: part.part_number)
         complete_request_body = CompleteMultipartUploadRequest(
             name=object_name,
             upload_id=object_data.upload_id,
@@ -462,7 +464,8 @@ def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tupl
             part.pre_signed_url,
             content=data_to_upload,
             headers=part.headers,
-            timeout=httpx.Timeout(5.0, write=30.0),
+            # generous here as don't want to fail a big upload if temporarily bad internet
+            timeout=httpx.Timeout(connect=10.0, read=10.0, write=120.0, pool=None),
         )
         response.raise_for_status()
         # ETag is returned with quotes, which must be stripped prior to comparison
