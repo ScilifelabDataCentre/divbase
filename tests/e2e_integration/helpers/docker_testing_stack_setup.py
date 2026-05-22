@@ -137,5 +137,5 @@ def wait_for_docker_stack_healthy(stack_name, timeout=120):
             print("All containers healthy!")
             return
         print("Waiting for containers to become healthy...")
-        time.sleep(5)
+        time.sleep(1)
     raise RuntimeError("Some containers failed to become healthy in time.")
