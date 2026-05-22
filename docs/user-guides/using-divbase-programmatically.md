@@ -93,11 +93,12 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
 fi
 
 divbase-cli query get-vcf-results "$TASK_ID" --download-dir <path/to/destination/directory>
-if [ $? -eq 0 ]; then
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ]; then
     # results file downloaded to <path/to/destination/directory>, process it
-elif [ $? -eq 1 ]; then
+elif [ $EXIT_CODE -eq 1 ]; then
     # task failed with Celery task status FAILURE
-elif [ $? -eq 2 ]; then
+elif [ $EXIT_CODE -eq 2 ]; then
     # task ID does not belong to a VCF query task
 fi
 ```

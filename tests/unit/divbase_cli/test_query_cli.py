@@ -1,9 +1,12 @@
 """Unit tests for query CLI sample input normalization."""
 
+from unittest.mock import patch
+
 import pytest
+import stamina
 import typer
 
-from divbase_cli.cli_commands.query_cli import _normalize_samples_input
+from divbase_cli.cli_commands.query_cli import _normalize_samples_input, poll_task_until_final_state_reached
 
 
 def test_normalize_samples_option_splits_comma_separated_values():
@@ -83,3 +86,20 @@ def test_normalize_samples_file_errors_when_only_comments_and_blank_lines(tmp_pa
 
     with pytest.raises(typer.BadParameter, match="has no sample IDs"):
         _normalize_samples_input(samples=None, samples_file=samples_file)
+
+
+class TestPollTaskUntilFinalStateReached:
+    @pytest.fixture(autouse=True)
+    def stamina_no_wait(self):
+        with stamina.set_testing(testing=True, attempts=1):
+            yield
+
+    @patch("divbase_cli.cli_commands.query_cli.make_authenticated_request")
+    def test_poll_raises_for_unsupported_task_type(self, mock_make_request):
+        """Test that poll_task_until_final_state_reached raises BadParameter when the task is not a VCF query task."""
+        mock_make_request.return_value.json.return_value = [
+            {"id": 7, "status": "SUCCESS", "name": "tasks.some_other_task"}
+        ]
+
+        with pytest.raises(typer.BadParameter, match="unsupported task type"):
+            poll_task_until_final_state_reached(divbase_url="http://localhost:8001/api", task_id=7)

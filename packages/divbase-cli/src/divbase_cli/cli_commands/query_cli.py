@@ -84,8 +84,8 @@ VCF_QUERY_HELP_TEXT = (
 )
 
 GET_RESULTS_HELP_TEXT = (
-    "Poll for completion of a query job and download (or print) the results."
-    "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the"
+    "Poll for completion of a query job and download (or print) the results. "
+    "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the "
     "terminal state of the job (SUCCESS/FAILED). Designed to be of particular use in scripts and other automated workflows. "
     "Error codes (e.g. for scripts): 0 — task succeeded and file downloaded; 1 — task failed; 2 — unsupported task type"
 )
@@ -284,7 +284,7 @@ def get_results_from_query_job_by_task_id(
     * 60
     * 12,  # To avoid infinite polling in case of unforeseen errors. This needs to include time in the queue and time to process the task
 )
-def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> TaskHistoryResult:
+def poll_task_until_final_state_reached(divbase_url: str, task_id: int) -> str:
     """
     Poll for the final state (SUCCESS/FAILURE) of a celery task by task ID.
 
