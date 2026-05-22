@@ -19,18 +19,31 @@ TODO:
 import logging
 from pathlib import Path
 
+import stamina
 import typer
 from rich import print
 
-from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.file_cli import _pretty_print_download_results
+from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.config_resolver import ensure_logged_in, resolve_project
+from divbase_cli.cli_exceptions import PolledTaskNotFinalError
+from divbase_cli.config_resolver import (
+    ensure_logged_in,
+    resolve_download_dir,
+    resolve_project,
+)
+from divbase_cli.retries import (
+    retry_polling_until_final_or_retryable_api_errors,
+)
+from divbase_cli.services.s3_files import download_files_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryRequest,
     SampleMetadataQueryRequest,
     SampleMetadataQueryTaskResult,
 )
+from divbase_lib.api_schemas.task_history import TaskHistoryResult
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +81,15 @@ VCF_QUERY_HELP_TEXT = (
     "A single, merged VCF file with the query results will be added to the project on success.\n\n"
     "Exactly one sample-selection mode is required: "
     "--tsv-filter | --samples | --samples-file | --all-samples."
+)
+
+MAX_WAIT_MINS_HARD_LIMIT = 600  # 10 hours
+
+GET_RESULTS_HELP_TEXT = (
+    "Wait for a 'divbase-cli query vcf' job to complete and download the results file when complete. "
+    "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the "
+    "terminal state of the job (SUCCESS/FAILED). Designed to be of particular use in scripts and other automated workflows. "
+    "Error codes (e.g. for scripts): 0 — task succeeded and file downloaded; 1 — task failed; 2 — unsupported task type"
 )
 
 query_app = typer.Typer(
@@ -216,6 +238,98 @@ def vcf_query(
     print(
         f"Job submitted successfully with task id: {task_id}. To check the status of your job, use the command: divbase-cli task-history id {task_id}"
     )
+
+
+@query_app.command("get-vcf-results", help=GET_RESULTS_HELP_TEXT)
+def get_results_from_query_job_by_task_id(
+    task_id: int = typer.Argument(..., help="Task ID of the query job to poll for results from."),
+    download_dir: str = DOWNLOAD_DIR_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
+    max_wait_mins: int = typer.Option(
+        120,
+        "--max-wait-mins",
+        help=f"Maximum number of minutes to poll for task completion. Must be between 1 and {MAX_WAIT_MINS_HARD_LIMIT}.",
+    ),
+) -> None:
+    """
+    Get results from a VCF query job by its task ID by first polling for the final state of the task and then downloading the results file.
+
+    Exit codes (for programmatic use in scripts and other automated workflows):
+    0 — task succeeded and file downloaded (default, no explicit call needed)
+    1 — task failed (Celery job final status was FAILURE)
+    2 — unsupported task type
+    """
+
+    if not 1 <= max_wait_mins <= MAX_WAIT_MINS_HARD_LIMIT:
+        raise typer.BadParameter(
+            f"--max-wait-mins must be between 1 and {MAX_WAIT_MINS_HARD_LIMIT} minutes, got {max_wait_mins}."
+        )
+
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    task_status = poll_task_until_final_state_reached(
+        divbase_url=logged_in_url, task_id=task_id, timeout_mins=max_wait_mins
+    )
+
+    if task_status == "SUCCESS":
+        result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
+        download_results = download_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+            raw_files_input=[result_filename],
+            download_dir=resolve_download_dir(download_dir=download_dir),
+            verify_checksums=True,
+            dry_run=False,
+            project_version=None,
+        )
+        _pretty_print_download_results(download_results=download_results)
+    else:
+        print(f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.")
+        raise typer.Exit(code=1)
+
+
+def poll_task_until_final_state_reached(divbase_url: str, task_id: int, timeout_mins: int) -> str:
+    """
+    Poll for the final state (SUCCESS/FAILURE) of a celery task by task ID.
+
+    Note that this is designed with two layers of retry_only_on_retryable_divbase_api_errors: the outer layer (this function), and the inner layer (make_authenticated_request; 3 attempts).
+    This is to make this polling more resilient to temporary API errors for the intent of using the CLI command that calls this in scripts and other automated workflows.
+    """
+
+    FINAL_STATES = {"SUCCESS", "FAILURE"}
+    SUPPORTED_TASK_NAMES = {"tasks.bcftools_query"}
+
+    # inline retry_context instead of using @stamina.retry decorator because timeout_mins is a runtime value input from the CLI, not a constant (which the decorator needs)
+    for attempt in stamina.retry_context(
+        on=retry_polling_until_final_or_retryable_api_errors,
+        attempts=None,  # no attempt cap — rely solely on timeout_mins
+        wait_initial=1.0,  # seconds. Some overhead time is required to init the Celery task even with idle workers, so wait a bit before first poll.
+        wait_exp_base=2,  # exponential backoff factor
+        wait_max=60.0,  # cap exponential backoff at once per 60 seconds if it reaches that far.
+        wait_jitter=0.0,
+        timeout=timeout_mins * 60,
+    ):
+        with attempt:
+            response = make_authenticated_request(
+                method="GET",
+                divbase_base_url=divbase_url,
+                api_route=f"v1/task-history/tasks/{task_id}",
+            )
+            # Endpoint returns 403 if the task is not found or the user does not have permission to view it. So item should not be empty.
+            items = response.json()
+
+            task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
+
+            if task_results.name not in SUPPORTED_TASK_NAMES:
+                raise typer.BadParameter(
+                    f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."
+                )
+
+            if task_results.status in FINAL_STATES:
+                return task_results.status
+
+            raise PolledTaskNotFinalError(f"Task {task_id} state is {task_results.status}")
 
 
 def _normalize_samples_input(samples: str | None, samples_file: Path | None) -> tuple[list[str] | None, list[str]]:

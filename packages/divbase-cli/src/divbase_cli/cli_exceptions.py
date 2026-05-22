@@ -112,3 +112,9 @@ class ProjectNotInConfigError(DivBaseCLIError):
             f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
         super().__init__(error_message)
+
+
+class PolledTaskNotFinalError(Exception):
+    """Raised when a polled celerytask is not in a final state."""
+
+    pass

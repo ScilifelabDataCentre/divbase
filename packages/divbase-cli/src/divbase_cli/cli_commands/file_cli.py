@@ -11,7 +11,7 @@ from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
@@ -34,15 +34,6 @@ file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 
-DOWNLOAD_DIR_OPTION = typer.Option(
-    None,
-    "--download-dir",
-    "-d",
-    help="""Directory to download the files to. 
-        If not provided, defaults to what you specified in your user config. 
-        If also not specified in your user config, downloads to the current directory.
-        You can also specify "." to download to the current directory.""",
-)
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
     "--disable-verify-checksums",
