@@ -164,3 +164,9 @@ class UnsupportedFileNameError(DivBaseCLIError):
             "Please rename the files and try again."
         )
         super().__init__(message)
+
+
+class PolledTaskNotFinalError(Exception):
+    """Raised when a polled celerytask is not in a final state."""
+
+    pass
