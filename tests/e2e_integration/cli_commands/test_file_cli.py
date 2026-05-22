@@ -16,10 +16,7 @@ import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
-from divbase_cli.cli_exceptions import (
-    DivBaseAPIError,
-    FilesAlreadyInProjectError,
-)
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
     QUERY_RESULTS_FILE_PREFIX,
@@ -382,6 +379,180 @@ def test_upload_glob_patterns(
         assert file_name in result.stdout
 
 
+def test_upload_recursive_flag_matches_subdirectories(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --recursive expands ** patterns into subdirectories."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "top.tsv").write_text("top level")
+    sub_dir = data_dir / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "deep.tsv").write_text("nested")
+
+    command = f"files upload --recursive '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0, result.output
+    assert "top.tsv" in result.stdout
+    assert "deep.tsv" in result.stdout
+
+
+def test_upload_without_recursive_does_not_match_subdirectories(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that without --recursive, ** patterns do not descend into subdirectories."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sub_dir = data_dir / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "only_nested.tsv").write_text("nested only")
+
+    command = f"files upload '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert "no files specified" in result.stdout.lower()
+
+
+def test_upload_duplicate_file_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that uploading two files with the same name from different directories raises an error."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    (dir_a / "data.tsv").write_text("version a")
+    (dir_b / "data.tsv").write_text("version b")
+
+    command = f"files upload {dir_a / 'data.tsv'} {dir_b / 'data.tsv'} --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert "appear more than once" in result.stdout.lower()
+    assert "data.tsv" in result.stdout
+
+
+def test_upload_recursive_duplicate_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --recursive upload raises an error when subdirs contain files with the same name."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    (data_dir / "group_a").mkdir(parents=True)
+    (data_dir / "group_b").mkdir(parents=True)
+    (data_dir / "group_a" / "samples.tsv").write_text("group a samples")
+    (data_dir / "group_b" / "samples.tsv").write_text("group b samples")
+
+    command = f"files upload --recursive '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert "appear more than once" in result.stdout.lower()
+    assert "samples.tsv" in result.stdout
+
+
+def test_upload_resume_skips_already_uploaded_and_uploads_new(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that --resume skips files already in the project and uploads only new ones."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    existing_file = tmp_path / "existing.tsv"
+    new_file = tmp_path / "new.tsv"
+    existing_file.write_text("already uploaded content")
+    new_file.write_text("new content")
+
+    # Upload the existing file first
+    result = runner.invoke(app, f"files upload {existing_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # should fail as no --resume flag
+    result = runner.invoke(app, f"files upload {existing_file} {new_file}  --project {clean_project}")
+    assert result.exit_code != 0
+    assert "--resume" in result.stdout
+
+    # with --resume flag, new should be uploaded, old should be skipped
+    command = f"files upload --resume {existing_file} {new_file} --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.stdout.lower()
+    assert "existing.tsv" in result.stdout
+    assert "new.tsv" in result.stdout
+    assert "successfully uploaded" in result.stdout.lower()
+
+
+def test_upload_resume_all_already_uploaded(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --resume with all files already uploaded exits successfully with all files skipped."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    file = tmp_path / "already_there.tsv"
+    file.write_text("some content")
+
+    result = runner.invoke(app, f"files upload {file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # Re-run with --resume — should skip everything and still exit 0
+    result = runner.invoke(app, f"files upload --resume {file} --project {clean_project}")
+
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.stdout.lower()
+    assert "already_there.tsv" in result.stdout
+    assert "would have been uploaded" not in result.stdout.lower()
+
+
+def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --dry-run shows which files would be uploaded but does not actually upload them."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    file1 = tmp_path / "dry1.tsv"
+    file2 = tmp_path / "dry2.tsv"
+    file1.write_text("dry run content 1")
+    file2.write_text("dry run content 2")
+
+    result = runner.invoke(app, f"files upload --dry-run {file1} {file2} --project {clean_project}")
+
+    assert result.exit_code == 0, result.output
+    assert "dry1.tsv" in result.stdout
+    assert "dry2.tsv" in result.stdout
+
+    # Confirm nothing was actually uploaded
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert result.exit_code == 0
+    assert "dry1.tsv" not in ls_result.stdout
+    assert "dry2.tsv" not in ls_result.stdout
+
+
+def test_upload_dry_run_with_resume_shows_skipped_and_new(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that --dry-run --resume shows which files would be skipped vs uploaded."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    existing = tmp_path / "already_there_dry.tsv"
+    new_file = tmp_path / "new_dry.tsv"
+    existing.write_text("already uploaded content")
+    new_file.write_text("brand new content")
+
+    result = runner.invoke(app, f"files upload {existing} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files upload --dry-run --resume {existing} {new_file} --project {clean_project}")
+
+    assert result.exit_code == 0, result.output
+    assert "already_there_dry.tsv" in result.stdout
+    assert "new_dry.tsv" in result.stdout
+    assert "skipped" in result.stdout.lower()
+    assert "would have been uploaded" in result.stdout.lower()
+
+    # Confirm new file was not actually uploaded
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert "new_dry.tsv" not in ls_result.stdout
+
+
 def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload with safe mode on (default) works the first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
@@ -393,7 +564,8 @@ def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONS
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert "the exact version of the following files" in result.stdout.lower()
+    assert "already exist" in result.stdout.lower()
 
 
 def test_reupload_of_same_file_with_safe_mode_off_works(
@@ -427,7 +599,8 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
     command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert "the exact version of the following files" in result.stdout.lower()
+    assert "already exist" in result.stdout.lower()
 
     command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
@@ -481,10 +654,10 @@ def test_upload_non_supported_files(
         assert "successfully uploaded" in result.stdout.lower()
     elif expected_error == "file_type":
         assert result.exit_code != 0
-        assert "types are not supported" in result.stderr.lower()
+        assert "types are not supported" in result.stdout.lower()
     elif expected_error == "file_chars":
         assert result.exit_code != 0
-        assert "unsupported characters" in result.stderr.lower()
+        assert "unsupported characters" in result.stdout.lower()
 
 
 def test_safe_mode_fails_with_large_file_duplicate(
@@ -504,8 +677,9 @@ def test_safe_mode_fails_with_large_file_duplicate(
 
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
-    assert large_file_path.name in str(result.exception)
+    assert "the exact version of the following files" in result.stdout.lower()
+    assert "already exist" in result.stdout.lower()
+    assert large_file_path.name in result.stdout
 
     # validate turning off safe mode allows re-upload
     command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
@@ -1091,13 +1265,13 @@ def pagination_files_uploaded(
         file_path.write_text(f"content_{name}")
 
     # Check if files are already uploaded to avoid re-running
-    list_command = f"files ls --project {pagination_project}"
+    list_command = f"files ls --project {pagination_project} --tsv"
     list_result = runner.invoke(app, list_command)
     assert list_result.exit_code == 0
     already_uploaded = all(name in list_result.stdout for name in file_names)
 
     if not already_uploaded:
-        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project}"
+        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project} --resume"
         upload_result = runner.invoke(app, upload_command)
         assert upload_result.exit_code == 0
 
@@ -1197,7 +1371,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded, tmp_path
 ):
     """
-    Tests that safe mode correctly identifies a duplicate file and raises FilesAlreadyInProjectError,
+    Tests that safe mode correctly identifies a duplicate file and raises an error to prevent upload,
     even when the check involves more than S3_PAGINATION_LIMIT files.
 
     The duplicated file would not be in the 1st batch of files to be uploaded as well, but should prevent any file being uploaded.
@@ -1222,8 +1396,9 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     command = f"files upload '{upload_dir}/*' --project {pagination_project}"
     result = runner.invoke(app, command)
     assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
-    assert duplicate_file.name in str(result.exception)
+    assert "the exact version of the following files" in result.stdout.lower()
+    assert "already exist" in result.stdout.lower()
+    assert duplicate_file.name in result.stdout
 
     # Verify that none of the files were uploaded.
     command = f"files ls --project {pagination_project}"
