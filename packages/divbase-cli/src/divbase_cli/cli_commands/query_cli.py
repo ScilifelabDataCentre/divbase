@@ -86,7 +86,7 @@ VCF_QUERY_HELP_TEXT = (
 MAX_WAIT_MINS_HARD_LIMIT = 600  # 10 hours
 
 GET_RESULTS_HELP_TEXT = (
-    "Poll for completion of a query job and download (or print) the results. "
+    "Wait for a 'divbase-cli query vcf' job to complete and download the results file when complete. "
     "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the "
     "terminal state of the job (SUCCESS/FAILED). Designed to be of particular use in scripts and other automated workflows. "
     "Error codes (e.g. for scripts): 0 — task succeeded and file downloaded; 1 — task failed; 2 — unsupported task type"
