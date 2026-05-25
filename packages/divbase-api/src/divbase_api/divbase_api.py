@@ -3,11 +3,11 @@ The API server for DivBase.
 """
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
+import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +28,7 @@ from divbase_api.frontend_routes.core import fr_core_router
 from divbase_api.frontend_routes.personal_access_tokens import fr_pat_router
 from divbase_api.frontend_routes.profile import fr_profile_router
 from divbase_api.frontend_routes.projects import fr_projects_router
+from divbase_api.logging_config import configure_logging
 from divbase_api.middleware import register_middleware
 from divbase_api.routes.admin import admin_router
 from divbase_api.routes.auth import auth_router
@@ -39,9 +40,8 @@ from divbase_api.routes.task_history import task_history_router
 from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
-logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
-
-logger = logging.getLogger(__name__)
+configure_logging(log_level=api_settings.general.log_level, environment=api_settings.general.environment)
+logger = structlog.get_logger()
 
 
 @asynccontextmanager
