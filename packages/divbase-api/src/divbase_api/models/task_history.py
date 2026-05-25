@@ -5,7 +5,7 @@ Task history DB Model. Summarizes tasks run by Celery without storing all detail
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, LargeBinary, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import Base, BaseDBModel
@@ -25,6 +25,15 @@ class TaskHistoryDB(BaseDBModel):
     """
 
     __tablename__ = "task_history"
+    # Use a partial index on these fields since there are several entries with Null task_name (cronjobs, legacy data)
+    __table_args__ = (
+        Index(
+            "ix_task_history_project_id_task_name",
+            "project_id",
+            "task_name",
+            postgresql_where=text("task_name IS NOT NULL"),
+        ),
+    )
 
     task_id: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
     user_id: Mapped[int | None] = mapped_column(

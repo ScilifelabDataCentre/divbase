@@ -22,9 +22,17 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.add_column("task_history", sa.Column("task_name", sa.String(), nullable=True))
     op.create_index(op.f("ix_task_history_task_name"), "task_history", ["task_name"], unique=False)
+    op.create_index(
+        "ix_task_history_project_id_task_name",
+        "task_history",
+        ["project_id", "task_name"],
+        unique=False,
+        postgresql_where=sa.text("task_name IS NOT NULL"),
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index("ix_task_history_project_id_task_name", table_name="task_history", if_exists=True)
     op.drop_index(op.f("ix_task_history_task_name"), table_name="task_history")
     op.drop_column("task_history", "task_name")
