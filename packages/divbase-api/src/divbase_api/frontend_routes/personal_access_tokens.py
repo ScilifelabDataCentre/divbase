@@ -4,10 +4,10 @@ Frontend routes for user to manage their personal access tokens (PATs).
 All routes here should rely on get_current_user_from_cookie dependency to ensure user is logged in.
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,7 @@ from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
 fr_pat_router = APIRouter()
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PAT_EXPIRE_OPTIONS = {
     "1": "1 day",

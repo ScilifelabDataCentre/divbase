@@ -474,7 +474,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
                 return self._stdout, self._stderr
 
         container_id = get_container_id("divbase-tests-worker-quick-1")
-        logger = structlog.get_logger()
+        logger = structlog.get_logger(__name__)
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
         run_result = subprocess.run(
@@ -499,7 +499,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             yield self
         finally:
             if self.temp_files:
-                logger = structlog.get_logger()
+                logger = structlog.get_logger(__name__)
                 logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
                 temp_files_with_path = [ensure_fixture_path(f) for f in self.temp_files]
                 self.cleanup_temp_files(temp_files_with_path)
@@ -577,7 +577,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """
 
-        logger = structlog.get_logger()
+        logger = structlog.get_logger(__name__)
 
         if output_file is not None:
             output_file = ensure_fixture_path(str(output_file))

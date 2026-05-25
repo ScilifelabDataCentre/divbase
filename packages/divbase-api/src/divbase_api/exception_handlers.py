@@ -9,8 +9,7 @@ The idea of centralising this is to:
 3. Less work/duplication in the routes themselves, just raise the exception and the handler makes it pretty.
 """
 
-import logging
-
+import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -43,7 +42,7 @@ from divbase_api.exceptions import (
 from divbase_api.frontend_routes.core import templates
 from divbase_api.models.users import UserDB
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def is_api_request(request: Request) -> bool:

@@ -25,22 +25,23 @@ For versioned buckets (which DivBase uses):
             This would not be expected since the file was soft deleted and the user expected it to be gone.
 """
 
-import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import stamina
+import structlog
 from botocore.exceptions import ConnectionError as BotoCoreConnectionError
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import selectinload, sessionmaker
 
+from divbase_api.logging_config import configure_logging
 from divbase_api.models.projects import ProjectDB
 from divbase_api.services.s3_client import S3_BATCH_SIZE, S3FileManager
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class HardDeletePartialFailureError(Exception):
@@ -59,6 +60,8 @@ DEFAULT_SOFT_DELETED_FILES_RETENTION_DAYS = 30
 class CronJobConfig:
     """Config for the cron job"""
 
+    environment: str = os.environ["DIVBASE_ENV"]
+    logging_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     db_url: SecretStr = field(default_factory=lambda: SecretStr(os.environ["SYNC_DATABASE_URL"]))
     endpoint_url: str = field(default_factory=lambda: os.environ["S3_ENDPOINT_URL"])
     access_key: SecretStr = field(default_factory=lambda: SecretStr(os.environ["S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY"]))
@@ -327,9 +330,9 @@ def delete_expired_non_results_files(
 
 def main() -> None:
     """See docstring at top of file for description"""
-    logging.basicConfig(level=logging.INFO)
-
     job_config = CronJobConfig()
+    configure_logging(log_level=job_config.logging_level, environment=job_config.environment)
+
     s3_file_manager = S3FileManager(
         url=job_config.endpoint_url,
         access_key=job_config.access_key.get_secret_value(),
@@ -338,6 +341,7 @@ def main() -> None:
 
     logger.info(
         f"Starting hard_delete_expired_files cron job with configuration settings: \n"
+        f"environment={job_config.environment} \n"
         f"endpoint_url={job_config.endpoint_url} \n"
         f"soft_deleted_files_retention_days={job_config.soft_deleted_files_retention_days} \n"
         f"task_files_retention_days={job_config.task_files_retention_days}",

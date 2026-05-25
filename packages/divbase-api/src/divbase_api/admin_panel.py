@@ -6,12 +6,12 @@ These overrides are on methods inside BaseModelView (parent of ModelView, which 
 """
 
 import json
-import logging
 import pickle
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import structlog
 from fastapi import FastAPI, Response
 from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
@@ -47,7 +47,7 @@ from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskS
 from divbase_api.models.users import UserDB
 from divbase_api.security import TokenType, get_password_hash
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
 

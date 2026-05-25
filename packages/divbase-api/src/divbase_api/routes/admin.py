@@ -8,8 +8,7 @@ We manage deployed instances of DivBase via the admin-panel (which uses starlett
 All routes in here should depend on get_current_admin_user.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +22,7 @@ from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipRespons
 from divbase_api.schemas.users import UserCreate, UserResponse
 from divbase_api.services.email_sender import send_test_email
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 admin_router = APIRouter()
 

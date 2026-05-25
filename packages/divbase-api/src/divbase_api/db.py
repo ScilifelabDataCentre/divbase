@@ -2,10 +2,10 @@
 Handles connection between FastAPI and the postgresql db.
 """
 
-import logging
 from pathlib import Path
 from typing import AsyncGenerator
 
+import structlog
 from alembic import command
 from alembic.config import Config
 from alembic.util.exc import DatabaseNotAtHead
@@ -16,7 +16,7 @@ from divbase_api.api_config import api_settings
 from divbase_api.crud.users import create_user, get_all_users
 from divbase_api.schemas.users import UserCreate
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # NOTE: The creation of the AsyncSessionLocal should only occur once, when the module is loaded.

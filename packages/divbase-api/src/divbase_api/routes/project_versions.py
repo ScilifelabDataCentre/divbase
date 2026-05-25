@@ -5,9 +5,9 @@ Project versions are the state of all files in a project at a given time point.
 These are user defined points in time (like a checkpoint/commit) that the user can refer back to later.
 """
 
-import logging
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +37,7 @@ from divbase_lib.api_schemas.project_versions import (
     UpdateVersionResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 project_version_router = APIRouter()
 

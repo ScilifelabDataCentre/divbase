@@ -1,7 +1,8 @@
 import json
-import logging
 import pickle
 from datetime import datetime, timezone
+
+import structlog
 
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
@@ -14,7 +15,7 @@ from divbase_lib.api_schemas.task_history import (
 )
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def deserialize_tasks_to_result(serialized_tasks: list[dict]) -> list[TaskHistoryResult]:

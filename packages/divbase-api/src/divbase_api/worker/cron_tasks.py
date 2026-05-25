@@ -5,9 +5,9 @@ Hard deletion of soft deleted files is handled by a separate script: cleanup_exp
 This includes both results files and soft deleted files
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from celery.schedules import crontab
 from sqlalchemy import delete, select, text, update
 
@@ -20,7 +20,7 @@ from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")

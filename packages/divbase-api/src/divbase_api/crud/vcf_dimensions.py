@@ -6,15 +6,14 @@ There are separate VCF dimensions CRUD functions for the Celery workers in
 packages/divbase-api/src/divbase_api/worker/crud_dimensions.py
 """
 
-import logging
-
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -> dict:

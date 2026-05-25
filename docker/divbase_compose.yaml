@@ -213,6 +213,7 @@ services:
       db-migrator:
         condition: service_completed_successfully
     environment:
+      - DIVBASE_ENV=local_dev
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY=s3-cron-service-account

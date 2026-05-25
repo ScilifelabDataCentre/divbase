@@ -5,7 +5,7 @@ Structlog configuration for the divbase-api.
 - All other environments: JSON for Loki.
 
 Usage in all modules is simply:
-logger = structlog.get_logger()
+logger = structlog.get_logger(__name__)
 (but if standard logging is used in some places, it will still work fine)
 """
 

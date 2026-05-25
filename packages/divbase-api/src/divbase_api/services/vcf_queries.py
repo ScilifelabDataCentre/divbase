@@ -1,6 +1,5 @@
 import contextlib
 import datetime
-import logging
 import os
 import shlex
 import subprocess
@@ -9,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psutil
+import structlog
 
 from divbase_api.services.bcftools_helpers import (
     BCFTOOLS_CONTAINER_NAME,
@@ -28,7 +28,7 @@ from divbase_lib.exceptions import (
 )
 from divbase_lib.utils import split_semicolon_bcftools_command_segments
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 ###
 ### Data structures for the query managers and their helper functions

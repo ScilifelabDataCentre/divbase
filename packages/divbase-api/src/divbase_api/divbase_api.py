@@ -41,7 +41,7 @@ from divbase_api.routes.vcf_dimensions import vcf_dimensions_router
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
 configure_logging(log_level=api_settings.general.log_level, environment=api_settings.general.environment)
-logger = structlog.get_logger()
+logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager

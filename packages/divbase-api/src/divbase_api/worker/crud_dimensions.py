@@ -5,10 +5,10 @@ packages/divbase-api/src/divbase_api/crud/vcf_dimensions.py
 """
 
 import dataclasses
-import logging
 from dataclasses import dataclass, field
 from typing import List
 
+import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
@@ -16,7 +16,7 @@ from sqlalchemy.orm.session import Session
 
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

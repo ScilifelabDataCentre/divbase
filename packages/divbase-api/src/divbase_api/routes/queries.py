@@ -2,9 +2,8 @@
 API routes for query operations.
 """
 
-import logging
-
 import celery
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +38,7 @@ from divbase_lib.exceptions import (
     TaskUserError,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 query_router = APIRouter()
 
