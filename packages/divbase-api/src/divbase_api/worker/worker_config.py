@@ -23,6 +23,7 @@ class WorkerGeneralSettings:
     """General configuration settings for the worker."""
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
+    log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     sync_url: SecretStr = SecretStr(os.getenv("SYNC_DATABASE_URL", "NOT_SET"))
     broker_url: SecretStr = SecretStr(os.getenv("CELERY_BROKER_URL", "NOT_SET"))
     result_backend: SecretStr = SecretStr(os.getenv("CELERY_RESULT_BACKEND", "NOT_SET"))

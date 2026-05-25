@@ -3,14 +3,12 @@ API routes for query operations.
 """
 
 import logging
-import sys
 
 import celery
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
@@ -40,8 +38,6 @@ from divbase_lib.exceptions import (
     SidecarSampleIDError,
     TaskUserError,
 )
-
-logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
 
 logger = logging.getLogger(__name__)
 
