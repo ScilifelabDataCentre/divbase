@@ -126,8 +126,11 @@ divbase-cli dimensions show
 DivBase can checkout data based the VCF files themselves, but can also take an optional sidecar sample metadata file into account. The metadata file must be a TSV (tab-separated variables) file. The metadata contents of the file is defined by the users. If the VCF dimensions command has been run for the project, the cached dimensions data can be used create a template where the samples of the project have been pre-filled:
 
 ```bash
-divbase-cli dimensions create-metadata-template
+divbase-cli dimensions create-metadata-template --output path/to/your/sample_metadata.tsv
 ```
+
+!!! note
+    Subsequent commands will, unless otherwise specified, default to looking for a file name `sample_metadata.tsv` and thus we keep to that name throughout the quick start guide. The default output of `divbase-cli dimensions create-metadata-template` is a file named `sample_metadata_<project_name>.tsv` to accomodate that the same user might be a member of multiple DivBase projects.
 
 Details on how to write this file are given in [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md). In short, the first row starts with `#` and contains the headers for different metadata columns. The first column (`Sample_ID`) is mandatory and can be created by the system as just described; if created manually just make sure that each sample name is spelled exactly as in the VCF files. The rest of the columns are free for the user to define.
 
