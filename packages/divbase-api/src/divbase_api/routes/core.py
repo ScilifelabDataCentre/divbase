@@ -4,8 +4,6 @@ Core API routes for divbase, including health checks and announcements.
 Note that unlike every other API route these routes are not behind authentication...
 """
 
-import logging
-
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,17 +14,6 @@ from divbase_lib.api_schemas.announcements import AnnouncementResponse
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 core_router = APIRouter()
-
-
-class HealthCheckFilter(logging.Filter):
-    """
-    Suppress uvicorn access log entries for the health check endpoint.
-    To avoid filling up logs with these requests.
-    We only filter out the 200 OK health check responses, so any failed health checks will still be logged.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        return '/api/v1/core/health HTTP/1.1" 200' not in record.getMessage()
 
 
 @core_router.get("/health", status_code=status.HTTP_200_OK, response_model=dict[str, str])
