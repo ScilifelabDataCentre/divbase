@@ -42,17 +42,20 @@ class DivBaseAPIError(DivBaseCLIError):
         status_code: int = 500,
         http_method: str = "unknown",
         url: str = "unknown",
+        request_id: str = "unknown",
     ):
         self.status_code = status_code
         self.error_type = error_type
         self.error_details = error_details
         self.http_method = http_method
         self.url = url
+        self.request_id = request_id
         error_message = (
             f"DivBase Server returned an error response:\n"
             f"HTTP Status code: {status_code}\n"
             f"HTTP method: {http_method}\n"
             f"URL: {url}\n"
+            f"Request ID: {request_id}\n"
             f"Error type: {error_type}\n"
             f"Details: {error_details}\n"
         )
