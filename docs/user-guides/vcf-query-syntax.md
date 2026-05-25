@@ -388,7 +388,7 @@ Result VCF file will contain samples S1,S2. The input VCF files needed for this 
 | Error | Likely cause | Suggested fix |
 |---|---|---|
 | `Use only one of --tsv-filter, --samples, --samples-file, or --all-samples` | More than one sample-selection mode was provided in the same query. | Use exactly one of: `--tsv-filter`, `--samples`, `--samples-file`, or `--all-samples`. |
-| `Unknown sample IDs` / `were not found in the project's dimensions index` | One or more sample IDs are not present in current VCF dimensions cache. | Run `divbase-cli dimensions show --unique-samples` to verify names. If needed, update cache with `divbase-cli dimensions update --project <project>`. |
+| `Unknown sample IDs` / `were not found in the project's dimensions cache` | One or more sample IDs are not present in current VCF dimensions cache. | Run `divbase-cli dimensions show --unique-samples` to verify names. If needed, update cache with `divbase-cli dimensions update --project <project>`. |
 | `Invalid --samples-file format` (warnings/errors about delimiters or only one parsed sample) | The samples file has comma/semicolon/tab/pipe-separated values, header-like rows, or malformed lines. | Use plain UTF-8 text with one sample ID per line. Keep comments as lines starting with `#`. |
 | `Dimensions not up to date` | Bucket contents changed since dimensions were last indexed. | Run `divbase-cli dimensions update --project <project>` and retry the query. |
 | `Unsupported bcftools command ...` | `--command` used a command other than `view` (for example `merge`). | Use only `bcftools view` syntax in `--command`. |

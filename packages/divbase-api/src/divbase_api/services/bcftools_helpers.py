@@ -90,7 +90,7 @@ def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, tar
     """
     Raise user-facing TaskUserError for known/important bcftools stderr patterns.
 
-    This centralizes bcftools stderr classification so both dimensions indexing and query orchestration
+    This centralizes bcftools stderr classification so both dimensions caching and query orchestration
     can produce consistent user-facing errors.
     """
     stderr_clean = (stderr or "").strip()

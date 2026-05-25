@@ -739,7 +739,7 @@ class TestQueryTSVPreconditionErrors:
         command = f'query tsv "Area:North" --metadata-tsv-name {tsv_filename} --project {project_name} '
         cli_result = runner.invoke(app, command)
 
-        assert f"The VCF dimensions index in project '{project_name}' is missing or empty" in str(
+        assert f"The VCF dimensions cache in project '{project_name}' is missing or empty" in str(
             cli_result.exception
         ), "Expected error message about missing VCF dimensions file in project bucket"
 

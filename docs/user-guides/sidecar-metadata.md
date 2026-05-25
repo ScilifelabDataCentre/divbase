@@ -18,7 +18,7 @@ To be able to accomodate metadata needs for any research project that deals with
 This guide contains sections on how to [Create a sample metadata TSV](#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#2-query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
 !!! warning
-    All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions index is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
+    All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions cache is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
 
     ```bash
     divbase-cli dimensions update
@@ -69,7 +69,7 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: `" Sample 1 "` will be processed as `"Sample 1"`.
 
 !!! Note
-    Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions indexing (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
+    Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions caching (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
 
 #### 1.1.3. Example
 
@@ -106,9 +106,9 @@ divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv -
 
 The validation runs on the user's local computer and not as a job on the DivBase server. It is intended to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#111-mandatory-content) and [User-defined columns](#112-user-defined-columns).
 
-The command requires that the project's dimensions index is up-to-date with the VCF files in the project, and that is why it is sorted under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions index is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
+The command requires that the project's dimensions cache is up-to-date with the VCF files in the project, and that is why it is sorted under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions cache is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
 
-The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
+The validation command will fetch all sample names from the project dimensions cache from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
 
 #### 1.2.1. Errors from TSV content validation
 
@@ -122,7 +122,7 @@ The following will return **Errors**. These must be fixed for the sidecar TSV be
 
 - `Sample_ID` column issues: Empty value, value containing bracket array notation (e.g. `["S1", "S2"]`), rows with duplicate sample names.
 
-- Samples in TSV not found in project dimensions index: All samples listed in the TSV must exist in the project's dimensions index. If a sample is known to be in a VCF file in the DivBase project but is missing from the VCF dimensions index, the user needs to run `divbase-cli dimensions update` to submit an update job and then try the validator again after the job has finished.
+- Samples in TSV not found in project dimensions cache: All samples listed in the TSV must exist in the project's dimensions cache. If a sample is known to be in a VCF file in the DivBase project but is missing from the VCF dimensions cache, the user needs to run `divbase-cli dimensions update` to submit an update job and then try the validator again after the job has finished.
 
 - Mixed element types within a single multi-value cell: e.g. `[1, "two", 3]` (since it contains different types: `int`, `string`, `int`).
 
@@ -137,7 +137,7 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 
 - Cell value has leading or trailing whitespace (will be stripped by DivBase when a query is run)
 
-- Samples in the project's dimensions index not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, especially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
+- Samples in the project's dimensions cache not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, especially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
 
 - Mixed-type columns (a column with numeric and string values, e.g. `8`, `1a`, `5a`). They are allowed but the user should keep in mind that since they will be treated as string columns, numeric query operations (ranges, inequalities) will not work on these columns.
 

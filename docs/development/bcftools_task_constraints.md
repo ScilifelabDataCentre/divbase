@@ -90,7 +90,7 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 
 **Implementation:**
 
-- This is guarded against during the VCF dimensions indexing. `services/bcftools_helpers.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
+- This is guarded against during the VCF dimensions caching. `services/bcftools_helpers.py` contains shared bcftools stderr classification logic in `_raise_task_user_error_from_bcftools_stderr`. `services/vcf_dimension_indexing.py` calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains `Duplicated sample name`, DivBase raises a user-facing `TaskUserError` with guidance to fix duplicate sample IDs and re-run dimensions update.
 
 **Regression test coverage:**
 
@@ -98,7 +98,7 @@ bcftools view -Oz -o tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_t
 
 ### 1.4. What is required in the header?
 
-There is no single "one-line rule" for VCF headers across all `bcftools` commands, but for DivBase dimensions indexing and query orchestration the following header-related errors need to be handled:
+There is no single "one-line rule" for VCF headers across all `bcftools` commands, but for DivBase dimensions caching and query orchestration the following header-related errors need to be handled:
 
 - Invalid/unparseable header content (for example `unknown file type` or `could not parse header`)
 - Duplicate sample IDs in header (`Duplicated sample name ...`)
@@ -152,7 +152,7 @@ DivBase handles five cases of sample set overlap:
 
     E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S3,S4,S5` (`S3` is in both sample sets). Violates `bctools` contstrains, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
 
-This classification is performed by `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py`, using sample names stored in the dimensions index to determine whether the input VCFs fulfil the rules for the bcftools orchestration in `tasks.bcftools_query`. If they do not, the task exits before VCF files are downloaded from S3, saving compute resources.
+This classification is performed by `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py`, using sample names stored in the dimensions cache to determine whether the input VCFs fulfil the rules for the bcftools orchestration in `tasks.bcftools_query`. If they do not, the task exits before VCF files are downloaded from S3, saving compute resources.
 
 ## 3. bcftools merge
 
@@ -199,7 +199,7 @@ It gives the error: `Error: Duplicate sample names (5a_HOM-I7), use --force-samp
 
 **Implementation:**
 
-- The VCF dimensions index stores all sample names for all VCF files in the bucket. When a query is submitted, `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py` reads these from the dimensions index and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the blocked cases (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat)).
+- The VCF dimensions cache stores all sample names for all VCF files in the bucket. When a query is submitted, `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py` reads these from the dimensions cache and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the blocked cases (see [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat)).
 
 **Regression test coverage:**
 

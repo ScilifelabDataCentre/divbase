@@ -131,7 +131,7 @@ def _submit_tasks_for_user(CONSTANTS):
     )
     assert (
         result_submit.exit_code == 1
-    )  # should fail due to missing dimensions index, this allows to test task history for fail messages
+    )  # should fail due to missing dimensions cache, this allows to test task history for fail messages
 
 
 # TODO could make a login and submit task for admin, but admin user does not belong to any projects in the testing stack and can thus not submit tasks

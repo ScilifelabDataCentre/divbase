@@ -21,7 +21,7 @@ class DimensionUpdateTaskResult(BaseModel):
 
     status: Optional[str] = None
     VCF_files_added: Optional[list[str]] = Field(
-        None, description="VCF files that were added to dimensions index by this job"
+        None, description="VCF files that were added to dimensions cache by this job"
     )
     VCF_files_skipped: Optional[list[str]] = Field(
         None, description="VCF files skipped by this job (previous DivBase-generated result VCFs)"

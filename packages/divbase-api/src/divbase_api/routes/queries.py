@@ -141,10 +141,10 @@ async def submit_vcf_query_job_endpoint(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    "The following sample IDs were not found in the project's dimensions index: "
+                    "The following sample IDs were not found in the project's dimensions cache: "
                     f"{', '.join(mismatched_samples)}. "
                     "Please verify that the sample names are correctly spelled. "
-                    "If the sample names are correct, please make sure the dimensions index is up to date "
+                    "If the sample names are correct, please make sure the dimensions cache is up to date "
                     "by running 'divbase-cli dimensions update --project <project_name>'."
                 ),
             )

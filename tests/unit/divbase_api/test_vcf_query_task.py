@@ -378,7 +378,7 @@ class TestResolveInputsForCliSamplesMode:
                 ProjectVCFDimensionsEntry(vcf_file_s3_key="fileA.vcf.gz", s3_version_id="v1", samples=["S1", "S2"]),
             ],
         )
-        with pytest.raises(TaskUserError, match="were not found in the project's dimensions index"):
+        with pytest.raises(TaskUserError, match="were not found in the project's dimensions cache"):
             _resolve_inputs_for_cli_samples_mode(
                 samples=["S1", "DOES_NOT_EXIST"], vcf_dimensions_data=vcf_dimensions_data
             )
