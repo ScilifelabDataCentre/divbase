@@ -100,7 +100,7 @@ divbase-cli dimensions update
 
 This submits a task to the DivBase task management system. The task will wait in a queue until the system is ready to work on it. Depending on the size of the VCF files, this make take a couple of minutes.
 
-!!! notes
+!!! note
     1. Please note that it is not possible to run VCF queries in DivBase until the dimensions update task has finished. The reason for this is that the VCF queries use the dimensions data ensure that the queries are feasible and to know which VCF files from the project to process.
 
     2. Please also note that the `divbase-cli dimensions update` command needs to be run every time a new VCF or a new version of a VCF file is uploaded.
@@ -228,7 +228,7 @@ For details on:
 
 - How to format your VCF files to get the most out of DivBase, see [Working with VCF Files in DivBase](vcf-files.md)
 
-- Everything releated to DivBase queries, we reccomend to start at [Running Queries: Overview](running-queries-overview.md)
+- Everything releated to DivBase queries, we recommend to start at [Running Queries: Overview](running-queries-overview.md)
 
 - Creating a snapshot the version of the files in a DivBase project at a current time, see [Project versioning](project-versioning.md)
 

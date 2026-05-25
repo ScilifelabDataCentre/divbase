@@ -15,7 +15,7 @@ All queries depend on that the prerequisites are fulfilled, as described in the 
 First, ensure that the VCF files fulfill the requirements described in [Working with VCF Files in DivBase](vcf-files.md) and have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
 
 ```bash
-# Submit a job to that ensure that the project's dimensions cache is up-to-date
+# Submit a job to ensure that the project's dimensions cache is up-to-date
 divbase-cli dimensions update --project <PROJECT_NAME>
 
 # To check the progress of the dimensions update job, use

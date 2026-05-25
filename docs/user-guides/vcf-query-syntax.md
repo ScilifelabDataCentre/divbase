@@ -185,7 +185,7 @@ Example of piped commands in DivBase VCF queries:
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -g hom; view -i 'MAF>=0.05'"
 ```
 
-The DivBase will apply the command(s) specified in `--command` in turn to a copy of each VCF file included in the query, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
+DivBase will apply the command(s) specified in `--command` in turn to a copy of each VCF file included in the query, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
 
 !!! Note
     The [bcftools view manual](https://samtools.github.io/bcftools/bcftools.html#view) has the following recommendation:
@@ -198,7 +198,7 @@ The DivBase will apply the command(s) specified in `--command` in turn to a copy
 
 Samples and filenames are automatically handled by the DivBase server based on the user input discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) above.
 
-If there is more one command specified by the user in the `--command` string, the sample filtering command `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be automatically appended by the DivBase server to the first command in the user-defined pipe. This means that the user only need to explicitly include `view -s` in the `--command` straing when that is the only bcftools filtering command in their query.
+If there is more one command specified by the user in the `--command` string, the sample filtering command `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY>` will be automatically appended by the DivBase server to the first command in the user-defined pipe. This means that the user only need to explicitly include `view -s` in the `--command` straing when that is the only bcftools filtering command in their query.
 
 For example, a command like
 
@@ -318,7 +318,7 @@ TODO describe cron job for old results files
 
 This section is aimed towards the technical user that would like to understand how DivBase uses `bcftools` to process VCF data queries on the files in a project's data storage.
 
-Figure 1 below shows a schematic overview of how DivBase processes VCF queries for the general case of _n_ user-defined `bcftools view` commands in `--comands` and _m_ VCF files needed for the given query.
+Figure 1 below shows a schematic overview of how DivBase processes VCF queries for the general case of _n_ user-defined `bcftools view` commands in `--command` and _m_ VCF files needed for the given query.
 
 ![VCF query processing](../assets/diagrams/vcf_query_processing_for_user_guide.png)
 

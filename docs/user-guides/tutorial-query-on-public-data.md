@@ -2,7 +2,7 @@
 
 This tutorial assumes that you have an account on DivBase and have a membership in a DivBase project with at least an EDIT role (i.e. can upload files and run queries). If this is your first time using DivBase, you may want to have a look at the [Quick Start guide](quick-start.md) before trying the tutorial out.
 
-We will use a mouse (_Mus musculus_) data set availalbe on the European Nucleotide Archive: <https://www.ebi.ac.uk/ena/browser/view/ERZ022025>. It a 5.5 Gb VCF.gz file that contains 18 samples and 66,007,044 variants.
+We will use a mouse (_Mus musculus_) data set available on the European Nucleotide Archive: <https://www.ebi.ac.uk/ena/browser/view/ERZ022025>. It is a 5.5 Gb VCF.gz file that contains 18 samples and 66,007,044 variants.
 
 ## 1. Obtain the data and upload it to your DivBase project
 
@@ -24,16 +24,12 @@ We then need to upload the file to the DivBase project. If the project you want 
 divbase-cli files upload mgp.v3.snps.rsIDdbSNPv137.vcf.gz --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
-For the sake of demonstration, we can create a sidecar metadata file for the 18 samples in this dataset so that we can use that for the query. In fact, a file prepared for this demo can be downloaded from the DivBase repo with:
-
-```bash
-curl -o tutorial_mock_metadata_mgpv3snps.tsv https://raw.githubusercontent.com/ScilifelabDataCentre/divbase/refs/heads/main/tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv
-```
+For the sake of demonstration, we can create a sidecar metadata file for the 18 samples in this dataset so that we can use that for the query. In fact, a file prepared for this demo is found in the DivBase repo at `tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv`:
 
 And then upload it to the DivBase project with:
 
 ```bash
-divbase-cli files upload tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli files upload tests/fixtures/tutorial_mock_metadata_mgpv3snps.tsv --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
 With this, we are set in terms of the files we need in the DivBase project to be able to run the query.
@@ -76,7 +72,7 @@ The task should now have been submitted. The terminal prints a DivBase Task ID w
 Job submitted successfully with task id: 102
 ```
 
-Make note of the Task ID integer for for now; we will use it later in the tutorial for a variable named `<THE_JOB_ID_OF_THE_QUERY>`.
+Make note of the Task ID integer for now; we will use it later in the tutorial for a variable named `<THE_JOB_ID_OF_THE_QUERY>`.
 
 We need to wait until this has finished before we can send the actual DivBase query.
 
