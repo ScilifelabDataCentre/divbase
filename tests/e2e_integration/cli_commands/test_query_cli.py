@@ -9,7 +9,6 @@ A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for th
 import csv
 import gzip
 import io
-import logging
 import re
 import time
 from pathlib import Path
@@ -24,7 +23,6 @@ from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 from tests.conftest import REGRESSION_GUARD_PREFIX
 
-logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
 
 _TASK_TERMINAL_STATES = {"SUCCESS", "FAILURE"}

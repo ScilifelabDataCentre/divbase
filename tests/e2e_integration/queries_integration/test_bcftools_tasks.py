@@ -7,8 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import structlog
 from celery import current_app
 from kombu.connection import Connection
+from structlog.testing import capture_logs
 from typer.testing import CliRunner
 
 from divbase_api.exceptions import VCFDimensionsEntryMissingError
@@ -18,8 +20,8 @@ from divbase_api.worker.tasks import bcftools_pipe_task
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, TaskUserError
+from tests.conftest import _text_in_logs
 
-logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
 
 
@@ -472,7 +474,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
                 return self._stdout, self._stderr
 
         container_id = get_container_id("divbase-tests-worker-quick-1")
-        logger = logging.getLogger("divbase_lib.queries")
+        logger = structlog.get_logger()
         logger.debug(f"Executing command in container with ID: {container_id}")
         docker_cmd = ["docker", "exec", "-w", "/app/tests/fixtures", container_id, "bcftools"] + command.split()
         run_result = subprocess.run(
@@ -497,7 +499,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             yield self
         finally:
             if self.temp_files:
-                logger = logging.getLogger("divbase_lib.queries")
+                logger = structlog.get_logger()
                 logger.info(f"Cleaning up {len(self.temp_files)} temporary files")
                 temp_files_with_path = [ensure_fixture_path(f) for f in self.temp_files]
                 self.cleanup_temp_files(temp_files_with_path)
@@ -575,7 +577,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """
 
-        logger = logging.getLogger("divbase_api.worker.tasks")
+        logger = structlog.get_logger()
 
         if output_file is not None:
             output_file = ensure_fixture_path(str(output_file))
@@ -620,19 +622,20 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
                 new=patched_prepare_txt_with_divbase_header_for_vcf,
             ),
         ):
-            if not expect_success:
-                with pytest.raises((VCFDimensionsEntryMissingError, TaskUserError)) as e:
-                    bcftools_pipe_task(**params)
-                for msg in expected_error_msgs:
-                    assert msg.replace("\n", "") in str(e.value).replace("\n", "")
-            else:
-                result = bcftools_pipe_task(**params)
-                assert result is not None
+            with capture_logs() as cap_logs:
+                if not expect_success:
+                    with pytest.raises((VCFDimensionsEntryMissingError, TaskUserError)) as e:
+                        bcftools_pipe_task(**params)
+                    for msg in expected_error_msgs:
+                        assert msg.replace("\n", "") in str(e.value).replace("\n", "")
+                else:
+                    result = bcftools_pipe_task(**params)
+                    assert result is not None
 
-            for log_msg in expected_logs:
-                assert log_msg in caplog.text
+                for log_msg in expected_logs:
+                    assert _text_in_logs(text=log_msg, logs=cap_logs)
 
-            print(f"Captured logs:\n{caplog.text}")
+            print(f"Captured logs:\n{cap_logs}")
     finally:
         current_app.conf.task_always_eager = original_task_always_eager
         current_app.conf.task_eager_propagates = original_task_eager_propagates
