@@ -21,6 +21,7 @@ from divbase_api.exceptions import AuthorizationError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.vcf_queries import validate_user_submitted_bcftools_command
+from divbase_api.worker.task_names import TaskName
 from divbase_api.worker.tasks import (
     bcftools_pipe_task,
     sample_metadata_query_task,
@@ -85,6 +86,7 @@ async def submit_sample_metadata_query_job_endpoint(
         user_id=current_user.id,
         project_id=project.id,
         task_id=results.id,
+        task_name=TaskName.SAMPLE_METADATA_QUERY.value,
         db=db,
     )
 
@@ -160,6 +162,7 @@ async def submit_vcf_query_job_endpoint(
     job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
+        task_name=TaskName.BCFTOOLS_QUERY.value,
         db=db,
     )
 

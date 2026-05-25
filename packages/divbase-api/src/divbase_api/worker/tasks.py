@@ -211,7 +211,7 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
 
     task_id = headers["id"]
 
-    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None)
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None, task_name=task_name)
     with SyncSessionLocal() as db:
         db.add(task_history_entry)
         db.commit()

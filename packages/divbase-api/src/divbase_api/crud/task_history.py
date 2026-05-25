@@ -126,7 +126,7 @@ async def get_active_dimensions_contenders(
 
     A job is considered active if:
     - Its Celery task is in an active status (PENDING, STARTED, RETRY), or
-    - It was enqueued recently but the CeleryTaskMeta entry has not yet been written by the worker
+    - It was enqueued recently but the CeleryTaskMeta entry has not yet been written by the worker, i.e. still in the queue
       (celerytaskmeta_entry_gap_ttl_seconds covers this window, defaulting to 1 hour).
 
     Returns job IDs ordered ascending (lowest = oldest = the one to reuse).
