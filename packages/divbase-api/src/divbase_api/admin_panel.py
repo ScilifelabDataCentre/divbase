@@ -475,6 +475,7 @@ class TaskHistoryView(ModelView):
     fields = [
         IntegerField("id", label="ID", disabled=True),
         StringField("task_id"),
+        StringField("task_name", label="Task Name", disabled=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
