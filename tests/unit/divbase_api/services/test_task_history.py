@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
+from divbase_api.worker.task_names import TaskName
 
 
 def test_deserialize_sample_metadata_task_with_legacy_result_keys():
@@ -30,7 +31,7 @@ def test_deserialize_sample_metadata_task_with_legacy_result_keys():
                 "status": "success",
             }
         ),
-        "name": "tasks.sample_metadata_query",
+        "name": TaskName.SAMPLE_METADATA_QUERY.value,
         "kwargs": json.dumps(
             {
                 "tsv_filter": "Area:West of Ireland",

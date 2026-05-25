@@ -55,6 +55,7 @@ from divbase_api.worker.metrics import (
     store_task_metric_in_cache,
     update_prometheus_gauges_from_cache,
 )
+from divbase_api.worker.task_names import TaskName
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
@@ -185,11 +186,11 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
         return {"queue": "quick"}
     if "long" in name:
         return {"queue": "long"}
-    if name == "tasks.sample_metadata_query":
+    if name == TaskName.SAMPLE_METADATA_QUERY.value:
         return {"queue": "quick"}
-    if name == "tasks.bcftools_query":
+    if name == TaskName.BCFTOOLS_QUERY.value:
         return {"queue": "long"}
-    if name == "tasks.update_vcf_dimensions_task":
+    if name == TaskName.UPDATE_VCF_DIMENSIONS.value:
         return {"queue": "long"}  # can take minutes for large VCF files
     return {"queue": "celery"}
 
@@ -233,7 +234,7 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-@app.task(name="tasks.sample_metadata_query", tags=["quick"])
+@app.task(name=TaskName.SAMPLE_METADATA_QUERY.value, tags=["quick"])
 def sample_metadata_query_task(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -294,7 +295,7 @@ def sample_metadata_query_task(
     return result
 
 
-@app.task(name="tasks.bcftools_query", tags=["slow"])
+@app.task(name=TaskName.BCFTOOLS_QUERY.value, tags=["slow"])
 def bcftools_pipe_task(
     tsv_filter: str | None,
     metadata_tsv_name: str | None,
@@ -474,7 +475,7 @@ def bcftools_pipe_task(
     return {"status": "completed", "output_file": str(output_file)}
 
 
-@app.task(name="tasks.update_vcf_dimensions_task")
+@app.task(name=TaskName.UPDATE_VCF_DIMENSIONS.value)
 def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,

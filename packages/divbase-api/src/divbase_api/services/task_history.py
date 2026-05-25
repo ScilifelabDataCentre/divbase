@@ -3,6 +3,7 @@ import logging
 import pickle
 from datetime import datetime, timezone
 
+from divbase_api.worker.task_names import TaskName
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
     BcftoolsQueryTaskResult,
@@ -85,13 +86,13 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
         parsed_result = result_data
         parsed_kwargs = kwargs
     else:
-        if task_name == "tasks.sample_metadata_query":
+        if task_name == TaskName.SAMPLE_METADATA_QUERY.value:
             parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
             parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
-        elif task_name == "tasks.bcftools_query":
+        elif task_name == TaskName.BCFTOOLS_QUERY.value:
             parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
             parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
-        elif task_name == "tasks.update_vcf_dimensions_task":
+        elif task_name == TaskName.UPDATE_VCF_DIMENSIONS.value:
             parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
             parsed_kwargs = DimensionUpdateKwargs(**kwargs) if kwargs else None
         else:
