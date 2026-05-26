@@ -109,16 +109,15 @@ def check_existing_session(divbase_url: str, config) -> int | None:
 
 def _handle_divbase_api_error(response: httpx.Response, http_method: str, url: str) -> None:
     """Handles custom display of a HTTP error response returned by DivBase API."""
+    request_id = response.headers.get("X-Request-ID", "unknown")
     try:
         response_body = response.json()
         error_details = response_body.get("detail", "No error message provided.")
         error_type = response_body.get("type", "unknown")
-        request_id = response.headers.get("X-Request-ID", "unknown")
     except (JSONDecodeError, ValueError):
         # most likely situation for this would be if the reverse proxy returns an error, not the server itself.
         error_details = response.text
         error_type = "unexpected_server_error"
-        request_id = "unknown"
 
     raise DivBaseAPIError(
         error_details=error_details,

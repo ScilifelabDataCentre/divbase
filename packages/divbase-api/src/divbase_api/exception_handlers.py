@@ -12,7 +12,7 @@ The idea of centralising this is to:
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException
 
 from divbase_api.db import get_db
@@ -64,6 +64,17 @@ async def get_current_user_from_request_object(request: Request) -> UserDB | Non
     return user
 
 
+def add_request_id_header(request: Request, response: Response) -> Response:
+    """
+    helper fn to add X-Request-ID to an existing response
+    Needed in the global/generic exception handler as the middleware approach of appending the header will not work as won't be reached.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    return response
+
+
 async def render_error_page(
     request: Request,
     message: str,
@@ -71,7 +82,7 @@ async def render_error_page(
 ):
     """Helper function to render the generic error page for frontend requests."""
     current_user = await get_current_user_from_request_object(request)
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="error.html",
         context={
@@ -81,6 +92,7 @@ async def render_error_page(
         },
         status_code=status_code,
     )
+    return add_request_id_header(request, response)
 
 
 async def global_exception_handler(request: Request, exc: Exception):
@@ -90,12 +102,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unexpected Error occurred for: {request.method} {request.url.path}: {exc}", exc_info=True)
 
     if is_api_request(request):
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "detail": "An unexpected error occurred. Please try again later.",
-                "type": "server_error",
-            },
+        return add_request_id_header(
+            request,
+            JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "detail": "An unexpected error occurred. Please try again later.",
+                    "type": "server_error",
+                },
+            ),
         )
     else:
         return await render_error_page(
@@ -344,6 +359,7 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException):
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail, "type": "http_error"},
+            headers=exc.headers,
         )
 
     # (Frontend request)

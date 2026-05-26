@@ -39,6 +39,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         - user can give us the "X-Request-ID" in error report and we can search logs more easily.
         """
         request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
