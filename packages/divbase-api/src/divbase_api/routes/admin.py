@@ -2,7 +2,7 @@
 Admin routes for basic tasks like creating users and projects.
 This is only used in local development and testing to automatically setup test/dev data.
 
-These routes are turned off in other enviroments.
+These routes are turned off in other environments.
 We manage deployed instances of DivBase via the admin-panel (which uses starlette-admin).
 
 All routes in here should depend on get_current_admin_user.

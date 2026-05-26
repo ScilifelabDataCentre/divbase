@@ -44,7 +44,7 @@ def test_concurrent_health_requests_have_distinct_request_ids():
 def test_cli_version_middleware_rejects_outdated_cli_header():
     """
     Validate outdated CLI version header is rejected.
-    Should provide back a request ID header for both succesful and unsuccessful responses, and they should be different.
+    Should provide back a request ID header for both successful and unsuccessful responses, and they should be different.
     """
     outdated_response = httpx.get(HEALTH_URL, headers={CLI_VERSION_HEADER_KEY: "0.0.0"}, timeout=10)
     assert outdated_response.status_code == 400

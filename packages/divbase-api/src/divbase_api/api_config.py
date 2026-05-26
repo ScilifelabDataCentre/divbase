@@ -101,7 +101,7 @@ class EmailSettings:
     password_reset_expires_seconds: int = int(os.getenv("PASSWORD_RESET_EXPIRES_SECONDS", 60 * 60))  # 1 hour
 
     def __post_init__(self):
-        """Handle enviroment specific email settings."""
+        """Handle environment specific email settings."""
         if os.getenv("DIVBASE_ENV") in LOCAL_DEV_ENVIRONMENTS:
             # using mailpit in docker stack
             self.smtp_server = "mailpit"

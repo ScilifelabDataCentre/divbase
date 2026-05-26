@@ -106,7 +106,7 @@ app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
 app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
 app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
 if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
-    # not needed in deployed enviroments, so no need to expose it.
+    # not needed in deployed environments, so no need to expose it.
     app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 
 app.include_router(fr_auth_router, prefix="", include_in_schema=False)

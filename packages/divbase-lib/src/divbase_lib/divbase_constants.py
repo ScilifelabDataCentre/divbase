@@ -55,5 +55,5 @@ CLI_VERSION_HEADER_KEY = "X-CLI-Version"
 # Personal Access Tokens (PATs) are used for passwordless auth with DivBase API
 PAT_TOKEN_PREFIX = "divbase_pat_"
 
-# Both divbase-api and divbase-worker(s) configs want to know if we are in a deployed enviroment or not
+# Both divbase-api and divbase-worker(s) configs want to know if we are in a deployed environment or not
 LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
