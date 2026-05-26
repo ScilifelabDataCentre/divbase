@@ -5,9 +5,13 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 !!! info "What is the project's file store?"
     - Each project in DivBase has its own separate, file store.
     - Files are versioned, so uploading a new file with the same name does not delete the existing file.
-    - You can access and restore previous versions of a file at any time.
+    - You can access and restore previous versions of a file at any time ([unless you hard deleted the file](#what-if-i-want-to-delete-a-file-permanently)).
     - When you view/download/stream files, you are always working with the latest version of that file by default, but you can also specify older versions if needed.
     - Every file uploaded to your project gets a unique `Version ID`. These IDs are used internally by DivBase to keep track of files and their versions, but you can also use them to access specific versions of files if needed
+
+!!! warning "Your Project's file store is not the same as a traditional file system"
+    - All files are stored in a flat structure (there is no concept of directories) and are accessed by their file name (and optionally version ID).
+    - If you upload a file from a path that includes directories the full path will NOT be included in the file name in DivBase. For example, `divbase-cli files upload path/to/data/sample_metadata.tsv`, becomes `sample_metadata.tsv` in the project file store.
 
 ## Quick links to each `divbase-cli files` subcommand
 
@@ -111,18 +115,26 @@ This will show you information about a specific version of the file that has bee
 
 ### Uploading files
 
-You can upload files to your project's store using the `upload` command. There are three ways to specify which files to upload:
+You can upload files to your project's store using the `upload` command. Use spaces to separate file paths or use a glob pattern (e.g. `*.vcf.gz`) to specify multiple files. You can also provide a text file with a list of file paths (one per line) using the `--file-list` flag.
 
-    ```bash
-    # 1. space separated list of file paths
-    divbase-cli files upload path/to/file1.txt path/to/another/file2.csv
+```bash
+# Upload multiple files by specifying them one after another
+divbase-cli files upload file1.vcf.gz path/to/file2.tsv
 
-    # 2. A whole directory
-    divbase-cli files upload --upload-dir /path/to/my_data_dir
+# Upload all .vcf.gz files in the current directory using a glob
+divbase-cli files upload "*.vcf.gz"
 
-    # 3. From a text file (with one file path per line)
-    divbase-cli files upload --file-list files_to_upload.txt
-    ```
+# Upload all files in a directory using a glob
+divbase-cli files upload "/path/to/data/*"
+
+# Upload all files in a directory and its subdirectories
+# Note that the folders in each file's path will be removed on upload.
+# for example: /path/to/data/sample_metadata.tsv will be uploaded as sample_metadata.tsv
+divbase-cli files upload --recursive "/path/to/data/**"
+
+# Upload from a text file list (one file path per line)
+divbase-cli files upload --file-list files_to_upload.txt
+```
 
 !!! warning "Safe Mode"
     By default, the `upload` command is performed in "safe mode". This mode calculates the MD5 checksum of your local files before uploading to:

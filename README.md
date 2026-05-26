@@ -69,8 +69,8 @@ For detailed instructions and alternative methods, see our [Installation Guide](
 4. **Upload Data and sync your data**
 
    ```bash
-   divbase-cli files upload data/my_samples.vcf.gz
-   divbase-cli files upload --upload-dir data/
+   divbase-cli files upload data/my_metadata.tsv
+   divbase-cli files upload data/my_samples/*.vcf.gz
    divbase-cli dimensions update
    ```
 

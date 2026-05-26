@@ -2,6 +2,7 @@
 Command line interface for managing files in a DivBase project's store on DivBase.
 """
 
+from glob import glob
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -11,7 +12,6 @@ from rich.table import Table
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
-from divbase_cli.cli_exceptions import UnsupportedFileNameError, UnsupportedFileTypeError
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
@@ -33,6 +33,7 @@ from divbase_lib.utils import format_file_size
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
 
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
@@ -403,9 +404,26 @@ def stream_file(
 
 @file_app.command("upload")
 def upload_files(
-    files: list[Path] | None = typer.Argument(None, help="Space separated list of files to upload."),
-    upload_dir: Path | None = typer.Option(None, "--upload-dir", help="Directory to upload all files from."),
-    file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to upload."),
+    files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
+    file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        "-s",
+        help="If set, will skip already uploaded files, from the files you provided in the command. "
+        "Already uploaded files are determined by checking if a file with the same name and MD5 checksum already exists in the project's store on DivBase. ",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        "-R",
+        help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
+        "Without this flag, patterns only match files in the specified directory.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n", help="If set, will show what files would be uploaded, but not actually upload them."
+    ),
     disable_safe_mode: Annotated[
         bool,
         typer.Option(
@@ -419,56 +437,116 @@ def upload_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Upload files to your project's store on DivBase:
+    Upload files to your project's store on DivBase.
+    NOTE that directory structure is not preserved on upload, only the file name is used as the object name.
 
-    To provide files to upload you can either:
-        1. provide a list of files paths directly in the command line
-        2. provide a directory to upload
-        3. provide a text file with or a file list.
+    You can specify files directly as arguments including glob patterns (aka * or **) or use the --file-list option.
+    Use the flag --recursive / -R to expand glob patterns into subdirectories.
+    We recommend wrapping the glob pattern in quotes when using --recursive to ensure the correct behavior across different shells.
+
+    Examples:
+        # Upload multiple files by specifying them one after another
+        divbase-cli files upload file1.vcf.gz file2.tsv
+
+        # Upload all .vcf.gz files in the current directory
+        divbase-cli files upload "*.vcf.gz"
+
+        # Upload all files in a directory (non-recursive)
+        divbase-cli files upload "/path/to/data/*"
+
+        # Upload all files in a directory and its subdirectories
+        divbase-cli files upload --recursive "/path/to/data/**"
+
+        # Upload from a text file list (one file path per line)
+        divbase-cli files upload --file-list files_to_upload.txt
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    if bool(files) + bool(upload_dir) + bool(file_list) > 1:
-        print("Please specify only one of --files, --upload_dir, or --file-list.")
+    if bool(files) + bool(file_list) > 1:
+        print("Please specify only space separated files or provide a --file-list.")
         raise typer.Exit(1)
 
-    all_files: set[Path] = set()
+    if skip_existing and disable_safe_mode:
+        print(
+            "The --skip-existing and --disable-safe-mode options cannot be used together.\n"
+            "Safe mode calculates file checksums, "
+            "and these checksums are needed for --skip-existing to know what files to skip uploading."
+        )
+        raise typer.Exit(1)
+
+    # (to preserve order of files provided by user, but ensure no duplicates)
+    all_files: list[Path] = []
+    missing_files_or_patterns: list[str] = []
+    _seen: set[Path] = set()
     if files:
-        all_files.update(files)
-    if upload_dir:
-        all_files.update([p for p in upload_dir.iterdir() if p.is_file()])
+        for pattern in files:
+            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
+            if not matched:
+                missing_files_or_patterns.append(pattern)
+            for file in matched:
+                if file not in _seen:
+                    _seen.add(file)
+                    all_files.append(file)
+        if missing_files_or_patterns:
+            print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
+            for path in missing_files_or_patterns:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
     if file_list:
+        missing_files = []
         with open(file_list) as f:
             for line in f:
                 path = Path(line.strip())
                 if path.is_file():
-                    all_files.add(path)
+                    if path not in _seen:
+                        _seen.add(path)
+                        all_files.append(path)
+                else:
+                    missing_files.append(path)
+        if missing_files:
+            print(
+                "[red bold]Error: The following file paths provided in the --file-list do not exist or are not files:[/red bold]"
+            )
+            for path in missing_files:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
 
     if not all_files:
         print(NO_FILES_SPECIFIED_MSG)
         raise typer.Exit(1)
 
+    _check_for_duplicate_file_names(all_files)
     _check_for_unsupported_files(all_files)
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
-        all_files=list(all_files),
+        all_files=all_files,
         safe_mode=not disable_safe_mode,
+        skip_existing=skip_existing,
+        dry_run=dry_run,
     )
+
+    if uploaded_results.skipped:
+        print("[yellow bold]\nThe following files were skipped: [/yellow bold]")
+        for file in uploaded_results.skipped:
+            print(f"[yellow]- '{file.object_name}' reason: {file.reason}[/yellow]")
 
     if uploaded_results.successful:
         print("[green bold]\nThe following files were successfully uploaded: [/green bold]")
-        for object in uploaded_results.successful:
-            print(f"- '{object.object_name}' created from file at: '{object.file_path.resolve()}'")
+        for file in uploaded_results.successful:
+            print(f"[green]- '{file.object_name}' created from file at: '{file.file_path.resolve()}'[/green]")
 
     if uploaded_results.failed:
         print("[red bold]\nERROR: Failed to upload the following files:[/red bold]")
         for failed in uploaded_results.failed:
             print(f"[red]- '{failed.object_name}': Exception: '{failed.exception}'[/red]")
-
         raise typer.Exit(1)
+    elif not uploaded_results.successful:
+        print("\nNo files were uploaded.")
+    else:
+        print("\n[green bold]All files uploaded successfully![/green bold]")
 
 
 @file_app.command("rm")
@@ -582,7 +660,32 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     return list(all_files)
 
 
-def _check_for_unsupported_files(all_files: set[Path]) -> None:
+def _check_for_duplicate_file_names(all_files: list[Path]) -> None:
+    """
+    Helper fn to check if any two files in the upload set share the same file name.
+    Since directory structure is not preserved on upload, duplicate names would overwrite each other.
+    """
+    name_to_paths: dict[str, list[Path]] = {}
+    for f in all_files:
+        if f.name not in name_to_paths:
+            name_to_paths[f.name] = []
+        name_to_paths[f.name].append(f)
+
+    duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
+    if duplicates:
+        print(
+            "[red bold]Error: The following file names appear more than once in the upload list.[/red bold]\n"
+            "[red]Since directory structure is not preserved on upload, these files would collide:[/red]\n"
+        )
+        for name, paths in duplicates.items():
+            print(f"[red bold]'{name}':[/red bold]")
+            for p in paths:
+                print(f"[red]- {p.resolve()}[/red]")
+        print("\nPlease rename the files so each has a unique name before uploading.")
+        raise typer.Exit(1)
+
+
+def _check_for_unsupported_files(all_files: list[Path]) -> None:
     """
     Helper fn to check if any of the files to be uploaded are not supported by DivBase.
     Raises error if so.
@@ -603,10 +706,24 @@ def _check_for_unsupported_files(all_files: set[Path]) -> None:
             unsupported_chars.append(file_path)
 
     if unsupported_file_types:
-        raise UnsupportedFileTypeError(unsupported_files=unsupported_file_types)
+        print(
+            f"[red bold]Error: The following files' types are not supported by DivBase and therefore cannot be uploaded: [/red bold] \n"
+            f"[red]{'\n'.join(str(file) for file in unsupported_file_types)}\n\n[/red]"
+            f"DivBase currently supports the following file types: '{', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}'\n"
+            "Note that while you can upload '.tbi' and '.csi' files they are not used by DivBase in queries, we create our own index files instead. \n"
+            "If you want us to support another file type, please let us know.",
+        )
 
     if unsupported_chars:
-        raise UnsupportedFileNameError(unsupported_files=unsupported_chars)
+        print(
+            f"[red bold]Error: The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: [/red bold]\n"
+            f"[red]{'\n'.join(str(file) for file in unsupported_chars)}\n\n[/red]"
+            f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"
+            "Please rename the files and try again.",
+        )
+
+    if unsupported_file_types or unsupported_chars:
+        raise typer.Exit(1)
 
 
 def _pretty_print_download_results(download_results):

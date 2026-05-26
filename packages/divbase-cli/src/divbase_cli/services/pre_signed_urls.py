@@ -245,19 +245,29 @@ class FailedUpload:
 
 
 @dataclass
+class SkippedUpload:
+    """Represents a skipped upload attempt."""
+
+    object_name: str
+    file_path: Path
+    reason: str
+
+
+@dataclass
 class UploadOutcome:
     """Outcome of attempting to upload multiple files."""
 
     successful: list[SuccessfulUpload]
     failed: list[FailedUpload]
+    skipped: list[SkippedUpload]
 
 
 def upload_multiple_singlepart_pre_signed_urls(
     pre_signed_urls: list[PreSignedSinglePartUploadResponse], all_files: list[Path]
-) -> UploadOutcome:
+) -> tuple[list[SuccessfulUpload], list[FailedUpload]]:
     """
     Upload singlepart files using pre-signed PUT URLs.
-    Returns a UploadResults object containing the results of the upload attempts.
+    Returns a tuple of both the successful and failed uploads
     """
     file_map = {file.name: file for file in all_files}
 
@@ -280,7 +290,7 @@ def upload_multiple_singlepart_pre_signed_urls(
                 print("[bold red]Failed[/bold red]")
                 failed_uploads.append(result)
 
-    return UploadOutcome(successful=successful_uploads, failed=failed_uploads)
+    return successful_uploads, failed_uploads
 
 
 @stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
@@ -352,6 +362,8 @@ def perform_multipart_upload(
             uploaded_parts.extend(batch_uploads)
 
         # 3. Complete multipart upload
+        # must be uploaded in part order otherwise InvalidPartOrder error from S3
+        uploaded_parts.sort(key=lambda part: part.part_number)
         complete_request_body = CompleteMultipartUploadRequest(
             name=object_name,
             upload_id=object_data.upload_id,
@@ -452,7 +464,8 @@ def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tupl
             part.pre_signed_url,
             content=data_to_upload,
             headers=part.headers,
-            timeout=httpx.Timeout(5.0, write=30.0),
+            # generous here as don't want to fail a big upload if temporarily bad internet
+            timeout=httpx.Timeout(connect=10.0, read=10.0, write=120.0, pool=None),
         )
         response.raise_for_status()
         # ETag is returned with quotes, which must be stripped prior to comparison

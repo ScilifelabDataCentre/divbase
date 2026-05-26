@@ -4,8 +4,6 @@ Custom exceptions for the divbase CLI.
 
 from pathlib import Path
 
-from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
-
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -81,27 +79,6 @@ class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
         super().__init__(error_message)
 
 
-class FilesAlreadyInProjectError(DivBaseCLIError):
-    """
-    Raised when trying to upload file(s) that already exists in the project
-    and the user does not want to accidently create a new version of any file.
-    """
-
-    def __init__(self, existing_files: dict[Path, str], project_name: str):
-        files_list = "\n".join(
-            f"'{file_path}' (Checksum: {checksum})" for file_path, checksum in existing_files.items()
-        )
-        self.existing_files = existing_files
-        self.project_name = project_name
-
-        error_message = (
-            f"For the project: '{project_name}'\n"
-            "The exact version of the following file(s) that you're trying to upload already exist inside the project:\n"
-            f"{files_list}."
-        )
-        super().__init__(error_message)
-
-
 class ProjectNameNotSpecifiedError(DivBaseCLIError):
     """
     Raised when the project name is not specified in the command line arguments, and
@@ -135,35 +112,6 @@ class ProjectNotInConfigError(DivBaseCLIError):
             f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
         super().__init__(error_message)
-
-
-class UnsupportedFileTypeError(DivBaseCLIError):
-    """Raised when one or more files to be uploaded are not supported by DivBase (based on file extension)."""
-
-    def __init__(self, unsupported_files: list[Path], supported_types: tuple[str, ...] = SUPPORTED_DIVBASE_FILE_TYPES):
-        self.unsupported_files = unsupported_files
-        self.supported_types = supported_types
-        message = (
-            f"The following file(s) have types that are not supported by DivBase and therefore cannot be uploaded: \n"
-            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
-            f"DivBase currently supports the following file types: {', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}\n"
-            "If you want us to support another file type, please let us know."
-        )
-        super().__init__(message)
-
-
-class UnsupportedFileNameError(DivBaseCLIError):
-    """Raised when one or more files to be uploaded have unsupported characters in their filenames."""
-
-    def __init__(self, unsupported_files: list[Path]):
-        self.unsupported_files = unsupported_files
-        message = (
-            f"The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: \n"
-            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
-            f"Filenames cannot contain any of the following characters: {', '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)}\n"
-            "Please rename the files and try again."
-        )
-        super().__init__(message)
 
 
 class PolledTaskNotFinalError(Exception):
