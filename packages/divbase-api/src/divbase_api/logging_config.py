@@ -29,7 +29,9 @@ def configure_logging(log_level: str, environment: str) -> None:
     https://wazaari.dev/blog/fastapi-structlog-integration
     """
     if environment in LOCAL_DEV_ENVIRONMENTS:
-        renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer(colors=False)
+        renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer(
+            colors=False, exception_formatter=structlog.dev.plain_traceback
+        )
     else:
         renderer = structlog.processors.JSONRenderer()
 
