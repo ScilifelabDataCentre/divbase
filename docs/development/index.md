@@ -24,9 +24,9 @@ The API package has 2 entrypoints (fastapi and celery worker) and the CLI packag
 
 We use docker compose in local development and testing to create a matching local environment with all the services we need. Taking a look at the `docker/divbase_compose.yaml` file is a good way to get an overview of the different services that make up DivBase and how they interact.
 
-You can also take a look at our architecture decision records (ADRs) folder - `adr/` (and their associated PRs) for some more context surrounding choices we have made over time.
+You can also take a look at our architecture decision records (ADRs) folder - `adr/` (and their associated PRs) for some more context surrounding choices we have made over time. See also the separate developer documentation on [Key design decisions related to VCF files](key_design_decisions_related_to_vcf_files.md).
 
-## Some good to know things
+## Some good to know things about the DivBase system
 
 1. Whilst we expose an API, all user interactions with DivBase are intended to be done via `divbase-cli`. The CLI handles authentication, configuration management and making the appropriate API calls to divbase.
 

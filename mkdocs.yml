@@ -94,6 +94,7 @@ nav:
   - Dev Guide: 
     - Overview: development/index.md
     - Setup Guide: development/setup.md
+    - Key design decisions related to VCF files: development/key_design_decisions_related_to_vcf_files.md
     - API: development/api.md
     - Database Migrations: development/database-migrations.md
     - Celery Task Implementation: development/celery_task_implementation.md
