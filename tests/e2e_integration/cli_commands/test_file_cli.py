@@ -414,7 +414,7 @@ def test_upload_without_recursive_does_not_match_subdirectories(
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert "no files specified" in result.stdout.lower()
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
 
 
 def test_upload_duplicate_file_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
