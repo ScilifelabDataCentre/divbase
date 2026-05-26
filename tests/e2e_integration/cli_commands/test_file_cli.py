@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
+from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG, NO_UPLOAD_MATCHES_MSG
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
@@ -601,12 +601,41 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
 
 
-def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_nonexistent_files(logged_in_edit_user_with_existing_config, tmp_path):
+    """
+    Test that uploading nonexistent files fails with helpful error msg about which files do not exist
+    """
+    real_file = tmp_path / "new.tsv"
+    real_file.write_text("I exist! :)")
+    real_file_str = str(real_file.resolve())
+
     command = "files upload nonexistent_file.tsv"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert "no files specified" in result.stdout.lower()
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent_file.tsv" in result.stdout
+
+    # only those that don't exist should be in the error message.
+    command = f"files upload nonexistent_file.tsv another_nonexistent_file.vcf.gz {real_file_str}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent_file.tsv" in result.stdout
+    assert "another_nonexistent_file.vcf.gz" in result.stdout
+    assert real_file_str not in result.stdout
+
+    # same idea as above but using globs
+    real_file_glob = real_file_str[:-4] + "*"
+    command = f"files upload 'nonexistent*' 'another*.vcf.gz' {real_file_glob}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent*" in result.stdout
+    assert "another*.vcf.gz" in result.stdout
+    assert real_file_glob not in result.stdout
 
 
 @pytest.mark.parametrize(

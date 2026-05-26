@@ -33,6 +33,7 @@ from divbase_lib.utils import format_file_size
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
 
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
@@ -476,14 +477,22 @@ def upload_files(
 
     # (to preserve order of files provided by user, but ensure no duplicates)
     all_files: list[Path] = []
+    missing_files_or_patterns: list[str] = []
     _seen: set[Path] = set()
     if files:
         for pattern in files:
             matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
+            if not matched:
+                missing_files_or_patterns.append(pattern)
             for file in matched:
                 if file not in _seen:
                     _seen.add(file)
                     all_files.append(file)
+        if missing_files_or_patterns:
+            print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
+            for path in missing_files_or_patterns:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
     if file_list:
         missing_files = []
         with open(file_list) as f:
