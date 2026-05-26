@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
+from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG, NO_UPLOAD_MATCHES_MSG
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
@@ -414,7 +414,7 @@ def test_upload_without_recursive_does_not_match_subdirectories(
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert "no files specified" in result.stdout.lower()
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
 
 
 def test_upload_duplicate_file_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -454,8 +454,10 @@ def test_upload_recursive_duplicate_names_rejected(logged_in_edit_user_with_exis
     assert "samples.tsv" in result.stdout
 
 
-def test_upload_resume_skips_already_uploaded_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """Test that --resume skips files already in the project and uploads only new ones."""
+def test_upload_skip_existing_skips_already_uploaded_files(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that --skip-existing skips files already in the project and uploads only new ones."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
     existing_file = tmp_path / "existing.tsv"
@@ -467,13 +469,13 @@ def test_upload_resume_skips_already_uploaded_files(logged_in_edit_user_with_exi
     result = runner.invoke(app, f"files upload {existing_file} --project {clean_project}")
     assert result.exit_code == 0
 
-    # should fail as no --resume flag
+    # should fail as no --skip-existing flag
     result = runner.invoke(app, f"files upload {existing_file} {new_file}  --project {clean_project}")
     assert result.exit_code != 0
-    assert "--resume" in result.stdout
+    assert "--skip-existing" in result.stdout
 
-    # with --resume flag, new should be uploaded, old should be skipped
-    command = f"files upload --resume {existing_file} {new_file} --project {clean_project}"
+    # with --skip-existing flag, new should be uploaded, old should be skipped
+    command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0, result.output
     assert "skipped" in result.stdout.lower()
@@ -481,8 +483,8 @@ def test_upload_resume_skips_already_uploaded_files(logged_in_edit_user_with_exi
     assert "new.tsv" in result.stdout
     assert "successfully uploaded" in result.stdout.lower()
 
-    # now run again with --resume, should skip both as they are now both uploaded, but not fail
-    command = f"files upload --resume {existing_file} {new_file} --project {clean_project}"
+    # now run again with --skip-existing, should skip both as they are now both uploaded, but not fail
+    command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0, result.output
     assert "skipped" in result.stdout.lower()
@@ -513,10 +515,10 @@ def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_e
     assert "dry2.tsv" not in ls_result.stdout
 
 
-def test_upload_dry_run_with_resume_shows_skipped_and_new(
+def test_upload_dry_run_with_skip_existing_shows_skipped_and_new(
     logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
 ):
-    """Test that --dry-run --resume shows which files would be skipped vs uploaded."""
+    """Test that --dry-run --skip-existing shows which files would be skipped vs uploaded."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
     existing = tmp_path / "already_there_dry.tsv"
@@ -527,7 +529,9 @@ def test_upload_dry_run_with_resume_shows_skipped_and_new(
     result = runner.invoke(app, f"files upload {existing} --project {clean_project}")
     assert result.exit_code == 0
 
-    result = runner.invoke(app, f"files upload --dry-run --resume {existing} {new_file} --project {clean_project}")
+    result = runner.invoke(
+        app, f"files upload --dry-run --skip-existing {existing} {new_file} --project {clean_project}"
+    )
 
     assert result.exit_code == 0, result.output
     assert "already_there_dry.tsv" in result.stdout
@@ -597,12 +601,41 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
 
 
-def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_nonexistent_files(logged_in_edit_user_with_existing_config, tmp_path):
+    """
+    Test that uploading nonexistent files fails with helpful error msg about which files do not exist
+    """
+    real_file = tmp_path / "new.tsv"
+    real_file.write_text("I exist! :)")
+    real_file_str = str(real_file.resolve())
+
     command = "files upload nonexistent_file.tsv"
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert "no files specified" in result.stdout.lower()
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent_file.tsv" in result.stdout
+
+    # only those that don't exist should be in the error message.
+    command = f"files upload nonexistent_file.tsv another_nonexistent_file.vcf.gz {real_file_str}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent_file.tsv" in result.stdout
+    assert "another_nonexistent_file.vcf.gz" in result.stdout
+    assert real_file_str not in result.stdout
+
+    # same idea as above but using globs
+    real_file_glob = real_file_str[:-4] + "*"
+    command = f"files upload 'nonexistent*' 'another*.vcf.gz' {real_file_glob}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code != 0
+    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert "nonexistent*" in result.stdout
+    assert "another*.vcf.gz" in result.stdout
+    assert real_file_glob not in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -1258,7 +1291,7 @@ def pagination_files_uploaded(
     already_uploaded = all(name in list_result.stdout for name in file_names)
 
     if not already_uploaded:
-        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project} --resume"
+        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project} --skip-existing"
         upload_result = runner.invoke(app, upload_command)
         assert upload_result.exit_code == 0
 

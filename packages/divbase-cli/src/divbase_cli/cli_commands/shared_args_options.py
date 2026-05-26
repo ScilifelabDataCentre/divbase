@@ -6,6 +6,16 @@ If you have something that is only used in one of the cli subcommands, don't mov
 
 import typer
 
+DOWNLOAD_DIR_OPTION = typer.Option(
+    None,
+    "--download-dir",
+    "-d",
+    help="""Directory to download the files to.
+        If not provided, defaults to what you specified in your user config.
+        If also not specified in your user config, downloads to the current directory.
+        You can also specify "." to download to the current directory.""",
+)
+
 PROJECT_NAME_OPTION = typer.Option(
     None,
     "--project",

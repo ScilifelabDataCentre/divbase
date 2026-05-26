@@ -11,7 +11,7 @@ from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
+from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
@@ -33,16 +33,8 @@ from divbase_lib.utils import format_file_size
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
+NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
 
-DOWNLOAD_DIR_OPTION = typer.Option(
-    None,
-    "--download-dir",
-    "-d",
-    help="""Directory to download the files to. 
-        If not provided, defaults to what you specified in your user config. 
-        If also not specified in your user config, downloads to the current directory.
-        You can also specify "." to download to the current directory.""",
-)
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
     "--disable-verify-checksums",
@@ -414,16 +406,17 @@ def stream_file(
 def upload_files(
     files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
-    resume: bool = typer.Option(
+    skip_existing: bool = typer.Option(
         False,
-        "--resume",
-        "-r",
+        "--skip-existing",
+        "-s",
         help="If set, will skip already uploaded files, from the files you provided in the command. "
         "Already uploaded files are determined by checking if a file with the same name and MD5 checksum already exists in the project's store on DivBase. ",
     ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
+        "-r",
         "-R",
         help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
         "Without this flag, patterns only match files in the specified directory.",
@@ -474,24 +467,32 @@ def upload_files(
         print("Please specify only space separated files or provide a --file-list.")
         raise typer.Exit(1)
 
-    if resume and disable_safe_mode:
+    if skip_existing and disable_safe_mode:
         print(
-            "The --resume and --disable-safe-mode options cannot be used together.\n"
+            "The --skip-existing and --disable-safe-mode options cannot be used together.\n"
             "Safe mode calculates file checksums, "
-            "and these checksums are needed for --resume to know what files to skip uploading."
+            "and these checksums are needed for --skip-existing to know what files to skip uploading."
         )
         raise typer.Exit(1)
 
     # (to preserve order of files provided by user, but ensure no duplicates)
     all_files: list[Path] = []
+    missing_files_or_patterns: list[str] = []
     _seen: set[Path] = set()
     if files:
         for pattern in files:
             matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
+            if not matched:
+                missing_files_or_patterns.append(pattern)
             for file in matched:
                 if file not in _seen:
                     _seen.add(file)
                     all_files.append(file)
+        if missing_files_or_patterns:
+            print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
+            for path in missing_files_or_patterns:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
     if file_list:
         missing_files = []
         with open(file_list) as f:
@@ -523,7 +524,7 @@ def upload_files(
         divbase_base_url=logged_in_url,
         all_files=all_files,
         safe_mode=not disable_safe_mode,
-        resume_upload=resume,
+        skip_existing=skip_existing,
         dry_run=dry_run,
     )
 
