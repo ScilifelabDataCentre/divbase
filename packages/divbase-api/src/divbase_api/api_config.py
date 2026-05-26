@@ -26,6 +26,7 @@ class GeneralSettings:
     mkdocs_site_url: str = os.getenv("MKDOCS_SITE_URL", "NOT_SET")
     user_support_email: EmailStr = os.getenv("USER_SUPPORT_EMAIL", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
 

@@ -24,6 +24,7 @@ class WorkerGeneralSettings:
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     sync_url: SecretStr = SecretStr(os.getenv("SYNC_DATABASE_URL", "NOT_SET"))
     broker_url: SecretStr = SecretStr(os.getenv("CELERY_BROKER_URL", "NOT_SET"))
     result_backend: SecretStr = SecretStr(os.getenv("CELERY_RESULT_BACKEND", "NOT_SET"))
@@ -62,6 +63,7 @@ class WorkerCronSettings:
     stuck_pending_hours: int = int(os.getenv("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
     stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
+    log_retention_days: int = int(os.getenv("LOG_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
     soft_deleted_project_version_retention_days: int = int(
         os.getenv("SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS", "30")

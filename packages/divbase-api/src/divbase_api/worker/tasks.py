@@ -141,6 +141,8 @@ def config_loggers(*args, **kwargs) -> None:
     configure_logging(
         log_level=worker_settings.general.log_level,
         environment=worker_settings.general.environment,
+        log_to_file=worker_settings.general.log_to_file,
+        service_name="divbase_worker",
     )
 
 

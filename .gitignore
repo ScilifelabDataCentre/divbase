@@ -40,6 +40,10 @@ scripts/benchmarking/results
 htmlcov/
 docker/coverage-data/
 
+# log files written by docker compose, if env var set to do so (by default no)
+docker/logs/*
+!docker/logs/.gitkeep
+
 #MacOS artifacts
 .DS_Store
 

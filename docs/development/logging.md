@@ -30,3 +30,9 @@ The config can handle both:
 ## Logging in deployed environments
 
 This is handled by our private [divbase argocd](https://github.com/ScilifelabDataCentre/argocd-divbase) repo. See the docs there for information.
+
+## Logging to file (by default turned off)
+
+File logging is optional (for api + worker) and controlled by setting `LOG_TO_FILE=1` in the docker compose file.
+
+If on, it will write logs to `{REPO_ROOT}/docker/logs/` in local dev (as well as stdout).

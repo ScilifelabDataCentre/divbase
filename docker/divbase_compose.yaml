@@ -77,6 +77,8 @@ services:
           target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
+    volumes:
+      - ./logs:/logs
     # NOTE: celery beat runs here ("-B"), in production it is run as a separate service
     # NOTE: Worker quick takes any non-specified tasks (with -Q "celery" being the default queue), 
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=1", "-B"]
@@ -90,6 +92,8 @@ services:
     depends_on: *worker-api-depends
     environment: *worker-env
     develop: *watch-celery-src
+    volumes:
+      - ./logs:/logs
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=1"]
     networks: *internal-network
     ports:
@@ -174,6 +178,7 @@ services:
     volumes:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
+      - ./logs:/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/core/health"]
       interval: 5s
@@ -218,6 +223,8 @@ services:
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY=s3-cron-service-account
       - S3_CRON_SERVICE_ACCOUNT_SECRET_KEY=badpassword
+    volumes:
+      - ./logs:/logs
     networks:
       - internal
   postgres:
