@@ -967,39 +967,34 @@ def _delete_job_files_from_worker(
     vcf_paths: list[Path] | None = None,
     metadata_path: Path | None = None,
     output_file: Path | None = None,
+    log_file: Path | None = None,
 ) -> None:
     """
     After uploading results to bucket, delete job files from the worker.
+    TODO - it would be better to just have a dir per job (e.g. /<task_id>/) and rm the dir after each job,
+    to ensure isolation even in job failure.
+    but that requires more refactorign and care.
     """
-
     vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
-        try:
-            os.remove(vcf_path)
-            logger.info(f"Deleted {vcf_path} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete input VCF file from worker {vcf_path}: {e}")
+        vcf_path.unlink(missing_ok=True)
+        logger.info(f"Deleted {vcf_path} from worker.")
+
         csi_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
-        if csi_path.exists():
-            try:
-                os.remove(csi_path)
-                logger.info(f"Deleted CSI index {csi_path} from worker.")
-            except Exception as e:
-                logger.warning(f"Could not delete CSI index file {csi_path}: {e}")
+        csi_path.unlink(missing_ok=True)
+        logger.info(f"Deleted CSI index {csi_path} from worker.")
 
-    if metadata_path is not None:
-        try:
-            os.remove(metadata_path)
-            logger.info(f"Deleted {metadata_path} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete metadata file from worker {metadata_path}: {e}")
+    if metadata_path:
+        metadata_path.unlink(missing_ok=True)
+        logger.info(f"Deleted {metadata_path} from worker.")
 
-    if output_file is not None:
-        try:
-            os.remove(output_file)
-            logger.info(f"Deleted {output_file} from worker.")
-        except Exception as e:
-            logger.warning(f"Could not delete output file from worker {output_file}: {e}")
+    if output_file:
+        output_file.unlink(missing_ok=True)
+        logger.info(f"Deleted {output_file} from worker.")
+
+    if log_file:
+        log_file.unlink(missing_ok=True)
+        logger.info(f"Deleted {log_file} from worker.")
 
 
 def _check_if_samples_can_be_combined_with_bcftools(
