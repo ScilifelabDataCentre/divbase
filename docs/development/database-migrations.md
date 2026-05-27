@@ -135,7 +135,7 @@ Documentation on how to run migrations in production/deployed environments is co
 
 ### "No changes in schema detected"
 
-- Ensure your models are properly imported in `models/base.py`
+- Ensure your models are properly imported in `models/__init__.py`
 - Check that your model changes are actually different from the database.
 
 ### Migration fails to apply

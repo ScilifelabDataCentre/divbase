@@ -33,7 +33,7 @@ To run only unit, e2e_integration or migration tests:
 ```bash
 pytest -s tests/unit
 pytest -s tests/e2e_integration
-pytest -s tests/migration
+pytest -s tests/migrations
 ```
 
 **The e2e_integration tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker compose building steps.**
@@ -56,7 +56,9 @@ scripts/run_tests_with_coverage.sh
 This runs `pytest -s tests/ --coverage-docker --cov --cov-branch --cov-context=test --cov-report=term-missing` (where `--coverage-docker` is a custom option implemented in the DivBase testing suite to apply the `docker/divbase_compose.tests.coverage.yaml` overlay), ensures that the docker compose stack stops gracefully to trigger coverage results collection before terminating the containers, ensures all intermediate coverage results files are collected in `docker/coverage-data/`, combines them with `coverage combine` into a single results file, and builds an HTML report with per-test context.
 
 !!! Important
-    The wrapper script will print coverage results to the terminal after the pytest run has finished. This is the code coverage of the local machine Python process. For a complete report that includes code coverage of the containers too, please refer to the HTML report created by the wrapper script.
+    1. The wrapper script will print coverage results to the terminal after the pytest run has finished. This is the code coverage of the local machine Python process. For a complete report that includes code coverage of the containers too, please refer to the HTML report created by the wrapper script.
+
+    2. The `--coverage-docker` flag only activates the compose overlay but does not handle the graceful stack shutdown, coverage file collection, or `coverage combine` step that are needed for a complete coverage report. Use `scripts/run_tests_with_coverage.sh` instead.
 
 The coverage analysis report is set up to track which tests trigger which line of code. This is displayed to the far right of a code line in the HTML report. However, this feature only works for code that ran on the host machine. All code that ran inside a container will say `(empty)`. This is a limitation of this custom container coverage setup.
 

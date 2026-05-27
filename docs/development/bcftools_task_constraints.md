@@ -3,7 +3,7 @@
 DivBase uses `bcftools` for several VCF parsing steps, including VCF dimensions caching and VCF queries. This document outlines the rules and constraints of different `bcftools` commands used in the DivBase backend. The main reference for this is the [`bcftools` manual](https://samtools.github.io/bcftools/bcftools.html). The commands were run using `bcftools` v1.21.
 
 !!! note
-    There is intentional overlap between this page and [Key design decisions related to VCF files](key_design_decisions_related_to_vcf_files.md). This page goes deep into the details of `bcftools`, whereas the other document describe high level design choices.
+    There is intentional overlap between this page and [Key design decisions related to VCF files](key_design_decisions_related_to_vcf_files.md). This page goes deep into the details of `bcftools`, whereas the other document describes high level design choices. For an overview of how the task logic is orchestrated, see [Bcftools Celery Task Logic](bcftools_task_logic.md).
 
 What sets DivBase apart from regular `bcftools` scripting is that the DivBase server dynamically orchestrates `bcftools` workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed ([as described in e.g. the VCF query user guide](../user-guides/vcf-query-syntax.md/#53-how-does-divbase-process-the-vcf-files)). There are two ways to combine VCF files with `bcftools`: `bcftools merge` and `bcftools concat`. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined. An overview of the possible sample column overlap cases and are found in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) and described in detail in [Section 3 (`bcftools merge`)](#3-bcftools-merge) and [Section 4 (`bcftools concat`)](#4-bcftools-concat).
 
@@ -129,7 +129,7 @@ There is no single "one-line rule" for VCF headers across all `bcftools` command
 
 ## 2. How DivBase chooses between bcftools merge and concat
 
-`bcfools merge` and `concat` are designed to consider so-called "sample sets", i.e. ["sample columns appearing in the same order"](https://samtools.github.io/bcftools/bcftools.html#concat) in the `#CHROM` header of the VCF file. For example, if `S1`- `S6` are names of different samples, a sample set is an ordered combination of samples in a given VCF file, such as `S1,S3,S4`.
+`bcftools merge` and `concat` are designed to consider so-called "sample sets", i.e. ["sample columns appearing in the same order"](https://samtools.github.io/bcftools/bcftools.html#concat) in the `#CHROM` header of the VCF file. For example, if `S1`- `S6` are names of different samples, a sample set is an ordered combination of samples in a given VCF file, such as `S1,S3,S4`.
 
 The relationship between sample sets across the input files to a DivBase query determines which `bcftools` command (`merge` or `concat`) — or whether the query is rejected before bcftools is called at all.
 
@@ -149,11 +149,11 @@ DivBase handles five cases of sample set overlap:
 
 - **Same samples but different sample column order**
 
-    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S2,S1,S3`. Violates `bctools` contstrains, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S2,S1,S3`. Violates `bcftools` constraints, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
 
 - **Partially overlapping sample sets**
 
-    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S3,S4,S5` (`S3` is in both sample sets). Violates `bctools` contstrains, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
+    E.g. VCF file 1: `S1,S2,S3` vs VCF file 2: `S3,S4,S5` (`S3` is in both sample sets). Violates `bcftools` constraints, rejected with a `TaskUserError` before the VCF processing of the VCF query starts.
 
 This classification is performed by `_check_if_samples_can_be_combined_with_bcftools` in `worker/tasks.py`, using sample names stored in the dimensions cache to determine whether the input VCFs fulfil the rules for the bcftools orchestration in `tasks.bcftools_query`. If they do not, the task exits before VCF files are downloaded from S3, saving compute resources.
 
@@ -297,7 +297,7 @@ bcftools merge -Ov -o test5c.vcf tests/fixtures/HOM_20ind_17SNPs_first_10_sample
 
 ### 3.5. What about the headers? Do they need to be the same?
 
-No, the headers do not need to be identical. `bcftools merge` builds the output header by computing a union of all input file headers. Deduplication is performed bason on header lines (`FILTER`, `INFO`, `FORMAT`, and `contig`) whose `ID` does not yet appear in the output header; lines whose `ID` is already present are silently skipped (first-seen wins tie-breaks).
+No, the headers do not need to be identical. `bcftools merge` builds the output header by computing a union of all input file headers. Deduplication is performed based on header lines (`FILTER`, `INFO`, `FORMAT`, and `contig`) whose `ID` does not yet appear in the output header; lines whose `ID` is already present are silently skipped (first-seen wins tie-breaks).
 
 No error or warning is emitted for structural differences such as different sets of `contig` lines or different `FILTER` definitions. The only header-related warning is for `INFO` or `FORMAT` fields that appear in two files with a different `Number` or `Type` attribute: `bcftools` emits a warning to stderr but continues the merge, keeping the first file's definition. There seem to be no `bcftools`option to control this behaviour.
 
