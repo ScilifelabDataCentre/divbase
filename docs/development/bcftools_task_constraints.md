@@ -2,6 +2,9 @@
 
 DivBase uses `bcftools` for several VCF parsing steps, including VCF dimensions caching and VCF queries. This document outlines the rules and constraints of different `bcftools` commands used in the DivBase backend. The main reference for this is the [`bcftools` manual](https://samtools.github.io/bcftools/bcftools.html). The commands were run using `bcftools` v1.21.
 
+!!! note
+    There is intentional overlap between this page and [Key design decisions related to VCF files](key_design_decisions_related_to_vcf_files.md). This page goes deep into the details of `bcftools`, whereas the other document describe high level design choices.
+
 What sets DivBase apart from regular `bcftools` scripting is that the DivBase server dynamically orchestrates `bcftools` workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed ([as described in e.g. the VCF query user guide](../user-guides/vcf-query-syntax.md/#53-how-does-divbase-process-the-vcf-files)). There are two ways to combine VCF files with `bcftools`: `bcftools merge` and `bcftools concat`. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined. An overview of the possible sample column overlap cases and are found in [Section 2](#2-how-divbase-chooses-between-bcftools-merge-and-concat) and described in detail in [Section 3 (`bcftools merge`)](#3-bcftools-merge) and [Section 4 (`bcftools concat`)](#4-bcftools-concat).
 
 !!! Important
