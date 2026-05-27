@@ -8,10 +8,7 @@ We don't use structlog in the cli or lib modules as would add unnecessary bloat.
 
 ## Configuration
 
-- Shared logging configuration lives in packages/divbase-api/src/divbase_api/logging_config.py.
-- Logging is configured through configure_logging(log_level, environment).
-
-The config can handle both:
+Shared logging configuration lives in logging_config.py. The config can handle both:
 
 - structlog logger calls.
 - non-structlog stdlib logging calls (for example from third-party libraries like uvicorn).
@@ -27,12 +24,13 @@ The config can handle both:
 
     - celery signals used to bind (aka add) the task id to all logging events associated with a specific task, - again same idea as above, nice for filtering.
 
-## Logging in deployed environments
-
-This is handled by our private [divbase argocd](https://github.com/ScilifelabDataCentre/argocd-divbase) repo. See the docs there for information.
-
 ## Logging to file (by default turned off)
 
-File logging is optional (for api + worker) and controlled by setting `LOG_TO_FILE=1` in the docker compose file.
+File logging is optional (for api + worker) and controlled by setting `LOG_TO_FILE=1` and is by default turned off.
 
-If on, it will write logs to `{REPO_ROOT}/docker/logs/` in local dev (as well as stdout).
+- If on, it will write logs to /logs/ in deployed environments (as well as stdout).
+- If on, it will write logs to `{REPO_ROOT}/docker/logs/` in local dev (as well as stdout).
+
+There is a celery cron job in place to clean up old logs files (older than 30 days).
+
+At time of writing, in deployed environments, logs are written to a shared PVC and stdout. In local dev logs are only written to stdout. At some point it would be nice to setup loki, grafana alloy and grafana for log aggregation and visualisation in the deployed environments. If that happens then the logging to file approch can most likely be deleted.
