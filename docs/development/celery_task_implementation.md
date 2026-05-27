@@ -38,8 +38,8 @@ For a user-submitted task to be fully integrated in DivBase, it needs to be impl
 ### 2.1 Task Definition
 
 - Tasks are defined in `./packages/divbase-api/src/divbase_api/worker/tasks.py`
-- Towards the top of the file are the Celery app defintions in `app = Celery()` and `app.conf.update()`. These should not be altered unless refactoring the celery app specifically. The Celery results backend handles writing of task metadata to the `CeleryTaskMeta` table in the postgreSQL database.
-- Two Celery signal handlers are used to write to additional postgreSQL tables to capture values that are not included in `CeleryTaskMeta`. Like the Celery app, these should not be altered unless they are part of a refactoring.
+- Towards the top of the file are the Celery app defintions in `app = Celery()` and `app.conf.update()`. These should not be altered unless refactoring the celery app specifically. The Celery results backend handles writing of task metadata to the `CeleryTaskMeta` table in the PostgreSQL database.
+- Two Celery signal handlers are used to write to additional PostgreSQL tables to capture values that are not included in `CeleryTaskMeta`. Like the Celery app, these should not be altered unless they are part of a refactoring.
   - The `after_task_publish` signal handler handles cron jobs specifically. This signal fires when a task is published to the queue. If the task name begins with `cron_task` an entry is written to `TaskHistoryDB`. For user-submitted tasks, the writes to `TaskHistoryDB` are handled by the API, as described below in Section 2.3.
   - The `task_prerun` signal handler fires when an idle worker picks up a task from the queue and changes its status to `STARTED`. This signal triggeres a write of a `started_at` timestamp to the `TaskStartedAtDB` table. This is used by the task history logic to calculate the runtime of a task.
 - A user-submitted task in DivBase is a function decorated with `@app.task(tasks.<NAME>)`. It is possible to tag the tasks with labels, such as `tags=["slow"]`. These tags could potentially be used by other Celery logic, such as task routing, but the use of tags is optional in DivBase tasks.
@@ -188,7 +188,7 @@ class TaskHistoryResult(BaseModel):
 - Tasks should also call the `check_queue_closed_for_new_tasks` fn to validate the queue is not down (i.e. due to planned maintenance). This function raises a `QueueClosedError` if the queue is closed, which is handled in the API layer to return a 400 error with a message to the user.
 - To enqueue the task function defined in `tasks.py` in the job system, use `result = <TASK_FUNCTION>.apply_async()`. This returns some initial Celery task metadata, including the Celery task UUID.
   - The established pattern in DivBase is - for clarity - to call `.apply_async()` with keyword arguments and not arguments. Specifically, the Pydantic kwargs model can be populated, and then dumped in to Python dict in `.apply_async()` since Celery cannot de/serialise Pydantic mdoels. This ensures that kwarg types are validated before enqueuing the task.
-- Call the `create_task_history_entry()` CRUD function to record the Celery task UUID in `TaskHistoryDB` along with user and project ID. This function will return the DivBase task ID, which is the autoincrementing id from the postgreSQL table. This is an integer and much easier for the users to handle than long UUIDs.
+- Call the `create_task_history_entry()` CRUD function to record the Celery task UUID in `TaskHistoryDB` along with user and project ID. This function will return the DivBase task ID, which is the autoincrementing id from the PostgreSQL table. This is an integer and much easier for the users to handle than long UUIDs.
 - Finally, return the DivBase task ID to the user client as an API reponse.
 
 Example of an API endpoint. This pattern can more or less be used as boilerplate code when creating new endpoints for user-submitted tasks.

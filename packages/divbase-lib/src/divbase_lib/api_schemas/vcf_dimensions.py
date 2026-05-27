@@ -17,7 +17,7 @@ class DimensionUpdateKwargs(BaseModel):
 
 
 class DimensionUpdateTaskResult(BaseModel):
-    """Dimension update task result details. Based on the return of tasks.update_dimensions_index."""
+    """Dimension update task result details. Based on the return of tasks.update_vcf_dimensions_task."""
 
     status: Optional[str] = None
     VCF_files_added: Optional[list[str]] = Field(
