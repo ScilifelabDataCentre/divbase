@@ -19,7 +19,7 @@ import structlog
 
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
-DEFAULT_LOG_DIR = Path("/logs")
+LOG_FILES_DIR = Path("/logs")
 
 
 class SkipHealthyApiChecksFilter(logging.Filter):
@@ -93,7 +93,7 @@ def configure_logging(log_level: str, environment: str, service_name: str, log_t
     handlers: list[logging.Handler] = [stream_handler]
     if log_to_file:
         instance_name = socket.gethostname()
-        log_file = DEFAULT_LOG_DIR / f"{service_name}-{instance_name}.log"
+        log_file = LOG_FILES_DIR / f"{service_name}-{instance_name}.log"
 
         file_handler = RotatingFileHandler(
             filename=log_file,

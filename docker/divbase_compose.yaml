@@ -159,6 +159,7 @@ services:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations:ro
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini:ro
   fastapi:
+    hostname: divbase-api
     build:
       context: ..
       dockerfile: docker/fastapi.dockerfile
