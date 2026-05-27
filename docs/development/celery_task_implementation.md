@@ -29,7 +29,7 @@ DivBase uses a layered architecture and therefore task implementations occur at 
 
 ![Celery Task Implementation Sequence Diagram](../assets/diagrams/celery_task_implementation_sequence_diagram.svg)
 
-Figure 1: Sequence diagram of the task signal flow in DivBase. Note that this diagram only shows submission and execution of tasks; to fetch the result of a task, users need to use the task history CLI command, which is not included in this diagram. Please see [Task History Implementation](task_history_implementation.md) for details on that command.
+Figure 1: General sequence diagram of the task signal flow in DivBase. Note that this diagram only shows submission and execution of tasks; to fetch the result of a task, users need to use the task history CLI command, which is not included in this diagram. Please see [Task History Implementation](task_history_implementation.md) for details on that command.
 
 !!! warning "Task not re-enqueued if workers crash or restart"
     `task_acks_late=False` is set in `tasks.py`, which means a task is acknowledged by the broker as soon as a worker picks it up, not when it completes. Consequently, if the worker pod crashes mid-execution, the task will not be automatically requeued, the user must manually resubmit. This is how HPC job management systems like SLURM typically are configured, and thus this is likely behaviour that the DivBase target audience expects.
