@@ -267,7 +267,7 @@ def test_results_files_hard_deleted(
     tmp_path: Path,
 ):
     """
-    Validate that query job/task files are hard deleted after the retention window:
+    Validate that query job/task files and their associated log files are hard deleted after the retention window:
         - all versions and delete markers removed
         - true whether the file was soft-deleted or not (both paths exercised in one test).
     """
@@ -285,10 +285,21 @@ def test_results_files_hard_deleted(
     f.write_text("active results content")
     s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={active_filename: f})
 
+    soft_deleted_log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{tmp_path.name}.log"
+    f = tmp_path / soft_deleted_log_filename
+    f.write_text("log content")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={soft_deleted_log_filename: f})
+    s3_file_manager.soft_delete_objects(objects=[soft_deleted_log_filename], bucket_name=bucket_name)
+
+    active_log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{tmp_path.name}_active.log"
+    f = tmp_path / active_log_filename
+    f.write_text("active log content")
+    s3_file_manager.upload_files(bucket_name=bucket_name, to_upload={active_log_filename: f})
+
     mocked_now = datetime.now(timezone.utc) + timedelta(days=DEFAULT_RESULTS_FILES_RETENTION_DAYS + 1)
     _run_script_with_mocked_time(mocked_now)
 
-    for filename in (soft_deleted_filename, active_filename):
+    for filename in (soft_deleted_filename, active_filename, soft_deleted_log_filename, active_log_filename):
         versions = s3_file_manager.s3_client.list_object_versions(Bucket=bucket_name, Prefix=filename)
         assert not [v for v in versions.get("Versions", []) if v["Key"] == filename]
         assert not [m for m in versions.get("DeleteMarkers", []) if m["Key"] == filename]
