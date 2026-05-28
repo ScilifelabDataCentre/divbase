@@ -1,12 +1,16 @@
 import dataclasses
+import logging
+import subprocess
 import time
 from datetime import datetime, timezone
 from enum import Enum
 from itertools import combinations
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import psutil
 import structlog
+from botocore.exceptions import ClientError
 from celery import Celery
 from celery.signals import (
     after_task_publish,
@@ -19,13 +23,14 @@ from celery.signals import (
 )
 from sqlalchemy.exc import SQLAlchemyError
 
+from divbase_api import __version__ as divbase_version
 from divbase_api.crud.s3 import validate_s3_service_account
 from divbase_api.exceptions import (
     ObjectDoesNotExistError,
     TSVFileNotFoundInProjectError,
     VCFDimensionsEntryMissingError,
 )
-from divbase_api.logging_config import configure_logging
+from divbase_api.logging_config import configure_logging, create_task_log_handler
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.metadata_queries import run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager
@@ -346,130 +351,183 @@ def bcftools_pipe_task(
     logger.info(f"Starting bcftools_pipe_task with Celery, task ID: {task_id}, job ID: {job_id}")
     s3_file_manager = _create_s3_file_manager()
 
-    with SyncSessionLocal() as db:
-        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-    if not vcf_dimensions_data.vcf_files:
-        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
-        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
-
-    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
-    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
-        vcf_dimensions_data=vcf_dimensions_data,
-        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
-        project_id=project_id,
+    log_file = Path(f"{QUERY_RESULTS_FILE_PREFIX}{job_id}.log")
+    log_date = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M:%S %Z")
+    header = (
+        "DivBase query vcf task log\n"
+        "=================\n"
+        "Job Status: JOB_STATUS_PLACEHOLDER\n"  # will get replaced at the end of the task
+        f"DivBase version: {divbase_version}\n"
+        f"BCFtools version: {_get_bcftools_version()}\n"
+        f"Date: {log_date}\n"
+        f"Project: {project_name}\n"
+        f"Sample Selection Mode: SAMPLE_FILTER_PLACEHOLDER\n"  # TODO placeholder update on _determine_sample_selection_mode
+        # if e.g. tsv_filter, include the filter in 2nd line, same for samples
+        f"User inputted bcftools command used: '{command}'\n"
+        f"Task ID: {job_id}\n"
+        f"DivBase internal task ID: {task_id}\n"
+        "=================\n\n"
     )
+    log_handler = create_task_log_handler(log_file=log_file, header=header)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
 
-    sample_selection_mode = _determine_sample_selection_mode(
-        tsv_filter=tsv_filter,
-        samples=samples,
-        all_samples=all_samples,
-    )
+    # assign here so even if early exit from error the finally block will be able to clean them up.
+    vcf_paths: list[Path] = []
+    metadata_path: Path | None = None
+    output_file: Path | None = None
+    task_succeeded = False
+    try:
+        with SyncSessionLocal() as db:
+            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
 
-    if sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
-        resolved_sample_mode_results = _resolve_inputs_for_sample_metadata_mode(
-            metadata_tsv_name=metadata_tsv_name,
-            bucket_name=bucket_name,
-            s3_file_manager=s3_file_manager,
-            tsv_filter=tsv_filter,
+        if not vcf_dimensions_data.vcf_files:
+            # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+            raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
+
+        latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+        _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
+            vcf_dimensions_data=vcf_dimensions_data,
+            latest_versions_of_bucket_files=latest_versions_of_bucket_files,
             project_id=project_id,
-            project_name=project_name,
-            vcf_dimensions_data=vcf_dimensions_data,
         )
-    elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
-        resolved_sample_mode_results = _resolve_inputs_for_cli_samples_mode(
+
+        sample_selection_mode = _determine_sample_selection_mode(
+            tsv_filter=tsv_filter,
             samples=samples,
-            vcf_dimensions_data=vcf_dimensions_data,
-        )
-    elif sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
-        resolved_sample_mode_results = _resolve_inputs_for_all_samples_mode(
-            vcf_dimensions_data=vcf_dimensions_data,
+            all_samples=all_samples,
         )
 
-    files_to_download = resolved_sample_mode_results.files_to_download
-    sample_and_filename_subset = resolved_sample_mode_results.sample_and_filename_subset
-    metadata_path = resolved_sample_mode_results.metadata_path
+        if sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
+            resolved_sample_mode_results = _resolve_inputs_for_sample_metadata_mode(
+                metadata_tsv_name=metadata_tsv_name,
+                bucket_name=bucket_name,
+                s3_file_manager=s3_file_manager,
+                tsv_filter=tsv_filter,
+                project_id=project_id,
+                project_name=project_name,
+                vcf_dimensions_data=vcf_dimensions_data,
+            )
+        elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
+            resolved_sample_mode_results = _resolve_inputs_for_cli_samples_mode(
+                samples=samples,
+                vcf_dimensions_data=vcf_dimensions_data,
+            )
+        elif sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
+            resolved_sample_mode_results = _resolve_inputs_for_all_samples_mode(
+                vcf_dimensions_data=vcf_dimensions_data,
+            )
 
-    # Defensive validation in worker: API route validates before queueing, but task execution can also be invoked directly in tests/internal paths.
-    command = validate_user_submitted_bcftools_command(command=command, all_samples=all_samples)
+        files_to_download = resolved_sample_mode_results.files_to_download
+        sample_and_filename_subset = resolved_sample_mode_results.sample_and_filename_subset
+        metadata_path = resolved_sample_mode_results.metadata_path
 
-    region_scaffolds = extract_region_scaffolds_from_command(command=command)
-    if region_scaffolds:
-        files_to_download = _check_for_unnecessary_files_for_region_query(
-            scaffolds=region_scaffolds,
+        # Defensive validation in worker: API route validates before queueing, but task execution can also be invoked directly in tests/internal paths.
+        command = validate_user_submitted_bcftools_command(command=command, all_samples=all_samples)
+
+        region_scaffolds = extract_region_scaffolds_from_command(command=command)
+        if region_scaffolds:
+            files_to_download = _check_for_unnecessary_files_for_region_query(
+                scaffolds=region_scaffolds,
+                files_to_download=files_to_download,
+                vcf_dimensions_data=vcf_dimensions_data,
+            )
+            sample_and_filename_subset = [
+                entry for entry in sample_and_filename_subset if entry.filename in files_to_download
+            ]
+
+        _check_if_samples_can_be_combined_with_bcftools(
             files_to_download=files_to_download,
             vcf_dimensions_data=vcf_dimensions_data,
         )
-        sample_and_filename_subset = [
-            entry for entry in sample_and_filename_subset if entry.filename in files_to_download
-        ]
 
-    _check_if_samples_can_be_combined_with_bcftools(
-        files_to_download=files_to_download,
-        vcf_dimensions_data=vcf_dimensions_data,
-    )
+        # Measure download operation resources
+        # Memory: Capture baseline before download, then measure incremental memory increase (delta)
+        if worker_settings.metrics.enabled_per_task:
+            download_cpu_start = process.cpu_times()
+            download_mem_baseline = process.memory_info().rss
+            download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
+            download_memory_monitor.start()
+            download_start = time.time()
 
-    # Measure download operation resources
-    # Memory: Capture baseline before download, then measure incremental memory increase (delta)
-    if worker_settings.metrics.enabled_per_task:
-        download_cpu_start = process.cpu_times()
-        download_mem_baseline = process.memory_info().rss
-        download_memory_monitor = MemoryMonitor(process, sample_interval=0.5, baseline_memory=download_mem_baseline)
-        download_memory_monitor.start()
-        download_start = time.time()
+        logger.info("Started downloading VCF files from S3 to worker")
 
-    logger.info("Started downloading VCF files from S3 to worker")
-
-    vcf_paths = _download_vcf_files(
-        files_to_download=files_to_download,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
-    )
-
-    logger.info("Finished downloading VCF files from S3 to worker")
-
-    if worker_settings.metrics.enabled_per_task:
-        download_walltime = time.time() - download_start
-        download_memory_stats = download_memory_monitor.stop()
-        download_cpu_end = process.cpu_times()
-        download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
-            download_cpu_start.user + download_cpu_start.system
-        )
-        download_mem_peak_delta = download_memory_stats["peak_bytes"]
-        download_mem_avg_delta = download_memory_stats["avg_bytes"]
-        logger.debug(
-            f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+        vcf_paths = _download_vcf_files(
+            files_to_download=files_to_download,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
         )
 
-    bcftools_inputs = BCFToolsInput(
-        sample_and_filename_subset=sample_and_filename_subset,
-        sampleIDs=resolved_sample_mode_results.unique_sample_ids,
-        filenames=[path.name for path in vcf_paths],
-        # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
-        auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
-    )
+        logger.info("Finished downloading VCF files from S3 to worker")
 
-    logger.info("Started bcftools subprocesses")
+        if worker_settings.metrics.enabled_per_task:
+            download_walltime = time.time() - download_start
+            download_memory_stats = download_memory_monitor.stop()
+            download_cpu_end = process.cpu_times()
+            download_cpu_used = (download_cpu_end.user + download_cpu_end.system) - (
+                download_cpu_start.user + download_cpu_start.system
+            )
+            download_mem_peak_delta = download_memory_stats["peak_bytes"]
+            download_mem_avg_delta = download_memory_stats["avg_bytes"]
+            logger.debug(
+                f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
+            )
 
-    # Execute bcftools and get true subprocess metrics
-    # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
-    # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
-    manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
-    output_file, bcftools_metrics = manager.execute_pipe(
-        command=command,
-        bcftools_inputs=bcftools_inputs,
-        job_id=job_id,
-    )
-    logger.info("Finished bcftools subprocesses")
+        bcftools_inputs = BCFToolsInput(
+            sample_and_filename_subset=sample_and_filename_subset,
+            sampleIDs=resolved_sample_mode_results.unique_sample_ids,
+            filenames=[path.name for path in vcf_paths],
+            # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
+            auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
+        )
 
-    bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
-    bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
-    bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
-    bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
+        logger.info("Started bcftools subprocesses")
 
-    _upload_results_file(output_file=output_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
-    _delete_job_files_from_worker(vcf_paths=vcf_paths, metadata_path=metadata_path, output_file=output_file)
+        # Execute bcftools and get true subprocess metrics
+        # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
+        # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
+        manager = BcftoolsQueryManager(enable_subprocess_monitoring=worker_settings.metrics.enabled_per_task)
+        output_file, bcftools_metrics = manager.execute_pipe(
+            command=command,
+            bcftools_inputs=bcftools_inputs,
+            job_id=job_id,
+        )
+        logger.info("Finished bcftools subprocesses")
 
+        bcftools_cpu_used = bcftools_metrics.get("cpu_seconds", 0.0)
+        bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
+        bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
+        bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
+
+        _upload_results_file(output_file=output_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        task_succeeded = True
+
+    except Exception as e:
+        # This ensures the user gets any error message in their log file
+        logger.exception(f"An error occurred running your task: {str(e)}", exc_info=True)
+        raise
+
+    finally:
+        root_logger.removeHandler(log_handler)
+        log_handler.close()
+
+        status_str = "SUCCESS" if task_succeeded else "FAILURE"
+        _update_log_header(log_file=log_file, find="JOB_STATUS_PLACEHOLDER", replace=status_str)
+        # the selection mode is determined during task execution, hence updated in finally block
+        _add_sample_selection_info_to_log_header(
+            log_file=log_file,
+            sample_selection_mode=sample_selection_mode,
+            tsv_filter=tsv_filter,
+            samples=samples,
+        )
+
+        _upload_log_file(log_file=log_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        _delete_job_files_from_worker(
+            vcf_paths=vcf_paths,
+            metadata_path=metadata_path,
+            output_file=output_file,
+            log_file=log_file,
+        )
     if worker_settings.metrics.enabled_per_task:
         memory_stats = memory_monitor.stop()
         cpu_end = process.cpu_times()
@@ -496,7 +554,7 @@ def bcftools_pipe_task(
         )
         _record_task_metrics(task_metrics)
 
-    return {"status": "completed", "output_file": str(output_file)}
+    return {"status": "completed", "output_file": str(output_file), "log_file": str(log_file)}
 
 
 @app.task(name="tasks.update_vcf_dimensions_task")
@@ -622,6 +680,7 @@ def update_vcf_dimensions_task(
 
             except Exception as e:
                 logger.error(f"Error indexing {s3_key}: {str(e)}")
+                _delete_job_files_from_worker(vcf_paths=vcf_paths)
                 return {"status": "error", "error": str(e), "task_id": task_id}
 
         _delete_job_files_from_worker(vcf_paths=vcf_paths)
@@ -721,6 +780,14 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_
     return downloaded_files
 
 
+def _get_bcftools_version() -> str:
+    try:
+        result = subprocess.run(["bcftools", "--version-only"], capture_output=True, text=True, check=True, timeout=5)
+    except Exception:
+        return "unknown"
+    return result.stdout.splitlines()[0].strip()
+
+
 def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
     Upon completion of the task, upload the results file to the specified bucket.
@@ -729,6 +796,47 @@ def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S
         to_upload={output_file.name: output_file},
         bucket_name=bucket_name,
     )
+
+
+def _upload_log_file(log_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
+    """
+    Upload the per-job log file to S3.
+    Unlike a results file upload, a failed log file upload should not cause the task to be marked as failed.
+    """
+    try:
+        _ = s3_file_manager.upload_files(
+            to_upload={log_file.name: log_file},
+            bucket_name=bucket_name,
+        )
+    except ClientError as e:
+        logger.error(f"Could not upload log file {log_file.name} to S3: {e}")
+
+
+def _update_log_header(log_file: Path, find: str, replace: str) -> None:
+    """Update the log header by replacing a placeholder string with the provided replacement string."""
+    log_file.write_text(log_file.read_text(encoding="utf-8").replace(find, replace), encoding="utf-8")
+
+
+def _add_sample_selection_info_to_log_header(
+    log_file: Path,
+    sample_selection_mode: VCFQuerySampleSelectionMode,
+    tsv_filter: str | None,
+    samples: list[str] | None,
+    metadata_tsv_name: str | None = None,
+) -> None:
+    """
+    Update the log file header based on the user defined sample selection mode.
+    """
+    if sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
+        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace="All samples selected")
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
+        replace_text = f"Filter by sample IDs\nSamples selected: {', '.join(samples)}"
+        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace=replace_text)
+    elif sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
+        replace_text = f"Sample metadata query \nTSV query string: '{tsv_filter}'"
+        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace=replace_text)
+    else:
+        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace="Unknown")
 
 
 def _remove_stale_dimensions_db_entries(

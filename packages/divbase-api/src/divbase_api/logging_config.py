@@ -16,10 +16,25 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import structlog
+from structlog.types import EventDict
 
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
 LOG_FILES_DIR = Path("/logs")
+
+# shared for both (1) application logs and (2) task logs given to users
+_SHARED_PROCESSORS: list[structlog.types.Processor] = [
+    structlog.contextvars.merge_contextvars,
+    structlog.stdlib.add_log_level,
+    structlog.stdlib.add_logger_name,
+    structlog.stdlib.PositionalArgumentsFormatter(),
+    structlog.processors.StackInfoRenderer(),
+]
+
+_APP_LOG_PROCESSORS: list[structlog.types.Processor] = [
+    *_SHARED_PROCESSORS,
+    structlog.processors.TimeStamper(fmt="iso"),
+]
 
 
 class SkipHealthyApiChecksFilter(logging.Filter):
@@ -58,18 +73,9 @@ def configure_logging(log_level: str, environment: str, service_name: str, log_t
 
     level = getattr(logging, log_level.upper())
 
-    shared_processors: list[structlog.types.Processor] = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-    ]
-
     structlog.configure(
         processors=[
-            *shared_processors,
+            *_APP_LOG_PROCESSORS,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(level),
@@ -80,7 +86,7 @@ def configure_logging(log_level: str, environment: str, service_name: str, log_t
 
     # handles non structlog logs
     formatter = structlog.stdlib.ProcessorFormatter(
-        foreign_pre_chain=shared_processors,
+        foreign_pre_chain=_APP_LOG_PROCESSORS,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             renderer,
@@ -117,3 +123,38 @@ def configure_logging(log_level: str, environment: str, service_name: str, log_t
         uvicorn_logger = logging.getLogger(name)
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
+
+
+def create_task_log_handler(log_file: Path, header: str) -> logging.Handler:
+    """
+    Create a log handler for a user log file for a Celery task.
+    We append a header to the log file with task info and return a FileHandler that will write human readable logs.
+    """
+    log_file.unlink(missing_ok=True)  # ensure we have a fresh log file for each job
+    log_file.parent.mkdir(exist_ok=True, parents=True)
+    log_file.write_text(header, encoding="utf-8")
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=_SHARED_PROCESSORS,
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _simplify_user_log_events,
+            structlog.dev.ConsoleRenderer(colors=False, exception_formatter=structlog.dev.plain_traceback),
+        ],
+    )
+    handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    handler.setFormatter(formatter)
+    return handler
+
+
+def _simplify_user_log_events(_logger, _method, event_dict: EventDict) -> EventDict:
+    """
+    Remove what would be a lot of noise from user-facing task log files.
+    It's same task_id + name throughout a user's log file and timestarted is shown in the log header.
+    'logger' is the modules name, decided to also remove that for simplicity
+    """
+    event_dict.pop("timestamp", None)
+    event_dict.pop("task_id", None)
+    event_dict.pop("task_name", None)
+    event_dict.pop("logger", None)
+    return event_dict
