@@ -9,11 +9,6 @@ If sample metadata query:
 If bcftools query:
     a task id is returned which can be used to check the status of the job.
     After task completed, a merged VCF file will be added to the project's storage bucket which can be downloaded by the user.
-
-
-TODO:
-- Ability to download results file given task id with the file cli?
--
 """
 
 import logging
@@ -272,20 +267,27 @@ def get_results_from_query_job_by_task_id(
         divbase_url=logged_in_url, task_id=task_id, timeout_mins=max_wait_mins
     )
 
+    resolved_download_dir = resolve_download_dir(download_dir=download_dir)
+    log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.txt"
+
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
         download_results = download_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
             raw_files_input=[result_filename],
-            download_dir=resolve_download_dir(download_dir=download_dir),
+            download_dir=resolved_download_dir,
             verify_checksums=True,
             dry_run=False,
             project_version=None,
         )
+        # TODO - should we pretty print here if this is for programmtic use?
         _pretty_print_download_results(download_results=download_results)
     else:
         print(f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.")
+        print(
+            f"A log file of the task can be downloaded and viewed using the command: divbase-cli files download {log_filename}"
+        )
         raise typer.Exit(code=1)
 
 
