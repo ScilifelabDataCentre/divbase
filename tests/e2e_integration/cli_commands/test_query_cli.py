@@ -225,7 +225,7 @@ class TestQueryVCFSuccess:
         run_update_dimensions,
         project_map,
     ):
-        """Test running a bcftools pipe query using the CLI."""
+        """Test running a bcftools pipe query using the CLI completes and provides a results and log file for the task."""
         project_name = CONSTANTS["QUERY_PROJECT"]
         project_id = project_map[project_name]
         bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -249,9 +249,16 @@ class TestQueryVCFSuccess:
         result = runner.invoke(app, command)
 
         assert result.exit_code == 0
-        assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
-            f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
-        )
+        assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" in result.stdout
+        log_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.log"
+        assert log_file in result.stdout
+
+        command = f"files download {log_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+        assert Path(log_file).exists()
+        log_contents = Path(log_file).read_text()
+        assert "Job Status: SUCCESS" in log_contents
 
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",

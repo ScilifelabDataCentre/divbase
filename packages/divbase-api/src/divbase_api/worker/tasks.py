@@ -275,6 +275,8 @@ def sample_metadata_query_task(
     user_id: int,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
+    # assigned now to avoid UnboundLocalError in the finally block
+    metadata_path: Path | None = None
     try:
         task_id = sample_metadata_query_task.request.id
         s3_file_manager = _create_s3_file_manager()
