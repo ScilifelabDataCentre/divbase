@@ -6,7 +6,7 @@ There are three subcommands for `divbase-cli task-history`: `user`, `id`, and `p
 
 ## task-history user
 
-The `user` subcommand fetches all tasks submitted by the current logged in user from the postgreSQL database. It is possible to filter the tasks from a specific DivBase project in the user's task history with the `--project` option.
+The `user` subcommand fetches all tasks submitted by the current logged in user from the postgreSQL database. It is possible to filter the tasks from a specific DivBase project in the user's task history with the `--project` option for all project's where the user has at least an EDIT role (able to submit tasks). Users with a MANAGE role can also use the [task-history project](#task-history-project) as described below.
 
 ![Task History User Sequence Diagram](../assets/diagrams/task_history_user_sequence_diagram.svg)
 

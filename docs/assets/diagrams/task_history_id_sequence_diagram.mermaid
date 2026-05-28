@@ -6,7 +6,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>CLI: Run "divbase-cli task-history id TASK_ID"
-    Note over CLI: TASK_ID is the DivBase Job ID (int)
+    Note over CLI: TASK_ID is the DivBase job ID
 
     CLI->>CLI: Load user config from config file
     CLI->>CLI: Check if logged in (logged_in_url exists)
