@@ -1,5 +1,4 @@
 import dataclasses
-import os
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -270,53 +269,52 @@ def sample_metadata_query_task(
     user_id: int,
 ) -> dict:
     """Run a sample metadata query task as a Celery task."""
-    task_id = sample_metadata_query_task.request.id
-    s3_file_manager = _create_s3_file_manager()
-
-    metadata_path = _download_sample_metadata_for_task(
-        metadata_tsv_name=metadata_tsv_name,
-        bucket_name=bucket_name,
-        s3_file_manager=s3_file_manager,
-        project_name=project_name,
-    )
-
-    with SyncSessionLocal() as db:
-        vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
-
-    if not vcf_dimensions_data.vcf_files:
-        # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
-        raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
-
-    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
-
-    _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
-        vcf_dimensions_data=vcf_dimensions_data,
-        latest_versions_of_bucket_files=latest_versions_of_bucket_files,
-        project_id=project_id,
-    )
-
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-        project_id=project_id,
-        vcf_dimensions_data=vcf_dimensions_data,
-    )
-
     try:
-        os.remove(metadata_path)
-        logger.info(f"Deleted metadata file {metadata_path} from worker.")
-    except Exception as e:
-        logger.warning(f"Could not delete metadata file {metadata_path}: {e}")
+        task_id = sample_metadata_query_task.request.id
+        s3_file_manager = _create_s3_file_manager()
 
-    # Convert to dict since celery serializes to JSON when sending back to API layer
-    result = metadata_result.model_dump()
-    result["status"] = "completed"
-    result["task_id"] = task_id
+        metadata_path = _download_sample_metadata_for_task(
+            metadata_tsv_name=metadata_tsv_name,
+            bucket_name=bucket_name,
+            s3_file_manager=s3_file_manager,
+            project_name=project_name,
+        )
 
-    logger.info(
-        f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
-        f"mapped to {len(metadata_result.unique_filenames)} VCF files"
-    )
+        with SyncSessionLocal() as db:
+            vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
+
+        if not vcf_dimensions_data.vcf_files:
+            # Wrap exeception in TaskUserError () to avoid Celery serilization UnpicklableExceptionWrapper issue
+            raise TaskUserError(str(VCFDimensionsEntryMissingError(project_name=project_name))) from None
+
+        latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+
+        _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
+            vcf_dimensions_data=vcf_dimensions_data,
+            latest_versions_of_bucket_files=latest_versions_of_bucket_files,
+            project_id=project_id,
+        )
+
+        metadata_result = run_sidecar_metadata_query(
+            file=metadata_path,
+            filter_string=tsv_filter,
+            project_id=project_id,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+
+        # Convert to dict since celery serializes to JSON when sending back to API layer
+        result = metadata_result.model_dump()
+        result["status"] = "completed"
+        result["task_id"] = task_id
+
+        logger.info(
+            f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
+            f"mapped to {len(metadata_result.unique_filenames)} VCF files"
+        )
+    finally:
+        if metadata_path and metadata_path.exists():
+            metadata_path.unlink(missing_ok=True)
+            logger.info(f"Deleted metadata file {metadata_path} from worker.")
 
     return result
 
