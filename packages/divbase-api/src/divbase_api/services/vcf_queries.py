@@ -26,7 +26,7 @@ from divbase_lib.exceptions import (
     BcftoolsPipeUnsupportedCommandError,
     TaskUserError,
 )
-from divbase_lib.utils import split_semicolon_bcftools_command_segments
+from divbase_lib.utils import format_file_size, split_semicolon_bcftools_command_segments
 
 logger = structlog.get_logger(__name__)
 
@@ -1000,7 +1000,7 @@ class BcftoolsQueryManager:
         sort_command = f"sort -Oz -o {output_file} {annotated_unsorted_output_file}"
         proc = run_bcftools(command=sort_command, capture_stderr=True)
         self._wait_proc_and_check_return_code(proc=proc, command=sort_command)
-        self._log_file_size(output_file)
+        self._log_file_size(str(output_file))
         logger.info(
             f"Sorting the results file to ensure proper order of variants. Final results are in '{output_file}'."
         )
@@ -1090,15 +1090,13 @@ class BcftoolsQueryManager:
 
     def _log_file_size(self, file_path: str):
         """
-        Log the size of the a given file in both GB and GiB.
-        """
-
+        Log the size of the a given file in a human-readable format.
         # TODO consider changing to logger debug later in the dev process
+        """
         try:
             size_bytes = os.path.getsize(file_path)
-            size_gb = size_bytes / (1000 * 1000 * 1000)
-            size_gi = size_bytes / (1024 * 1024 * 1024)
-            logger.info(f"File '{file_path}' size: {size_gb:.2f} GB, {size_gi:.2f} Gi")
+            formatted_size = format_file_size(size_bytes)
+            logger.info(f"File '{file_path}' size: {formatted_size}")
         except Exception as e:
             logger.warning(f"Could not determine size of file '{file_path}': {e}")
 
