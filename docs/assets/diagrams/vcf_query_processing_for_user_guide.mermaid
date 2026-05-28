@@ -79,7 +79,7 @@ flowchart TB
     VCFm_OUT --> MERGE
     MERGE --> ANNOTATE[Annotate combined file with custom header line with DivBase provenance]
     ANNOTATE --> SORT[Sort and compress the VCF]
-    SORT --> RESULT([result_of_job_&lt;JOB_ID&gt;.vcf.gz])
+    SORT --> RESULT([result_of_job_&lt;TASK_ID&gt;.vcf.gz])
     RESULT --> UPLOAD["`Upload results file to
     DivBase project`"]
 

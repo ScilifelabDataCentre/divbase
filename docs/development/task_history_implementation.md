@@ -14,7 +14,7 @@ Figure 1: Sequence diagram of signal flow for the `task-history user` command.
 
 ## task-history id
 
-The `id` subcommand fetches a single task history entry based on its task ID (the integer returned to the user upon submitting the task; not the Celery task UUID that is only used internally) from the postgreSQL database. The user needs to have permission to view the task ID. A user with the MANAGE use roles can view all task IDs from the project(s) they manage, otherwise users need to be the submitting user of the task ID in order to view it.
+The `id` subcommand fetches a single task history entry based on its DivBase Task ID (the integer returned to the user upon submitting the task; not the Celery Task UUID, which is only used internally) from the postgreSQL database. The user needs to have permission to view the DivBase Task ID. A user with the MANAGE role can view all DivBase Task IDs from the project(s) they manage, otherwise users need to be the submitting user of the DivBase Task ID in order to view it.
 
 ![Task History ID Sequence Diagram](../assets/diagrams/task_history_id_sequence_diagram.svg)
 

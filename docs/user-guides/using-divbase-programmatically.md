@@ -85,7 +85,7 @@ Example bash script for submitting a VCF query with desired `<parameters>`, poll
 
 ```bash
 
-# Submit a VCF query with the desired <parameters> and extract the task ID from the terminal output upon successful submission
+# Submit a VCF query with the desired <parameters> and extract the DivBase Task ID from the terminal output upon successful submission
 TASK_ID=$(divbase-cli query vcf <parameters> | sed -n 's/.*task id: \([0-9]*\)\..*/\1/p')
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "Error: failed to submit VCF query job. See output above for details." >&2
@@ -99,9 +99,9 @@ if [ $EXIT_CODE -eq 0 ]; then
 elif [ $EXIT_CODE -eq 1 ]; then
     # task failed with Celery task status FAILURE
 elif [ $EXIT_CODE -eq 2 ]; then
-    # task ID does not belong to a VCF query task
+    # Task ID does not belong to a VCF query task
 fi
 ```
 
 !!! Note
-    It is also possible to check for the status of a submitted task with `divbase-cli task-history id <task_id>`, but that command does not have built in polling (and downloading) like `divbase-cli query get-vcf-results` does.
+    It is also possible to check for the status of a submitted task with `divbase-cli task-history id <TASK_ID>`, but that command does not have built-in polling (and downloading) like `divbase-cli query get-vcf-results` does.

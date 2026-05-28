@@ -59,14 +59,14 @@ divbase-cli query vcf \
 ## What happens after query submission?
 
 - `query tsv` directly returns the sample IDs and VCF filenames in the project matching the query.
-- `query vcf` submits an asynchronous job and returns a task ID.
+- `query vcf` submits an asynchronous job and returns a DivBase Task ID.
 - On successful VCF jobs, DivBase uploads a results VCF file with the subset data in the project's data storage.
 
 Check VCF job status with:
 
 ```bash
-# By the job ID
-divbase-cli task-history id <JOB_ID>
+# By the DivBase Task ID
+divbase-cli task-history id <TASK_ID>
 
 # Or by all the jobs submitted by the user
 divbase-cli task-history user

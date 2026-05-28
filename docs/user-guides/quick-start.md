@@ -113,8 +113,8 @@ Check the task history to confirm the dimensions update job has completed:
 # By all the jobs submitted by the user, show last 10 jobs by default (adjustable with --limit)
 divbase-cli task-history user
 
-# Or by the job ID printed in the terminal when submitting a job
-divbase-cli task-history id <JOB_ID>
+# Or by the DivBase Task ID printed in the terminal when submitting a job
+divbase-cli task-history id <TASK_ID>
 ```
 
 Once complete, you can run any queries on the uploaded data.
@@ -220,10 +220,10 @@ divbase-cli task-history user
 Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli files download result_of_job_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download result_of_job_<TASK_ID>.vcf.gz # --download-dir path/to/save/results/
 ```
 
-Replacing <JOB_ID> with the actual job ID from the task history.
+Replacing `<TASK_ID>` with the DivBase Task ID from the task history.
 
 ## Next steps
 

@@ -19,14 +19,14 @@ sequenceDiagram
     DB-->>API: returns queue open/closed status
     API-->>CLI: if queue closed:<br>Raise QueueClosedError
     CLI-->>User: prints error in<br>user's terminal
-    API->>DB: create TaskHistoryDB entry (DivBase job ID)
-    DB-->>API: returns DivBase job ID
-    API->>CeleryApp: calls <TASK_FUNCTION>.apply_async(job_id=...)
+    API->>DB: create TaskHistoryDB entry (DivBase Task ID)
+    DB-->>API: returns DivBase Task ID
+    API->>CeleryApp: calls <TASK_FUNCTION>.apply_async(task_id=...)
     CeleryApp->>Broker: puts task in queue
     CeleryApp-->>API: returns Celery task UUID
     API->>DB: update TaskHistoryDB entry with Celery task UUID
-    API-->>CLI: returns DivBase job ID
-    CLI-->>User: prints DivBase job ID<br>to user's terminal
+    API-->>CLI: returns DivBase Task ID
+    CLI-->>User: prints DivBase Task ID<br>to user's terminal
     Broker->>CeleryWorker: (idle worker) picks<br>up task from queue
     CeleryWorker-->>DB: writes task<br>started timestamp<br>in TaskStartedAtDB<br>(task_prerun signal handler)
     CeleryWorker->>CeleryWorker: executes task

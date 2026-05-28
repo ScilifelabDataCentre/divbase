@@ -13,7 +13,7 @@ Every time a new VCF file has been added or an existing VCF version has been rep
 ```bash
 divbase-cli dimensions update --project <PROJECT_NAME>
 
-# This will return the job ID of the submitted job. Example:
+# This will return the DivBase Task ID of the submitted job. Example:
 # Job submitted successfully with task id: 123. To check the status of your job, use the command: divbase-cli task-history id 123
 
 # Job status can be viewed with e.g.
@@ -45,7 +45,7 @@ The `divbase-cli dimensions update` pre-reads the VCF files in the project's dat
 
 The `divbase-cli dimensions update` will look for `.vcf.gz` files in the project's data store. If there is no VCF dimensions cache for the project, it will create it. If not, it will compare the existing record in the cache with the current status of the object store. If any new VCF files have been added or if any VCF file version have been updated, it will update the VCF dimensions cache with that information. DivBase uses `bcftools` to extract the dimensions information from the VCF files.
 
-The update of the VCF dimensions is scheduled as a job in the DivBase job queue system since it can potentially take a little time to update a VCF dimensions for projects that contain many or large VCF files that has not been previously cached. This is an up-front time investment: the time it takes to run the update command is saved on every subsequent command that needs to check the VCF dimensions. After submitting a job with `divbase-cli dimensions update`, use `divbase-cli task-history user` or `divbase-cli task-history id <JOB_ID_RECIEVED_AT_JOB_SUBMISSION>` to check the status of the VCF dimensions Update job.
+The update of the VCF dimensions is scheduled as a job in the DivBase job queue system since it can potentially take a little time to update a VCF dimensions for projects that contain many or large VCF files that has not been previously cached. This is an up-front time investment: the time it takes to run the update command is saved on every subsequent command that needs to check the VCF dimensions. After submitting a job with `divbase-cli dimensions update`, use `divbase-cli task-history user` or `divbase-cli task-history id <TASK_ID>` (replacing `<TASK_ID>` with the DivBase Task ID printed in the terminal at submission) to check the status of the VCF dimensions update job.
 
 VCF results files that have been produced by DivBase are not indexed in the VCF dimensions cache. The main reason for this is that they result files contain a subset of the VCF data in the project, and will thus contain duplicate data. The results files are not used for any queries: only the source VCF files uploaded by the users are. DivBase recognizes its results files on two levels: the files names have a `result_of_job_` prefix, and their VCF headers contain a row with `##DivBase_created`.
 

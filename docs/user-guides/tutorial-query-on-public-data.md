@@ -68,11 +68,11 @@ divbase-cli dimensions update --project <YOUR_DIVBASE_PROJECT_NAME>
 The task should now have been submitted. The terminal prints a DivBase Task ID with a message like this:
 
 ```
-# Example with Task ID 102
+# Example with DivBase Task ID 102
 Job submitted successfully with task id: 102
 ```
 
-Make note of the Task ID integer for now; we will use it later in the tutorial for a variable named `<THE_JOB_ID_OF_THE_QUERY>`.
+Make note of the DivBase Task ID integer for now; we will use it later in the tutorial for a variable named `<TASK_ID>`.
 
 We need to wait until this has finished before we can send the actual DivBase query.
 
@@ -97,14 +97,14 @@ divbase-cli task-history user
 ## 4. Download the results file
 
 ```bash
-divbase-cli files download result_of_job_<THE_JOB_ID_OF_THE_QUERY>.vcf.gz --project <YOUR_DIVBASE_PROJECT_NAME>
+divbase-cli files download result_of_job_<TASK_ID>.vcf.gz --project <YOUR_DIVBASE_PROJECT_NAME>
 ```
 
 We can now run some quick sanity-checks on the result file.
 
 ```bash
 # On MacOS, use gzcat instead of zcat
-zcat result_of_job_<THE_JOB_ID_OF_THE_QUERY>.vcf.gz | grep -v "^#" |wc -l
+zcat result_of_job_<TASK_ID>.vcf.gz | grep -v "^#" |wc -l
 
 # Expected terminal output:
 297415
@@ -126,6 +126,6 @@ As for the samples, the expected result is the following:
 zcat mgp.v3.snps.rsIDdbSNPv137.vcf.gz | grep "#CHROM"
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  129P2   129S1   129S5   AJ      AKRJ    BALBcJ  C3HHeJ  C57BL6NJ        CASTEiJ CBAJ    DBA2J   FVBNJ   LPJ     NODShiLtJ       NZOHlLtJ   PWKPhJ  SPRETEiJ        WSBEiJ
 
-zcat result_of_job_<THE_JOB_ID_OF_THE_QUERY>.vcf.gz | grep "#CHROM"
+zcat result_of_job_<TASK_ID>.vcf.gz | grep "#CHROM"
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  129P2   129S1   AKRJ    BALBcJ  CASTEiJ CBAJ    LPJ     NODShiLtJ       SPRETEiJ        WSBEiJ
 ```

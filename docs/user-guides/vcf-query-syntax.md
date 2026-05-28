@@ -6,13 +6,13 @@ Users can checkout subsets of their VCF data from their DivBase project using th
 divbase-cli query vcf
 ```
 
-This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a job ID when they submit their query to the task queue, and can view the status of the job with the `task-history` commands, such as:
+This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a DivBase Task ID when they submit their query to the task queue, and can view the status of the job with the `task-history` commands, such as:
 
 ```bash
-divbase-cli task-history id <JOB_ID>
+divbase-cli task-history id <TASK_ID>
 ```
 
-The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the job ID.
+The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the DivBase Task ID.
 
 Users can query the VCF data in their project with or without combining it with a [sample metadata query](sidecar-metadata.md).
 
@@ -21,7 +21,7 @@ Example of a VCF query that identifies the samples and VCF files to filter on in
 ```bash
 divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10" --command "view -r 21:15000000-25000000"
 
-# This will return the job ID of the submitted job. Example:
+# This will return the DivBase Task ID of the submitted job. Example:
 # Job submitted successfully with task id: 123
 
 # Job status can be viewed with e.g.
@@ -287,7 +287,7 @@ Failing to not escape the inner double quotes might lead to the string given by 
 
 ### 5.1. What the user can see after submitting the job
 
-1. CLI returns `Job submitted successfully with task id: <ID>`
+1. CLI returns `Job submitted successfully with task id: <ID>` — this integer is the DivBase Task ID
 2. User monitors status via task-history commands `divbase-cli task-history`
 3. On job success, DivBase uploads a result VCF file to project's data storage. If the job fails, user can read the error message in the task-history.
 4. User can list/download result files from the project's data storage.
@@ -305,7 +305,7 @@ See also the manual for `bcftools view` [bcftools manual](https://samtools.githu
 
 - Source VCF files: uploaded by project members to the DivBase project. Read, but not modified by the query jobs. Source VCF files are indexed in the VCF dimensions cache of the project.
 - Sidecar metadata TSV: read-only during queries.
-- Result VCF files: new files created on successful jobs. Are never considered towards the VCF dimensions cache or subsequent VCF queries. Will be named `result_of_job_<JOB_ID>`. As an extra layer of provenence in case the file name of the results file is change, a the following is also added to the file header using `bcftools annotate`: `##DivBase_created="This is a results file created by a DivBase query; Date=<TIME_STAMP>"`
+- Result VCF files: new files created on successful jobs. Are never considered towards the VCF dimensions cache or subsequent VCF queries. Will be named `result_of_job_<TASK_ID>`. As an extra layer of provenence in case the file name of the results file is change, a the following is also added to the file header using `bcftools annotate`: `##DivBase_created="This is a results file created by a DivBase query; Date=<TIME_STAMP>"`
 
 !!! Note
     - Re-running queries creates identical jobs and new result files. The system does not have any limitations for duplicate queries, so please be mindful of this.
@@ -344,7 +344,7 @@ bcftools view -s S1,S2 temp_2_1.bcf -Ou temp_2_1.bcf
 bcftools view -s S1,S2 temp_2_2.bcf -Ou temp_2_2.bcf
 
 # Assume that the files have no overlapping sample sets, i.e. can be merged (this check happens before the job starts)
-bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<JOB_ID>.vcf.gz
+bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<TASK_ID>.vcf.gz
 ```
 
 ## 6. Examples
