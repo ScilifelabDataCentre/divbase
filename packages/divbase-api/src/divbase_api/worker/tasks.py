@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import logging
 import subprocess
 import time
@@ -10,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import psutil
 import structlog
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError
 from celery import Celery
 from celery.signals import (
     after_task_publish,
@@ -372,11 +373,12 @@ def bcftools_pipe_task(
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
 
-    # assign here so even if early exit from error the finally block will be able to clean them up.
+    # assigned here so even if early exit from error the finally block will be able to clean them up.
     vcf_paths: list[Path] = []
     metadata_path: Path | None = None
     output_file: Path | None = None
     task_succeeded = False
+    sample_selection_mode: VCFQuerySampleSelectionMode | None = None
     try:
         with SyncSessionLocal() as db:
             vcf_dimensions_data = get_vcf_metadata_by_project(project_id=project_id, db=db)
@@ -510,17 +512,19 @@ def bcftools_pipe_task(
     finally:
         root_logger.removeHandler(log_handler)
         log_handler.close()
-
-        status_str = "SUCCESS" if task_succeeded else "FAILURE"
-        _update_log_header(log_file=log_file, find="JOB_STATUS_PLACEHOLDER", replace=status_str)
-        # the selection mode is determined during task execution, hence updated in finally block
-        _add_sample_selection_info_to_log_header(
-            log_file=log_file,
+        job_status_text = "SUCCESS" if task_succeeded else "FAILURE"
+        sample_filter_text = _build_sample_selection_replacement(
             sample_selection_mode=sample_selection_mode,
             tsv_filter=tsv_filter,
             samples=samples,
         )
-
+        _update_log_header(
+            log_file,
+            replacements={
+                "JOB_STATUS_PLACEHOLDER": job_status_text,
+                "SAMPLE_FILTER_PLACEHOLDER": sample_filter_text,
+            },
+        )
         _upload_log_file(log_file=log_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         _delete_job_files_from_worker(
             vcf_paths=vcf_paths,
@@ -780,6 +784,7 @@ def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_
     return downloaded_files
 
 
+@functools.lru_cache()
 def _get_bcftools_version() -> str:
     try:
         result = subprocess.run(["bcftools", "--version-only"], capture_output=True, text=True, check=True, timeout=5)
@@ -808,35 +813,31 @@ def _upload_log_file(log_file: Path, bucket_name: str, s3_file_manager: S3FileMa
             to_upload={log_file.name: log_file},
             bucket_name=bucket_name,
         )
-    except ClientError as e:
-        logger.error(f"Could not upload log file {log_file.name} to S3: {e}")
+    except (BotoCoreError, FileNotFoundError) as e:
+        logger.exception(f"Could not upload log file {log_file.name} to S3: {e}")
 
 
-def _update_log_header(log_file: Path, find: str, replace: str) -> None:
-    """Update the log header by replacing a placeholder string with the provided replacement string."""
-    log_file.write_text(log_file.read_text(encoding="utf-8").replace(find, replace), encoding="utf-8")
+def _update_log_header(log_file: Path, replacements: dict[str, str]) -> None:
+    """find and replace all placeholder in the user log file header."""
+    content = log_file.read_text(encoding="utf-8")
+    for old, new in replacements.items():
+        content = content.replace(old, new, count=1)
+    log_file.write_text(content, encoding="utf-8")
 
 
-def _add_sample_selection_info_to_log_header(
-    log_file: Path,
-    sample_selection_mode: VCFQuerySampleSelectionMode,
+def _build_sample_selection_replacement(
+    sample_selection_mode: VCFQuerySampleSelectionMode | None,
     tsv_filter: str | None,
     samples: list[str] | None,
-    metadata_tsv_name: str | None = None,
-) -> None:
-    """
-    Update the log file header based on the user defined sample selection mode.
-    """
+) -> str:
+    """Return the sample selection description for the user log file header."""
     if sample_selection_mode == VCFQuerySampleSelectionMode.ALL_SAMPLES:
-        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace="All samples selected")
+        return "All samples selected"
     elif sample_selection_mode == VCFQuerySampleSelectionMode.CLI_SAMPLES:
-        replace_text = f"Filter by sample IDs\nSamples selected: {', '.join(samples)}"
-        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace=replace_text)
+        return f"Filter by sample IDs\nSamples selected: {', '.join(samples)}"
     elif sample_selection_mode == VCFQuerySampleSelectionMode.SAMPLE_METADATA_QUERY:
-        replace_text = f"Sample metadata query \nTSV query string: '{tsv_filter}'"
-        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace=replace_text)
-    else:
-        _update_log_header(log_file, find="SAMPLE_FILTER_PLACEHOLDER", replace="Unknown")
+        return f"Sample metadata query\nTSV query string: '{tsv_filter}'"
+    return "Unknown"
 
 
 def _remove_stale_dimensions_db_entries(

@@ -281,12 +281,12 @@ def get_results_from_query_job_by_task_id(
             dry_run=False,
             project_version=None,
         )
-        # TODO - should we pretty print here if this is for programmtic use?
         _pretty_print_download_results(download_results=download_results)
     else:
         print(f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.")
         print(
-            f"A log file of the task can be downloaded and viewed using the command: divbase-cli files download {log_filename}"
+            f"The task's log file can be downloaded for debugging using the command:\n'divbase-cli files download {log_filename}'\n"
+            f"You can view the log file contents directly in your terminal with:\n'divbase-cli files stream {log_filename}'"
         )
         raise typer.Exit(code=1)
 

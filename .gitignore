@@ -22,6 +22,9 @@ __pycache__/
 tests/fixtures/temp*
 tests/fixtures/merged*
 divbase_metadata_template*.tsv
+# query results files
+result_of_job_*.vcf.gz
+result_of_job_*.log
 
 # query job config files
 bcftools_divbase_job_config.json
