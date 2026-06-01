@@ -1078,22 +1078,24 @@ def _delete_job_files_from_worker(
     """
     vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
-        vcf_path.unlink(missing_ok=True)
-        logger.info(f"Deleted {vcf_path} from worker.")
+        if vcf_path.exists():
+            vcf_path.unlink(missing_ok=True)
+            logger.info(f"Deleted {vcf_path} from worker.")
 
         csi_path = vcf_path.with_suffix(vcf_path.suffix + ".csi")
-        csi_path.unlink(missing_ok=True)
-        logger.info(f"Deleted CSI index {csi_path} from worker.")
+        if csi_path.exists():
+            csi_path.unlink(missing_ok=True)
+            logger.info(f"Deleted CSI index {csi_path} from worker.")
 
-    if metadata_path:
+    if metadata_path and metadata_path.exists():
         metadata_path.unlink(missing_ok=True)
         logger.info(f"Deleted {metadata_path} from worker.")
 
-    if output_file:
+    if output_file and output_file.exists():
         output_file.unlink(missing_ok=True)
         logger.info(f"Deleted {output_file} from worker.")
 
-    if log_file:
+    if log_file and log_file.exists():
         log_file.unlink(missing_ok=True)
         logger.info(f"Deleted {log_file} from worker.")
 
