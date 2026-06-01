@@ -260,6 +260,52 @@ class TestQueryVCFSuccess:
         log_contents = Path(log_file).read_text()
         assert "Job Status: SUCCESS" in log_contents
 
+    def test_query_vcf_failure_uploads_log_with_error_message(
+        self,
+        CONSTANTS,
+        project_map,
+        logged_in_edit_user_with_existing_config,
+        run_update_dimensions,
+    ):
+        """Test a failing query vcf task still uploads a log file containing failure status and the error message."""
+        project_name = CONSTANTS["QUERY_PROJECT"]
+        project_id = project_map[project_name]
+        bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
+        user_id = 1
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+        tsv_filter = "Area:West of Ireland,Northern Portugal;"
+        arg_command = "view -r 100000:15000000-25000000"  # specifying a chromosome that does not exist in the fixtures to cause the query to fail
+
+        # Job should be accepted but fail during the run.
+        command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+        assert "Job submitted" in result.stdout
+
+        user_task_id = result.stdout.strip().split()[-1]
+        task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+        assert task_state == "FAILURE"
+
+        # log file should be present, but not the results file
+        command = f"files ls --project {project_name} --include-results-files"
+        result = runner.invoke(app, command)
+
+        assert result.exit_code == 0
+        assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" not in result.stdout
+        log_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.log"
+        assert log_file in result.stdout
+
+        command = f"files download {log_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+        assert Path(log_file).exists()
+        log_contents = Path(log_file).read_text()
+        assert "Job Status: FAILURE" in log_contents
+        assert "TaskUserError" in log_contents
+        assert "no vcf files in the project that fulfill the query" in log_contents.lower()
+
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
         [
