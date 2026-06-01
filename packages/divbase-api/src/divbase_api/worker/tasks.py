@@ -1,7 +1,9 @@
 import dataclasses
 import functools
 import logging
+import shutil
 import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -11,7 +13,6 @@ from zoneinfo import ZoneInfo
 
 import psutil
 import structlog
-from botocore.exceptions import BotoCoreError
 from celery import Celery
 from celery.signals import (
     after_task_publish,
@@ -31,7 +32,7 @@ from divbase_api.exceptions import (
     TSVFileNotFoundInProjectError,
     VCFDimensionsEntryMissingError,
 )
-from divbase_api.logging_config import configure_logging, create_task_log_handler
+from divbase_api.logging_config import configure_logging, create_user_task_log_handler
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.metadata_queries import run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager
@@ -355,25 +356,11 @@ def bcftools_pipe_task(
     s3_file_manager = _create_s3_file_manager()
 
     log_file = Path(f"{QUERY_RESULTS_FILE_PREFIX}{job_id}.log")
-    log_date = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M:%S %Z")
-    header = (
-        "DivBase query vcf task log\n"
-        "=================\n"
-        "Job Status: JOB_STATUS_PLACEHOLDER\n"  # will get replaced at the end of the task
-        f"DivBase version: {divbase_version}\n"
-        f"BCFtools version: {_get_bcftools_version()}\n"
-        f"Date: {log_date}\n"
-        f"Project: {project_name}\n"
-        f"Sample Selection Mode: SAMPLE_FILTER_PLACEHOLDER\n"  # TODO placeholder update on _determine_sample_selection_mode
-        # if e.g. tsv_filter, include the filter in 2nd line, same for samples
-        f"User inputted bcftools command used: '{command}'\n"
-        f"Task ID: {job_id}\n"
-        f"DivBase internal task ID: {task_id}\n"
-        "=================\n\n"
-    )
-    log_handler = create_task_log_handler(log_file=log_file, header=header)
-    root_logger = logging.getLogger()
-    root_logger.addHandler(log_handler)
+    log_handler = create_user_task_log_handler(log_file=log_file)
+    divbase_api_logger = logging.getLogger("divbase_api")
+    divbase_lib_logger = logging.getLogger("divbase_lib")
+    divbase_api_logger.addHandler(log_handler)
+    divbase_lib_logger.addHandler(log_handler)
 
     # assigned here so even if early exit from error the finally block will be able to clean them up.
     vcf_paths: list[Path] = []
@@ -502,32 +489,41 @@ def bcftools_pipe_task(
         bcftools_mem_peak = bcftools_metrics.get("peak_memory_bytes", 0)
         bcftools_mem_avg = bcftools_metrics.get("avg_memory_bytes", 0)
         bcftools_walltime = bcftools_metrics.get("walltime_seconds", 0.0)
-
         _upload_results_file(output_file=output_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         task_succeeded = True
 
     except Exception as e:
-        # This ensures the user gets any error message in their log file
-        logger.exception(f"An error occurred running your task: {str(e)}", exc_info=True)
+        # This ensures the user gets any error message from the run in their log file
+        # We do not include the stacktrace since it could contain sensitive info.
+        logger.error(
+            f"An error of type: '{type(e).__name__}' occurred running your task, error message was:\n {e}",
+            exc_info=False,
+        )
         raise
 
     finally:
-        root_logger.removeHandler(log_handler)
+        divbase_api_logger.removeHandler(log_handler)
+        divbase_lib_logger.removeHandler(log_handler)
         log_handler.close()
-        job_status_text = "SUCCESS" if task_succeeded else "FAILURE"
-        sample_filter_text = _build_sample_selection_replacement(
-            sample_selection_mode=sample_selection_mode,
-            tsv_filter=tsv_filter,
-            samples=samples,
-        )
-        _update_log_header(
-            log_file,
-            replacements={
-                "JOB_STATUS_PLACEHOLDER": job_status_text,
-                "SAMPLE_FILTER_PLACEHOLDER": sample_filter_text,
-            },
-        )
-        _upload_log_file(log_file=log_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        try:
+            log_date = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M:%S %Z")
+            header = (
+                "DivBase query vcf task log\n"
+                "=================\n"
+                f"Job Status: {'SUCCESS' if task_succeeded else 'FAILURE'}\n"
+                f"DivBase version: {divbase_version}\n"
+                f"BCFtools version: {_get_bcftools_version()}\n"
+                f"Task Started At: {log_date}\n"
+                f"Project: {project_name}\n"
+                f"Sample Selection Mode: {_build_sample_selection_replacement(sample_selection_mode, tsv_filter, samples)}\n"
+                f"User inputted bcftools command used: '{command}'\n"
+                f"Task ID: {job_id}\n"
+                f"DivBase internal task ID: {task_id}\n"
+                "=================\n\n"
+            )
+            _upload_log_file(log_file=log_file, header=header, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
+        except Exception as e:
+            logger.error(f"Failed to upload user log file for job {job_id} to S3: {str(e)}", exc_info=True)
         _delete_job_files_from_worker(
             vcf_paths=vcf_paths,
             metadata_path=metadata_path,
@@ -805,26 +801,22 @@ def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S
     )
 
 
-def _upload_log_file(log_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:
+def _upload_log_file(log_file: Path, header: str, bucket_name: str, s3_file_manager: S3FileManager) -> None:
     """
-    Upload the per-job log file to S3.
+    Append the log header and upload the users log file to s3.
     Unlike a results file upload, a failed log file upload should not cause the task to be marked as failed.
     """
-    try:
-        _ = s3_file_manager.upload_files(
-            to_upload={log_file.name: log_file},
-            bucket_name=bucket_name,
-        )
-    except (BotoCoreError, FileNotFoundError) as e:
-        logger.exception(f"Could not upload log file {log_file.name} to S3: {e}")
-
-
-def _update_log_header(log_file: Path, replacements: dict[str, str]) -> None:
-    """find and replace all placeholder in the user log file header."""
-    content = log_file.read_text(encoding="utf-8")
-    for old, new in replacements.items():
-        content = content.replace(old, new, count=1)
-    log_file.write_text(content, encoding="utf-8")
+    # in the event the log file is very large, this is to avoid reading the whole at once.
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8") as tmp:
+        tmp.write(header)
+        with open(log_file, encoding="utf-8") as body:
+            shutil.copyfileobj(body, tmp)
+    tmp_path = Path(tmp.name)
+    tmp_path.replace(log_file)
+    _ = s3_file_manager.upload_files(
+        to_upload={log_file.name: log_file},
+        bucket_name=bucket_name,
+    )
 
 
 def _build_sample_selection_replacement(
@@ -1082,7 +1074,7 @@ def _delete_job_files_from_worker(
     After uploading results to bucket, delete job files from the worker.
     TODO - it would be better to just have a dir per job (e.g. /<task_id>/) and rm the dir after each job,
     to ensure isolation even in job failure.
-    but that requires more refactorign and care.
+    but that requires more refactoring and care.
     """
     vcf_paths = vcf_paths or []
     for vcf_path in vcf_paths:
