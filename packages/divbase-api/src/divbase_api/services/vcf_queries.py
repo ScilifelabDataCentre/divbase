@@ -1090,7 +1090,7 @@ class BcftoolsQueryManager:
 
     def _log_file_size(self, file_path: str):
         """
-        Log the size of the a given file in a human-readable format.
+        Log the size of a given file in a human-readable format.
         # TODO consider changing to logger debug later in the dev process
         """
         try:

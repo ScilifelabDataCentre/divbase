@@ -268,7 +268,7 @@ def get_results_from_query_job_by_task_id(
     )
 
     resolved_download_dir = resolve_download_dir(download_dir=download_dir)
-    log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.txt"
+    log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.log"
 
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
