@@ -5,6 +5,9 @@ members = [
     "packages/divbase-api",
 ]
 
+[tool.uv]
+exclude-newer = "3 days"
+
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",
