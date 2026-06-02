@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from itertools import combinations
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import psutil
 import structlog
@@ -506,14 +505,14 @@ def bcftools_pipe_task(
         divbase_lib_logger.removeHandler(log_handler)
         log_handler.close()
         try:
-            log_date = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M:%S %Z")
+            log_date = datetime.now().strftime("%Y-%m-%d")
             header = (
                 "DivBase query vcf task log\n"
                 "=================\n"
                 f"Job Status: {'SUCCESS' if task_succeeded else 'FAILURE'}\n"
                 f"DivBase version: {divbase_version}\n"
                 f"BCFtools version: {_get_bcftools_version()}\n"
-                f"Task Started At: {log_date}\n"
+                f"Date: {log_date}\n"
                 f"Project: {project_name}\n"
                 f"Sample Selection Mode: {_build_sample_selection_replacement(sample_selection_mode, tsv_filter, samples)}\n"
                 f"User inputted bcftools command used: '{command}'\n"
@@ -807,7 +806,7 @@ def _upload_log_file(log_file: Path, header: str, bucket_name: str, s3_file_mana
     Unlike a results file upload, a failed log file upload should not cause the task to be marked as failed.
     """
     # in the event the log file is very large, this is to avoid reading the whole at once.
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8") as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", dir=log_file.parent, delete=False, encoding="utf-8") as tmp:
         tmp.write(header)
         with open(log_file, encoding="utf-8") as body:
             shutil.copyfileobj(body, tmp)

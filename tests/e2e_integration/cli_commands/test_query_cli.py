@@ -229,7 +229,7 @@ class TestQueryVCFSuccess:
     ):
         """
         Test running a bcftools pipe query using the CLI.
-        We test one case where the job should succeed and one where is should fail mid run.
+        We test one case where the job should succeed and one where the job should fail mid run.
         In both cases we should get back a log file and in the success case we should also get back the results file.
         """
         project_name = CONSTANTS["QUERY_PROJECT"]
