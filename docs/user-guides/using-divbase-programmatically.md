@@ -12,9 +12,9 @@ See [Account Management — Personal Access Tokens](./account-management.md#pers
 
 You can store/use a PAT in two ways
 
-### Option 1 — Let `divbase-cli` handle storing the PAT (recommended)
+### (Recommended) — Let `divbase-cli` handle storing the PAT
 
-After creating a PAT on the website, store it on your device by copy pasting the pre-filled commands shown on the website, it will look something like this:
+After creating a PAT on the DivBase website, store it on your device by copy pasting the pre-filled commands shown on the website, it will look something like this:
 
 ```bash
 # with an expiry date:
@@ -23,7 +23,7 @@ divbase-cli auth add-pat "my-pat-name" --expires UNIX_TIMESTAMP
 divbase-cli auth add-pat "my-pat-name"
 ```
 
-You will be prompted to paste the token value. It is then stored securely in your OS keyring (or in a restricted file if no keyring is available) and used automatically on every subsequent `divbase-cli` command.
+You will be prompted to paste the token value. It will then be stored securely in your OS keyring (or in a restricted file if no keyring is available) and used automatically on every subsequent `divbase-cli` command.
 
 ```bash
 divbase-cli auth pat-info   # show name and expiry of the stored PAT
@@ -33,7 +33,7 @@ divbase-cli auth rm-pat     # remove the stored PAT from this device
 !!! info "This strategy works on HPC clusters"
     On the login node with divbase-cli [installed as we recommend](./installation.md), store the PAT as described above. The token will be available to all your jobs running on the cluster, without needing to worry about setting any environment variables in your job scripts.
 
-### Option 2 — Environment variable
+### (Not recommended alternative) — Store the PAT in an environment variable
 
 Set `DIVBASE_API_PAT` in your shell or job script:
 
@@ -44,8 +44,7 @@ divbase-cli files ls
 
 You may prefer this if you want explicit per-job control of which token is used.
 
-1. Store it securely on your device using `divbase-cli auth add-pat` (recommended and works on HPC clusters!)
-2. Set it as an environment variable `DIVBASE_API_PAT` (can give you more control over which token is used when)
+---
 
 !!! question "What if I have both an active login session and a personal access token set?"
     `divbase-cli` follows this priority order:

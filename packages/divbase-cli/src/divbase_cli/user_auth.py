@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
+from typing import Any
 
 import httpx
 import keyring
@@ -38,6 +39,12 @@ from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
+PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE = (
+    "Your Personal Access Token (PAT) has expired. \n"
+    "Please create a new one and add it with 'divbase-cli auth add-pat'. \n"
+    "See https://scilifelabdatacentre.github.io/divbase/user-guides/account-management/#personal-access-tokens for more details."
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,25 +66,11 @@ class TokenData:
             "access_token_expires_at": self.access_token_expires_at,
             "refresh_token_expires_at": self.refresh_token_expires_at,
         }
-        try:
-            keyring.set_password(
-                service_name=cli_settings.KEYRING_SERVICE,
-                username=cli_settings.KEYRING_TOKENS_USERNAME,
-                password=json.dumps(token_dict),
-            )
-            fallback_output_path.unlink(missing_ok=True)
-            logger.debug("JWTs stored in device keyring successfully.")
-            return
-        except KeyringError as e:
-            logger.debug(f"Keyring JWT storage failed with error: {e}\n falling back to file storage.")
-
-        fallback_output_path.parent.mkdir(parents=True, exist_ok=True)
-        # Create file with 0600 permissions (user read/write only).
-        # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
-        # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
-        fd = os.open(path=fallback_output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
-        with os.fdopen(fd, "w") as file:
-            yaml.safe_dump(token_dict, file, sort_keys=False)
+        _dump_to_keyring_or_file(
+            data=token_dict,
+            keyring_user_name=cli_settings.KEYRING_TOKENS_USERNAME,
+            fallback_file_path=fallback_output_path,
+        )
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
@@ -112,25 +105,16 @@ class PATData:
             "pat_expires_at": self.pat_expires_at,
             "pat": self.pat.get_secret_value(),
         }
-        try:
-            keyring.set_password(
-                service_name=cli_settings.KEYRING_SERVICE,
-                username=cli_settings.KEYRING_PATS_USERNAME,
-                password=json.dumps(token_dict),
-            )
-            fallback_output_path.unlink(missing_ok=True)
-            logger.debug("PATs stored in device keyring successfully.")
-            return
-        except KeyringError as e:
-            logger.debug(f"Keyring PAT storage failed with error: {e}\n falling back to file storage.")
+        _dump_to_keyring_or_file(
+            data=token_dict,
+            keyring_user_name=cli_settings.KEYRING_PATS_USERNAME,
+            fallback_file_path=fallback_output_path,
+        )
 
-        fallback_output_path.parent.mkdir(parents=True, exist_ok=True)
-        # Create file with 0600 permissions (user read/write only).
-        # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
-        # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
-        fd = os.open(path=fallback_output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
-        with os.fdopen(fd, "w") as file:
-            yaml.safe_dump(token_dict, file, sort_keys=False)
+    def is_pat_expired(self) -> bool:
+        """Check if the PAT is expired"""
+        cutoff = time.time() + 10  # 10 second buffer to account for clock skew or time delay
+        return self.pat_expires_at is not None and self.pat_expires_at <= cutoff
 
     def pat_expiry_formatted(self) -> str:
         """Returns the token's expiry time in a human readable format in user's current timezone."""
@@ -314,7 +298,7 @@ def load_user_tokens(token_path: Path = cli_settings.TOKENS_FALLBACK_PATH) -> To
             access_token_expires_at=token_dict["access_token_expires_at"],
             refresh_token_expires_at=token_dict["refresh_token_expires_at"],
         )
-    except KeyError as e:
+    except (KeyError, TypeError) as e:
         logger.debug(f"User tokens file at {token_path} appears to be malformed: {e}")
         return None
 
@@ -360,7 +344,7 @@ def load_stored_user_pat(pat_fallback_path: Path = cli_settings.PATS_FALLBACK_PA
             pat=SecretStr(pat_dict["pat"]),
             pat_expires_at=pat_dict["pat_expires_at"],
         )
-    except KeyError as e:
+    except (KeyError, TypeError) as e:
         logger.debug(f"User PAT file at {pat_fallback_path} appears to be malformed: {e}")
         return None
 
@@ -386,12 +370,8 @@ def get_pat_for_authentication() -> SecretStr | None:
     if not pat_data:
         return None
 
-    if pat_data.pat_expires_at and pat_data.pat_expires_at <= time.time():
-        raise AuthenticationError(
-            "Your Personal Access Token (PAT) has expired. \n"
-            "Please create a new one and add it with 'divbase-cli auth add-pat'. \n"
-            "See https://scilifelabdatacentre.github.io/divbase/user-guides/account-management/#personal-access-tokens for more details."
-        )
+    if pat_data.is_pat_expired():
+        raise AuthenticationError(PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE)
 
     return pat_data.pat
 
@@ -515,3 +495,31 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     )
     new_token_data.dump_tokens()
     return new_token_data
+
+
+def _dump_to_keyring_or_file(data: dict[Any, Any], keyring_user_name: str, fallback_file_path: Path) -> None:
+    """
+    Helper fn to dump a dict to user's OS keyring.
+
+    If dump fails, will fallback to a local file and set permissions to 0600 (user read/write only).
+    Used to store both JWTs and PATs.
+    """
+    try:
+        keyring.set_password(
+            service_name=cli_settings.KEYRING_SERVICE,
+            username=keyring_user_name,
+            password=json.dumps(data),
+        )
+        fallback_file_path.unlink(missing_ok=True)
+        logger.debug(f"Data stored in user device keyring under username: {keyring_user_name}")
+        return
+    except KeyringError as e:
+        logger.debug(f"Keyring storage failed with error: {e}\n falling back to file storage.")
+
+    fallback_file_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create file with 0600 permissions (user read/write only).
+    # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
+    # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
+    fd = os.open(path=fallback_file_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
+    with os.fdopen(fd, "w") as file:
+        yaml.safe_dump(data, file, sort_keys=False)

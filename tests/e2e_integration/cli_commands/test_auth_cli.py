@@ -16,6 +16,7 @@ from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.divbase_cli import app
 from divbase_cli.user_auth import LOGIN_AGAIN_MESSAGE
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 runner = CliRunner()
 
@@ -279,7 +280,7 @@ def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatc
     """
     log_in_as_user()
 
-    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr("divbase_pat_fake_not_a_real_token"))
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr(f"{PAT_TOKEN_PREFIX}_fake_not_a_real_token"))
 
     result = runner.invoke(app=app, args="auth whoami")
     assert result.exit_code == 0
@@ -287,7 +288,7 @@ def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatc
 
 
 _FAKE_PAT_NAME = "work-laptop"
-_FAKE_PAT = "divbase_pat_fakefakefakefakefakefakefake"
+_FAKE_PAT = f"{PAT_TOKEN_PREFIX}_fakefakefakefakefakefakefake"
 
 
 def run_add_pat_cmd(

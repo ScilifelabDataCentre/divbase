@@ -22,6 +22,7 @@ from divbase_cli.user_auth import (
     load_user_tokens,
     make_authenticated_request,
 )
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 # cli config set to use "divbase-cli-test" (via pytest.ini) as the keyring service name,
 # so tokens and PATs stored in tests don't interfere with real credentials in dev computer with service name "divbase-cli"
@@ -214,8 +215,9 @@ def test_load_user_tokens_keyring_takes_priority_over_file(mock_get_password, mo
 @patch("divbase_cli.user_auth.load_user_tokens")
 def test_make_authenticated_request_uses_jwt_over_pat(mock_load_tokens, mock_request, mock_token_data, monkeypatch):
     """JWT session should take priority over PAT when both are available."""
+    raw_pat = f"{PAT_TOKEN_PREFIX}_should_not_be_used"
     mock_load_tokens.return_value = mock_token_data
-    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr("divbase_pat_should_not_be_used"))
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", SecretStr(raw_pat))
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()
     mock_request.return_value = mock_response
@@ -224,14 +226,14 @@ def test_make_authenticated_request_uses_jwt_over_pat(mock_load_tokens, mock_req
 
     auth_header = mock_request.call_args.kwargs["headers"]["Authorization"]
     assert auth_header == f"Bearer {mock_token_data.access_token.get_secret_value()}"
-    assert "divbase_pat_should_not_be_used" not in auth_header
+    assert raw_pat not in auth_header
 
 
 @pytest.fixture
 def mock_pat_data():
     return PATData(
         name="test-pat",
-        pat=SecretStr("divbase_pat_faketoken"),
+        pat=SecretStr(f"{PAT_TOKEN_PREFIX}_faketoken"),
         pat_expires_at=9999999999,
     )
 
@@ -266,7 +268,7 @@ def test_load_stored_user_pat_reads_from_keyring(mock_get_password, mock_pat_dat
 
     assert result is not None
     assert result.name == "test-pat"
-    assert result.pat.get_secret_value() == "divbase_pat_faketoken"
+    assert result.pat.get_secret_value() == f"{PAT_TOKEN_PREFIX}_faketoken"
 
 
 @patch("divbase_cli.user_auth.keyring.get_password", side_effect=NoKeyringError)
@@ -291,7 +293,7 @@ def test_load_stored_user_pat_keyring_takes_priority_over_file(mock_get_password
     mock_get_password.return_value = json.dumps(
         {
             "name": "keyring-pat",
-            "pat": "divbase_pat_keyringtoken",
+            "pat": f"{PAT_TOKEN_PREFIX}_keyringtoken",
             "pat_expires_at": mock_pat_data.pat_expires_at,
         }
     )
@@ -309,7 +311,7 @@ def test_load_stored_user_pat_keyring_takes_priority_over_file(mock_get_password
 
 def test_get_pat_for_authentication_returns_env_var_pat(monkeypatch):
     """get_pat_for_authentication returns env var PAT when set, without hitting keyring."""
-    env_pat = SecretStr("divbase_pat_from_env")
+    env_pat = SecretStr(f"{PAT_TOKEN_PREFIX}_from_env")
     monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", env_pat)
 
     result = get_pat_for_authentication()
@@ -341,7 +343,7 @@ def test_delete_stored_pat_can_run_multiple_times(mock_delete_password, tmp_path
 def mock_pat_data_no_expiry():
     return PATData(
         name="no-expiry-pat",
-        pat=SecretStr("divbase_pat_noexpirytoken"),
+        pat=SecretStr(f"{PAT_TOKEN_PREFIX}_noexpirytoken"),
         pat_expires_at=None,
     )
 

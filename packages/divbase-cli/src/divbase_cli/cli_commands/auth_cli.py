@@ -3,6 +3,7 @@ CLI subcommand for managing user auth with DivBase server.
 """
 
 import logging
+import time
 from datetime import datetime
 
 import typer
@@ -14,6 +15,7 @@ from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIErro
 from divbase_cli.config_resolver import resolve_url_for_non_project_specific_commands
 from divbase_cli.services.announcements import get_and_display_announcements
 from divbase_cli.user_auth import (
+    PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE,
     PATData,
     check_existing_session,
     delete_stored_pat,
@@ -92,6 +94,7 @@ def add_pat(
         "--expires",
         "-e",
         help="When the personal access token (PAT) expires (if it does), as a unix timestamp.",
+        min=1,
     ),
     overwrite_existing: bool = typer.Option(
         False, "--overwrite-existing", "-o", help="Overwrite the existing stored PAT if one already exists."
@@ -114,7 +117,7 @@ def add_pat(
         )
         raise typer.Exit(code=1)
 
-    if expires_unix_timestamp and expires_unix_timestamp < int(datetime.now().timestamp()):
+    if expires_unix_timestamp and expires_unix_timestamp < time.time():
         print("The expiry time you entered is in the past. Please enter a valid expiry time for the PAT.")
         raise typer.Exit(code=1)
 
@@ -156,11 +159,12 @@ def pat_info():
         print("No personal access token stored on this device.")
         return
 
-    if pat_data.pat_expires_at and pat_data.pat_expires_at <= datetime.now().timestamp():
-        print("[red]Warning: this PAT has expired.[/red]")
-
     print(f"Name: {pat_data.name}")
     print(f"Expires: {pat_data.pat_expiry_formatted()}")
+
+    if pat_data.is_pat_expired():
+        print("[red bold]Warning [/red bold]")
+        print(PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE)
 
 
 @auth_app.command("whoami")
