@@ -191,8 +191,10 @@ async def create_pat_endpoint(
     if expires_at_dt:
         dt = expires_at_dt.astimezone(ZoneInfo("Europe/Stockholm"))
         expires_at_cet = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        expires_at_unix = int(expires_at_dt.timestamp())
     else:
         expires_at_cet = None
+        expires_at_unix = None
 
     background_tasks.add_task(
         send_pat_created_email, email_to=current_user.email, pat_name=name, expires_at_cet=expires_at_cet
@@ -204,6 +206,7 @@ async def create_pat_endpoint(
             "current_user": current_user,
             "pat": pat,
             "expires_at_cet": expires_at_cet,
+            "expires_at_unix": expires_at_unix,
             "raw_token": raw_token.get_secret_value(),
             "project_name_by_id": project_name_by_id,
         },
