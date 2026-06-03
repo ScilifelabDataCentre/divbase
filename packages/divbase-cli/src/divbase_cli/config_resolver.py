@@ -10,6 +10,7 @@ from pathlib import Path
 
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecifiedError
+from divbase_cli.user_auth import load_stored_user_pat
 from divbase_cli.user_config import ProjectConfig, load_user_config
 
 
@@ -27,7 +28,7 @@ def ensure_logged_in(desired_url: str | None = None) -> str:
             )
         return config.logged_in_url
 
-    if cli_settings.DIVBASE_API_PAT:
+    if cli_settings.DIVBASE_API_PAT or load_stored_user_pat():
         return desired_url or cli_settings.DIVBASE_API_URL
 
     raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
@@ -48,7 +49,7 @@ def resolve_url_for_non_project_specific_commands() -> str:
         return config.logged_in_url
 
     # No active session — fall back to PAT if available.
-    if cli_settings.DIVBASE_API_PAT:
+    if cli_settings.DIVBASE_API_PAT or load_stored_user_pat():
         return cli_settings.DIVBASE_API_URL
 
     raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")

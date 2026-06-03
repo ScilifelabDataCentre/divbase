@@ -19,8 +19,9 @@ APP_DIR = Path(typer.get_app_dir(APP_NAME))
 DEFAULT_METADATA_TSV_NAME = "sample_metadata.tsv"
 DEFAULT_LOG_LEVEL = "INFO"
 DEV_MODE = os.getenv("DIVBASE_DEV", "0") == "1"
-CONFIG_PATH = APP_DIR / "config.yaml"
-TOKENS_PATH = APP_DIR / ".secrets"
+DEFAULT_CONFIG_PATH = APP_DIR / "config.yaml"
+DEFAULT_TOKENS_PATH = APP_DIR / ".secrets"
+DEFAULT_PATS_PATH = APP_DIR / ".pat"  # no plural because only 1 stored.
 
 if DEV_MODE:
     DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
@@ -39,13 +40,15 @@ class DivBaseCLISettings:
     instead, import the 'cli_settings' instance created at this module's load time.
     """
 
-    CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", CONFIG_PATH))
+    CONFIG_PATH: Path = Path(os.getenv("DIVBASE_CLI_CONFIG_PATH", DEFAULT_CONFIG_PATH))
 
     # for tokens stored via OS keyring, we use these to define a unique lookup key.
     KEYRING_SERVICE: str = os.getenv("DIVBASE_KEYRING_SERVICE", "divbase-cli")
-    KEYRING_USERNAME: str = "tokens"
-    # Fallback path for tokens storage if keyring cannot be used on device.
-    TOKENS_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", TOKENS_PATH))
+    KEYRING_TOKENS_USERNAME: str = "tokens"
+    KEYRING_PATS_USERNAME: str = "pat"
+    # Fallback paths for tokens (JWTs) and PATs storage if keyring cannot be used on the device.
+    TOKENS_FALLBACK_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", DEFAULT_TOKENS_PATH))
+    PATS_FALLBACK_PATH: Path = Path(os.getenv("DIVBASE_CLI_PATS_PATH", DEFAULT_PATS_PATH))
 
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
