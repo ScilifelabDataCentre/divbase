@@ -572,7 +572,7 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
             bucket_name=bucket_name,
         )
 
-    def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None):
+    def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None, log_file=None):
         """
         Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
         """

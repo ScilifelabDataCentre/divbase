@@ -2,7 +2,7 @@
 Schemas for query routes.
 """
 
-from typing import Optional, Self
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -206,4 +206,5 @@ class BcftoolsQueryTaskResult(BaseModel):
     """BCFtools query task result details. Based on the return of tasks.bcftools_query."""
 
     output_file: str
-    status: Optional[str] = None
+    status: str | None = None
+    log_file: str | None = None

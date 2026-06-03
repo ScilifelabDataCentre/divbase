@@ -218,14 +218,20 @@ class TestQueryTSVSuccess:
 class TestQueryVCFSuccess:
     """Successful query vcf CLI test cases."""
 
-    def test_bcftools_pipe_query(
+    @pytest.mark.parametrize("should_succeed", [True, False])
+    def test_basic_bcftools_pipe_query_success_and_failure(
         self,
         CONSTANTS,
         logged_in_edit_user_with_existing_config,
         run_update_dimensions,
         project_map,
+        should_succeed,
     ):
-        """Test running a bcftools pipe query using the CLI."""
+        """
+        Test running a bcftools pipe query using the CLI.
+        We test one case where the job should succeed and one where the job should fail mid run.
+        In both cases we should get back a log file and in the success case we should also get back the results file.
+        """
         project_name = CONSTANTS["QUERY_PROJECT"]
         project_id = project_map[project_name]
         bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -234,8 +240,12 @@ class TestQueryVCFSuccess:
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
-        arg_command = "view -r 21:15000000-25000000"
+        if should_succeed:
+            arg_command = "view -r 21:15000000-25000000"
+        else:
+            arg_command = "view -r 100000:15000000-25000000"  # range that does not exist.
 
+        # both cases should be able to submit the job
         command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
         result = runner.invoke(app, command)
         assert result.exit_code == 0
@@ -243,15 +253,35 @@ class TestQueryVCFSuccess:
 
         user_task_id = result.stdout.strip().split()[-1]
         task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
-        assert task_state == "SUCCESS", f"Task failed. task-history output:\n{task_stdout}"
+        if should_succeed:
+            assert task_state == "SUCCESS"
+        else:
+            assert task_state == "FAILURE"
 
+        # both should have log file
         command = f"files ls --project {project_name} --include-results-files"
         result = runner.invoke(app, command)
-
         assert result.exit_code == 0
-        assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
-            f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
-        )
+        log_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.log"
+        assert log_file in result.stdout
+
+        if should_succeed:
+            assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" in result.stdout
+        else:
+            assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" not in result.stdout
+
+        command = f"files download {log_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+        assert Path(log_file).exists()
+        log_contents = Path(log_file).read_text()
+
+        if should_succeed:
+            assert "Job Status: SUCCESS" in log_contents
+        else:
+            assert "Job Status: FAILURE" in log_contents
+            assert "TaskUserError" in log_contents
+            assert "no vcf files in the project that fulfill the query" in log_contents.lower()
 
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",

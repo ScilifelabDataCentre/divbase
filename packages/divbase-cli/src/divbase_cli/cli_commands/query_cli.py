@@ -9,11 +9,6 @@ If sample metadata query:
 If bcftools query:
     a task id is returned which can be used to check the status of the job.
     After task completed, a merged VCF file will be added to the project's storage bucket which can be downloaded by the user.
-
-
-TODO:
-- Ability to download results file given task id with the file cli?
--
 """
 
 import logging
@@ -272,13 +267,16 @@ def get_results_from_query_job_by_task_id(
         divbase_url=logged_in_url, task_id=task_id, timeout_mins=max_wait_mins
     )
 
+    resolved_download_dir = resolve_download_dir(download_dir=download_dir)
+    log_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.log"
+
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
         download_results = download_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
             raw_files_input=[result_filename],
-            download_dir=resolve_download_dir(download_dir=download_dir),
+            download_dir=resolved_download_dir,
             verify_checksums=True,
             dry_run=False,
             project_version=None,
@@ -286,6 +284,10 @@ def get_results_from_query_job_by_task_id(
         _pretty_print_download_results(download_results=download_results)
     else:
         print(f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.")
+        print(
+            f"The task's log file can be downloaded for debugging using the command:\n'divbase-cli files download {log_filename}'\n"
+            f"You can view the log file contents directly in your terminal with:\n'divbase-cli files stream {log_filename}'"
+        )
         raise typer.Exit(code=1)
 
 

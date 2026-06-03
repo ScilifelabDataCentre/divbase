@@ -182,7 +182,7 @@ def delete_expired_results_files(
     s3_file_manager: S3FileManager, buckets: list[str], results_files_retention_days: int
 ) -> tuple[int, int, bool]:
     """
-    Results files older than cutoff date are considered expired and are hard deleted.
+    Results files (and their associated log files) older than cutoff date are considered expired and are hard deleted.
 
     We also cover any delete markers that may have been placed on the results files, to ensure they are also fully purged.
 
