@@ -9,6 +9,14 @@ Almost all API endpoints are scoped based on project level permissions which is 
 get_project_member in deps.py. Other more special cases like auth whoami and task-history user have their logic.
 
 So below we cover a representative cmd for project scope (files ls) and then the special cases.
+
+### Why mostly just env var tests
+A user can provide a PAT via an env var or from storing it with the add-pat command.
+
+Logic to validate those cli cmds is in test_auth_cli.py.
+
+We have 1 e2e test here that covers using the PAT stored by the add-pat command, otherwise we use the env var approach for convienance.
+These tests primarly focus on PATs being scoped correctly etc...
 """
 
 from datetime import datetime, timedelta, timezone
@@ -264,11 +272,32 @@ def test_expired_pat_rejected(CONSTANTS, logged_out_user_with_existing_config, p
     assert_401_error(result)
 
 
-def test_pat_does_not_work_on_frontend_endpoints(
-    CONSTANTS, logged_out_user_with_existing_config, pat_factory, monkeypatch
-):
+def test_pat_stored_via_add_pat_cmd_works(CONSTANTS, logged_out_user_with_existing_config, pat_factory):
+    """Validate that a PAT stored via the add-pat cmd works for authentication and respects scopes."""
+    raw_token: SecretStr = pat_factory(user_email=EDIT_USER_EMAIL, permissions=NO_SCOPE_PERMISSIONS)
+    try:
+        result = runner.invoke(
+            app=app,
+            args="auth add-pat my-pat",
+            input=f"{raw_token.get_secret_value()}\n",
+        )
+        assert result.exit_code == 0
+
+        result = runner.invoke(app, "auth whoami")
+        assert result.exit_code == 0
+        assert EDIT_USER_EMAIL in result.output
+
+        result = runner.invoke(app, f"files ls --project {CONSTANTS['DEFAULT_PROJECT']}")
+        assert_403_error(result)
+    finally:
+        # clean up the stored PAT so it doesn't interfere with other tests, even if above fails
+        result = runner.invoke(app=app, args="auth rm-pat")
+        assert result.exit_code == 0
+
+
+def test_pat_does_not_work_on_frontend_endpoints(CONSTANTS, logged_out_user_with_existing_config, pat_factory):
     """PATs should not work on frontend endpoints"""
-    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=FULL_ACCESS_PAT_PERMISSIONS)
+    raw_token: SecretStr = pat_factory(user_email=EDIT_USER_EMAIL, permissions=FULL_ACCESS_PAT_PERMISSIONS)
 
     home_url = "http://localhost:8001/"
     # technically don't need the token here

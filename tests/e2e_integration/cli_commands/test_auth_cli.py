@@ -3,9 +3,11 @@ E2E tests for the "divbase-cli auth" CLI commands.
 """
 
 import shutil
+from datetime import datetime, timedelta
 
 import keyring
 import pytest
+from click.testing import Result
 from keyring.errors import NoKeyringError
 from pydantic import SecretStr
 from typer.testing import CliRunner
@@ -39,9 +41,9 @@ def make_tokens_expired(access: bool = False, refresh: bool = False):
     Helper function to make either the access token or refresh token expired in the tokens file.
     Sets the expiry time to 1970 (unix time stamp)
     """
-    with open(cli_settings.TOKENS_PATH, "r") as token_file:
+    with open(cli_settings.TOKENS_FALLBACK_PATH, "r") as token_file:
         lines = token_file.readlines()
-    with open(cli_settings.TOKENS_PATH, "w") as token_file:
+    with open(cli_settings.TOKENS_FALLBACK_PATH, "w") as token_file:
         for line in lines:
             if access and line.startswith("access_token_expires_at:"):
                 token_file.write("access_token_expires_at: 1\n")
@@ -220,12 +222,12 @@ def test_using_revoked_refresh_token_fails(tmp_path, disable_keyring_backend):
     log_in_as_user()
 
     shutil.copy(cli_settings.CONFIG_PATH, tmp_path / "config_backup.yaml")
-    shutil.copy(cli_settings.TOKENS_PATH, tmp_path / "tokens_backup.yaml")
+    shutil.copy(cli_settings.TOKENS_FALLBACK_PATH, tmp_path / "tokens_backup.yaml")
 
     result = runner.invoke(app=app, args=logout_command)
     assert result.exit_code == 0
 
-    shutil.copy(tmp_path / "tokens_backup.yaml", cli_settings.TOKENS_PATH)
+    shutil.copy(tmp_path / "tokens_backup.yaml", cli_settings.TOKENS_FALLBACK_PATH)
     shutil.copy(tmp_path / "config_backup.yaml", cli_settings.CONFIG_PATH)
     make_tokens_expired(access=True)
 
@@ -282,3 +284,121 @@ def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatc
     result = runner.invoke(app=app, args="auth whoami")
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
+
+
+_FAKE_PAT_NAME = "work-laptop"
+_FAKE_PAT = "divbase_pat_fakefakefakefakefakefakefake"
+
+
+def run_add_pat_cmd(
+    name: str = _FAKE_PAT_NAME,
+    expires: int | None = 9999999999,
+    pat: str = _FAKE_PAT,
+    overwrite: bool = False,
+) -> Result:
+    """Helper fn to run the add-pat command."""
+    args = f"auth add-pat {name}"
+    if expires is not None:
+        args += f" --expires {expires}"
+    if overwrite:
+        args += " --overwrite-existing"
+    return runner.invoke(
+        app=app,
+        args=args,
+        input=f"{pat}\n",
+    )
+
+
+@pytest.fixture
+def cleanup_stored_cli_pat():
+    """Remove any possibly stored PAT from a add-pat command in a test"""
+    yield
+    # rm-pat is idempotent, so doesn't matter if there is no PAT.
+    result = runner.invoke(app=app, args="auth rm-pat")
+    assert result.exit_code == 0
+
+
+def test_add_pat_stores_pat(cleanup_stored_cli_pat):
+    """add-pat should store the PAT and pat-info should now show the PATs is stored"""
+    result = run_add_pat_cmd()
+    assert result.exit_code == 0
+    assert _FAKE_PAT_NAME in result.stdout
+
+    info = runner.invoke(app=app, args="auth pat-info")
+    assert info.exit_code == 0
+    assert _FAKE_PAT_NAME in info.stdout
+    assert _FAKE_PAT not in info.stdout  # PAT should not be printed
+
+
+def test_add_pat_rejects_invalid_pat_prefix(cleanup_stored_cli_pat):
+    """add-pat should fail if the token doesn't start with the PAT prefix."""
+    result = run_add_pat_cmd(pat="not_a_real_pat")
+    assert result.exit_code != 0
+    assert "not a valid personal access token" in result.stdout
+
+
+def test_add_pat_rejects_already_expired_pat(cleanup_stored_cli_pat):
+    """add-pat should fail if the token doesn't start with the PAT prefix."""
+    one_day_ago = datetime.now() - timedelta(days=1)
+    result = run_add_pat_cmd(expires=int(one_day_ago.timestamp()))
+    assert result.exit_code != 0
+    assert "expiry" in result.stdout
+
+
+def test_add_pat_with_no_expiry(cleanup_stored_cli_pat):
+    """add-pat without --expires set works and stores a PAT."""
+    result = run_add_pat_cmd(expires=None)
+    assert result.exit_code == 0
+    assert _FAKE_PAT_NAME in result.stdout
+
+    info = runner.invoke(app=app, args="auth pat-info")
+    assert info.exit_code == 0
+    assert _FAKE_PAT_NAME in info.stdout
+    assert "Never" in info.stdout  # expiry info
+    assert _FAKE_PAT not in info.stdout  # PAT should not be printed
+
+
+def test_cannot_add_pat_without_overwrite_flag(cleanup_stored_cli_pat):
+    """add-pat must refuse to overwrite an existing PAT unless --overwrite-existing is passed."""
+    result = run_add_pat_cmd()
+    assert result.exit_code == 0
+    assert _FAKE_PAT_NAME in result.stdout
+
+    result = run_add_pat_cmd()
+    assert result.exit_code != 0
+    assert "already stored" in result.stdout
+    assert "--overwrite-existing" in result.stdout
+
+    result = run_add_pat_cmd(overwrite=True)
+    assert result.exit_code == 0
+    assert _FAKE_PAT_NAME in result.stdout
+
+    result = run_add_pat_cmd(name="a-new-pat", overwrite=True)
+    assert result.exit_code == 0
+    assert "a-new-pat" in result.stdout
+
+
+def test_rm_pat_removes_stored_pat(cleanup_stored_cli_pat):
+    """rm-pat should remove the stored PAT so that pat-info shows nothing."""
+    result = run_add_pat_cmd()
+    assert result.exit_code == 0
+
+    result = runner.invoke(app=app, args="auth rm-pat")
+    assert result.exit_code == 0
+
+    info = runner.invoke(app=app, args="auth pat-info")
+    assert info.exit_code == 0
+    assert "No personal access token" in info.stdout
+
+
+def test_rm_pat_with_no_pat_is_ok(cleanup_stored_cli_pat):
+    """rm-pat should succeed even if no PAT is currently stored."""
+    result = runner.invoke(app=app, args="auth rm-pat")
+    assert result.exit_code == 0
+
+
+def test_pat_info_when_no_pat_stored(cleanup_stored_cli_pat):
+    """pat-info should report nothing stored when no PAT has been added."""
+    info = runner.invoke(app=app, args="auth pat-info")
+    assert info.exit_code == 0
+    assert "No personal access token" in info.stdout
