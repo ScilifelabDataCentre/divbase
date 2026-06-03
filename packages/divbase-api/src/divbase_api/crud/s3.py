@@ -2,9 +2,8 @@
 Crud operations for the S3 endpoints
 """
 
-import logging
-
 import boto3
+import structlog
 from botocore.exceptions import ClientError
 from pydantic import SecretStr
 
@@ -13,7 +12,7 @@ from divbase_api.services.pre_signed_urls import S3PreSignedService
 from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.s3 import FileChecksumResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def get_s3_file_manager() -> S3FileManager:

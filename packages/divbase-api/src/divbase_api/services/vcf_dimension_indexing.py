@@ -1,7 +1,8 @@
-import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+import structlog
 
 from divbase_api.services.bcftools_helpers import (
     _raise_task_user_error_from_bcftools_stderr,
@@ -9,7 +10,7 @@ from divbase_api.services.bcftools_helpers import (
     ensure_csi_index,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

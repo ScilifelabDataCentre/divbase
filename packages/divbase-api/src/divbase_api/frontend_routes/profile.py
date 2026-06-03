@@ -4,8 +4,7 @@ Frontend routes for user to manage their profile/account.
 All routes here should rely on get_current_user_from_cookie dependency to ensure user is logged in.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
@@ -22,7 +21,7 @@ from divbase_api.schemas.users import UserUpdate
 
 fr_profile_router = APIRouter()
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @fr_profile_router.get("/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)

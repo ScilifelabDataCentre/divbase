@@ -8,9 +8,9 @@ version IDs (hashes) at that point in time.
 Version entries are created and managed via the API.
 """
 
-import logging
 from datetime import datetime, timezone
 
+import structlog
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -34,7 +34,7 @@ from divbase_lib.api_schemas.project_versions import (
     UpdateVersionResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def add_project_version(

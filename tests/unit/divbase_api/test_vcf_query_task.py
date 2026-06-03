@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from structlog.testing import capture_logs
 
 import divbase_api.services.vcf_queries as queries_module
 from divbase_api.services.vcf_queries import (
@@ -24,7 +25,7 @@ from divbase_api.worker.tasks import (
     _resolve_inputs_for_cli_samples_mode,
 )
 from divbase_lib.exceptions import BcftoolsCommandError, TaskUserError
-from tests.conftest import REGRESSION_GUARD_PREFIX
+from tests.conftest import REGRESSION_GUARD_PREFIX, _text_in_logs
 
 
 class TestDetermineSampleSelectionMode:
@@ -705,6 +706,6 @@ class TestSampleSetOverlapHelpers:
                 _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
             assert expected_message_part in str(excinfo.value)
         else:
-            with caplog.at_level("INFO"):
+            with capture_logs() as cap_logs:
                 _check_if_samples_can_be_combined_with_bcftools(files_to_download, vcf_dimensions_data)
-            assert expected_message_part in caplog.text
+            assert _text_in_logs(text=expected_message_part, logs=cap_logs)

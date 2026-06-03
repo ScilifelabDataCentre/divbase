@@ -18,9 +18,9 @@ so all checks in the sub-dependency function are ran when you use this dependenc
 (see here: https://fastapi.tiangolo.com/yo/advanced/security/oauth2-scopes/#dependency-tree-and-scopes)
 """
 
-import logging
 from typing import Annotated
 
+import structlog
 from fastapi import Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import SecretStr, ValidationError
@@ -40,7 +40,7 @@ from divbase_api.security import TokenType, create_token
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Returned for JWT tokens and PATs which are not scoped.
 # Effectively means the token has whatever permissions the user has.

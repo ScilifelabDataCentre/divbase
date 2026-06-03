@@ -1,10 +1,11 @@
 # Shared bcftools helpers used by both VCF dimension indexing and query orchestration in DivBase.
 
-import logging
 import os
 import shlex
 import subprocess
 from pathlib import Path
+
+import structlog
 
 from divbase_lib.exceptions import (
     BcftoolsCommandError,
@@ -12,7 +13,7 @@ from divbase_lib.exceptions import (
     TaskUserError,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 BCFTOOLS_CONTAINER_NAME = (
     "divbase-worker-quick-1"  # for synchronous tasks in local dev, use this container name to find the container ID

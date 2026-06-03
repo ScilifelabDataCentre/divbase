@@ -12,18 +12,18 @@ The compiled HTML templates are used by Jinja2 to create the emails actual conte
 To compile the templates I used the vscode "MJML Official" extension.
 """
 
-import logging
 from pathlib import Path
 from time import sleep
 from typing import Any
 
 import emails
+import structlog
 from jinja2 import Template
 
 from divbase_api.api_config import api_settings
 from divbase_api.security import TokenType, create_token
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def render_email_template(template_name: str, context: dict[str, Any]) -> str:

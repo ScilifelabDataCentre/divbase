@@ -5,9 +5,9 @@ This is for CLI/API clients to login and get tokens for authenticated requests.
 Frontend routes are located in frontend_routes/auth.py
 """
 
-import logging
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ from divbase_lib.api_schemas.auth import (
 )
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 auth_router = APIRouter()
 

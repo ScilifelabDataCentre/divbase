@@ -110,6 +110,7 @@ nav:
     - Writing E2E Tests for VCF Results Checksums: development/writing_e2e_tests_for_vcf_results_checksums.md
     - Monitoring and observability: development/monitoring_and_observability.md
     - "Monitoring: Celery Worker Metrics": development/worker_metrics.md
+    - Logging: development/logging.md
     - Contributing to DivBase development: CONTRIBUTING.md
     - Security Policy: SECURITY.md
   - Releases: releases/index.md

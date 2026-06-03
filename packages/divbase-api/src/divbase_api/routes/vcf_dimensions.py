@@ -2,8 +2,7 @@
 API routes for VCF dimensions (technical metadata) operations.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +30,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionUpdateKwargs,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 vcf_dimensions_router = APIRouter()
 

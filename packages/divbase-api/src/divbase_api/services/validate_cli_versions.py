@@ -6,7 +6,11 @@ OR
 On login, add announcement that a new version of the CLI can be installed.
 """
 
+import structlog
+
 from divbase_api.api_config import api_settings
+
+logger = structlog.get_logger(__name__)
 
 
 def _parse_version(version: str) -> list[int]:
@@ -39,7 +43,11 @@ def cli_version_outdated(cli_version: str, minimum_cli_version: str = api_settin
     Version strings are expected to be in the format "major.minor.patch" (e.g., "2.5.0").
     Any extra parts, e.g. alpha, beta, rc1, dev3 etc.. ignored.
     """
-    cli_parts = _parse_version(cli_version)
+    try:
+        cli_parts = _parse_version(cli_version)
+    except ValueError:
+        logger.warning(f"Received malformed CLI version: {cli_version}. Treating as outdated.")
+        return True
     min_parts = _parse_version(minimum_cli_version)
 
     for cli_part, min_part in zip(cli_parts, min_parts, strict=True):

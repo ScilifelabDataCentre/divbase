@@ -2,8 +2,7 @@
 API routes for task history operations.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
@@ -20,7 +19,7 @@ from divbase_api.services.task_history import (
 )
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 task_history_router = APIRouter()
 

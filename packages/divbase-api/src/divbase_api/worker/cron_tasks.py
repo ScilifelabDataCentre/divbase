@@ -5,12 +5,13 @@ Hard deletion of soft deleted files is handled by a separate script: cleanup_exp
 This includes both results files and soft deleted files
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from celery.schedules import crontab
 from sqlalchemy import delete, select, text, update
 
+from divbase_api.logging_config import LOG_FILES_DIR
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
@@ -20,7 +21,7 @@ from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
@@ -233,6 +234,43 @@ def update_storage_usage_metrics():
     }
 
 
+@app.task(name="cron_tasks.remove_old_log_files")
+def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_retention_days):
+    """
+    If a deployed enviroment is writing logs to files, this task will clean up outdated log files to prevent disk clutter.
+    NOTE: If loki/grafana alloy is setup, then this task can be removed.
+
+    Runs daily and deletes the log files based on when they were last modified.
+    """
+    if not LOG_FILES_DIR.exists():
+        logger.info(f"Log files directory does not exist, skipping cleanup: {LOG_FILES_DIR}")
+        return {
+            "status": "completed",
+            "number_of_log_files_deleted": "N/A - log directory does not exist",
+            "retention_days": log_retention_days,
+        }
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=log_retention_days)
+
+    numb_deleted = 0
+    for log_file in LOG_FILES_DIR.glob("*.log*"):
+        if not log_file.is_file():
+            continue
+
+        last_modified = datetime.fromtimestamp(log_file.stat().st_mtime, tz=timezone.utc)
+        if last_modified < cutoff_date:
+            log_file.unlink(missing_ok=True)
+            numb_deleted += 1
+
+    logger.info(f"Deleted {numb_deleted} log files older than {log_retention_days} days from {LOG_FILES_DIR}")
+
+    return {
+        "status": "completed",
+        "number_of_log_files_deleted": numb_deleted,
+        "retention_days": log_retention_days,
+    }
+
+
 # NOTE! If you add a new task here, make sure it starts with "cron_tasks"
 # Don't set to 2 AM or 3 AM due to daylight saving.
 # Timezone for job schedule is CET (defined in app in tasks.py).
@@ -256,5 +294,9 @@ app.conf.beat_schedule = {
     "update-storage-usage-metrics-daily": {
         "task": "cron_tasks.update_storage_usage_metrics",
         "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
+    },
+    "clear-out-old-log-files-daily": {
+        "task": "cron_tasks.remove_old_log_files",
+        "schedule": crontab(hour=5, minute=35),  # Run daily at 5:35 AM CET
     },
 }

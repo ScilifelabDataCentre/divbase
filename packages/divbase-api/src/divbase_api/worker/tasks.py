@@ -1,5 +1,4 @@
 import dataclasses
-import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -8,11 +7,14 @@ from itertools import combinations
 from pathlib import Path
 
 import psutil
+import structlog
 from celery import Celery
 from celery.signals import (
     after_task_publish,
     beat_init,
     celeryd_init,
+    setup_logging,
+    task_postrun,
     task_prerun,
     worker_process_init,
 )
@@ -24,6 +26,7 @@ from divbase_api.exceptions import (
     TSVFileNotFoundInProjectError,
     VCFDimensionsEntryMissingError,
 )
+from divbase_api.logging_config import configure_logging
 from divbase_api.models.task_history import TaskHistoryDB, TaskStartedAtDB
 from divbase_api.services.metadata_queries import run_sidecar_metadata_query
 from divbase_api.services.s3_client import S3FileManager
@@ -61,7 +64,7 @@ from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 app = Celery(
@@ -130,6 +133,30 @@ app.conf.update(
     },
     result_expires=None,  # disables celery.backend_cleanup since Divbase uses custom cleanup tasks (see cron_tasks.py).
 )
+
+
+@setup_logging.connect
+def config_loggers(*args, **kwargs) -> None:
+    """Override Celery's default logging config with our custom structlog config"""
+    configure_logging(
+        log_level=worker_settings.general.log_level,
+        environment=worker_settings.general.environment,
+        log_to_file=worker_settings.general.log_to_file,
+        service_name="divbase_worker",
+    )
+
+
+@task_prerun.connect
+def structlog_task_prerun(task_id, task, *args, **kwargs) -> None:
+    """Adds task_id and task_name into structlog context for each task"""
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(task_id=task_id, task_name=task.name)
+
+
+@task_postrun.connect
+def structlog_task_postrun(*args, **kwargs) -> None:
+    """Clear structlog context after task run to prevent leakage into next task run by worker"""
+    structlog.contextvars.clear_contextvars()
 
 
 @celeryd_init.connect

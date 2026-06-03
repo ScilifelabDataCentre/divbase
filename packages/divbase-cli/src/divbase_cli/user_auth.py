@@ -109,6 +109,7 @@ def check_existing_session(divbase_url: str, config) -> int | None:
 
 def _handle_divbase_api_error(response: httpx.Response, http_method: str, url: str) -> None:
     """Handles custom display of a HTTP error response returned by DivBase API."""
+    request_id = response.headers.get("X-Request-ID", "unknown")
     try:
         response_body = response.json()
         error_details = response_body.get("detail", "No error message provided.")
@@ -124,6 +125,7 @@ def _handle_divbase_api_error(response: httpx.Response, http_method: str, url: s
         error_type=error_type,
         http_method=http_method,
         url=url,
+        request_id=request_id,
     ) from None
 
 

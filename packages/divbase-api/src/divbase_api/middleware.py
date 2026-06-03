@@ -9,8 +9,10 @@ NOTE: The following are not implemented here as they are handled by the ingress 
 - Autoredirect from HTTP to HTTPS (so no need for HTTPSRedirectMiddleware)
 """
 
+import uuid
 from urllib.parse import urlparse
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -18,12 +20,31 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from divbase_api.api_config import LOCAL_DEV_ENVIRONMENTS, api_settings
+from divbase_api.api_config import api_settings
 from divbase_api.services.validate_cli_versions import cli_version_outdated
-from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
+from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY, LOCAL_DEV_ENVIRONMENTS
 
 IMAGE_FONT_EXTENSIONS = [".webp", ".svg", ".jpg", ".jpeg", ".png", ".woff", ".woff2", ".ttf"]
 CSS_JS_EXTENSIONS = [".css", ".js"]
+
+
+class RequestContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """
+        To every request that comes in, we bind(aka add) context into structlog's contextvars so every log line
+        produced during the request-response cycle automatically includes these fields.
+
+        2 benefits:
+        - correlate every log message to the request.
+        - user can give us the "X-Request-ID" in error report and we can search logs more easily.
+        """
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 
 class CustomHeaderMiddleware(BaseHTTPMiddleware):
@@ -101,4 +122,5 @@ def register_middleware(app: FastAPI) -> None:
     app.add_middleware(middleware_class=GZipMiddleware, minimum_size=1000, compresslevel=5)
     app.add_middleware(CustomHeaderMiddleware)
     app.add_middleware(CLIVersionMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.add_middleware(middleware_class=TrustedHostMiddleware, allowed_hosts=allowed_hosts)

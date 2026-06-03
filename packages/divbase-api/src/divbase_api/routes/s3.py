@@ -8,9 +8,9 @@ we need to use has_required_role to check if they have permission to do the oper
 - To avoid blocking the event loop when using the S3 client (boto3 is a sync SDK), we run these operations in a threadpool.
 """
 
-import logging
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -44,7 +44,7 @@ from divbase_lib.api_schemas.s3 import (
 )
 from divbase_lib.divbase_constants import MAX_S3_API_BATCH_SIZE
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 s3_router = APIRouter()
 

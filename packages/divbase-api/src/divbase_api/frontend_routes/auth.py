@@ -2,8 +2,7 @@
 Frontend routes for authentication-related pages.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import SecretStr, ValidationError
@@ -38,7 +37,7 @@ from divbase_api.services.email_sender import (
     send_verification_email,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 fr_auth_router = APIRouter()

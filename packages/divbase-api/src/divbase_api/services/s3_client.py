@@ -6,12 +6,12 @@ This class is a wrapper around the boto3 S3 client.
 See the 'docs/development/s3_transfers.md' for more info on how S3 transfers are handled.
 """
 
-import logging
 import os
 from pathlib import Path
 
 import boto3
 import stamina
+import structlog
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -30,7 +30,7 @@ from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE, S3_MULTIPART_
 from divbase_lib.exceptions import ChecksumVerificationError
 from divbase_lib.s3_checksums import verify_downloaded_checksum
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 S3_BATCH_SIZE = 1000
 

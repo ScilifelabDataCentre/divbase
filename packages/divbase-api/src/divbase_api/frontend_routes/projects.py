@@ -9,8 +9,7 @@ For these routes you'll likely want to use one of the following dependencies:
     (You need to validate their role is sufficient for what they're trying to do though).
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +32,7 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import UserProjectResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 fr_projects_router = APIRouter()
 

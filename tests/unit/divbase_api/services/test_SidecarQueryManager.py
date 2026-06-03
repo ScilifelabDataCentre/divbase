@@ -1,12 +1,13 @@
-import logging
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from structlog.testing import capture_logs
 
 from divbase_api.services.metadata_queries import SidecarQueryManager
 from divbase_lib.exceptions import SidecarColumnNotFoundError, SidecarInvalidFilterError, SidecarNoDataLoadedError
+from tests.conftest import _text_in_logs
 
 
 @pytest.mark.unit
@@ -53,15 +54,17 @@ def test_run_query_invalid_filter_raises_custom_exception(create_sidecar_manager
 
 
 @pytest.mark.unit
-def test_empty_string(valid_tsv_path, caplog):
+def test_empty_string(valid_tsv_path):
     """
     Test that an empty input filter returns all records and that unique values are extracted correctly.
     """
     manager = SidecarQueryManager(valid_tsv_path)
-    with caplog.at_level("WARNING"):
+    with capture_logs() as cap_logs:
         manager.run_query("")
 
-    assert "Empty filter provided - returning ALL records. This may be a large result set." in caplog.text
+    assert _text_in_logs(
+        text="Empty filter provided - returning ALL records. This may be a large result set.", logs=cap_logs
+    )
     assert sorted(manager.get_unique_values("col1")) == ["A", "B"]
     assert sorted(manager.get_unique_values("col2")) == [1, 2, 3]
 
@@ -112,16 +115,16 @@ def test_sidecar_query_manager_chain(sample_tsv_file):
 
 
 @pytest.mark.unit
-def test_tsv_query_empty_filter(sample_tsv_file, caplog, create_sidecar_manager):
+def test_tsv_query_empty_filter(sample_tsv_file, create_sidecar_manager):
     """Test that empty filter returns all records with a warning."""
-    with caplog.at_level(logging.WARNING):
+    with capture_logs() as cap_logs:
         manager = create_sidecar_manager(sample_tsv_file)
         manager.run_query(filter_string="")
         query_result = manager.query_result
         query_message = manager.query_message
 
     assert len(query_result) == 5, "Empty filter should return all records"
-    assert "Empty filter provided - returning ALL records" in caplog.text
+    assert _text_in_logs(text="Empty filter provided - returning ALL records", logs=cap_logs)
     assert "ALL RECORDS" in query_message
 
 
@@ -136,37 +139,38 @@ def test_tsv_query_none_filter(sample_tsv_file, create_sidecar_manager):
 
 
 @pytest.mark.unit
-def test_tsv_query_column_not_found(sample_tsv_file, caplog, create_sidecar_manager):
+def test_tsv_query_column_not_found(sample_tsv_file, create_sidecar_manager):
     """Test that a non-existent column raises SidecarInvalidFilterError."""
-    with caplog.at_level(logging.WARNING):
+    with capture_logs() as cap_logs:
         manager = create_sidecar_manager(sample_tsv_file)
         with pytest.raises(SidecarInvalidFilterError) as exc_info:
             manager.run_query(filter_string="NonExistentColumn:Value")
 
-    assert "Column 'NonExistentColumn' not found in the TSV file" in caplog.text
+    assert _text_in_logs(text="Column 'NonExistentColumn' not found in the TSV file", logs=cap_logs)
     assert "NonExistentColumn:Value" in str(exc_info.value)
 
 
 @pytest.mark.unit
-def test_tsv_query_value_not_found(sample_tsv_file, caplog, create_sidecar_manager):
+def test_tsv_query_value_not_found(sample_tsv_file, create_sidecar_manager):
     """Test handling of filter with non-existent values."""
-    with caplog.at_level(logging.WARNING):
+    with capture_logs() as cap_logs:
         manager = create_sidecar_manager(sample_tsv_file)
         manager.run_query(filter_string="Population:NonExistentPop")
         query_result = manager.query_result
 
     assert len(query_result) == 0, "Should return empty DataFrame when no values match"
-    assert "No results for the filter ['NonExistentPop'] were found in column 'Population'" in caplog.text
+    assert _text_in_logs(
+        text="No results for the filter ['NonExistentPop'] were found in column 'Population'", logs=cap_logs
+    )
 
 
 @pytest.mark.unit
-def test_tsv_query_invalid_filter_format(sample_tsv_file, caplog, create_sidecar_manager):
+def test_tsv_query_invalid_filter_format(sample_tsv_file, create_sidecar_manager):
     """Test handling of incorrectly formatted filter."""
-    with caplog.at_level(logging.WARNING):
-        manager = create_sidecar_manager(sample_tsv_file)
-        with pytest.raises(SidecarInvalidFilterError) as exc_info:
-            manager.run_query(filter_string="InvalidFormatNoColon")
-        assert "Invalid filter format" in str(exc_info.value)
+    manager = create_sidecar_manager(sample_tsv_file)
+    with pytest.raises(SidecarInvalidFilterError) as exc_info:
+        manager.run_query(filter_string="InvalidFormatNoColon")
+    assert "Invalid filter format" in str(exc_info.value)
 
 
 @pytest.mark.unit

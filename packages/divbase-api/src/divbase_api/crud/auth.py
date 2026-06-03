@@ -2,9 +2,9 @@
 Authentication-related CRUD operations.
 """
 
-import logging
 from datetime import datetime, timezone
 
+import structlog
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from divbase_api.models.users import UserDB
 from divbase_api.schemas.users import UserPasswordUpdate
 from divbase_api.security import TokenType, get_password_hash, verify_password, verify_token
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
