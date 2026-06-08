@@ -89,7 +89,7 @@ def logout():
 @auth_app.command("add-pat")
 def add_pat(
     name: str = typer.Argument(..., help="Name of the personal access token (PAT). E.g. 'work-laptop-pat'"),
-    expires_unix_timestamp: int = typer.Option(
+    expires_unix_timestamp: int | None = typer.Option(
         None,
         "--expires",
         "-e",

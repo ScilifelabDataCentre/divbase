@@ -8,7 +8,7 @@ They fallback to a local file with 0600 permissions if not possible.
 - JWTs stored on login
 - PATs stored when user adds one via the add-pat CLI command.
 
-PATs can also be provided via environment variable (which takes precedence over any stored PATs) but no over a logged in session.
+PATs can also be provided via environment variable (which takes precedence over any stored PATs) but not over a logged in session.
 """
 
 import contextlib

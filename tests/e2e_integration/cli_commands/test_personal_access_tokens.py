@@ -15,8 +15,8 @@ A user can provide a PAT via an env var or from storing it with the add-pat comm
 
 Logic to validate those cli cmds is in test_auth_cli.py.
 
-We have 1 e2e test here that covers using the PAT stored by the add-pat command, otherwise we use the env var approach for convienance.
-These tests primarly focus on PATs being scoped correctly etc...
+We have 1 e2e test here that covers using the PAT stored by the add-pat command, otherwise we use the env var approach for convenience.
+These tests primarily focus on PATs being scoped correctly etc...
 """
 
 from datetime import datetime, timedelta, timezone
