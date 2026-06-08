@@ -67,6 +67,9 @@ To create a PAT:
     - **Task history** — Allow you to use the token to view your entire task history, not filtered by project.
 4. Click **Create**. Copy the token immediately — it is shown **only once** and cannot be recovered afterwards.
 
+After creating your PAT, the website will show you two options on how to store and use the PAT. For more advice on how to use a PAT in scripts and HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).
+
 You can have up to **5 active tokens** at a time. To revoke a token, click **Revoke** next to it on the Personal Access Tokens page.
 
-For how to use a PAT in scripts and HPC jobs, see [Using DivBase Programmatically](./using-divbase-programmatically.md#use-personal-access-tokens-to-authenticate-programmatically).
+!!! tip "Scope your token to what the job needs and when you need it for"
+    When creating the PAT, restrict it to the specific project(s) you need it for. Consider also setting an appropriate expiry date for the token. You can always revoke the token immediately if needed from the DivBase website.

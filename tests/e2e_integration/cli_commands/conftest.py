@@ -110,8 +110,15 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
         with contextlib.suppress(KeyringError):
-            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+            )
+        cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+        with contextlib.suppress(KeyringError):
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME
+            )
+        cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
         # running any cmd that requires the config file will create it
         for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
@@ -139,7 +146,14 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
         with contextlib.suppress(KeyringError):
-            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+            )
+        cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+        with contextlib.suppress(KeyringError):
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME
+            )
+        cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
     return factory

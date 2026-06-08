@@ -52,16 +52,26 @@ def clean_tmp_config_and_tokens_between_tests():
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
     with contextlib.suppress(KeyringError):
-        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+        keyring.delete_password(
+            service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+        )
+    cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+    with contextlib.suppress(KeyringError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME)
+    cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
     yield
 
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
     # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
     with contextlib.suppress(KeyringError):
-        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+        keyring.delete_password(
+            service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+        )
+    cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+    with contextlib.suppress(KeyringError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME)
+    cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session")
@@ -268,7 +278,7 @@ def logged_in_edit_user_with_existing_config(CONSTANTS):
     """Shared fixture: logged-in edit user with existing CLI config."""
     # ensure no config or tokens file exist before test
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
 
     for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
         add_command = f"config add {project}"
@@ -287,7 +297,7 @@ def logged_in_edit_user_with_existing_config(CONSTANTS):
     yield
 
     cli_settings.CONFIG_PATH.unlink(missing_ok=True)
-    cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+    cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture

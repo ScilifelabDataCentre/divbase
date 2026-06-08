@@ -86,7 +86,7 @@ def test_new_pat_form_renders(logged_in_edit_user_pat_page: Page):
 def test_create_full_access_pat_shows_token(logged_in_edit_user_pat_page: Page):
     """
     Creating a PAT with no scope restrictions shows the 'Token generated' page,
-    the copy-now warning, and the raw token (which must start with 'divbase_pat_').
+    the copy-now warning, and the raw token (which must start with PAT_TOKEN_PREFIX set in divbase-lib's constants module).
     """
     fill_and_submit_new_pat_form(logged_in_edit_user_pat_page, name="my-hpc-token")
 

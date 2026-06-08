@@ -4,49 +4,58 @@ Below is a set of tips for users who want to use DivBase in scripts/pipelines/pr
 
 If you have any tips or suggestions to add to this page or any desired features, please let us know!
 
-## Use Personal Access Tokens to Authenticate programmatically
+## Use Personal Access Tokens to authenticate programmatically
 
-For scripts, pipelines, and HPC jobs the recommended approach is to use a **Personal Access Token (PAT)**. A PAT is a static bearer token that you create once via the website and pass to `divbase-cli` via an environment variable. When using a PAT, there is no login step and no password storage required.
+For scripts, pipelines, and HPC jobs the recommended approach is to use a **Personal Access Token (PAT)**. A PAT is a static bearer token that you create once via the website. When using a PAT, there is no login step and no password storage required.
 
-See [Account Management — Personal Access Tokens](./account-management.md#personal-access-tokens) for how to create/and remove PATs.
+See [Account Management — Personal Access Tokens](./account-management.md#personal-access-tokens) for how to create and revoke PATs.
 
-Once you have a token, set the `DIVBASE_API_PAT` environment variable to it. `divbase-cli` will automatically use it in every request.
+You can store/use a PAT in two ways
 
-!!! question "What if I have both an active login session and a Personal Access Token set?"
-    `divbase-cli` prioritises an active login session over a PAT. If you have both, the CLI will use the active session and ignore the PAT. To use the PAT, you would need to run `divbase-cli auth logout` first.
+### (Recommended) — Let `divbase-cli` handle storing the PAT
+
+After creating a PAT on the DivBase website, store it on your device by copy pasting the pre-filled commands shown on the website, it will look something like this:
+
+```bash
+# with an expiry date:
+divbase-cli auth add-pat "my-pat-name" --expires UNIX_TIMESTAMP
+# or without an expiry date:
+divbase-cli auth add-pat "my-pat-name"
+```
+
+You will be prompted to paste the token value. It will then be stored securely in your OS keyring (or in a restricted file if no keyring is available) and used automatically on every subsequent `divbase-cli` command.
+
+```bash
+divbase-cli auth pat-info   # show name and expiry of the stored PAT
+divbase-cli auth rm-pat     # remove the stored PAT from this device
+```
+
+!!! info "This strategy works on HPC clusters"
+    On the login node with divbase-cli [installed as we recommend](./installation.md), store the PAT as described above. The token will be available to all your jobs running on the cluster, without needing to worry about setting any environment variables in your job scripts.
+
+### (Not recommended alternative) — Store the PAT in an environment variable
+
+Set `DIVBASE_API_PAT` in your shell or job script:
 
 ```bash
 export DIVBASE_API_PAT="divbase_pat_your_token_here"
 divbase-cli files ls
 ```
 
-When `DIVBASE_API_PAT` is set, `divbase-cli` does not need you to be logged in.
+You may prefer this if you want explicit per-job control of which token is used.
 
-### Example: Slurm job script
+---
 
-The cleanest way to use a PAT in a SLURM job is to store the token in a restricted file and load it at job start:
+!!! question "What if I have both an active login session and a personal access token set?"
+    `divbase-cli` follows this priority order:
 
-```bash
-echo "divbase_pat_your_token_here" > ~/.divbase_pat
-chmod 600 ~/.divbase_pat  # only readable/writeable by the owner
-```
+    1. **Active login session** (from `divbase-cli auth login`) — highest priority
+    2. **`DIVBASE_API_PAT` environment variable**
+    3. **CLI-stored PAT** (from `divbase-cli auth add-pat`)
 
-Then in your SLURM script:
+    To use a PAT when you are also logged in, run `divbase-cli auth logout` first.
 
-```bash
-#!/bin/bash
-#SBATCH --job-name=my_divbase_job
-#SBATCH --time=24:00:00
-# ....
-
-export DIVBASE_API_PAT=$(cat ~/.divbase_pat)
-
-# Download the files you need
-divbase-cli files download my_data.vcf.gz
-```
-
-!!! tip "Scope your token to what the job needs and when you need it for"
-    When creating the PAT, restrict it to the specific project(s) you need it for. Consider also setting an appropriate expiry date for the token. You can always revoke the token immediately if needed from the DivBase website.
+    Your logged in account will have the same or more permissions that your PATs, this is why we follow this order.
 
 ## Parse divbase-cli files ls/info output programmatically
 

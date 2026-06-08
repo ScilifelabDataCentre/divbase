@@ -3,8 +3,12 @@ Manage user authentication with the DivBase server.
 
 This includes login/logout and the getting, storing, using, and refreshing of access + refresh JWTs and Personal Access Tokens (PATs).
 
-User JWTs are stored in the device's OS keyring. They fallback to a local file with 0600 permissions if not possible.
-PATs provided via environment variable
+User JWTs and PATs can be stored in the device's OS keyring.
+They fallback to a local file with 0600 permissions if not possible.
+- JWTs stored on login
+- PATs stored when user adds one via the add-pat CLI command.
+
+PATs can also be provided via environment variable (which takes precedence over any stored PATs) but not over a logged in session.
 """
 
 import contextlib
@@ -14,8 +18,10 @@ import os
 import time
 import warnings
 from dataclasses import dataclass
+from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
+from typing import Any
 
 import httpx
 import keyring
@@ -33,6 +39,12 @@ from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
+PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE = (
+    "Your Personal Access Token (PAT) has expired. \n"
+    "Please create a new one and add it with 'divbase-cli auth add-pat'. \n"
+    "See https://scilifelabdatacentre.github.io/divbase/user-guides/account-management/#personal-access-tokens for more details."
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +58,7 @@ class TokenData:
     access_token_expires_at: int
     refresh_token_expires_at: int
 
-    def dump_tokens(self, output_path: Path = cli_settings.TOKENS_PATH) -> None:
+    def dump_tokens(self, fallback_output_path: Path = cli_settings.TOKENS_FALLBACK_PATH) -> None:
         """Dump the user token data to the OS keyring. If fails, fall back to a local file."""
         token_dict = {
             "access_token": self.access_token.get_secret_value(),
@@ -54,25 +66,11 @@ class TokenData:
             "access_token_expires_at": self.access_token_expires_at,
             "refresh_token_expires_at": self.refresh_token_expires_at,
         }
-        try:
-            keyring.set_password(
-                service_name=cli_settings.KEYRING_SERVICE,
-                username=cli_settings.KEYRING_USERNAME,
-                password=json.dumps(token_dict),
-            )
-            output_path.unlink(missing_ok=True)
-            logger.debug("JWTs stored in device keyring successfully.")
-            return
-        except KeyringError as e:
-            logger.debug(f"Keyring JWT storage failed with error: {e}\n falling back to file storage.")
-
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        # Create file with 0600 permissions (user read/write only).
-        # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
-        # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
-        fd = os.open(path=output_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
-        with os.fdopen(fd, "w") as file:
-            yaml.safe_dump(token_dict, file, sort_keys=False)
+        _dump_to_keyring_or_file(
+            data=token_dict,
+            keyring_user_name=cli_settings.KEYRING_TOKENS_USERNAME,
+            fallback_file_path=fallback_output_path,
+        )
 
     def is_access_token_expired(self) -> bool:
         """Check if the access token is expired"""
@@ -86,8 +84,51 @@ class TokenData:
 def _delete_stored_jwts(token_path: Path) -> None:
     """Attempt to delete user JWTs from both the keyring and the fallback file."""
     with contextlib.suppress(KeyringError):
-        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
+        keyring.delete_password(
+            service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+        )
     token_path.unlink(missing_ok=True)
+
+
+@dataclass
+class PATData:
+    """Class to hold user PAT data"""
+
+    name: str
+    pat_expires_at: int | None  # None means the PAT does not expire
+    pat: SecretStr
+
+    def dump_pat_data(self, fallback_output_path: Path = cli_settings.PATS_FALLBACK_PATH) -> None:
+        """Dump the user PAT data to the OS keyring. If fails, fall back to a local file."""
+        token_dict = {
+            "name": self.name,
+            "pat_expires_at": self.pat_expires_at,
+            "pat": self.pat.get_secret_value(),
+        }
+        _dump_to_keyring_or_file(
+            data=token_dict,
+            keyring_user_name=cli_settings.KEYRING_PATS_USERNAME,
+            fallback_file_path=fallback_output_path,
+        )
+
+    def is_pat_expired(self) -> bool:
+        """Check if the PAT is expired"""
+        cutoff = time.time() + 10  # 10 second buffer to account for clock skew or time delay
+        return self.pat_expires_at is not None and self.pat_expires_at <= cutoff
+
+    def pat_expiry_formatted(self) -> str:
+        """Returns the token's expiry time in a human readable format in user's current timezone."""
+        if self.pat_expires_at is None:
+            return "Never"
+        expiry = datetime.fromtimestamp(self.pat_expires_at).astimezone()
+        return expiry.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def delete_stored_pat(pat_path: Path = cli_settings.PATS_FALLBACK_PATH) -> None:
+    """Attempt to delete user PAT from both the keyring and the fallback file."""
+    with contextlib.suppress(KeyringError):
+        keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME)
+    pat_path.unlink(missing_ok=True)
 
 
 def check_existing_session(divbase_url: str, config) -> int | None:
@@ -172,7 +213,7 @@ def login_to_divbase(email: str, password: SecretStr, divbase_url: str) -> None:
     config.set_login_status(url=divbase_url, email=email)
 
 
-def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
+def logout_of_divbase(token_path: Path = cli_settings.TOKENS_FALLBACK_PATH) -> None:
     """
     Log out of the DivBase server.
     We send the refresh token to DivBase to be revoked server-side.
@@ -219,13 +260,15 @@ def logout_of_divbase(token_path: Path = cli_settings.TOKENS_PATH) -> None:
     config.set_login_status(url=None, email=None)
 
 
-def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData | None:
+def load_user_tokens(token_path: Path = cli_settings.TOKENS_FALLBACK_PATH) -> TokenData | None:
     """
     Load user tokens from the OS keyring. Fallback for this is a local file with 0600 permissions.
     Return None if no tokens found or if tokens are malformed/invalid - user logged out.
     """
     try:
-        raw = keyring.get_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
+        raw = keyring.get_password(
+            service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+        )
     except KeyringError as e:
         raw = None
         logger.debug(f"Keyring read failed with error: {e}, falling back to file storage.")
@@ -255,11 +298,82 @@ def load_user_tokens(token_path: Path = cli_settings.TOKENS_PATH) -> TokenData |
             access_token_expires_at=token_dict["access_token_expires_at"],
             refresh_token_expires_at=token_dict["refresh_token_expires_at"],
         )
-    except KeyError as e:
+    except (KeyError, TypeError) as e:
         logger.debug(f"User tokens file at {token_path} appears to be malformed: {e}")
         return None
 
     return token_data
+
+
+def load_stored_user_pat(pat_fallback_path: Path = cli_settings.PATS_FALLBACK_PATH) -> PATData | None:
+    """
+    Attempts to load a user's Personal Access Token (PAT) from:
+    1. OS keyring (if stored there)
+    2. file fallback (if stored there)
+
+    Returns the PATData if found and valid, else None.
+    """
+    try:
+        raw = keyring.get_password(
+            service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME
+        )
+    except KeyringError as e:
+        raw = None
+        logger.debug(f"Keyring read failed with error: {e}, falling back to file storage.")
+
+    if raw is not None:
+        try:
+            pat_dict = json.loads(raw)
+            return PATData(
+                name=pat_dict["name"],
+                pat=SecretStr(pat_dict["pat"]),
+                pat_expires_at=pat_dict["pat_expires_at"],
+            )
+        except (KeyError, json.JSONDecodeError) as e:
+            logger.debug(f"Keyring PAT data malformed: {e}")
+
+    if not pat_fallback_path.exists():
+        return None
+
+    with open(pat_fallback_path, "r") as file:
+        pat_dict = yaml.safe_load(file)
+
+    try:
+        pat_data = PATData(
+            name=pat_dict["name"],
+            pat=SecretStr(pat_dict["pat"]),
+            pat_expires_at=pat_dict["pat_expires_at"],
+        )
+    except (KeyError, TypeError) as e:
+        logger.debug(f"User PAT file at {pat_fallback_path} appears to be malformed: {e}")
+        return None
+
+    return pat_data
+
+
+def get_pat_for_authentication() -> SecretStr | None:
+    """
+    Get a user's Personal Access Token (PAT) for authentication with the DivBase API.
+
+    Priority order:
+    1. Environment variable
+    2. OS keyring
+    3. file with 0600 permissions fallback
+
+    Returns the PAT as a SecretStr if found and valid, else None.
+    """
+    pat = cli_settings.DIVBASE_API_PAT
+    if pat is not None:
+        return pat
+    pat_data = load_stored_user_pat()
+
+    if not pat_data:
+        return None
+
+    if pat_data.is_pat_expired():
+        raise AuthenticationError(PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE)
+
+    return pat_data.pat
 
 
 @stamina.retry(on=retry_only_on_retryable_divbase_api_errors, attempts=3)
@@ -267,7 +381,7 @@ def make_authenticated_request(
     method: str,
     divbase_base_url: str,
     api_route: str,
-    token_path: Path = cli_settings.TOKENS_PATH,
+    token_path: Path = cli_settings.TOKENS_FALLBACK_PATH,
     **kwargs,
 ) -> httpx.Response:
     """Make an authenticated request to the DivBase server, handles refreshing tokens if needed."""
@@ -276,10 +390,11 @@ def make_authenticated_request(
 
     token_data = load_user_tokens(token_path=token_path)
     if not token_data:
-        if not cli_settings.DIVBASE_API_PAT:
+        pat = get_pat_for_authentication()
+        if not pat:
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE)
         logger.info("Using personal access token in request to DivBase API.")
-        headers["Authorization"] = f"Bearer {cli_settings.DIVBASE_API_PAT.get_secret_value()}"
+        headers["Authorization"] = f"Bearer {pat.get_secret_value()}"
     else:
         if token_data.is_access_token_expired():
             if token_data.is_refresh_token_expired():
@@ -365,7 +480,7 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
             # Prevents user getting warning about being already logged in when they try to log in again.
             config = load_user_config()
             config.set_login_status(url=None, email=None)
-            _delete_stored_jwts(token_path=cli_settings.TOKENS_PATH)
+            _delete_stored_jwts(token_path=cli_settings.TOKENS_FALLBACK_PATH)
             raise AuthenticationError(LOGIN_AGAIN_MESSAGE) from None
 
         _handle_divbase_api_error(response=response, http_method="POST", url=refresh_url)
@@ -380,3 +495,31 @@ def _refresh_access_token(token_data: TokenData, divbase_base_url: str) -> Token
     )
     new_token_data.dump_tokens()
     return new_token_data
+
+
+def _dump_to_keyring_or_file(data: dict[Any, Any], keyring_user_name: str, fallback_file_path: Path) -> None:
+    """
+    Helper fn to dump a dict to user's OS keyring.
+
+    If dump fails, will fallback to a local file and set permissions to 0600 (user read/write only).
+    Used to store both JWTs and PATs.
+    """
+    try:
+        keyring.set_password(
+            service_name=cli_settings.KEYRING_SERVICE,
+            username=keyring_user_name,
+            password=json.dumps(data),
+        )
+        fallback_file_path.unlink(missing_ok=True)
+        logger.debug(f"Data stored in user device keyring under username: {keyring_user_name}")
+        return
+    except KeyringError as e:
+        logger.debug(f"Keyring storage failed with error: {e}\n falling back to file storage.")
+
+    fallback_file_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create file with 0600 permissions (user read/write only).
+    # Windows doesn't support 0600 permissions, but Windows can use keyring, so should never reach this fallback.
+    # Even if a Windows OS can't use keyring the fallback will still work, the 0600 mode will just be ignored.
+    fd = os.open(path=fallback_file_path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
+    with os.fdopen(fd, "w") as file:
+        yaml.safe_dump(data, file, sort_keys=False)
