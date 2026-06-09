@@ -207,8 +207,9 @@ async def remove_project_member(db: AsyncSession, project_id: int, user_id: int)
 
 ROLE_HIERARCHY = {
     ProjectRoles.READ: 1,
-    ProjectRoles.EDIT: 2,
-    ProjectRoles.MANAGE: 3,
+    ProjectRoles.QUERY: 2,
+    ProjectRoles.EDIT: 3,
+    ProjectRoles.MANAGE: 4,
 }
 
 

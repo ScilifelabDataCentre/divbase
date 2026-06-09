@@ -50,17 +50,19 @@ class ProjectDB(BaseDBModel):
 
 class ProjectRoles(StrEnum):
     """
-    Roles assignable to a user in a project.
+    Roles assignable to a user in a project (higher role includes permissions of the lower roles):
 
     - READ: Can view project and download files
+    - QUERY: Can submit queries
     - EDIT: Can add/edit/(soft)delete files + submit queries.
     - MANAGE: Can EDIT + add/remove users and change their roles.
 
-    Note: Admin users do not need to be assigned to projects,
-    but have access to all projects.
+    Note: Admin users do not need to be assigned to projects.
+    The admin panel can be used by admins to manage any project.
     """
 
     READ = "read"
+    QUERY = "query"
     EDIT = "edit"
     MANAGE = "manage"
 
