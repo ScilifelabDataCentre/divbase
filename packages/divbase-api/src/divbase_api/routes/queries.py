@@ -42,7 +42,9 @@ logger = structlog.get_logger(__name__)
 
 query_router = APIRouter()
 
-# TODO harmonize function names
+QUERY_AUTHORIZATION_ERROR_MSG = (
+    "You don't have permission to query this project. You need at least 'QUERY' level permissions."
+)
 
 
 @query_router.post(
@@ -61,8 +63,8 @@ async def submit_sample_metadata_query_job_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to query this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(QUERY_AUTHORIZATION_ERROR_MSG)
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = SampleMetadataQueryKwargs(
@@ -125,8 +127,8 @@ async def submit_vcf_query_job_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to query this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(QUERY_AUTHORIZATION_ERROR_MSG)
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     if bcftools_query_request.samples is not None:

@@ -33,7 +33,6 @@ async def get_all_tasks_for_user(
     Get the task history for the current user.
     Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
-
     serialized_tasks = await get_tasks_pg(
         db=db,
         user_id=current_user.id,
@@ -51,14 +50,13 @@ async def get_all_tasks_for_user_and_project(
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for the current user and project. Admin users can view all tasks of the project (even if not member of the projects), non-admin users can only view their own tasks of the project.
+    Get the task history for the current user and project.
+    Admin users can view all tasks of the project (even if not member of the projects), non-admin users can only view their own tasks of the project.
     """
-
     project, current_user, role = project_and_user_and_role
-
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY) and not current_user.is_admin:
         raise AuthorizationError(
-            "Project not found or you don't have permission to view task history for this project."
+            "You don't have permission to view task history for this project. You need at least 'QUERY' level permissions for this."
         )
 
     serialized_tasks = await get_tasks_pg(
@@ -79,14 +77,13 @@ async def get_project_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for a project. Requires MANAGE role or higher. Admin users can view all tasks of the project (even if not member of the projects).
+    Get the task history for a project. Requires MANAGE role or higher.
+    Admin users can view all tasks of the project (even if not member of the projects).
     """
-
     project, current_user, role = project_and_user_and_role
-
     if not has_required_role(role, ProjectRoles.MANAGE) and not current_user.is_admin:
         raise AuthorizationError(
-            "Project not found or you don't have permission to view task history for this whole project."
+            "You don't have permission to view all task history for this project. You need 'MANAGE' level permissions for this."
         )
 
     serialized_tasks = await get_tasks_pg(db=db, project_id=project.id)
@@ -108,7 +105,6 @@ async def get_task_by_id(
 
     Since the request body does not include project ID, permissions checks are made in get_tasks_pg.
     """
-
     serialized_task = await get_tasks_pg(
         db=db,
         user_task_id=user_task_id,
