@@ -71,6 +71,11 @@
                             {% set to_copy = "divbase-cli config add " ~ project.name %}
                             {% include "components/copy_to_clipboard.html" %}
                         </div>
+                        <div class="card-body">
+                            <p class="text-muted">To make it your default project you can instead run:</p>
+                            {% set to_copy = "divbase-cli config add " ~ project.name ~ " --default" %}
+                            {% include "components/copy_to_clipboard.html" %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -82,6 +87,31 @@
             {% include "components/add_user_to_project.html" %}
         {% endif %}
             
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-start">
+                        <div>
+                            <h5 class="mb-1"><i class="bi bi-shield-check me-2"></i>Project Role Permissions</h5>
+                            <small class="text-muted">Higher roles inherit all permissions from lower roles</small>
+                        </div>
+                        <a href="{{ mkdocs_site_url }}/user-guides/account-management/#project-roles-and-permissions"
+                           class="small text-muted flex-shrink-0 ms-3" target="_blank" rel="noopener">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Full breakdown of each role
+                        </a>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled d-flex flex-wrap gap-3 mb-0">
+                            <li><span class="badge scilife-role-badge-read me-1">Read</span><small class="text-muted">View and download files</small></li>
+                            <li><span class="badge scilife-role-badge-query me-1">Query</span><small class="text-muted">Upload files, submit queries, and add versions</small></li>
+                            <li><span class="badge scilife-role-badge-edit me-1">Edit</span><small class="text-muted">delete files and remove versions</small></li>
+                            <li><span class="badge scilife-role-badge-manage me-1">Manage</span><small class="text-muted">add and remove project members</small></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 {% endblock %}

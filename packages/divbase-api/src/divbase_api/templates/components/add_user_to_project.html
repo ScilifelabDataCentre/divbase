@@ -29,17 +29,22 @@
                     <div class="mb-3">
                         <label for="project_role" class="form-label">
                             Project Role <span class="text-danger">*</span>
+                            <br>
+                            <small class="text-muted">Higher roles inherit all permissions from lower roles</small>
                         </label>
                         <select class="form-select" id="project_role" name="role" required>
                             <option value="">Select a role...</option>
                             <option value="read">
-                                <i class="bi bi-eye"></i> Read - Can view and download files
+                                <i class="bi bi-eye"></i> 1. Read - Can view and download files
+                            </option>
+                            <option value="query">
+                                <i class="bi bi-search"></i> 2. Query - Can run queries and upload files. 
                             </option>
                             <option value="edit">
-                                <i class="bi bi-pencil"></i> Edit - Can upload, modify, and delete files
+                                <i class="bi bi-pencil"></i> 3. Edit - Can modify and delete files
                             </option>
                             <option value="manage">
-                                <i class="bi bi-shield"></i> Manage - Full project management access
+                                <i class="bi bi-shield"></i> 4. Manage - manage project access and view all queries submitted to the project
                             </option>
                         </select>
                         <div class="form-text">

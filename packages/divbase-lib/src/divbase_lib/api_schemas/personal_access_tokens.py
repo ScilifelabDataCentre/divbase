@@ -7,7 +7,7 @@ from typing_extensions import Self
 
 # This needs to stay in sync with ProjectRoles in divbase-api.
 # Redefined here to avoid a circular dependency on divbase-api.
-ALLOWED_PROJECT_ROLES = ["read", "edit", "manage"]
+ALLOWED_PROJECT_ROLES = ["read", "query", "edit", "manage"]
 
 
 class PATPermissions(BaseModel):
