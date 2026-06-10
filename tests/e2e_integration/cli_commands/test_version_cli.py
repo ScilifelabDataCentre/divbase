@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
+from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
 runner = CliRunner()
 
@@ -28,15 +29,26 @@ def clean_versions(db_session_sync):
     yield
 
 
-def test_add_version(logged_in_edit_user_with_existing_config):
-    command = f"version add {VERSION_1_NAME}"
-    result = runner.invoke(app, command)
+def test_read_user_cannot_add_or_rm_version(logged_in_read_user_with_existing_config):
+    """Read role cannot add or delete project versions."""
+    result = runner.invoke(app, f"version add {VERSION_1_NAME}")
+    assert_divbase_403_permissions_error(result)
 
+    result = runner.invoke(app, f"version rm {VERSION_1_NAME}")
+    assert_divbase_403_permissions_error(result)
+
+
+def test_query_user_cannot_rm_a_version(logged_in_query_user_with_existing_config):
+    """Query role can add project versions but cannot delete them."""
+    result = runner.invoke(app, f"version add {VERSION_1_NAME}")
     assert result.exit_code == 0
     assert f"New version: '{VERSION_1_NAME}'" in result.stdout
 
+    result = runner.invoke(app, f"version rm {VERSION_1_NAME}")
+    assert_divbase_403_permissions_error(result)
 
-def test_add_version_with_description(logged_in_edit_user_with_existing_config):
+
+def test_add_version_with_description(logged_in_query_user_with_existing_config):
     description = "Initial release"
     command = f'version add {VERSION_1_NAME} --description "{description}"'
     result = runner.invoke(app, command)
@@ -50,7 +62,7 @@ def test_add_version_with_description(logged_in_edit_user_with_existing_config):
     assert description in list_result.stdout
 
 
-def test_add_multiple_versions(logged_in_edit_user_with_existing_config):
+def test_add_multiple_versions(logged_in_query_user_with_existing_config):
     versions = [VERSION_1_NAME, VERSION_2_NAME, VERSION_3_NAME]
     for version in versions:
         command = f"version add {version}"
@@ -65,7 +77,7 @@ def test_add_multiple_versions(logged_in_edit_user_with_existing_config):
         assert version in result.stdout
 
 
-def test_attempt_add_version_that_already_exists_fails(logged_in_edit_user_with_existing_config):
+def test_attempt_add_version_that_already_exists_fails(logged_in_query_user_with_existing_config):
     command = "version add v1.0.0"
 
     result = runner.invoke(app, command)
@@ -78,7 +90,7 @@ def test_attempt_add_version_that_already_exists_fails(logged_in_edit_user_with_
     assert result.exception.status_code == 400
 
 
-def test_list_versions(logged_in_edit_user_with_existing_config):
+def test_list_versions(logged_in_query_user_with_existing_config):
     runner.invoke(app, f"version add {VERSION_1_NAME}")
     runner.invoke(app, f"version add {VERSION_2_NAME}")
 
@@ -91,7 +103,10 @@ def test_list_versions(logged_in_edit_user_with_existing_config):
 
 
 def test_list_versions_with_and_without_include_deleted_flag(logged_in_edit_user_with_existing_config):
-    """Test that deleted versions only show up when include_deleted flag is used"""
+    """
+    Test that deleted versions only show up when include_deleted flag is used
+    (rm requires edit user permissions)
+    """
     runner.invoke(app, f"version add {VERSION_1_NAME}")
     runner.invoke(app, f"version add {VERSION_2_NAME}")
     runner.invoke(app, f"version rm {VERSION_1_NAME}")
@@ -107,7 +122,7 @@ def test_list_versions_with_and_without_include_deleted_flag(logged_in_edit_user
     assert VERSION_2_NAME in result.stdout
 
 
-def test_list_versions_for_empty_project(logged_in_edit_user_with_existing_config):
+def test_list_versions_for_empty_project(logged_in_query_user_with_existing_config):
     """Test that list version works fine if no versions exist"""
     result = runner.invoke(app, "version ls")
     assert result.exit_code == 0

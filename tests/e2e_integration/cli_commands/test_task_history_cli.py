@@ -332,9 +332,8 @@ def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_e
     result_history = runner.invoke(app, f"task-history user --project {project_name}")
     assert result_history.exit_code == 1
     assert "authorization_error" in str(result_history.exception)
-    assert "Project not found or you don't have permission to view task history from this project" in str(
-        result_history.exception
-    )
+    assert "You don't have permission to view task history for this project" in str(result_history.exception)
+    assert "You need at least 'QUERY' level permissions for this" in str(result_history.exception)
 
 
 def test_edit_user_cannot_see_task_history_for_project_not_member_of(

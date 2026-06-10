@@ -22,6 +22,7 @@ from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 from tests.conftest import REGRESSION_GUARD_PREFIX
+from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
 runner = CliRunner()
 
@@ -154,6 +155,16 @@ def _checksum_vcf_skip_double_hash_headers(vcf_gz_file: Path, tmp_path: Path) ->
         file_path=normalized_file,
         output_format=MD5CheckSumFormat.HEX,
     )
+
+
+def test_read_user_query_permissions(logged_in_read_user_with_existing_config, CONSTANTS):
+    """Read role cannot submit VCF queries."""
+    project = CONSTANTS["QUERY_PROJECT"]
+    result = runner.invoke(app, f"query vcf --all-samples --command 'view -r 21:15000000-25000000' --project {project}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"query tsv 'Area:West of Ireland,Northern Portugal;Sex:F' --project {project}")
+    assert_divbase_403_permissions_error(result)
 
 
 class TestQueryTSVSuccess:
