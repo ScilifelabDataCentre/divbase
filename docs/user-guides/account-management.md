@@ -11,20 +11,22 @@ Once your project is created, you will be added as a member with the **Manage** 
 
 ## Project roles and permissions
 
-Each project member is assigned one of three roles. The table below shows what each role can do with the `divbase-cli`.
+Each project member is assigned one of four roles. The table below shows what each role can do within the project using `divbase-cli`.
 
-| CLI Command | Read | Edit | Manage |
-|---|:---:|:---:|:---:|
-| `files ls` | ✓ | ✓ | ✓ |
-| `files download` / `files download-all` | ✓ | ✓ | ✓ |
-| `task-history user` | ✓ | ✓ | ✓ |
-| `files upload` | | ✓ | ✓ |
-| `query vcf` / `query tsv` | | ✓ | ✓ |
-| `dimensions update` | | ✓ | ✓ |
-| `version ls` | | ✓ | ✓ |
-| `version add` / `version rm` | | ✓ | ✓ |
-| `task-history project` | | | ✓ |
-| Add / remove project members <sup>1</sup>| | | ✓ |
+| CLI Command | Read | Query | Edit | Manage |
+|---|:---:|:---:|:---:|:---:|
+| `files ls` | ✓ | ✓ | ✓ | ✓ |
+| `files download` | ✓ | ✓ | ✓ | ✓ |
+| `version ls/info` | ✓ | ✓ | ✓ | ✓ |
+| `files upload` | | ✓ | ✓ | ✓ |
+| `query vcf` / `query tsv` | | ✓ | ✓ | ✓ |
+| `dimensions update` | | ✓ | ✓ | ✓ |
+| `task-history user` | | ✓ | ✓ | ✓ |
+| `version add` | | ✓ | ✓ | ✓ |
+| `files restore/rm` | | | ✓ | ✓ |
+| `version update/rm` | | | ✓ | ✓ |
+| `task-history project` | | | | ✓ |
+| Add / remove project members <sup>1</sup>| | | | ✓ |
 
 !!! note
     <sup>1</sup> Members management can be done by any project manager using the DivBase web interface, not `divbase-cli`.
@@ -36,7 +38,7 @@ Project members can be added by anyone with the **Manage** role on that project.
 1. Navigate to your project page via **Projects** in the navigation bar.
 2. Open the project you want to manage.
 3. In the **Members** section, click **Add Member**.
-4. Enter the email address of the person you want to add and select their role (`read`, `edit`, or `manage`).
+4. Enter the email address of the person you want to add and select their role (`read`, `query`, `edit`, or `manage`).
 5. Click **Add Member** to confirm.
 
 !!! note "The user must already have a DivBase account"

@@ -53,8 +53,8 @@ class ProjectRoles(StrEnum):
     Roles assignable to a user in a project (higher role includes permissions of the lower roles):
 
     - READ: Can view project and download files
-    - QUERY: Can submit queries
-    - EDIT: Can add/edit/(soft)delete files + submit queries.
+    - QUERY: Can READ + upload files and submit queries
+    - EDIT: Can QUERY + (soft)delete files and project versions.
     - MANAGE: Can EDIT + add/remove users and change their roles.
 
     Note: Admin users do not need to be assigned to projects.

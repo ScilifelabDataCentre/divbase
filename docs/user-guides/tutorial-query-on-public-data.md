@@ -1,6 +1,6 @@
 # Tutorial: Running a DivBase query on a public dataset
 
-This tutorial assumes that you have an account on DivBase and have a membership in a DivBase project with at least an EDIT role (i.e. can upload files and run queries). If this is your first time using DivBase, you may want to have a look at the [Quick Start guide](quick-start.md) before trying the tutorial out.
+This tutorial assumes that you have an account on DivBase and have a membership in a DivBase project with at least one 'QUERY' level role (i.e. can upload files and run queries). If this is your first time using DivBase, you may want to have a look at the [Quick Start guide](quick-start.md) before trying the tutorial out.
 
 We will use a mouse (_Mus musculus_) data set availalbe on the European Nucleotide Archive: <https://www.ebi.ac.uk/ena/browser/view/ERZ022025>. It a 5.5 Gb VCF.gz file that contains 18 samples and 66,007,044 variants.
 

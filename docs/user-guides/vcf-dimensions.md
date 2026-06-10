@@ -22,7 +22,7 @@ divbase-cli task-history id 123
 ```
 
 !!! Warning
-    DivBase system does not automatically run `divbase-cli dimensions update` when files are uploaded. This needs to be manually done by one project member that has at least an EDIT role in the project.
+    DivBase system does not automatically run `divbase-cli dimensions update` when files are uploaded. This needs to be manually done by one project member that has the role 'QUERY' or higher in the project.
 
 There are four CLI commands sorted under `divbase-cli dimensions`:
 
