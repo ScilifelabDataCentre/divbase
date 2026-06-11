@@ -23,7 +23,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # manually created steps to add the QUERY role to the projectroles enum
-    # Convert the colum to string first, so we can drop and then recreate the new enum type safely.
+    # Convert the column to string first, so we can drop and then recreate the new enum type safely.
     op.execute("ALTER TABLE project_membership ALTER COLUMN role TYPE VARCHAR(50)")
     op.execute("DROP TYPE projectroles")
     op.execute("CREATE TYPE projectroles AS ENUM ('READ', 'QUERY', 'EDIT', 'MANAGE')")

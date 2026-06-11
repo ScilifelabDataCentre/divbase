@@ -34,18 +34,10 @@
                         </label>
                         <select class="form-select" id="project_role" name="role" required>
                             <option value="">Select a role...</option>
-                            <option value="read">
-                                <i class="bi bi-eye"></i> 1. Read - Can view and download files
-                            </option>
-                            <option value="query">
-                                <i class="bi bi-search"></i> 2. Query - Can run queries and upload files. 
-                            </option>
-                            <option value="edit">
-                                <i class="bi bi-pencil"></i> 3. Edit - Can modify and delete files
-                            </option>
-                            <option value="manage">
-                                <i class="bi bi-shield"></i> 4. Manage - manage project access and view all queries submitted to the project
-                            </option>
+                            <option value="read">1. Read - Can view and download files</option>
+                            <option value="query">2. Query - Can run queries and upload files. </option>
+                            <option value="edit">3. Edit - Can modify and delete files</option>
+                            <option value="manage">4. Manage - manage project access and view all queries submitted to the project</option>
                         </select>
                         <div class="form-text">
                             <a href="{{ mkdocs_site_url }}/user-guides/account-management/#project-roles-and-permissions"
