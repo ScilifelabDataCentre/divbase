@@ -1,0 +1,100 @@
+flowchart TB
+    subgraph Legend
+        direction TB
+        key1[Start and End]:::green
+        key2[User: CLI input]:::gray
+        key3[WebAPI requests]:::amber
+        key4[Celery worker: pre-processing]:::teal
+        key5[Celery worker: VCF processing]:::blue
+        key6[ERROR: abort task]:::red
+    end
+
+    start([Start]):::green
+    CLI_command["`divbase-cli query vcf
+    --command 'view ...'
+    --project project_name
+
+    Sample selection — exactly one required:
+      --tsv-filter column:value
+      --samples SAMPLE1,SAMPLE2
+      --samples-file samples.txt
+      --all-samples`"]:::gray
+    API_request["`API: validate command and submit
+    bcftools_pipe_task (tasks.bcftools_query)
+    to Celery task queue`"]:::amber
+
+    worker_picks_up_task[Idle worker picks up task from queue and runs it]:::teal
+    check_dimensions{VCF dimensions in database present and up-to-date?}:::teal
+    raise_error_dimensions["`ERROR: VCF dimensions missing or not up-to-date.
+    Please run 'divbase-cli dimensions update --project &lt;project_name&gt;'`"]:::red
+    resolve_samples["`Resolve sample selection and identify VCF files needed for the query`"]:::teal
+    filter_files_by_region[Filter VCF files by region if -r in command]:::teal
+    check_sample_compatibility{Sample sets across all VCF files compatible with bcftools?}:::teal
+    raise_error_overlap[ERROR: Sample set overlap between VCF files is not compatible with bcftools]:::red
+    transfer_files_to_worker[Transfer required VCF files from bucket to worker]:::teal
+
+    command_list["`Make list of all input commands
+    e.g. view -s SAMPLES; view -r chr1,chr3`"]:::blue
+    process_commands{Commands in command_list left to process?}:::blue
+    init_loop{Processing the first command in command_list?}:::blue
+    input_vcf[Set current_inputs as the VCF files]:::blue
+    input_temp[Set current_inputs as the latest temp_files]:::blue
+    process_files{Files in current_inputs left to process?}:::blue
+    run_and_index["`Run bcftools command on file
+    → indexed temp output (.bcf + .csi)`"]:::blue
+
+    merge_concat_annotate_sort["`Merge/concat temp files by sample set
+    — bcftools merge / bcftools concat
+    Add DivBase header — bcftools annotate
+    Sort results — bcftools sort`"]:::blue
+    results_file_created[Results file created on worker]:::blue
+
+    upload_results_file[Upload results file to bucket]:::teal
+    delete_job_files[Delete job files from worker]:::teal
+    task_completed["`Task finished, return
+    {status: completed, output_file: ...} to job system`"]:::teal
+    end_node([End]):::green
+
+    start --> CLI_command
+    CLI_command --> API_request
+    API_request --> worker_picks_up_task
+    worker_picks_up_task --> check_dimensions
+    check_dimensions -->|No| raise_error_dimensions
+    check_dimensions -->|Yes| resolve_samples
+    resolve_samples --> filter_files_by_region
+    filter_files_by_region --> check_sample_compatibility
+    check_sample_compatibility -->|Incompatible| raise_error_overlap
+    check_sample_compatibility -->|Compatible| transfer_files_to_worker
+    transfer_files_to_worker --> command_list
+
+    command_list --> process_commands
+    process_commands -->|Yes| init_loop
+    init_loop -->|Yes| input_vcf
+    init_loop -->|No| input_temp
+    input_vcf --> process_files
+    input_temp --> process_files
+    process_files -->|Yes| run_and_index
+    run_and_index --> process_files
+    process_files -->|No| process_commands
+    process_commands -->|No| merge_concat_annotate_sort
+
+    merge_concat_annotate_sort --> results_file_created
+    results_file_created --> upload_results_file
+    upload_results_file --> delete_job_files
+    delete_job_files --> task_completed
+    task_completed --> end_node
+
+    classDef green fill:#14532d,stroke:#16a34a,color:#86efac,stroke-width:2px
+    classDef gray  fill:#1e293b,stroke:#475569,color:#cbd5e1,stroke-width:2px
+    classDef amber fill:#431407,stroke:#ea580c,color:#fdba74,stroke-width:2px
+    classDef teal  fill:#0c3547,stroke:#0ea5e9,color:#7dd3fc,stroke-width:2px
+    classDef blue  fill:#1e1b4b,stroke:#818cf8,color:#c7d2fe,stroke-width:2px
+    classDef red   fill:#450a0a,stroke:#dc2626,color:#fca5a5,stroke-width:2px
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/bcftools_task_logic_flow_simplified.mermaid \
+%%      -o docs/assets/diagrams/bcftools_task_logic_flow_simplified.svg \
+%%      --theme dark --backgroundColor "#22272e"
+
+%% mmdc -i docs/assets/diagrams/bcftools_task_logic_flow_simplified.mermaid\
+%%      -o docs/assets/diagrams/bcftools_task_logic_flow_simplified.png --theme dark --backgroundColor  "#22272e" --scale 2

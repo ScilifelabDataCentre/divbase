@@ -1,0 +1,39 @@
+sequenceDiagram
+    title celery task implementation
+    participant User
+    participant CLI
+    participant API
+    participant DB as PostgreSQL
+    participant CeleryApp as Celery App
+    participant Broker as RabbitMQ Broker
+    participant CeleryWorker as Celery Worker
+
+    User->>CLI: enters command<br>to submit task
+    CLI->>API: sends request
+    API->>DB: check user credentials
+    DB-->>API: returns user id, project id, project role
+    API->>API: checks if role has<br>required permissions
+    API-->>CLI: if no permission:<br>Raise AuthorizationError
+    CLI-->>User: prints error in<br>user's terminal
+    API->>DB: check if queue is open for new tasks
+    DB-->>API: returns queue open/closed status
+    API-->>CLI: if queue closed:<br>Raise QueueClosedError
+    CLI-->>User: prints error in<br>user's terminal
+    API->>DB: create TaskHistoryDB entry (DivBase Task ID)
+    DB-->>API: returns DivBase Task ID
+    API->>CeleryApp: calls <TASK_FUNCTION>.apply_async(task_id=...)
+    CeleryApp->>Broker: puts task in queue
+    CeleryApp-->>API: returns Celery task UUID
+    API->>DB: update TaskHistoryDB entry with Celery task UUID
+    API-->>CLI: returns DivBase Task ID
+    CLI-->>User: prints DivBase Task ID<br>to user's terminal
+    Broker->>CeleryWorker: (idle worker) picks<br>up task from queue
+    CeleryWorker-->>DB: writes task<br>started timestamp<br>in TaskStartedAtDB<br>(task_prerun signal handler)
+    CeleryWorker->>CeleryWorker: executes task
+    CeleryWorker-->>DB: writes task metadata<br>to CeleryTaskMeta<br>(Celery results backend)
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/celery_task_implementation_sequence_diagram.mermaid \
+%%      -o docs/assets/diagrams/celery_task_implementation_sequence_diagram.svg \
+%%      -t dark \
+%%      --backgroundColor "#22272e"

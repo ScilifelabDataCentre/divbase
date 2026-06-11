@@ -1,0 +1,3284 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A service to manage, query and version VCF files and associated sample metadata">
+      
+      
+      
+        <link rel="canonical" href="https://scilifelabdatacentre.github.io/divbase/development/bcftools_task_constraints/">
+      
+      
+        <link rel="prev" href="../bcftools_task_logic/">
+      
+      
+        <link rel="next" href="../task_history_implementation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/img/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Bcftools Celery Task Constraints - DivBase</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Bcftools Celery Task Constraints - DivBase" />
+<meta property="og:description" content="A service to manage, query and version VCF files and associated sample metadata" />
+<meta property="og:image" content="https://scilifelabdatacentre.github.io/divbase/assets/images/social/development/bcftools_task_constraints.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:url" content="https://scilifelabdatacentre.github.io/divbase/development/bcftools_task_constraints/" />
+<meta property="twitter:card" content="summary_large_image" />
+<meta property="twitter:title" content="Bcftools Celery Task Constraints - DivBase" />
+<meta property="twitter:description" content="A service to manage, query and version VCF files and associated sample metadata" />
+<meta property="twitter:image" content="https://scilifelabdatacentre.github.io/divbase/assets/images/social/development/bcftools_task_constraints.png" />
+</head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bcftools-celery-task-constraints" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DivBase" class="md-header__button md-logo" aria-label="DivBase" data-md-component="logo">
+      
+  <img src="../../assets/img/scilifelab_logo.webp" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DivBase
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Bcftools Celery Task Constraints
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 2C5.13 2 2 5.13 2 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7M6 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H6zm13-8h-2l-3.2 9h1.9l.7-2h3.2l.7 2h1.9zm-2.15 5.65L18 15l1.15 3.65z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="light-green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="light-green"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7M9 21v-1h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1m3-17a5 5 0 0 0-5 5c0 2.05 1.23 3.81 3 4.58V16h4v-2.42c1.77-.77 3-2.53 3-4.58a5 5 0 0 0-5-5"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ScilifelabDataCentre/divbase" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ScilifelabDataCentre/divbase
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  DivBase
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user-guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  User Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CLI Commands
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Dev Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../releases/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Releases
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://divbase.scilifelab-2-prod.sys.kth.se" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Go to DivBase Website
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DivBase" class="md-nav__button md-logo" aria-label="DivBase" data-md-component="logo">
+      
+  <img src="../../assets/img/scilifelab_logo.webp" alt="logo">
+
+    </a>
+    DivBase
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ScilifelabDataCentre/divbase" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ScilifelabDataCentre/divbase
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DivBase
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../user-guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/account-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Account Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/setup_divbase_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup DivBase CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Managing Project Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/vcf-files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with VCF Files in DivBase
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_8" id="__nav_2_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running Queries
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Running Queries
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/running-queries-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/vcf-dimensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCF Dimensions caching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/sidecar-metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sidecar Metadata TSV files: creating and querying sample metadata files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/vcf-query-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCF query syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/how-to-create-efficient-divbase-queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to create efficient DivBase queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/tutorial-query-on-public-data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial: Running a query on a public dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/project-versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Managing Project Versions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/using-divbase-programmatically/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using DivBase Programmatically
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guides/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Commands
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Commands
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/divbase-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/query/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli query
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/version/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli version
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/dimensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli dimensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/_auto_generated/task-history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    divbase-cli task-history
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Guide
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Dev Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../key_design_decisions_related_to_vcf_files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Key design decisions related to VCF files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database-migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database Migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../celery_task_implementation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Celery Task Implementation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bcftools_task_logic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bcftools Celery Task Logic
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bcftools Celery Task Constraints
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bcftools Celery Task Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-general-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1. General rules
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. General rules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-vcf-files-need-to-be-sorted-by-position" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.1. VCF files need to be sorted by position
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-vcf-files-need-to-be-indexed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.2. VCF files need to be indexed
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-duplicate-sample-names-cannot-recur-in-a-single-vcf-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.3. Duplicate sample names cannot recur in a single VCF file
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-what-is-required-in-the-header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.4. What is required in the header?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          2. How DivBase chooses between bcftools merge and concat
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-bcftools-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3. bcftools merge
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. bcftools merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-only-records-from-different-vcf-files-can-be-merged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.1. Only records from different VCF files can be merged
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-sample-names-must-be-unique-across-all-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.2. Sample names must be unique across all input files
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-what-about-the-order-of-the-scaffolds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.3. What about the order of the scaffolds?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.4. How does merge handle overlapping and non-overlapping variant positions and scaffolds?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-what-about-the-headers-do-they-need-to-be-the-same" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.5. What about the headers? Do they need to be the same?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-what-if-one-file-contains-different-info-column-values-than-the-other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.6. What if one file contains different INFO column values than the other?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bcftools-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4. bcftools concat
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. bcftools concat">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-sample-sets-must-be-identical-across-all-vcf-files-sample-names-and-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.1. Sample sets must be identical across all VCF files (sample names and order)
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-what-about-the-order-that-the-input-files-are-given-to-bcftools-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.2. What about the order that the input files are given to bcftools concat?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.3. What happens if input files have overlapping or duplicate variant positions?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-what-about-headers-and-info-field-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.4. What about headers and INFO field values?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../task_history_implementation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task History Implementation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metadata_queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sidecar sample metadata TSV queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sending-emails/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sending Emails
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../personal_access_tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Personal Access Tokens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../s3_transfers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    S3 Transfers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing_e2e_tests_for_vcf_results_checksums/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing E2E Tests for VCF Results Checksums
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../monitoring_and_observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring and observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../worker_metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring: Celery Worker Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to DivBase development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://divbase.scilifelab-2-prod.sys.kth.se" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go to DivBase Website
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-general-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1. General rules
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. General rules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-vcf-files-need-to-be-sorted-by-position" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.1. VCF files need to be sorted by position
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-vcf-files-need-to-be-indexed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.2. VCF files need to be indexed
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-duplicate-sample-names-cannot-recur-in-a-single-vcf-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.3. Duplicate sample names cannot recur in a single VCF file
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-what-is-required-in-the-header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          1.4. What is required in the header?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          2. How DivBase chooses between bcftools merge and concat
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-bcftools-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3. bcftools merge
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. bcftools merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-only-records-from-different-vcf-files-can-be-merged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.1. Only records from different VCF files can be merged
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-sample-names-must-be-unique-across-all-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.2. Sample names must be unique across all input files
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-what-about-the-order-of-the-scaffolds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.3. What about the order of the scaffolds?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.4. How does merge handle overlapping and non-overlapping variant positions and scaffolds?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-what-about-the-headers-do-they-need-to-be-the-same" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.5. What about the headers? Do they need to be the same?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-what-if-one-file-contains-different-info-column-values-than-the-other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          3.6. What if one file contains different INFO column values than the other?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bcftools-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4. bcftools concat
+        </span>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. bcftools concat">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-sample-sets-must-be-identical-across-all-vcf-files-sample-names-and-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.1. Sample sets must be identical across all VCF files (sample names and order)
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-what-about-the-order-that-the-input-files-are-given-to-bcftools-concat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.2. What about the order that the input files are given to bcftools concat?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.3. What happens if input files have overlapping or duplicate variant positions?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-what-about-headers-and-info-field-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <span class="md-typeset">
+          4.4. What about headers and INFO field values?
+        </span>
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    DivBase
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Dev Guide
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ScilifelabDataCentre/divbase/edit/master/docs/development/bcftools_task_constraints.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/ScilifelabDataCentre/divbase/raw/master/docs/development/bcftools_task_constraints.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"/></svg>
+    </a>
+  
+
+
+<h1 id="bcftools-celery-task-constraints">Bcftools Celery Task Constraints<a class="headerlink" href="#bcftools-celery-task-constraints" title="Permanent link">&para;</a></h1>
+<p>DivBase uses <code>bcftools</code> for several VCF parsing steps, including VCF dimensions caching and VCF queries. This document outlines the rules and constraints of different <code>bcftools</code> commands used in the DivBase backend. The main reference for this is the <a href="https://samtools.github.io/bcftools/bcftools.html"><code>bcftools</code> manual</a>. The commands were run using <code>bcftools</code> v1.21.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There is intentional overlap between this page and <a href="../key_design_decisions_related_to_vcf_files/">Key design decisions related to VCF files</a>. This page goes deep into the details of <code>bcftools</code>, whereas the other document describes high level design choices. For an overview of how the task logic is orchestrated, see <a href="../bcftools_task_logic/">Bcftools Celery Task Logic</a>.</p>
+</div>
+<p>What sets DivBase apart from regular <code>bcftools</code> scripting is that the DivBase server dynamically orchestrates <code>bcftools</code> workflows based on user queries, and will take into account multiple VCF files from the DivBase project's data storage if needed (<a href="../../user-guides/vcf-query-syntax/#53-how-does-divbase-process-the-vcf-files">as described in e.g. the VCF query user guide</a>). There are two ways to combine VCF files with <code>bcftools</code>: <code>bcftools merge</code> and <code>bcftools concat</code>. The choice of command depends on whether or not the sample columns overlap or not in the VCF files that are to be combined. An overview of the possible sample column overlap cases and are found in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a> and described in detail in <a href="#3-bcftools-merge">Section 3 (<code>bcftools merge</code>)</a> and <a href="#4-bcftools-concat">Section 4 (<code>bcftools concat</code>)</a>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The rules described in this document are considered a system contract for the design of the DivBase <code>bcftools</code> orchestration logic. Be very careful when refactoring code that touches upon these rules. Several regression tests (prefixed with <code>test_regression_*</code>) have been implemented to guard the parts of the codebase that rely on these rules.</p>
+</div>
+<h2 id="1-general-rules">1. General rules<a class="headerlink" href="#1-general-rules" title="Permanent link">&para;</a></h2>
+<h3 id="11-vcf-files-need-to-be-sorted-by-position">1.1. VCF files need to be sorted by position<a class="headerlink" href="#11-vcf-files-need-to-be-sorted-by-position" title="Permanent link">&para;</a></h3>
+<p>Sorted the variants is a major assumption for working VCF files, so it is not very likely that users will come to DivBase with unsorted files. Nevertheless, the system need to ensure that files are sorted. Sorting can be done with <code>bcftools sort</code>, but it should be up to the users to ensure that their files are sorted before upload to DivBase.</p>
+<p>The variants need to be sorted at least per scaffold: it is possible to have the scaffolds in different order if the VCF files are indexed, as discussed below.</p>
+<p>If attempting to subset a single VCF file that has unsorted positions, the <code>bcftools</code> will ask for an index:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-0-1">bcftools<span class="w"> </span>view<span class="w"> </span>-r<span class="w"> </span><span class="m">21</span><span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz
+</span><span id="__span-0-2">
+</span><span id="__span-0-3"><span class="c1"># [E::idx_find_and_load] Could not retrieve index file for &#39;tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz&#39;</span>
+</span></code></pre></div>
+<p>but indexing is actually not possible in this case, since it requires sorted positions:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-1-1">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz
+</span><span id="__span-1-2">
+</span><span id="__span-1-3"><span class="c1"># [E::hts_idx_push] Unsorted positions on sequence #1: 22053057 followed by 17504018</span>
+</span><span id="__span-1-4"><span class="c1"># index: failed to create index for &quot;tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz&quot;</span>
+</span></code></pre></div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>Check that all VCF files are sorted before running <code>bcftools</code> on the files. Currently implemented in the module-level <code>ensure_csi_index</code> function in <code>services/bcftools_helpers.py</code>, shared by both <code>BcftoolsQueryManager</code> and <code>VCFDimensionCalculator</code>. This is a two birds in one stone-case: files should preferrably be indexed, and unsorted files will error upon indexing (as illustrated above). If the files are not sorted, a message is returned to the user that tells them to sort the files with <code>bcftools sort</code> and upload them to their DivBase project and try the query again.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions</code> in <code>tests/unit/divbase_api/test_vcf_query_task.py</code>.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<ul>
+<li>
+<p>Implement a VCF specification checking job to ensure that user-uploaded VCFs adhere to the <a href="https://samtools.github.io/hts-specs/VCFv4.5.pdf">VCF specification</a>.</p>
+</li>
+<li>
+<p>Sorting of VCF files could possibly be done by jobs triggered when a VCF file is uploaded to a bucket? Could be tied to VCF specification checks: if file pass all other checks but is unsorted, run it through <code>bcftools sort</code> and upload that as a new version?</p>
+</li>
+</ul>
+<h3 id="12-vcf-files-need-to-be-indexed">1.2. VCF files need to be indexed<a class="headerlink" href="#12-vcf-files-need-to-be-indexed" title="Permanent link">&para;</a></h3>
+<p>Most - but not all -  <code>bcftools</code> commands requires that the VCF files are indexed either with the TBI or CSI index format. <code>bcftools view</code> requires an index and since that operation is the core of the DivBase bcftools orchestration, index files are thus required in DivBase.</p>
+<p><code>bcftools merge</code> will for instance raise this error if one of the files that are to be combined do not have an index in the same folder as the VCF file; there is a flag <code>--force-no-index</code>, but as mentioned earlier, indexes are needed for other bcftools commands.</p>
+<p><code>[E::idx_find_and_load] Could not retrieve index file for '&lt;VCF_FILENAME&gt;'</code></p>
+<p>For the commands in this document to work, the following files needs to be indexed:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-2-1">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+</span><span id="__span-2-2">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz
+</span><span id="__span-2-3">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_break_merge.vcf.gz
+</span><span id="__span-2-4">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_coordinates.vcf.gz
+</span><span id="__span-2-5">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
+</span><span id="__span-2-6">bcftools<span class="w"> </span>index<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz
+</span></code></pre></div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>The module-level <code>ensure_csi_index</code> function in <code>services/bcftools_helpers.py</code> is called for all VCF files operated on in a given query (including temp files) and also during VCF dimension calculation. Docker-exec routing is preserved because <code>ensure_csi_index</code> calls <code>run_bcftools</code>, which handles the Docker/k8s dispatch. The index files are not uploaded to the DivBase project (at the time of writing), and thus they are recalculated each time a VCF file is subject to a query.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions</code> in <code>tests/unit/divbase_api/test_vcf_query_task.py</code>.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<ul>
+<li>An alternative solution would be to store index files in the bucket along with the VCF files. The challenge there is to ensure that the index files are kept up to date with the VCF files. There is risk for drift if the VCF files are updated but not their associated CSI index files.</li>
+</ul>
+<h3 id="13-duplicate-sample-names-cannot-recur-in-a-single-vcf-file">1.3. Duplicate sample names cannot recur in a single VCF file<a class="headerlink" href="#13-duplicate-sample-names-cannot-recur-in-a-single-vcf-file" title="Permanent link">&para;</a></h3>
+<p>If a VCF file is modified so that the same sample name occurs in two sample columns in the same file, it cannot be processed by <code>bcftools</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-3-1">bcftools<span class="w"> </span>view<span class="w"> </span>-Oz<span class="w"> </span>-o<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf
+</span><span id="__span-3-2">
+</span><span id="__span-3-3"><span class="c1"># [E::bcf_hdr_add_sample_len] Duplicated sample name &#39;8_HOM-E57&#39;</span>
+</span><span id="__span-3-4"><span class="c1"># Failed to read from tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_duplicate_a_sample_name.vcf: could not parse header</span>
+</span></code></pre></div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>This is guarded against during the VCF dimensions caching. <code>services/bcftools_helpers.py</code> contains shared bcftools stderr classification logic in <code>_raise_task_user_error_from_bcftools_stderr</code>. <code>services/vcf_dimension_indexing.py</code> calls that shared helper when header parsing and bgzip/index-related steps fail. If stderr contains <code>Duplicated sample name</code>, DivBase raises a user-facing <code>TaskUserError</code> with guidance to fix duplicate sample IDs and re-run dimensions update.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in_header</code> in <code>tests/e2e_integration/cli_commands/test_dimensions_cli.py</code>.</li>
+</ul>
+<h3 id="14-what-is-required-in-the-header">1.4. What is required in the header?<a class="headerlink" href="#14-what-is-required-in-the-header" title="Permanent link">&para;</a></h3>
+<p>There is no single "one-line rule" for VCF headers across all <code>bcftools</code> commands, but for DivBase dimensions caching and query orchestration the following header-related errors need to be handled:</p>
+<ul>
+<li>Invalid/unparseable header content (for example <code>unknown file type</code> or <code>could not parse header</code>)</li>
+<li>Duplicate sample IDs in header (<code>Duplicated sample name ...</code>)</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li><code>services/vcf_dimension_indexing.py</code> performs header parsing (<code>bcftools view --header-only</code>).</li>
+<li>Any stderr from this step is routed through shared classifier logic in <code>services/bcftools_helpers.py::_raise_task_user_error_from_bcftools_stderr</code>.</li>
+<li>This gives explicit <code>TaskUserError</code> messages for header/content failures instead of opaque bcftools errors.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content</code> in <code>tests/e2e_integration/cli_commands/test_dimensions_cli.py</code>.</li>
+<li><code>test_regression_vcf_query_fails_with_descriptive_error_for_malformed_sample_columns</code> in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+<li><code>test_regression_update_dimensions_fails_for_non_vcf_file_disguised_as_vcf_gz</code> in <code>tests/e2e_integration/cli_commands/test_dimensions_cli.py</code>.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<ul>
+<li>Missing contig definitions are often warning-level diagnostics in bcftools, for example:
+  <code>[W::vcf_parse] Contig '51' is not defined in the header. (Quick workaround: index the file with tabix.)</code>
+  Add explicit DivBase policy checks if we want this to be a strict upload/dimensions error.</li>
+<li>Add explicit checks for coordinates outside declared contig lengths and decide whether to treat this as a strict DivBase validation failure.</li>
+<li>Add broader VCF specification validation as a preflight/upload-time job.</li>
+<li>Add a validation step (e.g. at file upload or at dimensions update) to check for header-data mismatches, e.g. sample-column count mismatches (<code>Number of columns ... does not match the number of samples</code>). A full test would require passing over every variant line in the VCF file, which is an O(n) process. Another idea would be to validate only the first e.g. 1000 lines and assume that potential systematic formatting errors caused by the upstream VCF generation workflow would be caught in that subsubset of variants.</li>
+</ul>
+<h2 id="2-how-divbase-chooses-between-bcftools-merge-and-concat">2. How DivBase chooses between bcftools merge and concat<a class="headerlink" href="#2-how-divbase-chooses-between-bcftools-merge-and-concat" title="Permanent link">&para;</a></h2>
+<p><code>bcftools merge</code> and <code>concat</code> are designed to consider so-called "sample sets", i.e. <a href="https://samtools.github.io/bcftools/bcftools.html#concat">"sample columns appearing in the same order"</a> in the <code>#CHROM</code> header of the VCF file. For example, if <code>S1</code>- <code>S6</code> are names of different samples, a sample set is an ordered combination of samples in a given VCF file, such as <code>S1,S3,S4</code>.</p>
+<p>The relationship between sample sets across the input files to a DivBase query determines which <code>bcftools</code> command (<code>merge</code> or <code>concat</code>) — or whether the query is rejected before bcftools is called at all.</p>
+<p>DivBase handles five cases of sample set overlap:</p>
+<ul>
+<li>
+<p><strong>Completely non-overlapping sample sets</strong></p>
+<p>E.g. VCF file 1: <code>S1,S2,S3</code> vs VCF file 2: <code>S4,S5,S6</code>. Handled with <code>bcftools merge</code> (see <a href="#3-bcftools-merge">Section 3</a>).</p>
+</li>
+<li>
+<p><strong>Identical sample sets (same sample column order)</strong></p>
+<p>E.g. VCF file 1: <code>S1,S2,S3</code> vs VCF file 2: <code>S1,S2,S3</code>. Handled with <code>bcftools concat</code> (see <a href="#4-bcftools-concat">Section 4</a>).</p>
+</li>
+<li>
+<p><strong>Mixed identical-sample set and non-overlapping sample set</strong></p>
+<p>E.g. VCF file 1: <code>S1,S2,S3</code>, VCF file 2: <code>S1,S2,S3</code>, and VCF file 3: <code>S4,S5,S6</code>. The identical-sample set files (<code>S1,S2,S3</code>) are concatenated first, then the output file from the concatenation (<code>S1,S2,S3</code>) is merged with the non-overlapping file <code>S4,S5,S6</code>. Handled with <code>bcftools concat</code> followed by <code>bcftools merge</code>.</p>
+</li>
+<li>
+<p><strong>Same samples but different sample column order</strong></p>
+<p>E.g. VCF file 1: <code>S1,S2,S3</code> vs VCF file 2: <code>S2,S1,S3</code>. Violates <code>bcftools</code> constraints, rejected with a <code>TaskUserError</code> before the VCF processing of the VCF query starts.</p>
+</li>
+<li>
+<p><strong>Partially overlapping sample sets</strong></p>
+<p>E.g. VCF file 1: <code>S1,S2,S3</code> vs VCF file 2: <code>S3,S4,S5</code> (<code>S3</code> is in both sample sets). Violates <code>bcftools</code> constraints, rejected with a <code>TaskUserError</code> before the VCF processing of the VCF query starts.</p>
+</li>
+</ul>
+<p>This classification is performed by <code>_check_if_samples_can_be_combined_with_bcftools</code> in <code>worker/tasks.py</code>, using sample names stored in the dimensions cache to determine whether the input VCFs fulfil the rules for the bcftools orchestration in <code>tasks.bcftools_query</code>. If they do not, the task exits before VCF files are downloaded from S3, saving compute resources.</p>
+<h2 id="3-bcftools-merge">3. bcftools merge<a class="headerlink" href="#3-bcftools-merge" title="Permanent link">&para;</a></h2>
+<p>This section covers a few specific requirements for <code>bcftools merge</code> and add details to the sample set overlap cases described in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>.</p>
+<p>As stated in the <a href="https://www.htslib.org/doc/1.1/bcftools.html#merge">bcftools manual</a>, <code>bcftools merge</code> is used to:</p>
+<blockquote>
+<p>Merge multiple VCF/BCF files from non-overlapping sample sets to create one multi-sample file. For example, when merging file A.vcf.gz containing samples S1, S2 and S3 and file B.vcf.gz containing samples S3 and S4, the output file will contain four samples named S1, S2, S3, 2:S3 and S4.</p>
+</blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The bash examples throughout Sections 3 and 4 use <code>-Ov -o *.vcf</code> (uncompressed VCF text) so that output is human-readable when running the commands manually. <code>BcftoolsQueryManager</code> in <code>services/vcf_queries.py</code> uses <code>-Ou -o *.bcf</code> (uncompressed BCF binary) for all intermediate temp files, which avoids compression and decompression overhead between pipeline steps. Only the final <code>bcftools sort</code> step writes <code>-Oz -o *.vcf.gz</code> (bgzipped VCF) as the query result file.</p>
+</div>
+<h3 id="31-only-records-from-different-vcf-files-can-be-merged">3.1. Only records from different VCF files can be merged<a class="headerlink" href="#31-only-records-from-different-vcf-files-can-be-merged" title="Permanent link">&para;</a></h3>
+<p><code>bcftools merge</code> combines records across different input files — it does not transform or reshape records within a single file. If the query only involves a single source VCF file, <code>merge_or_concat_bcftools_temp_files</code> will receive a list of one temp file and skip the merge/concat step entirely, renaming that file to the output path instead (<code>len(output_temp_files) == 1</code> branch in <code>services/vcf_queries.py</code>).</p>
+<p>For intra-file normalization such as splitting multiallelic variants into biallelic records, <code>bcftools norm</code> is the relevant command, but that is not part of the current scope of DivBase. Users should perform such file operations prior to uploading files to a DivBase project.</p>
+<p><strong>Implementation:</strong></p>
+<p>No real need to guard or enforce this, much thanks to the single source VCF file handling described above.</p>
+<p><strong>Ideas for future improvements:</strong></p>
+<p>TODO: exact duplicate variants in to VCF files with different filename are currently not guarded against. That is a potentially big refactoring of the VCF dimensions caching. (marked as TODO since it is important)</p>
+<h3 id="32-sample-names-must-be-unique-across-all-input-files">3.2. Sample names must be unique across all input files<a class="headerlink" href="#32-sample-names-must-be-unique-across-all-input-files" title="Permanent link">&para;</a></h3>
+<p>This covers the partially overlapping case in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>. <code>bcftools merge</code> has a <code>--force-samples</code> flag that overrides the duplicate-sample-name error, but DivBase deliberately does not use it: when triggered, it silently renames conflicting samples by prepending the file index (e.g. <code>S3</code> becomes <code>2:S3</code>), which would corrupt the sample columns in the query results without any visible error. DivBase instead rejects incompatible sample sets before the merge step runs.</p>
+<p>The following fixtures can be merged the VCF files have different samples names:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test1.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+</span></code></pre></div>
+<p>The following fixtures cannot be merged since the second VCF file contains one sample name that is also in the first VCF:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test2.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_break_merge.vcf.gz
+</span></code></pre></div>
+<p>It gives the error: <code>Error: Duplicate sample names (5a_HOM-I7), use --force-samples to proceed anyway.</code></p>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>The VCF dimensions cache stores all sample names for all VCF files in the bucket. When a query is submitted, <code>_check_if_samples_can_be_combined_with_bcftools</code> in <code>worker/tasks.py</code> reads these from the dimensions cache and checks whether the sample sets across the requested files can be combined. Partial overlap is one of the blocked cases (see <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>).</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets</code> in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+</ul>
+<h3 id="33-what-about-the-order-of-the-scaffolds">3.3. What about the order of the scaffolds?<a class="headerlink" href="#33-what-about-the-order-of-the-scaffolds" title="Permanent link">&para;</a></h3>
+<p>As long as the VCF files have a CSI index, <code>bcftools merge</code> will use the it to parse each file by region and does not therefore not require variants to to appear in any particular order.</p>
+<p>It is possible to attempt to merge VCF files that do not have CSI indexes with <code>bcftools merge --no-index</code>. This is not used in DivBase (since indexing and sorting of files is a prerequisite, as described in <a href="#1-general-rules">Section 1</a>).</p>
+<div class="admonition example">
+<p class="admonition-title">Example</p>
+<p>This is a small example that illustrate what happens when trying to use <code>--no-index</code> and unindexed VCFs:</p>
+<p>Docstring from <code>bcftools merge -help</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1">--no-index  Merge unindexed files, the same chromosomal order is required and -r/-R are not allowed
+</span></code></pre></div>
+<p>This is not allowed:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-7-1">bcftools<span class="w"> </span>merge<span class="w"> </span>--no-index<span class="w">  </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test3.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+</span></code></pre></div>
+<p>and gives this warning from using <code>--no-index</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-8-1">[W::bcf_sr_add_reader] Using multiple unindexed files may produce errors, make sure chromosomes are in the same order!
+</span></code></pre></div>
+<p>and this error from the incorrect scaffold order:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-9-1">[E::_reader_fill_buffer] Sequences out of order, cannot stream multiple unindexed files: tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+</span></code></pre></div>
+<p>If we ensure that the files are indexed and run the command without the <code>--no-index</code> flag, it works, however:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-10-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test3.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_scramble_scaffold_order.vcf.gz
+</span></code></pre></div>
+</div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>DivBase never passes <code>--no-index</code> to any <code>bcftools merge</code> call. All files are indexed with a CSI index before the merge step runs, via the same <code>ensure_csi_index</code> function in <code>services/bcftools_helpers.py</code> described in <a href="#12-vcf-files-need-to-be-indexed">Section 1.2</a>. The scaffold record order of the input files is therefore irrelevant to the merge.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for this case. The indexing guarantee that makes it a non-issue is covered by <code>test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions</code> in <code>tests/unit/divbase_api/test_vcf_query_task.py</code> (see <a href="#12-vcf-files-need-to-be-indexed">Section 1.2</a>).</li>
+</ul>
+<h3 id="34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds">3.4. How does merge handle overlapping and non-overlapping variant positions and scaffolds?<a class="headerlink" href="#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds" title="Permanent link">&para;</a></h3>
+<p><code>bcftools merge</code> operates at the variant level: for each unique CHROM/POS across all input files it produces one output record, combining genotype columns from all samples. This is the key behavioral difference from <code>bcftools concat</code>, which simply stacks records from each file without any position-level merging.</p>
+<p>The following three examples use VCF files with non-overlapping sample sets (see <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>) and show how <code>bcftools merge</code> handles varying degrees of variant and scaffold overlap.</p>
+<p><strong>Example 1 — Same variant coordinates in both files (the common case):</strong></p>
+<p><code>HOM_20ind_17SNPs_first_10_samples.vcf.gz</code> and <code>HOM_20ind_17SNPs_last_10_samples.vcf.gz</code> share all 17 variant positions but have non-overlapping sample sets. Merging them produces 17 output records (not 34), with genotype data from all 20 samples present in each row:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-11-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test5a.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+</span></code></pre></div>
+<p><strong>Example 2 — Non-overlapping variant coordinates, same scaffolds:</strong></p>
+<p><code>HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz</code> has all coordinates shifted by +1 relative to <code>HOM_20ind_17SNPs_first_10_samples.vcf.gz</code>, so no positions are shared. Merging them produces 34 output records (17 from each file). For each record, samples from the file that does not contain that position receive missing genotypes (<code>./.</code>).</p>
+<p><code>bcftools concat</code> cannot be used to avoid the missing genotypes here: concat requires identical sample sets in the same column order, which is the opposite precondition from merge. Because these two files have non-overlapping sample sets they must be merged, and the missing genotypes are the correct biological output — those samples have no data at those positions.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test5b.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_variants.vcf.gz
+</span></code></pre></div>
+<p><strong>Example 3 — Completely different scaffold names:</strong></p>
+<p><code>HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz</code> has all scaffold IDs prefixed with <code>5</code> (e.g. chromosome <code>1</code> → <code>51</code>, <code>4</code> → <code>54</code>, <code>21</code> → <code>521</code>), so there is no scaffold overlap. This is the same mechanism as Example 2: because no CHROM/POS in one file matches any CHROM/POS in the other, the merge produces 34 output records (17 per file) and non-represented samples receive missing genotypes (<code>./.</code>).</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test5c.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
+</span></code></pre></div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>More of a conclusion than a problem: no special handling is needed in DivBase. <code>merge_or_concat_bcftools_temp_files</code> in <code>services/vcf_queries.py</code> passes the temp files directly to <code>bcftools merge</code> without any variant-level flags. The position-merging and missing-genotype-filling is <code>bcftools</code> default behaviour: shared positions are merged into single records; positions unique to one file get missing genotypes for samples from the other file. This applies regardless of whether the position differences arise from shifted coordinates or entirely different scaffold names.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for this case. It is implicitly covered by the checksum-based query result tests in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>, which assert on stable output across multi-file merge queries.</li>
+</ul>
+<h3 id="35-what-about-the-headers-do-they-need-to-be-the-same">3.5. What about the headers? Do they need to be the same?<a class="headerlink" href="#35-what-about-the-headers-do-they-need-to-be-the-same" title="Permanent link">&para;</a></h3>
+<p>No, the headers do not need to be identical. <code>bcftools merge</code> builds the output header by computing a union of all input file headers. Deduplication is performed based on header lines (<code>FILTER</code>, <code>INFO</code>, <code>FORMAT</code>, and <code>contig</code>) whose <code>ID</code> does not yet appear in the output header; lines whose <code>ID</code> is already present are silently skipped (first-seen wins tie-breaks).</p>
+<p>No error or warning is emitted for structural differences such as different sets of <code>contig</code> lines or different <code>FILTER</code> definitions. The only header-related warning is for <code>INFO</code> or <code>FORMAT</code> fields that appear in two files with a different <code>Number</code> or <code>Type</code> attribute: <code>bcftools</code> emits a warning to stderr but continues the merge, keeping the first file's definition. There seem to be no <code>bcftools</code>option to control this behaviour.</p>
+<p>There is a <code>--use-header FILE</code> option to bypass the header union logic and load the output header from a user-supplied file. DivBase does not use this option.</p>
+<div class="admonition example">
+<p class="admonition-title">Example</p>
+<p>The <code>--print-header</code> flag prints the merged header without processing any records, which is useful for inspection. For example, merging files with completely different scaffold names (see Example 3 in <a href="#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds">Section 3.4</a>) produces a header that is the union of both files' <code>contig</code> lines:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-14-1">bcftools<span class="w"> </span>merge<span class="w"> </span>--print-header<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples_with_edit_to_have_different_scaffolds.vcf.gz
+</span></code></pre></div>
+<p>The merged header contains <code>contig</code> entries from the first file (<code>1</code>, <code>4</code>, <code>5</code>, <code>6</code>, <code>7</code>, <code>8</code>, <code>13</code>, <code>18</code>, <code>20</code>, <code>21</code>, <code>22</code>, <code>24</code>) followed by entries from the second file (<code>51</code>, <code>54</code>, <code>55</code>, <code>56</code>, <code>57</code>, <code>58</code>, <code>513</code>, <code>518</code>, <code>520</code>, <code>521</code>, <code>522</code>, <code>524</code>). The <code>INFO</code>, <code>FORMAT</code>, and <code>FILTER</code> definitions are identical in these two fixtures (both derive from the same source VCF), so the deduplication is a no-op for those lines.</p>
+</div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>No special handling is needed in DivBase. <code>merge_or_concat_bcftools_temp_files</code> in <code>services/vcf_queries.py</code> does not pass any header-related flags to <code>bcftools merge</code>.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for this case. The default union header behaviour is exercised implicitly by every multi-file merge query in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+</ul>
+<h3 id="36-what-if-one-file-contains-different-info-column-values-than-the-other">3.6. What if one file contains different INFO column values than the other?<a class="headerlink" href="#36-what-if-one-file-contains-different-info-column-values-than-the-other" title="Permanent link">&para;</a></h3>
+<p>When merging files with non-overlapping sample sets, the <code>INFO</code> column values at a shared position typically differ between files: each file's <code>AC</code>, <code>AN</code>, <code>DP</code>, etc. reflect only the samples in that file. <code>bcftools merge</code> handles this differently depending on whether not the merged values can be recalculated from the values in the input VCFs:</p>
+<p><strong>Standard fields derivable from genotype data (e.g. <code>AC</code>, <code>AN</code>):</strong></p>
+<p><code>bcftools</code> recalculates these from the merged genotype columns rather than combining the input values. For example, the <code>AC</code> and <code>AN</code> values for all positions in the merged output correctly reflect all 20 samples, i.e. it took the 10 samples in each input file into account:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-15-1">bcftools<span class="w"> </span>query<span class="w"> </span>-f<span class="w"> </span><span class="s1">&#39;%POS\t%INFO/AC\t%INFO/AN\n&#39;</span><span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-3
+</span><span id="__span-15-2"><span class="c1"># 17504018    7    20</span>
+</span><span id="__span-15-3"><span class="c1"># 22053057    10   20</span>
+</span><span id="__span-15-4"><span class="c1"># 13086614    1    20</span>
+</span><span id="__span-15-5">
+</span><span id="__span-15-6">bcftools<span class="w"> </span>query<span class="w"> </span>-f<span class="w"> </span><span class="s1">&#39;%POS\t%INFO/AC\t%INFO/AN\n&#39;</span><span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-3
+</span><span id="__span-15-7"><span class="c1"># 17504018    0    20</span>
+</span><span id="__span-15-8"><span class="c1"># 22053057    10   18</span>
+</span><span id="__span-15-9"><span class="c1"># 13086614    0    20</span>
+</span><span id="__span-15-10">
+</span><span id="__span-15-11">bcftools<span class="w"> </span>merge<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test_info.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_first_10_samples.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+</span><span id="__span-15-12">bcftools<span class="w"> </span>query<span class="w"> </span>-f<span class="w"> </span><span class="s1">&#39;%POS\t%INFO/AC\t%INFO/AN\n&#39;</span><span class="w"> </span>test_info.vcf<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-3
+</span><span id="__span-15-13"><span class="c1"># 17504018    7    40</span>
+</span><span id="__span-15-14"><span class="c1"># 22053057    20   38</span>
+</span><span id="__span-15-15"><span class="c1"># 13086614    1    40</span>
+</span></code></pre></div>
+<p><strong>Non-derivable fields (e.g. <code>DP</code> for read depth, custom annotations):</strong></p>
+<p>For fields that cannot be computed from genotype data, <code>bcftools</code> applies the <code>-i, --info-rules</code> mechanism:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-16-1">-i, --info-rules TAG:METHOD,..    Rules for merging INFO fields (method is one of sum,avg,min,max,join) or &quot;-&quot; to turn off the default [DP:sum,DP4:sum]
+</span></code></pre></div>
+<p>DP and DP4 are the only two fields with default sum rules. Every other field not covered by an explicit <code>-i</code> rule takes its value from the first input file at the shared positions (same CHROM/POS in both files). This has the following implications:</p>
+<ul>
+<li><strong>Both files have the field but with different values:</strong> the merged record uses the first file's value; the second file's value is silently discarded.</li>
+<li><strong>Only the second (or later) file has the field:</strong> the merged record takes the first file's "value" — which is absent — so the field is missing in the output even though the second file had data there.</li>
+</ul>
+<p>Both cases apply only at positions shared by both files. At positions unique to one file (as in Examples 2 and 3 in <a href="#34-how-does-merge-handle-overlapping-and-non-overlapping-variant-positions-and-scaffolds">Section 3.4</a>, where variant coordinates do not overlap), there is no conflict and the single file's <code>INFO</code> values pass through unchanged.</p>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>DivBase does not pass <code>-i</code> to <code>bcftools merge</code>. This means that the default <code>bcftools</code> behavior is used. Currently, users who rely on custom <code>INFO</code> fields being correctly combined across files need to post-process the query output themselves, which might not be optimal.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for this case. The standard <code>AC</code>/<code>AN</code> recalculation behaviour is implicitly included in every multi-file merge query in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<p>Gather feedback from users regarding the <code>-i</code> rules to learn if this is a pain point. One solution to this would be to allow users to control the merge rules in <code>divbase-cli query vcf</code></p>
+<h2 id="4-bcftools-concat">4. bcftools concat<a class="headerlink" href="#4-bcftools-concat" title="Permanent link">&para;</a></h2>
+<p>This section covers a few specific requirements for <code>bcftools concat</code> and add details to the sample set overlap cases described in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>.</p>
+<p>As stated in the <a href="https://samtools.github.io/bcftools/bcftools.html#concat">bcftools manual</a>, <code>bcftools concat</code> is used to:</p>
+<blockquote>
+<p>Concatenate or combine VCF/BCF files. All source files must have the same sample columns appearing in the same order. Can be used, for example, to concatenate chromosome VCFs into one VCF, or combine a SNP VCF and an indel VCF into one. The input files must be sorted by chr and position. The files must be given in the correct order to produce sorted VCF on output unless the <code>-a, --allow-overlaps</code> option is specified.</p>
+</blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>As with Section 3, the bash examples below use <code>-Ov -o *.vcf</code> for readability. DivBase uses <code>-Ou -o *.bcf</code> for the actual concat temp files (see the note on output formats at the start of <a href="#3-bcftools-merge">Section 3</a>).</p>
+</div>
+<h3 id="41-sample-sets-must-be-identical-across-all-vcf-files-sample-names-and-order">4.1. Sample sets must be identical across all VCF files (sample names and order)<a class="headerlink" href="#41-sample-sets-must-be-identical-across-all-vcf-files-sample-names-and-order" title="Permanent link">&para;</a></h3>
+<p>As the name implies, the <code>concat</code> command concatenates rows from the VCF files that are to be combined, and thus requires that the sample sets are identical between the files.</p>
+<p>A typical use case for <code>concat</code> is variant data for a sample set that has been separated by chromosome or scaffold. For example, these fixtures describe the same exact sample set, but the variants in each VCF describe chromosome 1 and 4, respectively:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-17-1">bcftools<span class="w"> </span>concat<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test6.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs.4.vcf.gz
+</span></code></pre></div>
+<p>However, trying to combine two files with different sample sets is not allowed.
+In this example: the two VCF files have partially overlapping sample sets. Note that the error message suggests to try <code>bcftools merge</code> instead:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-18-1">bcftools<span class="w"> </span>concat<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test6.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz
+</span><span id="__span-18-2">
+</span><span id="__span-18-3"><span class="c1"># Checking the headers and starting positions of 2 files</span>
+</span><span id="__span-18-4"><span class="c1"># Different number of samples in tests/fixtures/HOM_20ind_17SNPs_last_10_samples.vcf.gz. Perhaps &quot;bcftools merge&quot; is what you are looking for?</span>
+</span></code></pre></div>
+<p>Another example of non-identical sample sets: sample names must be in the same order. This is not allowed, since the sample order in the chromosome 4 VCF file has been scrambled relative to the order in the file for chromosome 1:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-19-1">bcftools<span class="w"> </span>concat<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test6.vcf<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz<span class="w"> </span>tests/fixtures/HOM_20ind_17SNPs.4_with_edits_to_change_sample_order.vcf
+</span><span id="__span-19-2">
+</span><span id="__span-19-3"><span class="c1"># Checking the headers and starting positions of 2 files</span>
+</span><span id="__span-19-4"><span class="c1"># Different sample names in tests/fixtures/HOM_20ind_17SNPs.4_with_edits_to_change_sample_order.vcf. Perhaps &quot;bcftools merge&quot; is what you are looking for?</span>
+</span></code></pre></div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li><code>_check_if_samples_can_be_combined_with_bcftools</code> in <code>worker/tasks.py</code> groups VCF files by their sample set and only passes files with completely identical sample sets (same names, same order) to <code>bcftools concat</code>. This is also used to handle the mixed concat-merge case (see case 5 in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>).</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li><code>test_regression_sample_order_preservation_allows_concat_compatible_sample_sets</code> in <code>tests/unit/divbase_api/test_worker_crud_dimensions.py</code>.</li>
+<li><code>test_merge_or_concat_raises_on_step_failure</code> (concat case) in <code>tests/unit/divbase_api/test_vcf_query_task.py</code>.</li>
+<li><code>test_vcf_query_result_file_by_headerless_checksum</code> (Case 2) in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+<li><code>test_regression_sample_order_preservation_enforces_bcftools_concat_guard</code> in <code>tests/unit/divbase_api/test_worker_crud_dimensions.py</code>.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<p>For case 4 in <a href="#2-how-divbase-chooses-between-bcftools-merge-and-concat">Section 2</a>, i.e. sample sets with same sample names but different order, it would technically be possible to sort the files to have identical sample sets. The <a href="https://samtools.github.io/bcftools/bcftools.html#common_options">manual states</a> that when using <code>--samples</code> or <code>--samples-file</code>, "The sample order is updated to reflect that given in the input file".</p>
+<p>Something like the following could be used to ensure that the sample order in a VCF file is sorted based on the order of another VCF file (assuming that they contain the same sample names):</p>
+<div class="highlight"><pre><span></span><code><span id="__span-20-1">bcftools<span class="w"> </span>query<span class="w"> </span>-l<span class="w"> </span>input_file_1.vcf<span class="w"> </span>&gt;<span class="w"> </span>order_of_samples_in_file1.txt
+</span><span id="__span-20-2">bcftools<span class="w"> </span>view<span class="w"> </span>--samples-file<span class="w"> </span>order_of_samples_in_file1.txt<span class="w"> </span>input_file_2.vcf<span class="w"> </span>-o<span class="w"> </span>input_file_2_sorted.vcf
+</span></code></pre></div>
+<h3 id="42-what-about-the-order-that-the-input-files-are-given-to-bcftools-concat">4.2. What about the order that the input files are given to bcftools concat?<a class="headerlink" href="#42-what-about-the-order-that-the-input-files-are-given-to-bcftools-concat" title="Permanent link">&para;</a></h3>
+<p><code>bcftools concat</code> requires that a) each VCF file is sorted by chromosome and position (same requirement as for <code>bcftools merge</code>), and b) that the input files are supplied to the <code>concat</code> command such that the same chromosome does not appear non-contiguously across files.</p>
+<p>The requirement in a) is handled by the <code>ensure_csi_index</code> function in <code>services/bcftools_helpers.py</code> (see <a href="#11-vcf-files-need-to-be-sorted-by-position">Section 1.1</a> and <a href="#12-vcf-files-need-to-be-indexed">Section 1.2</a>).</p>
+<p>For requirement b): if a chromosome that has already been processed in an earlier file reappears in a later file after a different chromosome has appeared in between, <code>bcftools</code> exits with a hard error:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-21-1">The chromosome block &lt;chr&gt; is not contiguous, consider running with -a.
+</span></code></pre></div>
+<p>See <a href="#43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions">Section 4.3</a> for a full discussion of all overlapping and duplicate position cases, including what <code>--allow-overlaps</code> does and its caveats.</p>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>DivBase does not pass <code>--allow-overlaps</code> to <code>bcftools concat</code>. Within-file sort order is guaranteed by <code>ensure_csi_index</code> (see <a href="#12-vcf-files-need-to-be-indexed">Section 1.2</a>). The across-file order is determined by the sequence in which VCF files appear in the query processing; DivBase does currently not explicitly sort the concat input list by chromosomal start coordinate. See Ideas for future improvements below.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for the across-file ordering case. Within-file sort order is covered by <code>test_regression_ensure_csi_index_raises_task_user_error_on_unsorted_positions</code> in <code>tests/unit/divbase_api/test_vcf_query_task.py</code> (see <a href="#12-vcf-files-need-to-be-indexed">Section 1.2</a>).</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<ul>
+<li>TODO: Consider sorting the <code>concat</code> input file list by the first chromosome/position declared in each file's header before passing them to <code>bcftools concat</code>. Alternatively, use <code>concat --allow-overlaps --remove-duplicates</code> followed by <code>bcftools sort</code>; see <a href="#43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions">Section 4.3</a> for caveats about <code>--allow-overlaps</code>. (marked as TODO since it is important)</li>
+</ul>
+<h3 id="43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions">4.3. What happens if input files have overlapping or duplicate variant positions?<a class="headerlink" href="#43-what-happens-if-input-files-have-overlapping-or-duplicate-variant-positions" title="Permanent link">&para;</a></h3>
+<p>Overlapping or duplicate variant positions across <code>concat</code> input files are handled differently depending on the specific overlap pattern. Manual testing with the DivBase VCF test fixtures identified three different overlap cases and how they are handled differently by the default <code>bcftools concat</code> command with any special options.</p>
+<p><strong>Case 1 — Same chromosome reappears non-contiguously across files (hard error):</strong></p>
+<p>If a chromosome ID reappears in a later input file after a <em>different</em> chromosome has already been processed, <code>bcftools</code> exits with a non-zero exit code:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-22-1"><span class="c1"># HOM_20ind_17SNPs.1.vcf.gz: chr1 (positions 17504018, 22053057)</span>
+</span><span id="__span-22-2"><span class="c1"># HOM_20ind_17SNPs.4.vcf.gz: chr4 (position 13086614)</span>
+</span><span id="__span-22-3">bcftools<span class="w"> </span>concat<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test_noncontig.vcf<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-22-4"><span class="w">  </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-22-5"><span class="w">  </span>tests/fixtures/HOM_20ind_17SNPs.4.vcf.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-22-6"><span class="w">  </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz
+</span><span id="__span-22-7">
+</span><span id="__span-22-8"><span class="c1"># The chromosome block 1 is not contiguous, consider running with -a.</span>
+</span><span id="__span-22-9"><span class="c1"># exit code: 255</span>
+</span></code></pre></div>
+<p><strong>Case 2 — Exact duplicate records (no error, silent duplicate rows in output):</strong></p>
+<p>If two files share the same chromosome and contain records at the same positions, <code>bcftools concat</code> does NOT error. All records are written to the output in the given file order. Can for instance be demonstrated by concatenating <code>HOM_20ind_17SNPs.1.vcf.gz</code> with itself:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-23-1"><span class="c1"># HOM_20ind_17SNPs.1.vcf.gz: 2 records (chr1:17504018, chr1:22053057)</span>
+</span><span id="__span-23-2">bcftools<span class="w"> </span>concat<span class="w"> </span>-Ov<span class="w"> </span>-o<span class="w"> </span>test_dups.vcf<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-23-3"><span class="w">  </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-23-4"><span class="w">  </span>tests/fixtures/HOM_20ind_17SNPs.1.vcf.gz
+</span><span id="__span-23-5">
+</span><span id="__span-23-6"><span class="c1"># No error. Exit code: 0.</span>
+</span><span id="__span-23-7"><span class="c1"># Output: 4 records — chr1:17504018 and chr1:22053057 appear twice each.</span>
+</span></code></pre></div>
+<p><strong>Case 3 — Positions go backward across a file boundary (no error, unsorted output):</strong></p>
+<p>If the first position of file N+1 is lower than the last position of file N on the same chromosome, <code>bcftools concat</code> also does NOT error. The records are written in the given file order, producing unsorted output with no warning. Verified empirically with bcftools 1.21 by constructing a file with chr1:17504018 followed by a file with chr1:17000000 — exit code was 0 and the output was chr1:17504018 then chr1:17000000 (unsorted).</p>
+<p><strong>Conclusion:</strong> Only case 1 is caught by <code>bcftools</code>. Cases 2 and 3 produce silent bad output. The manual's statement that "the files must be given in the correct order to produce sorted VCF on output" is a user responsibility, not a bcftools enforcement.</p>
+<p><strong>Handling overlapping positions with <code>--allow-overlaps</code> and <code>-d</code>:</strong></p>
+<p>The <code>--allow-overlaps</code> (<code>-a</code>) flag for <code>concat</code> mentioned in the error message of case 1 can be used to override requirement b) of <a href="#42-what-about-the-order-that-the-input-files-are-given-to-bcftools-concat">Section 4.2</a> by allowing that the <a href="https://samtools.github.io/bcftools/bcftools.html#concat">"First coordinate of the next file can precede last record of the current file."</a>. When using <code>--allow-overlaps</code>, deduplication can be performed with <code>-d/--rm-dups</code>.</p>
+<p>The difference between the options <code>snps|indels|both|all|exact</code> of <code>-d</code> are not that well explained in the manual, but <a href="https://github.com/samtools/bcftools/issues/917">other</a> <a href="https://open.bioqueue.org/home/knowledge/showKnowledge/sig/bcftools-concat">sources</a> <a href="https://www.biocomputix.com/post/combining-multiple-vcf-bcf-files-using-bcftools-concat">online</a> seem to converge on that <code>exact</code> is the argument to remove only identical duplicates (same CROM, POS, REF and ALT allele) and that this is the reason that <code>-D, --remove-duplicates</code> is a short form for <code>-d exact</code>. The arguments <code>snps</code>, <code>indels</code>, <code>both</code> seem to removes duplicates of the specified variant type by dropping the ALT alleles. <code>all</code> seem to drop all duplicates completely.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>--allow-overlaps</code> requires all input files to be bgzip-compressed and indexed. This is not documented in the manual but is confirmed in <a href="https://github.com/samtools/bcftools/issues/340">GitHub issue #340</a>.</p>
+</div>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>DivBase does not check for overlapping or duplicate variant positions before calling <code>bcftools concat</code>, and does not pass <code>--allow-overlaps</code> or <code>-d</code>. Case 1 propagates back as a task failure since <code>bcftools</code> exits with a non-zero return code. Cases 2 and 3 are silent failure modes that produce malformed output (duplicate rows or unsorted positions) without raising a task failure. Currently, users are responsible for ensuring their chromosome-split or region-split VCF files have non-overlapping, non-duplicate coordinates, but this will not be sustainable as the complexity of the VCF data in a DivBase project grows...</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for any of these cases.</li>
+</ul>
+<p><strong>Ideas for future improvements:</strong></p>
+<ul>
+<li>TODO: Handle overlapping variants for the concat case. Perhaps <code>--allow-overlaps --remove-duplicates</code> could be used? (marked as TODO since it is important)</li>
+</ul>
+<h3 id="44-what-about-headers-and-info-field-values">4.4. What about headers and INFO field values?<a class="headerlink" href="#44-what-about-headers-and-info-field-values" title="Permanent link">&para;</a></h3>
+<p>The topics covered in <a href="#35-what-about-the-headers-do-they-need-to-be-the-same">Section 3.5</a> and <a href="#36-what-if-one-file-contains-different-info-column-values-than-the-other">Section 3.6</a> for <code>bcftools merge</code> are more straightforward for <code>bcftools concat</code>:</p>
+<p><strong>Headers:</strong></p>
+<p>The <code>bcftools concat</code> manual is silent on header handling in standard mode. Based on source code analysis, <code>bcftools concat</code> builds the output header using the same union logic as <code>bcftools merge</code> (see <a href="#35-what-about-the-headers-do-they-need-to-be-the-same">Section 3.5</a>): new <code>INFO</code>, <code>FORMAT</code>, <code>FILTER</code>, and <code>contig</code> lines from later files are added to the output header, and lines whose <code>ID</code> already exists are silently skipped (first-seen wins). In practice, files used with <code>concat</code> have identical sample sets and often originate from the same upstream pipeline, so the likelihood is high that the headers are identical and the union is a no-op.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There is an option <code>bcftools concat --naive</code> for fast concatenation without recompression (raw compressed blocks are streamed directly). The manual states it requires all files to be of the same type (all VCF or all BCF) and have the same headers, and that "A header compatibility check is performed and the program throws an error if it is not safe to use the option." <code>--naive-force</code> bypasses that check; the manual warns "Dangerous, use with caution." Neither flag is used in DivBase.</p>
+</div>
+<p><strong>INFO field values:</strong></p>
+<p>Unlike <code>bcftools merge</code>, <code>concat</code> does not join sample column genotypes — it stacks variant rows from different files without combining any values. Each row in the output comes from exactly one input file and its <code>INFO</code> values are copied unchanged. There is no equivalent of the <code>--info-rules</code> mechanism from <code>merge</code> to consider.</p>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>No special handling is needed in DivBase for headers or INFO columns. <code>merge_or_concat_bcftools_temp_files</code> in <code>services/vcf_queries.py</code> passes the temp files directly to <code>concat -Ou -o &lt;output&gt; &lt;inputs&gt;</code> without any header or INFO flags. The union header behavior and INFO column pass-through are both <code>bcftools</code> defaults.</li>
+</ul>
+<p><strong>Regression test coverage:</strong></p>
+<ul>
+<li>No dedicated test for this case. Header union and INFO pass-through are exercised implicitly by the concat path in <code>test_vcf_query_result_file_by_headerless_checksum</code> (Case 2) in <code>tests/e2e_integration/cli_commands/test_query_cli.py</code>.</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../bcftools_task_logic/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Bcftools Celery Task Logic">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Bcftools Celery Task Logic
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../task_history_implementation/" class="md-footer__link md-footer__link--next" aria-label="Next: Task History Implementation">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Task History Implementation
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/ScilifelabDataCentre/divbase" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://divbase.scilifelab-2-prod.sys.kth.se" target="_blank" rel="noopener" title="Website" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M351.9 280H161c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zm-191-48h190.9c-2.8-64.5-17.1-123.9-37.4-167.4-11.4-24.4-23.7-41.8-35.1-52.4C268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4m-48 0c3.5-85.6 25.6-165.1 57.9-217.3C78.7 47.3 10.9 131.2 1.5 232zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3zm111.4-48C501.9 131.2 434.1 47.3 342 14.7c32.3 52.2 54.4 131.7 57.9 217.3z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.action.edit", "content.action.view", "content.code.annotate", "content.code.copy", "content.footnote.tooltips", "content.tabs.link", "content.tooltips", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.path", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "navigation.expand", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
