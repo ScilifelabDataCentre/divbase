@@ -6,7 +6,7 @@ The scripts in [Section 1](#1-factorial-design-scripts-august-2025) and [Section
 
 At the time of writing, scripts related to (historical) benchmarking experiments are stored in `./scripts/benchmarking`.
 
-> **Shared helper script:** The [scripts/generate_mock_sample_metadata.py](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/generate_mock_vcf.sh)
+> **Shared helper script:** The [scripts/generate_mock_sample_metadata.py](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/generate_mock_sample_metadata.py)
     script can be used to generate a mock DivBase sidecar sample metadata TSV file from an input VCF file. It will use the Sample IDs from the VCF and generate mock metadata that can be used to make VCF queries based on sample metadata filters. Versions of this script was used to generate the metadata TSV in [Section 1](#1-factorial-design-scripts-august-2025) and [Section 2](#2-cpu-and-ram-assesment-on-local-docker-compose-stack-and-on-kubernetes-deployment-january-2026), as well as for the user guide at [Tutorial: Running a DivBase query on a public dataset](../user-guides/tutorial-query-on-public-data.md)
 
 ## 1. Factorial design scripts (August 2025)
