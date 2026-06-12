@@ -18,7 +18,7 @@ The data in the VCF files also need follow the considerations for [how to organi
 
 The DivBase server will handle creation of CSI indexes during VCF processing, so users do not need to upload index files manually.
 
-!!!note
+!!! note
     All VCF files in a DivBase project should descibe the same version of the same reference genome. If you need to upload data for another reference genome, please contact the DivBase staff about creating a new DivBase project.
 
 ## 2. How to organize multiple VCF files in a DivBase project
@@ -31,14 +31,14 @@ For large VCF data, it will often be faster for the DivBase server to run querie
 
 There is no file size limit per VCF file, but smaller files will be faster to process due to how the DivBase server handles files. However, each DivBase project has storage quota limits for the total file content in the project. Contact the DivBase staff if needed.
 
-!!! Tip
+!!! tip
     Split your VCF files by chromsome or by a small set of scaffolds to improve the chances of faster DivBase queries. Ensure that the Sample column order is the same in all split files and that no exact row (variant and samples) is duplicated across the files.
 
 ### 2.2. Sample set overlap - important for DivBase compatibility
 
 The main constraints come from `bcftools concat` and `bcftools merge`, which DivBase uses internally when a query needs data from multiple files. This has to do with what combination of samples are found in each VCF files. We will refer to this as _sample sets_ (see also the [bcftools merge manual](https://samtools.github.io/bcftools/bcftools.html#merge)).
 
-To illustrate this, let's consider an example of few VCF files that each contain certain sample sets in a fixed order based on the column order in the `#CROM heading` of the VCF files:
+To illustrate this, let's consider an example of few VCF files that each contain certain sample sets in a fixed order based on the column order in the `#CHROM heading` of the VCF files:
 
 - file_A.vcf.gz samples: `{S1, S2, S3}`
 
@@ -48,7 +48,7 @@ To illustrate this, let's consider an example of few VCF files that each contain
 
 - file_D.vcf.gz samples: `{S3,S4,S5}`
 
-From this example, we can delinate four difference sample set overlap cases, three of which are supported by DivBase/`bcftools`:
+From this example, we can delineate four difference sample set overlap cases, three of which are supported by DivBase/`bcftools`:
 
 1. **Identical sets** (same sample IDs, same sample column order)
    Example: A=`{S1,S2,S3}`, B=`{S1,S2,S3}`
@@ -60,7 +60,7 @@ From this example, we can delinate four difference sample set overlap cases, thr
 
 3. **Partial overlap between sets** (some shared sample IDs, but not all)
    Example: A=`{S1,S2,S3}`, D=`{S3,S4,S5}`
-   This is not supported by DivBase queries since there is a non-identical overlap of the sample sets. Please do not organize your VCF data like this..
+   This is not supported by DivBase queries since there is a non-identical overlap of the sample sets. Please do not organize your VCF data like this.
 
 4. **Mixed group of overlapping and non-overlaping sets**
    Example: A=`{S1,S2,S3}`, B=`{S1,S2,S3}`, C=`{S4,S5}`

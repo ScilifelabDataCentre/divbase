@@ -110,3 +110,16 @@ If something goes wrong with the GH action that automatically publishes to PyPI:
 ## Considerations for Kubernetes deployment
 
 TODO: add some lessons learned from the k8s deployment, e.g. on resources needed for the celery worker.
+
+### Closing and re-opening the Celery queue
+
+For deployment and other DivBase work on the k8s cluster that affect the job system, it is advisable to close the Celery/RabbitMQ queue in advance to avoid accidentally losing jobs. The recommended strategy is to close the queue on the evening before the scheduled cluster work and let the queue drain itself overnight by having the workers pick up and run the enqueued jobs. The queue state is stored as a singleton row in the `QueueStatusDB` table and is managed through the Starlette admin panel (there is no API endpoint for this).
+
+A typical workflow ahead of a planned upgrade would look something like:
+
+1. Go to the admin panel, set `is_closed = True`. Optionally set `scheduled_start` to a future time at which the closure should take effect, and optionally use `reason_for_users` to compose a rejection message that will be returned to users when submitting tasks to the closed queue (max 500 characters).
+2. On upgrade day, verify that the queue is drained, then perform the upgrade.
+3. Submit a test task as an admin to confirm things are working.
+4. Set `is_closed = False` to re-open the queue.
+
+Admin users (i.e staff) are allowed to submit tasks even when the queue is closed. This allows them to test task submissions after an upgrade to verify that the system is healthy before re-opening the queue to all users.

@@ -99,7 +99,7 @@ divbase-cli dimensions update
 
 This submits a task to the DivBase task management system. The task will wait in a queue until the system is ready to work on it. Depending on the size of the VCF files, this make take a couple of minutes.
 
-!!! notes
+!!! note
     1. Please note that it is not possible to run VCF queries in DivBase until the dimensions update task has finished. The reason for this is that the VCF queries use the dimensions data ensure that the queries are feasible and to know which VCF files from the project to process.
 
     2. Please also note that the `divbase-cli dimensions update` command needs to be run every time a new VCF or a new version of a VCF file is uploaded.
@@ -109,7 +109,11 @@ This submits a task to the DivBase task management system. The task will wait in
 Check the task history to confirm the dimensions update job has completed:
 
 ```bash
+# By all the jobs submitted by the user, show last 10 jobs by default (adjustable with --limit)
 divbase-cli task-history user
+
+# Or by the DivBase Task ID printed in the terminal when submitting a job
+divbase-cli task-history id <TASK_ID>
 ```
 
 Once complete, you can run any queries on the uploaded data.
@@ -125,8 +129,11 @@ divbase-cli dimensions show
 DivBase can checkout data based the VCF files themselves, but can also take an optional sidecar sample metadata file into account. The metadata file must be a TSV (tab-separated variables) file. The metadata contents of the file is defined by the users. If the VCF dimensions command has been run for the project, the cached dimensions data can be used create a template where the samples of the project have been pre-filled:
 
 ```bash
-divbase-cli dimensions create-metadata-template
+divbase-cli dimensions create-metadata-template --output path/to/your/sample_metadata.tsv
 ```
+
+!!! note
+    Subsequent commands will, unless otherwise specified, default to looking for a file name `sample_metadata.tsv` and thus we keep to that name throughout the quick start guide. The default output of `divbase-cli dimensions create-metadata-template` is a file named `sample_metadata_<project_name>.tsv` to accomodate that the same user might be a member of multiple DivBase projects.
 
 Details on how to write this file are given in [Sidecar Metadata TSV files: creating and querying sample metadata files](sidecar-metadata.md). In short, the first row starts with `#` and contains the headers for different metadata columns. The first column (`Sample_ID`) is mandatory and can be created by the system as just described; if created manually just make sure that each sample name is spelled exactly as in the VCF files. The rest of the columns are free for the user to define.
 
@@ -212,10 +219,10 @@ divbase-cli task-history user
 Once a `vcf` job is complete, you can download the resulting merged vcf file:
 
 ```bash
-divbase-cli files download result_of_job_<JOB_ID>.vcf.gz # --download-dir path/to/save/results/
+divbase-cli files download result_of_job_<TASK_ID>.vcf.gz # --download-dir path/to/save/results/
 ```
 
-Replacing <JOB_ID> with the actual job ID from the task history.
+Replacing `<TASK_ID>` with the DivBase Task ID from the task history.
 
 ## Next steps
 
@@ -227,7 +234,7 @@ For details on:
 
 - How to format your VCF files to get the most out of DivBase, see [Working with VCF Files in DivBase](vcf-files.md)
 
-- Everything releated to DivBase queries, we reccomend to start at [Running Queries: Overview](running-queries-overview.md)
+- Everything releated to DivBase queries, we recommend to start at [Running Queries: Overview](running-queries-overview.md)
 
 - Creating a snapshot the version of the files in a DivBase project at a current time, see [Project versioning](project-versioning.md)
 
