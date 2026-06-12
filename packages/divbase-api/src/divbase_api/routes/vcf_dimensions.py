@@ -10,6 +10,7 @@ from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry
 from divbase_api.crud.vcf_dimensions import (
+    check_no_dimensions_update_task_already_in_progress,
     get_skipped_vcfs_by_project_async,
     get_unique_samples_by_project_async,
     get_unique_scaffolds_by_project_async,
@@ -87,7 +88,8 @@ async def update_vcf_dimensions_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> int:
     """
-    Update the VCF dimensions files for the specified project
+    Update the VCF dimensions files for the specified project.
+    If an existing dimensions update task is already in process or queued for the project, you will be prevented from submitting another update task.
     """
     project, current_user, role = project_and_user_and_role
 
@@ -96,6 +98,7 @@ async def update_vcf_dimensions_endpoint(
             "You don't have permission to update VCF dimensions, you need at least 'QUERY' level permissions."
         )
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
+    await check_no_dimensions_update_task_already_in_progress(db=db, project_id=project.id, project_name=project.name)
 
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,

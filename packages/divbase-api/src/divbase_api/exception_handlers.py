@@ -20,6 +20,7 @@ from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    DimensionsUpdateAlreadyInProcessError,
     DownloadedFileChecksumMismatchError,
     ObjectDoesNotExistError,
     PATDuplicateNameError,
@@ -410,6 +411,24 @@ async def vcf_dimensions_entry_missing_error_handler(request: Request, exc: VCFD
         return await render_error_page(request, exc.message, status_code=exc.status_code)
 
 
+async def dimensions_update_already_in_process_error_handler(
+    request: Request, exc: DimensionsUpdateAlreadyInProcessError
+):
+    logger.info(
+        f"Dimensions update already in process error for {request.method} {request.url.path}: {exc.message}",
+        exc_info=False,
+    )
+
+    if is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message, "type": "dimensions_update_task_already_in_process_error"},
+            headers=exc.headers,
+        )
+    else:
+        return await render_error_page(request, exc.message, status_code=exc.status_code)
+
+
 async def task_not_found_in_backend_error_handler(request: Request, exc: TaskNotFoundInBackendError):
     logger.warning(
         f"Task ID not found in results backend for {request.method} {request.url.path}: {exc.message}", exc_info=True
@@ -489,6 +508,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectVersionSoftDeletedError, project_version_soft_deleted_error_handler)  # type: ignore
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore
     app.add_exception_handler(VCFDimensionsEntryMissingError, vcf_dimensions_entry_missing_error_handler)  # type: ignore
+    app.add_exception_handler(
+        DimensionsUpdateAlreadyInProcessError,
+        dimensions_update_already_in_process_error_handler,  # type: ignore
+    )
     app.add_exception_handler(TaskNotFoundInBackendError, task_not_found_in_backend_error_handler)  # type: ignore
     app.add_exception_handler(DownloadedFileChecksumMismatchError, downloaded_file_checksum_mismatch_error_handler)  # type: ignore
     app.add_exception_handler(ObjectDoesNotExistError, object_does_not_exist_error_handler)  # type: ignore
