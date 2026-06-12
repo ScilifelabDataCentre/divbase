@@ -91,8 +91,10 @@ async def update_vcf_dimensions_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(
+            "You don't have permission to update VCF dimensions, you need at least 'QUERY' level permissions."
+        )
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = DimensionUpdateKwargs(

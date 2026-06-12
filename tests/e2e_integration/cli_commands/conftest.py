@@ -12,10 +12,12 @@ import logging
 
 import keyring
 import pytest
+from click.testing import Result
 from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 
 runner = CliRunner()
@@ -74,6 +76,12 @@ def logged_in_admin_with_existing_config(CONSTANTS):
 def logged_in_read_user_with_existing_config(CONSTANTS):
     """Fixture to provide a logged in read user with existing config."""
     yield from _create_logged_in_user_fixture("read user")(CONSTANTS)
+
+
+@pytest.fixture
+def logged_in_query_user_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in query user with existing config."""
+    yield from _create_logged_in_user_fixture("query user")(CONSTANTS)
 
 
 @pytest.fixture
@@ -157,3 +165,10 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
     return factory
+
+
+def assert_divbase_403_permissions_error(result: Result) -> None:
+    """Helper function to assert a cli cmd result is a DivBaseAPIError with a 403 permissions error."""
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "403" in str(result.exception)

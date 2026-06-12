@@ -290,8 +290,6 @@ class ProjectView(ModelView):
             raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
         return await super().validate(request=request, data=data)
 
-        return await super().validate(request=request, data=data)
-
     def handle_exception(self, exc: Exception) -> None:
         """
         sqlalchemy will raise an IntegrityError if an admin tries to create/edit a project to have either a

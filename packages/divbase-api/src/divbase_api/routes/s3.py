@@ -48,7 +48,9 @@ logger = structlog.get_logger(__name__)
 
 s3_router = APIRouter()
 
-UPLOAD_AUTHORIZATION_ERROR_MSG = "You don't have permission to upload files to this project."
+UPLOAD_AUTHORIZATION_ERROR_MSG = (
+    "You don't have permission to upload files to this project. You need at least 'QUERY' level permissions."
+)
 
 
 def check_too_many_objects_in_request(
@@ -145,7 +147,7 @@ async def get_object_info(
     """Get details about all versions of a specific object/file in the project's store."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
-        raise AuthorizationError("You don't have permission to list files in this project.")
+        raise AuthorizationError("You don't have permission to get info about files in this project.")
 
     return await run_in_threadpool(
         s3_file_manager.get_detailed_object_info,
@@ -172,7 +174,7 @@ async def generate_single_part_upload_urls(
     Larger files must use multipart upload.
     """
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     check_too_many_objects_in_request(numb_objects=len(objects))
@@ -200,7 +202,7 @@ async def create_multi_part_upload(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     return await run_in_threadpool(
@@ -222,7 +224,7 @@ async def get_pre_signed_urls_parts(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     numb_parts = parts_request.parts_range_end - parts_request.parts_range_start + 1
@@ -254,7 +256,7 @@ async def complete_multipart_upload(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     return await run_in_threadpool(
@@ -276,7 +278,7 @@ async def abort_multipart_upload(
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
 
     s3_signer_service.abort_multipart_upload(
@@ -301,7 +303,9 @@ async def soft_delete_files(
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to soft delete files in this project.")
+        raise AuthorizationError(
+            f"You don't have permission to soft delete files for this project. You need at least '{ProjectRoles.EDIT}' level permissions."
+        )
 
     check_too_many_objects_in_request(numb_objects=len(objects))
 
@@ -329,7 +333,9 @@ async def restore_soft_deleted_files(
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to restore files in this project.")
+        raise AuthorizationError(
+            f"You don't have permission to restore files for this project. You need at least '{ProjectRoles.EDIT}' level permissions."
+        )
 
     check_too_many_objects_in_request(numb_objects=len(objects))
 

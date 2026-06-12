@@ -155,6 +155,10 @@
                                                         {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'read' }}>
                                                         Read
                                                     </option>
+                                                    <option value="query"
+                                                        {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'query' }}>
+                                                        Query
+                                                    </option>
                                                     <option value="edit"
                                                         {{ 'selected' if form_projects and form_projects.get(project.id | string) == 'edit' }}>
                                                         Edit

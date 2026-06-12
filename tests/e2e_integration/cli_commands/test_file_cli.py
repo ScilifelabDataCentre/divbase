@@ -23,6 +23,7 @@ from divbase_lib.divbase_constants import (
     S3_MULTIPART_UPLOAD_THRESHOLD,
 )
 from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
+from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
 runner = CliRunner()
 
@@ -294,7 +295,7 @@ def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONS
     assert calculate_numb_table_rows_printed(result.stdout) == 2
 
 
-def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_1_file(logged_in_query_user_with_existing_config, tmp_path):
     """Test upload 1 file to the project."""
     test_file = tmp_path / "fake_test_file.tsv"
     test_file.write_text("testing, testing 1 2 3...")
@@ -306,7 +307,7 @@ def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
     assert test_file.name in result.stdout
 
 
-def test_upload_1_file_to_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_upload_1_file_to_non_default_project(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Specify a project when uploading a file."""
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
@@ -328,7 +329,7 @@ def test_upload_multiple_files_at_once(logged_in_edit_user_with_existing_config,
         assert f"{str(file)}" in result.stdout
 
 
-def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_upload_dir_contents(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload all files in a directory using a glob pattern."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
@@ -353,7 +354,7 @@ def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS
     ],
 )
 def test_upload_glob_patterns(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, glob_pattern_template, expected_file_names
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path, glob_pattern_template, expected_file_names
 ):
     """Test that glob patterns are correctly expanded when specifying files to upload."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
@@ -379,7 +380,7 @@ def test_upload_glob_patterns(
         assert file_name in result.stdout
 
 
-def test_upload_recursive_flag_matches_subdirectories(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_upload_recursive_flag_matches_subdirectories(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that --recursive expands ** patterns into subdirectories."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -399,7 +400,7 @@ def test_upload_recursive_flag_matches_subdirectories(logged_in_edit_user_with_e
 
 
 def test_upload_without_recursive_does_not_match_subdirectories(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
 ):
     """Test that without --recursive, ** patterns do not descend into subdirectories."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
@@ -417,7 +418,7 @@ def test_upload_without_recursive_does_not_match_subdirectories(
     assert NO_UPLOAD_MATCHES_MSG in result.stdout
 
 
-def test_upload_duplicate_file_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_upload_duplicate_file_names_rejected(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that uploading two files with the same name from different directories raises an error."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -436,7 +437,7 @@ def test_upload_duplicate_file_names_rejected(logged_in_edit_user_with_existing_
     assert "data.tsv" in result.stdout
 
 
-def test_upload_recursive_duplicate_names_rejected(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_upload_recursive_duplicate_names_rejected(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that --recursive upload raises an error when subdirs contain files with the same name."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -455,7 +456,7 @@ def test_upload_recursive_duplicate_names_rejected(logged_in_edit_user_with_exis
 
 
 def test_upload_skip_existing_skips_already_uploaded_files(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
 ):
     """Test that --skip-existing skips files already in the project and uploads only new ones."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
@@ -493,7 +494,7 @@ def test_upload_skip_existing_skips_already_uploaded_files(
     assert "no files were uploaded" in result.stdout.lower()
 
 
-def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+def test_upload_dry_run_shows_files_without_uploading(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
     """Test that --dry-run shows which files would be uploaded but does not actually upload them."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
@@ -516,7 +517,7 @@ def test_upload_dry_run_shows_files_without_uploading(logged_in_edit_user_with_e
 
 
 def test_upload_dry_run_with_skip_existing_shows_skipped_and_new(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
 ):
     """Test that --dry-run --skip-existing shows which files would be skipped vs uploaded."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
@@ -544,7 +545,7 @@ def test_upload_dry_run_with_skip_existing_shows_skipped_and_new(
     assert "new_dry.tsv" not in ls_result.stdout
 
 
-def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_reupload_same_file_fails(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload with safe mode on (default) works the first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
@@ -560,7 +561,7 @@ def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONS
 
 
 def test_reupload_of_same_file_with_safe_mode_off_works(
-    logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir
+    logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir
 ):
     """Test upload with safe mode off works for reuploading the same file."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
@@ -574,7 +575,7 @@ def test_reupload_of_same_file_with_safe_mode_off_works(
     assert result.exit_code == 0
 
 
-def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_no_file_uploaded_if_some_duplicated(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """
     Test that no files are uploaded with safe mode on (which is the default)
     if at least 1 of the files trying to be uploaded already exists in the project's bucket.
@@ -601,7 +602,7 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
         assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
 
 
-def test_upload_nonexistent_files(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_nonexistent_files(logged_in_query_user_with_existing_config, tmp_path):
     """
     Test that uploading nonexistent files fails with helpful error msg about which files do not exist
     """
@@ -653,7 +654,7 @@ def test_upload_nonexistent_files(logged_in_edit_user_with_existing_config, tmp_
     ],
 )
 def test_upload_non_supported_files(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_error
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_error
 ):
     """
     Tests that the upload command correctly handles
@@ -1253,6 +1254,45 @@ def test_restore_file_with_exact_key_match_among_similar_prefixes(
     )
     assert result.exit_code != 0
     assert "404" in result.stdout
+
+
+def test_read_user_file_permissions(logged_in_read_user_with_existing_config, CONSTANTS, tmp_path):
+    """Read role cannot upload or delete files."""
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+
+def test_query_user_file_permissions(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Query role can upload files but cannot delete them."""
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert result.exit_code == 0
+    assert "successfully uploaded" in result.stdout.lower()
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+
+def test_edit_user_file_permissions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Edit role can upload and delete files."""
+    test_file = tmp_path / "test_edit_perms.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "successfully uploaded" in result.stdout.lower()
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {clean_project}")
+    assert result.exit_code == 0
 
 
 #### Slow tests designed to test pagination/batching logic in all relevant files cli commands. ####

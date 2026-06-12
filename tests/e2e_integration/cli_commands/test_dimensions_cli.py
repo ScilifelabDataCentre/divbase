@@ -94,6 +94,15 @@ def test_update_vcf_dimensions_task_directly(
         assert vcf_file in indexed_files, f"{vcf_file} not found in indexed files: {indexed_files}"
 
 
+def test_read_user_cannot_trigger_dimensions_update(logged_in_read_user_with_existing_config, CONSTANTS):
+    """Read role cannot trigger a dimensions update."""
+    project = CONSTANTS["CLEANED_PROJECT"]
+    result = runner.invoke(app, f"dimensions update --project {project}")
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "403" in str(result.exception)
+
+
 def test_show_vcf_dimensions_task(
     CONSTANTS,
     run_update_dimensions,

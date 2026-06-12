@@ -28,6 +28,12 @@ TEST_USERS = {
         "organisation": "Uppsala University",
         "organisation_role": "Postdoctoral Researcher",
     },
+    "query user": {
+        "email": "query@divbase.se",
+        "password": "badpassword",
+        "organisation": "Karlstad University",
+        "organisation_role": "Student",
+    },
     "edit user": {
         "email": "edit@divbase.se",
         "password": "badpassword",
@@ -153,6 +159,7 @@ TEST_PROJECTS = {
 
 USER_ROLES = {
     "read@divbase.se": "read",
+    "query@divbase.se": "query",
     "edit@divbase.se": "edit",
     "manage@divbase.se": "manage",
 }

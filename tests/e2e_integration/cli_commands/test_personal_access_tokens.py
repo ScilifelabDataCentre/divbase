@@ -37,6 +37,7 @@ from divbase_cli.divbase_cli import app
 runner = CliRunner()
 
 READ_USER_EMAIL = "read@divbase.se"
+QUERY_USER_EMAIL = "query@divbase.se"
 EDIT_USER_EMAIL = "edit@divbase.se"
 MANAGE_USER_EMAIL = "manage@divbase.se"
 
@@ -224,7 +225,7 @@ def test_project_scoped_task_history_excluded_project_rejected(
 def test_read_role_pat_rejects_edit_level_action(
     CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch
 ):
-    """A PAT capped at read role cannot submit a query (requires edit)."""
+    """A PAT capped at read role cannot submit a query (requires query role or higher)."""
     project = CONSTANTS["DEFAULT_PROJECT"]
     permissions = {
         "all_projects": False,
@@ -293,6 +294,42 @@ def test_pat_stored_via_add_pat_cmd_works(CONSTANTS, logged_out_user_with_existi
         # clean up the stored PAT so it doesn't interfere with other tests, even if above fails
         result = runner.invoke(app=app, args="auth rm-pat")
         assert result.exit_code == 0
+
+
+def test_read_role_pat_rejects_upload(
+    CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch, tmp_path
+):
+    """A PAT capped at read role cannot upload files (requires query role or higher)."""
+    project = CONSTANTS["DEFAULT_PROJECT"]
+    permissions = {
+        "all_projects": False,
+        "projects": {str(project_map[project]): "read"},
+        "task_history": False,
+    }
+    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
+
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+    result = runner.invoke(app, f"files upload {test_file} --project {project}")
+    assert_403_error(result)
+
+
+def test_query_role_pat_rejects_file_delete(
+    CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch
+):
+    """A PAT capped at query role cannot delete files (requires edit role or higher)."""
+    project = CONSTANTS["DEFAULT_PROJECT"]
+    permissions = {
+        "all_projects": False,
+        "projects": {str(project_map[project]): "query"},
+        "task_history": False,
+    }
+    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
+
+    result = runner.invoke(app, f"files rm file1.tsv --project {project}")
+    assert_403_error(result)
 
 
 def test_pat_does_not_work_on_frontend_endpoints(CONSTANTS, logged_out_user_with_existing_config, pat_factory):

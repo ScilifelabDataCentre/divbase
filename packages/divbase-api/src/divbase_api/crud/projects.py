@@ -15,7 +15,6 @@ from divbase_api.exceptions import (
     UserNotFoundError,
 )
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, UserProjectResponse
 
 
@@ -207,8 +206,9 @@ async def remove_project_member(db: AsyncSession, project_id: int, user_id: int)
 
 ROLE_HIERARCHY = {
     ProjectRoles.READ: 1,
-    ProjectRoles.EDIT: 2,
-    ProjectRoles.MANAGE: 3,
+    ProjectRoles.QUERY: 2,
+    ProjectRoles.EDIT: 3,
+    ProjectRoles.MANAGE: 4,
 }
 
 
@@ -243,22 +243,3 @@ async def _validate_project_create(db: AsyncSession, name: str, bucket_name: str
     bucket_exists_result = await db.execute(bucket_exists_stmt)
     if bucket_exists_result.scalar():
         raise ProjectCreationError(f"Bucket name '{bucket_name}' is already in use")
-
-
-async def check_if_user_is_not_only_read_user_in_all_their_projects(db: AsyncSession, user_id: int) -> bool:
-    """
-    Check if a user has any project where they have at least an EDIT role.
-
-    Users with a READ role should not be able to view tasks from a project (since they cannot submit task there in the first place).
-    But if there is no project where they have a role with higher permissions than READ, they should not be able to see the task history
-    at all. Instead of just returning an empty task history table, they should get a special error message informing them of this.
-    """
-
-    stmt = select(ProjectMembershipDB.role).join_from(UserDB, ProjectMembershipDB).where(UserDB.id == user_id)
-
-    result = await db.execute(stmt)
-    rows = result.fetchall()
-
-    users_roles_unique = set(row[0] for row in rows)
-
-    return any(role in ("manage", "edit") for role in users_roles_unique)

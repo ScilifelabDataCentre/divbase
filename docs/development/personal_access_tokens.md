@@ -24,7 +24,7 @@ class PATPermissions(BaseModel):
 | Scope | Meaning |
 |---|---|
 | `all_projects` | Access all projects the user is a member of, at their membership role |
-| `projects` | Access specific projects only; each project mapped to a max role (`read`, `edit`, `manage`) |
+| `projects` | Access specific projects only; each project mapped to a max role (`read`, `query`, `edit`, `manage`) |
 | `task_history` | Access the task history endpoints which are not project specific |
 
 Note that almost all divbase-api routes called by the CLI tool are project scoped. So they rely on the `get_project_member` dependency. The only exceptions to that are:

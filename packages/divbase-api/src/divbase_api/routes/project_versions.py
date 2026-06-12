@@ -56,8 +56,10 @@ async def add_version_endpoint(
     The entry specifies the current state of all files in the project.
     """
     project, current_user, role = project_and_user_and_role
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to add a new project version to this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(
+            "You don't have permission to add a new project version to this project, you need at least 'QUERY' level permissions."
+        )
 
     new_version = await add_project_version(
         db=db,
