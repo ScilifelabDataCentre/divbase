@@ -141,7 +141,7 @@ def test_read_user_cannot_trigger_dimensions_update(logged_in_read_user_with_exi
     assert "403" in str(result.exception)
 
 
-@pytest.mark.parametrize("status", ["PENDING", "STARTED"])
+@pytest.mark.parametrize("status", ["PENDING", "STARTED", "RETRY"])
 def test_dimensions_update_blocked_when_task_already_in_progress_for_same_project(
     CONSTANTS,
     project_map,

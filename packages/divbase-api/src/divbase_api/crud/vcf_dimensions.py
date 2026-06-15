@@ -141,7 +141,7 @@ async def check_no_dimensions_update_task_already_in_progress(
     """
     ongoing_dimensions_tasks_subq = (
         select(CeleryTaskMeta.task_id)
-        .where(CeleryTaskMeta.status.in_(["PENDING", "STARTED"]))
+        .where(CeleryTaskMeta.status.in_(["PENDING", "STARTED", "RETRY"]))
         .where(CeleryTaskMeta.name == "tasks.update_vcf_dimensions_task")
         .subquery()
     )
