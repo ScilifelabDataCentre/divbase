@@ -24,11 +24,32 @@ To do this, a factorial design/design-of-experiments methodology was used. In sh
 
 The experiment was run on the local Docker Compose DivBase stack on a MacBook Pro M3 laptop with 32 GB RAM.
 
-**List of files related to this experiment:**
+### 1.1. Inputs
+
+Mock VCF files were generated using the [`fake-vcf`](https://github.com/endast/fake-vcf) tool. For the design space for this factorial design experiment, the factors (samples and variants) were scaled like this: 10 different sample set ranges (10-1000 samples; linspace 10 levels); 20 different variants ranges (10-1 000 000 variants; logspace 20 levels). In total 200 mock VCF files. The files were generated using the [`scripts/benchmarking/generate_mock_vcf.sh`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/generate_mock_vcf.sh) script.
+
+Mock sample metadata TSV files were generated for each of the 200 mock VCF files with [`scripts/generate_mock_sample_metadata.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/generate_mock_sample_metadata.py).
+
+The same VCF query was used for all runs the experiment. It subset the VCF files based on the sample metadata filter `Area:North,East`. Due to the perodic nature of how the mock sample metadata generting script assigned `Area` values at the time, this filter would approximatelly subset half of the samples in each input mock VCF file. This would mean that the `bcftools` process would make rewrites/updates to all row (i.e. all variants), but no variants would be dropped compared to its input file since there were no filter to subset on variant ranges included in this query.
+
+```bash
+# Note! The CLI syntax has been slightly refactored since this experiment
+divbase-cli query bcftools-pipe \
+  --tsv-filter 'Area:North,East' \
+  --command 'view -s SAMPLES' \
+  --metadata-tsv-name {metadata_filename}\
+  --project <project_name>
+```
+
+### 1.2. Factors varied
+
+The full factorial design used in this experiment meant that the factors that were varied were the number of samples, and the number of variants.
+
+### 1.3. List of files related to this experiment
 
 - [`scripts/benchmarking/generate_mock_vcf.sh`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/generate_mock_vcf.sh)
 
-    Generate mock VCF files for a full factorial design experiment. Uses the [`fake-vcf`](https://github.com/endast/fake-vcf) repository to generate mock VCF files, containerized in `docker/benchmarking.dockerfile`. For this experiment generate files for 10 different sample ranges (10-1000 samples; linspace 10 levels) and 20 different variants ranges (10-1 000 000 variants; logspace 20 levels). In total 200 mock VCF files.
+    Generate mock VCF files for a full factorial design experiment. Uses the [`fake-vcf`](https://github.com/endast/fake-vcf) repository to generate mock VCF files, containerized in `docker/benchmarking.dockerfile`.
 
 - [`docker/benchmarking.dockerfile`](https://github.com/ScilifelabDataCentre/divbase/blob/main/docker/benchmarking.dockerfile)
 
@@ -46,7 +67,7 @@ The experiment was run on the local Docker Compose DivBase stack on a MacBook Pr
 
     Shared logic used by the scripts of this experiment.
 
-**Results:**
+### 1.4. Results
 
 See plots and extended discussion of the results at [PR19](https://github.com/ScilifelabDataCentre/divbase/pull/19).
 
