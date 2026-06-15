@@ -125,7 +125,7 @@ class VCFDimensionsEntryMissingError(DivBaseAPIException):
 
 
 class DimensionsUpdateAlreadyInProcessError(DivBaseAPIException):
-    """Raised when a user tries to queue a new VCF dimensions update task for a project that already has an queued or running update task."""
+    """Raised when a user tries to queue a new VCF dimensions update task for a project that already has a queued or running update task."""
 
     def __init__(self, project_name: str, ongoing_task_id: int):
         message = (

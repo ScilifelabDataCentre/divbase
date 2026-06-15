@@ -137,7 +137,7 @@ async def check_no_dimensions_update_task_already_in_progress(
     Check that there is not already a dimensions update job in process for the given project and raise if so.
     This check includes jobs that are both queued and running.
 
-    There only needs to be one dimensions update job run at a time per project, otherwise it is just waited compute + bandwidth.
+    There only needs to be one dimensions update job run at a time per project, otherwise it is just wasted compute + bandwidth.
     """
     ongoing_dimensions_tasks_subq = (
         select(CeleryTaskMeta.task_id)

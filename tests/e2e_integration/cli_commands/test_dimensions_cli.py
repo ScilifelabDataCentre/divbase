@@ -149,7 +149,7 @@ def test_dimensions_update_blocked_when_task_already_in_progress_for_same_projec
     logged_in_edit_user_with_existing_config,
     status,
 ):
-    """Dimensions update should be rejected if a PENDING or STARTED task already exists for the same project."""
+    """Dimensions update should be rejected if a PENDING/STARTED/RETRY task already exists for the same project."""
     project_name = CONSTANTS["CLEANED_PROJECT"]
     project_id = project_map[project_name]
 
