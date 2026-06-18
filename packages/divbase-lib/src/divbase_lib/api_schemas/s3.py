@@ -111,7 +111,7 @@ class UploadSinglePartObjectRequest(BaseModel):
     """Request model to upload a single object as a single part using a pre-signed URL."""
 
     name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
-    content_length: int = Field(..., description="Size of the file in bytes")
+    content_length: int = Field(..., ge=0, description="Size of the file in bytes")
     md5_hash: str | None = Field(None, description="Optional MD5 hash of the object for integrity check")
 
 
@@ -128,7 +128,7 @@ class CreateMultipartUploadRequest(BaseModel):
     """Request model to create a multipart upload using pre-signed URLs."""
 
     name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
-    content_length: int = Field(..., description="Size of the file in bytes")
+    content_length: int = Field(..., ge=0, description="Size of the file in bytes")
 
 
 class CreateMultipartUploadResponse(BaseModel):
@@ -204,6 +204,25 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
+### make directories models ###
+
+
+class MakeDirectoriesResponse(BaseModel):
+    """Response model for making directories in the bucket."""
+
+    created: list[str] = Field(
+        ...,
+        description=(
+            "List of directories that were successfully created. This will include directories that already existed.\n"
+        ),
+    )
+    failed: list[str] = Field(
+        ...,
+        description=("List of directories that could not be created."),
+    )
+
+
+### restore objects models ###
 class RestoreObjectsResponse(BaseModel):
     """Response model for restoring soft-deleted objects in a bucket."""
 

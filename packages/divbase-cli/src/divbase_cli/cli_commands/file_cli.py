@@ -22,6 +22,7 @@ from divbase_cli.services.s3_files import (
     get_file_info_command,
     list_files_command,
     list_soft_deleted_files_command,
+    make_directories_command,
     restore_objects_command,
     soft_delete_objects_command,
     stream_file_command,
@@ -545,6 +546,50 @@ def upload_files(
         print("\n[green bold]All files uploaded successfully![/green bold]")
 
 
+@file_app.command("mkdir")
+def make_directory(
+    directories: list[str] = typer.Argument(
+        ..., help="space separated list of directories to create in the project's store on DivBase."
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Create directory(ies) in your project store.
+
+    Provide a single directory name or multiple directory names separated by space. E.g. 'dir1' or 'dir1 dir2 dir3'.
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    cleaned_dir_names = []
+    for dir in directories:
+        if any(char in dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            print(
+                f"[red bold]ERROR: The directory name '{dir}' contains unsupported characters: {UNSUPPORTED_CHARACTERS_IN_FILENAMES}[/red bold]"
+            )
+            raise typer.Exit(1)
+
+        dir = dir if dir.endswith("/") else dir + "/"
+        dir = dir[1:] if dir.startswith("/") else dir
+        cleaned_dir_names.append(dir)
+
+    dirs_created = make_directories_command(
+        directories=cleaned_dir_names,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+    )
+    if dirs_created.failed:
+        print("[red bold]WARNING: Failed to create the following directories:[/red bold]")
+        for dir in dirs_created.failed:
+            print(f"[red]'{dir}'[/red]")
+        print("This could be due to invalid characters in the directory name or an unexpected server error.\n")
+
+    if dirs_created.created:
+        print("Successfully created the following directories:")
+        for dir in dirs_created.created:
+            print(f"[bold blue]'{dir}'[/bold blue]")
+
+
 @file_app.command("rm")
 def remove_files(
     files: list[str] | None = typer.Argument(
@@ -588,6 +633,20 @@ def remove_files(
             print(f"- '{file}'")
     else:
         print("No files were deleted.")
+
+
+@file_app.command("rmdir")
+def remove_directory(
+    directories: list[str] = typer.Argument(
+        ..., help="space separated list of directories to remove from the project's store on DivBase."
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Remove a directory from your project store, any files inside the directory must already be soft deleted.
+    """
+    directories = [dir if dir.endswith("/") else dir + "/" for dir in directories]
+    # TODO
 
 
 @file_app.command("restore")

@@ -29,6 +29,7 @@ from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
     ListObjectsRequest,
     ListObjectsResponse,
+    MakeDirectoriesResponse,
     ObjectDetails,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
@@ -143,6 +144,22 @@ def get_file_info_command(divbase_base_url: str, project_name: str, object_name:
         api_route=f"v1/s3/info?project_name={project_name}&object_name={object_name}",
     )
     return ObjectInfoResponse(**response.json())
+
+
+def make_directories_command(
+    divbase_base_url: str, project_name: str, directories: list[str]
+) -> MakeDirectoriesResponse:
+    """
+    Create directories in the project's store.
+    Pagination not supported here, so up to MAX_S3_API_BATCH_SIZE directories can be created at once.
+    """
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/mkdir?project_name={project_name}",
+        json=directories,
+    )
+    return MakeDirectoriesResponse(**response.json())
 
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:

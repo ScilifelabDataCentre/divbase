@@ -20,6 +20,7 @@ from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDo
 from divbase_lib.api_schemas.project_versions import FileDetails
 from divbase_lib.api_schemas.s3 import (
     ListObjectsResponse,
+    MakeDirectoriesResponse,
     ObjectDetails,
     ObjectInfoResponse,
     ObjectVersionInfo,
@@ -232,6 +233,25 @@ class S3FileManager:
             uploaded_files[key] = source.resolve()
 
         return uploaded_files
+
+    def make_directories(self, directories: list[str], bucket_name: str) -> MakeDirectoriesResponse:
+        """
+        Create directories in the S3 bucket by uploading empty objects with a trailing '/' in their key.
+        NOTE: That if the directory object already exists, this will add a new empty object (version) on top of it.
+
+        Returns a MakeDirectoriesResponse containing the created and failed directory paths.
+        """
+        created_directories, failed_directories = [], []
+        for dir in directories:
+            dir_key = dir if dir.endswith("/") else dir + "/"
+            try:
+                self.s3_client.put_object(Bucket=bucket_name, Key=dir_key)
+            except ClientError as err:
+                logger.error(f"Failed to create directory '{dir_key}' in bucket '{bucket_name}': {err}")
+                failed_directories.append(dir_key)
+                continue
+            created_directories.append(dir_key)
+        return MakeDirectoriesResponse(created=created_directories, failed=failed_directories)
 
     def soft_delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
         """
