@@ -76,22 +76,24 @@ class ToUpload:
 def list_files_command(
     divbase_base_url: str,
     project_name: str,
-    prefix_filter: str | None = None,
+    prefix: str | None = None,
     include_results_files: bool = False,
-) -> list[ObjectDetails]:
+    file_system_view: bool = True,
+) -> tuple[list[ObjectDetails], list[str]]:
     """
-    List all files in a project optionally filtered by a prefix.
-    We page through results if there are more than can be returned in a single API call.
+    List files and (optionally) folders in a project.
 
-    NOTE: The current implementation is not very efficient as we page through all results before returning any.
-    Keeping simple for now as we don't expect projects to have huge numbers of files.
-    But could be revisted later if performance becomes an issue.
+    file_system_view = true will return both files and folders at the current prefix level, simulating a file system view.
+    Otherwise all files are returned in a flat list
+    TODO - consider that we page through all results before returning.
     """
+    if file_system_view:
+        delimiter = "/"
+    else:
+        delimiter = None
+
     api_route = f"v1/s3/list?project_name={project_name}"
-    initial_request = ListObjectsRequest(
-        prefix=prefix_filter,
-        next_token=None,
-    )
+    initial_request = ListObjectsRequest(prefix=prefix, delimiter=delimiter, next_token=None)
 
     response = make_authenticated_request(
         method="POST",
@@ -100,29 +102,26 @@ def list_files_command(
         json=initial_request.model_dump(),
     )
     response_data = ListObjectsResponse(**response.json())
-    all_matches = response_data.objects
+    folders, files = list(response_data.folders), list(response_data.files)
 
-    # page through any remaining results
     while response_data.next_token:
-        next_request = ListObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
+        next_request = ListObjectsRequest(prefix=prefix, delimiter=delimiter, next_token=response_data.next_token)
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=api_route,
             json=next_request.model_dump(),
         )
-        next_page_data = ListObjectsResponse(**response.json())
+        response_data = ListObjectsResponse(**response.json())
+        folders.extend(response_data.folders)
+        files.extend(response_data.files)
 
-        all_matches.extend(next_page_data.objects)
-        response_data.next_token = next_page_data.next_token
-
-    # To enable us to both search by prefix and optionally hide/include query results files,
-    # we hide DivBase query results/job files now instead of via S3.
-    # so the prefix param can be used for the optional filter the user wants.
+    # Hide DivBase query results files unless explicitly requested.
+    # we do this here instead of in the api query so we can use the prefix filter to filter on other things
     if not include_results_files:
-        all_matches = [obj for obj in all_matches if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
+        files = [obj for obj in files if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
 
-    return all_matches
+    return files, folders
 
 
 def list_soft_deleted_files_command(divbase_base_url: str, project_name: str) -> list[SoftDeletedObjectDetails]:

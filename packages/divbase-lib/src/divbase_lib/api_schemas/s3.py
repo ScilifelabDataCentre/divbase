@@ -17,15 +17,6 @@ MB = 1024 * 1024
 
 
 ## list objects models ##
-class ListObjectsRequest(BaseModel):
-    """Request model for listing objects in an S3 bucket."""
-
-    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
-    next_token: str | None = Field(
-        None, description="Token to continue listing files from the end of a previous request."
-    )
-
-
 class ObjectDetails(BaseModel):
     """Details about a single object in an S3 bucket."""
 
@@ -35,11 +26,37 @@ class ObjectDetails(BaseModel):
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
 
 
-class ListObjectsResponse(BaseModel):
-    """Response model for listing objects in an S3 bucket."""
+# TODO - could constrain delimter to only allow '/' or None
+class ListObjectsRequest(BaseModel):
+    """Request model for listing objects in an S3 bucket."""
 
-    objects: list[ObjectDetails] = Field(
-        ..., description="A list of objects in the bucket.", min_length=0, max_length=1000
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
+    delimiter: str | None = Field(
+        None,
+        description="Delimiter for simulating a file-system view. Use '/' to do this. Leave as none to recursively list all files.",
+    )
+    next_token: str | None = Field(
+        None, description="Token to continue listing files from the end of a previous request."
+    )
+
+
+class ListObjectsResponse(BaseModel):
+    """
+    Response model for listing objects in an S3 bucket.
+
+    When delimiter is omitted: files contains all matching objects, folders is always empty.
+    When delimiter='/' is used: files contains objects at the current level only, folders contains
+    common prefixes (simulated directories).
+    """
+
+    files: list[ObjectDetails] = Field(
+        ..., description="Files at this level (or all files when no delimiter is used).", min_length=0, max_length=1000
+    )
+    folders: list[str] = Field(
+        ...,
+        description="Simulated folder prefixes. Only populated when a delimiter is used.",
+        min_length=0,
+        max_length=1000,
     )
     next_token: str | None = Field(
         None, description="Token for fetching the next page of results. If None, no more results."

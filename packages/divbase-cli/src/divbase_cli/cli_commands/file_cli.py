@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
+from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
 
@@ -59,13 +60,17 @@ DRY_RUN_OPTION = typer.Option(
 
 @file_app.command("ls")
 def list_files(
-    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
-    prefix_filter: str | None = typer.Option(
+    prefix: str | None = typer.Argument(
         None,
-        "--prefix",
-        "-pre",
-        help="Optional prefix to filter the listed files by name (only list files starting with this prefix).",
+        help="Filter by prefix, if you want to see files and folders inside a specific dir, include the '/' at the end: e.g. 'vcfs/' . ",
     ),
+    detailed: bool = typer.Option(
+        False,
+        "--detailed",
+        "-l",
+        help="Show a detailed view including the file size and upload date.",
+    ),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     include_results_files: bool = typer.Option(
         False,
         "--include-results-files",
@@ -81,13 +86,20 @@ def list_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    List all currently available files in the project's DivBase store.
+    List files and folders in the project's DivBase store.
+    # TODO - support a recursive option to show all files and subfolders as well?
 
-    You can optionally filter the listed files by providing a prefix.
-    By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
-    To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
+    Examples:
+    - List all files and folders in the project:
+        divbase-cli files ls
+    - List files and folders in the 'vcfs/' folder:
+        divbase-cli files ls vcfs/
+    - List all files and folders starting with 'sample':
+        divbase-cli files ls sample
+    - List all files including DivBase query results files (hidden by default):
+        divbase-cli files ls --include-results-files
     """
-    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix_filter):
+    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix):
         print(
             "The --show-deleted-files option cannot be used with --include-results-files or --prefix. "
             "Please use these options separately."
@@ -110,43 +122,26 @@ def list_files(
         print(f"Soft deleted files for the project '{project_config.name}':")
         for file_details in files:
             cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-
             print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
         print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
         print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
         return
 
-    files = list_files_command(
+    files, folders = list_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
-        prefix_filter=prefix_filter,
+        prefix=prefix,
         include_results_files=include_results_files,
     )
 
-    if not files:
-        print("No files found in the project's store on DivBase.")
+    if not files and not folders:
+        print("No files or folders found in the project's store on DivBase.")
         return
 
-    table = Table(title=f"Files in [bold]{project_config.name}'s [/bold] DivBase Store:")
-    table.add_column("Name", justify="left", style="cyan")
-    table.add_column("File size", justify="left", style="magenta", no_wrap=True)
-    table.add_column("Upload date (CET)", justify="left", style="green", no_wrap=True)
-    table.add_column("MD5 checksum", justify="left", style="yellow")
-
-    for file_details in files:
-        cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-        file_size = format_file_size(size_bytes=file_details.size)
-        table.add_row(
-            file_details.name,
-            file_size,
-            cet_timestamp,
-            file_details.etag,
-        )
-
-    if not format_output_as_tsv:
-        print(table)
+    if detailed:
+        _print_ls_detailed(files=files, folders=folders, format_as_tsv=format_output_as_tsv)
     else:
-        print_rich_table_as_tsv(table=table)
+        _print_ls_simple(files=files, folders=folders)
 
 
 @file_app.command("info")
@@ -300,13 +295,14 @@ def download_all_files(
             )
 
     else:
-        list_files_response = list_files_command(
+        files, _ = list_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
-            prefix_filter=None,
+            prefix=None,
             include_results_files=False,
+            file_system_view=False,  # we want all files in a flat list to download al of them, not a file system view with folders and files
         )
-        for file_details in list_files_response:
+        for file_details in files:
             all_files.append(
                 ToDownload(
                     name=file_details.name,
@@ -638,6 +634,36 @@ def restore_soft_deleted_files(
             "2. The object was hard-deleted and is unrecoverable.\n"
             "3. An unexpected server error occurred during the restore attempt."
         )
+
+
+def _print_ls_simple(files, folders) -> None:
+    """Compact folder-aware listing: bold blue folders first, then plain filenames."""
+    console = Console()
+    for folder in folders:
+        console.print(f"[bold blue]{folder}[/bold blue]")
+    for file_details in files:
+        console.print(file_details.name)
+
+
+def _print_ls_detailed(files, folders, format_as_tsv: bool) -> None:
+    """Unix ls -l style: one entry per line with size, date, checksum, and name."""
+    console = Console()
+
+    if format_as_tsv:
+        for folder in folders:
+            folder_name = folder[-1] if folder.endswith("/") else folder
+            console.print(f"{folder_name}\t-\t-\t")
+        for f in files:
+            cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+            console.print(f"{f.name}\t{format_file_size(f.size)}\t{cet}")
+        return
+
+    for folder in folders:
+        console.print(f"[bold blue]{folder}[/bold blue]")
+    for f in files:
+        size_str = format_file_size(f.size).rjust(10)
+        cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        console.print(f"{f.name} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
 
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:

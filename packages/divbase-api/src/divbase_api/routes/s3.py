@@ -94,29 +94,32 @@ async def generate_download_urls(
 
 # Post request instead of GET as GET doesn't support/encourage body content.
 @s3_router.post("/list", status_code=status.HTTP_200_OK, response_model=ListObjectsResponse)
-async def list_file_details(
+async def list_objects(
     project_name: str,
     list_request: ListObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
-    List all files in the project's bucket
+    List objects in the project's bucket.
 
-    You can provide a prefix to only list files that start with that prefix.
-    The response object includes a next_token if there are more files to list.
-    Which you can append to the next request to get the next page of results.
-    1000 files are returned at most per request.
+    The response includes a next_token when there are more results to page through.
+    Up to 1000 entries are returned per request.
+
+    You can modify the behavior of the listing by via the ListObjectsRequest parameters.
+    To get a file-system-like view with both files and folders at the current prefix level, set delimiter to '/'.
+    Otherwise, all files are returned in a flat list, and the prefix is just used to filter files that start with the prefix string.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")
 
     return await run_in_threadpool(
-        s3_file_manager.list_files_detailed,
+        s3_file_manager.list_objects,
         bucket_name=project.bucket_name,
         prefix=list_request.prefix,
         next_token=list_request.next_token,
+        delimiter=list_request.delimiter,
     )
 
 
