@@ -250,7 +250,7 @@ Table 4. List of services in the local Docker Compose monitoring stack.
 | Prometheus | <http://localhost:9090> | Raw metrics browser and PromQL query interface |
 | cAdvisor | <http://localhost:8080> | Container-level CPU and memory usage for all running containers |
 
-Prometheus scrapes three targets, as defined in `docker/prometheus.yml`: the two Celery workers at `worker-quick:8101` and `worker-long:8101` (the per-task metrics endpoint described above), the RabbitMQ management plugin at `rabbitmq:15692` for queue metrics, and cAdvisor at `cadvisor:8080` for container-level resource usage. The global scrape interval is 15 seconds.
+Prometheus scrapes three targets, as defined in `docker/prometheus.yml`: the two Celery workers at `worker-quick:8101` and `worker-long:8101` (the `/metrics` endpoint that serves both general and per-task gauges), the RabbitMQ Prometheus plugin at `rabbitmq:15692` for queue metrics, and cAdvisor at `cadvisor:8080` for container-level resource usage. The global scrape interval is 15 seconds.
 
 For the per-task metrics to appear in Prometheus and Grafana, both `ENABLE_WORKER_METRICS` and `ENABLE_WORKER_METRICS_PER_TASK` must be set to `1`. Note that `docker/divbase_compose.yaml` explicitly sets both to `0` to reduce overhead during normal development, so you will need to override them to `1` (e.g. via a `docker compose` override file or by editing `divbase_compose.yaml` locally) before starting the stack. See Table 1 above.
 
