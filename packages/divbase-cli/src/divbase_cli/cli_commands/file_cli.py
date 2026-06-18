@@ -123,7 +123,10 @@ def list_files(
         print(f"Soft deleted files for the project '{project_config.name}':")
         for file_details in files:
             cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-            print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
+            if file_details.name.endswith("/"):
+                print(f"- [bold blue]'{file_details.name}'[/bold blue] (deleted at: '{cet_timestamp}')")
+            else:
+                print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
         print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
         print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
         return
@@ -561,18 +564,7 @@ def make_directory(
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    cleaned_dir_names = []
-    for dir in directories:
-        if any(char in dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
-            print(
-                f"[red bold]ERROR: The directory name '{dir}' contains unsupported characters: {UNSUPPORTED_CHARACTERS_IN_FILENAMES}[/red bold]"
-            )
-            raise typer.Exit(1)
-
-        dir = dir if dir.endswith("/") else dir + "/"
-        dir = dir[1:] if dir.startswith("/") else dir
-        cleaned_dir_names.append(dir)
-
+    cleaned_dir_names = _sanitize_directory_names(directories)
     dirs_created = make_directories_command(
         directories=cleaned_dir_names,
         divbase_base_url=logged_in_url,
@@ -587,6 +579,53 @@ def make_directory(
     if dirs_created.created:
         print("Successfully created the following directories:")
         for dir in dirs_created.created:
+            print(f"[bold blue]'{dir}'[/bold blue]")
+
+
+@file_app.command("rmdir")
+def remove_directory(
+    directories: list[str] = typer.Argument(
+        ..., help="space separated list of directories to remove from the project's store on DivBase."
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Remove an empty directory from your project store.
+
+    NOTE:
+    - Any files inside the directory must be removed before you can remove the directory.
+    - If the directory does not exist, the command will be treated as a successful deletion.
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    directories = _sanitize_directory_names(directories)
+    for dir in directories:
+        files, _ = list_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+            prefix=dir,
+            include_results_files=True,
+            file_system_view=False,
+        )
+        non_placeholder_files = [f for f in files if f.name != dir]
+        if non_placeholder_files:
+            print(
+                f"[red bold]ERROR: The directory '{dir}' is not empty. \n"
+                f"You must first remove all files inside it first using 'divbase-cli files rm'.[/red bold]"
+            )
+            raise typer.Exit(1)
+
+    # NOTE: as dirs are just empty files which end with "/", we can just do a regular soft delete on them.
+    deleted_dirs = soft_delete_objects_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        all_files=directories,
+    )
+
+    if deleted_dirs:
+        print("Deleted the following directories:")
+        for dir in deleted_dirs:
             print(f"[bold blue]'{dir}'[/bold blue]")
 
 
@@ -633,20 +672,6 @@ def remove_files(
             print(f"- '{file}'")
     else:
         print("No files were deleted.")
-
-
-@file_app.command("rmdir")
-def remove_directory(
-    directories: list[str] = typer.Argument(
-        ..., help="space separated list of directories to remove from the project's store on DivBase."
-    ),
-    project: str | None = PROJECT_NAME_OPTION,
-):
-    """
-    Remove a directory from your project store, any files inside the directory must already be soft deleted.
-    """
-    directories = [dir if dir.endswith("/") else dir + "/" for dir in directories]
-    # TODO
 
 
 @file_app.command("restore")
@@ -809,6 +834,21 @@ def _check_for_unsupported_files(all_files: list[Path]) -> None:
 
     if unsupported_file_types or unsupported_chars:
         raise typer.Exit(1)
+
+
+def _sanitize_directory_names(directories: list[str]) -> list[str]:
+    cleaned_dir_names = []
+    for dir in directories:
+        if any(char in dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            print(
+                f"[red bold]ERROR: The directory name '{dir}' contains unsupported characters: {UNSUPPORTED_CHARACTERS_IN_FILENAMES}[/red bold]"
+            )
+            raise typer.Exit(1)
+
+        dir = dir if dir.endswith("/") else dir + "/"
+        dir = dir[1:] if dir.startswith("/") else dir
+        cleaned_dir_names.append(dir)
+    return cleaned_dir_names
 
 
 def _pretty_print_download_results(download_results):

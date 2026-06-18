@@ -204,9 +204,7 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
-### make directories models ###
-
-
+### make and remove directories models ###
 class MakeDirectoriesResponse(BaseModel):
     """Response model for making directories in the bucket."""
 
@@ -219,6 +217,17 @@ class MakeDirectoriesResponse(BaseModel):
     failed: list[str] = Field(
         ...,
         description=("List of directories that could not be created."),
+    )
+
+
+class RemoveDirectoriesResponse(BaseModel):
+    """Response model for removing directories from the bucket."""
+
+    removed: list[str] = Field(
+        ...,
+        description=(
+            "List of directories that were successfully removed. This will include directories that did not exist.\n"
+        ),
     )
 
 
