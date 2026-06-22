@@ -38,6 +38,7 @@ SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi", ".txt", ".md"
 # This is to prevent issues when users try to filter/query files on DivBase using these characters
 # or when downloading files (e.g. ":" is used to specify file versions when downloading files
 UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\", "//")
+UNSUPPORTED_CHARACTERS_DISPLAY = ", ".join(f"'{c}'" for c in UNSUPPORTED_CHARACTERS_IN_FILENAMES)
 
 # This prefix is used for all *.vcf.gz results files from a query job/task.
 # After the prefix comes the job id which is a rolling integer.

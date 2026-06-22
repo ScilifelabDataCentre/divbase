@@ -17,6 +17,7 @@ from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, 
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
     ToDownload,
+    ToUpload,
     download_files_command,
     filter_out_already_downloaded_files,
     get_file_info_command,
@@ -29,7 +30,11 @@ from divbase_cli.services.s3_files import (
     upload_files_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
-from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+from divbase_lib.divbase_constants import (
+    SUPPORTED_DIVBASE_FILE_TYPES,
+    UNSUPPORTED_CHARACTERS_DISPLAY,
+    UNSUPPORTED_CHARACTERS_IN_FILENAMES,
+)
 from divbase_lib.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
@@ -406,6 +411,12 @@ def stream_file(
 def upload_files(
     files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
+    remote_dir: str | None = typer.Option(
+        None,
+        "--to",
+        "-t",
+        help="Remote folder to upload into, e.g. 'vcfs/batch1/'. Folder does not need to exist before uploading.",
+    ),
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
@@ -419,7 +430,8 @@ def upload_files(
         "-r",
         "-R",
         help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
-        "Without this flag, patterns only match files in the specified directory.",
+        "Without this flag, patterns only match files in the specified directory. "
+        "Put your argument in quotes to prevent shell expansion of the glob before it gets to the CLI, e.g. files upload 'data/**/*.vcf.gz' ",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", "-n", help="If set, will show what files would be uploaded, but not actually upload them."
@@ -438,33 +450,31 @@ def upload_files(
 ):
     """
     Upload files to your project's store on DivBase.
-    NOTE that directory structure is not preserved on upload, only the file name is used as the object name.
 
-    You can specify files directly as arguments including glob patterns (aka * or **) or use the --file-list option.
-    Use the flag --recursive / -R to expand glob patterns into subdirectories.
-    We recommend wrapping the glob pattern in quotes when using --recursive to ensure the correct behavior across different shells.
+    By default only the file name is used when storing the file in the project's store. Use '--to' to place files inside a remote folder.
+    To upload files recursively, see the --recursive flag.
 
     Examples:
         # Upload multiple files by specifying them one after another
         divbase-cli files upload file1.vcf.gz file2.tsv
 
-        # Upload all .vcf.gz files in the current directory
-        divbase-cli files upload "*.vcf.gz"
+        # Upload all .vcf.gz files in current directory into a remote directory called 'experiment1/'
+        divbase-cli files upload "*.vcf.gz" --to experiment1/
 
-        # Upload all files in a directory (non-recursive)
+        # Upload all files in a directory (non-recursive) to the root of the project store
         divbase-cli files upload "/path/to/data/*"
 
-        # Upload all files in a directory and its subdirectories
-        divbase-cli files upload --recursive "/path/to/data/**"
+        # Upload all files inside a directory and its subdirectories (recursive) into a remote directory called 'experiment1/'
+        divbase-cli files upload --recursive "/path/to/data/**" --to experiment1/
 
-        # Upload from a text file list (one file path per line)
-        divbase-cli files upload --file-list files_to_upload.txt
+        # Upload from a text file list (one file path per line) into a remote directory called 'experiment1/'
+        divbase-cli files upload --file-list files_to_upload.txt --to experiment1/
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     if bool(files) + bool(file_list) > 1:
-        print("Please specify only space separated files or provide a --file-list.")
+        print("You cannot specify files as arguments and provide a --file-list.")
         raise typer.Exit(1)
 
     if skip_existing and disable_safe_mode:
@@ -475,54 +485,19 @@ def upload_files(
         )
         raise typer.Exit(1)
 
-    # (to preserve order of files provided by user, but ensure no duplicates)
-    all_files: list[Path] = []
-    missing_files_or_patterns: list[str] = []
-    _seen: set[Path] = set()
-    if files:
-        for pattern in files:
-            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
-            if not matched:
-                missing_files_or_patterns.append(pattern)
-            for file in matched:
-                if file not in _seen:
-                    _seen.add(file)
-                    all_files.append(file)
-        if missing_files_or_patterns:
-            print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
-            for path in missing_files_or_patterns:
-                print(f"[red]- '{path}'[/red]")
-            raise typer.Exit(1)
-    if file_list:
-        missing_files = []
-        with open(file_list) as f:
-            for line in f:
-                path = Path(line.strip())
-                if path.is_file():
-                    if path not in _seen:
-                        _seen.add(path)
-                        all_files.append(path)
-                else:
-                    missing_files.append(path)
-        if missing_files:
-            print(
-                "[red bold]Error: The following file paths provided in the --file-list do not exist or are not files:[/red bold]"
-            )
-            for path in missing_files:
-                print(f"[red]- '{path}'[/red]")
-            raise typer.Exit(1)
-
-    if not all_files:
-        print(NO_FILES_SPECIFIED_MSG)
-        raise typer.Exit(1)
-
-    _check_for_duplicate_file_names(all_files)
-    _check_for_unsupported_files(all_files)
+    to_upload = _resolve_user_upload_inputs(
+        files=files,
+        file_list=file_list,
+        recursive=recursive,
+        remote_dir=remote_dir,
+    )
+    _check_for_duplicate_object_keys(to_upload)
+    _check_for_unsupported_files(to_upload)
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
-        all_files=all_files,
+        all_files=to_upload,
         safe_mode=not disable_safe_mode,
         skip_existing=skip_existing,
         dry_run=dry_run,
@@ -735,7 +710,7 @@ def _print_ls_detailed(files, folders, format_as_tsv: bool) -> None:
 
     if format_as_tsv:
         for folder in folders:
-            folder_name = folder[-1] if folder.endswith("/") else folder
+            folder_name = folder[:-1] if folder.endswith("/") else folder
             console.print(f"{folder_name}\t-\t-\t")
         for f in files:
             cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -770,32 +745,117 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     return list(all_files)
 
 
-def _check_for_duplicate_file_names(all_files: list[Path]) -> None:
+def _resolve_user_upload_inputs(
+    files: list[str] | None,
+    file_list: Path | None,
+    recursive: bool,
+    remote_dir: str | None,
+) -> list[ToUpload]:
     """
-    Helper fn to check if any two files in the upload set share the same file name.
-    Since directory structure is not preserved on upload, duplicate names would overwrite each other.
-    """
-    name_to_paths: dict[str, list[Path]] = {}
-    for f in all_files:
-        if f.name not in name_to_paths:
-            name_to_paths[f.name] = []
-        name_to_paths[f.name].append(f)
+    Take user CLI input arguments for files upload cmd and create a list of ToUpload objects.
 
-    duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
+    Handles the multiple ways a user can specify files for upload.
+    """
+    to_upload: list[ToUpload] = []
+    missing_patterns: list[str] = []
+    seen: set[Path] = set()
+
+    if remote_dir:
+        remote_dir = remote_dir[1:] if remote_dir.startswith("/") else remote_dir
+        remote_dir = remote_dir if remote_dir.endswith("/") else remote_dir + "/"
+        if any(char in remote_dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            print(
+                f"[red bold]Error: The --to destination path contains unsupported characters.[/red bold]\n"
+                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            )
+            raise typer.Exit(1)
+
+    if recursive and files and not any("*" in p for p in files) and any(len(Path(p).parts) > 1 for p in files):
+        print(
+            "[red bold]Error: --recursive was passed but all arguments provided are file paths.[/red bold]\n"
+            "Your shell likely expanded the glob before passing it to this command.\n"
+            "To solve the problem, wrap the pattern(s) in quotes to prevent shell expansion, e.g.:\n"
+            "  [green]divbase-cli files upload 'my_data/**/*.vcf.gz' --recursive[/green] AND NOT \n"
+            "  [red]divbase-cli files upload my_data/**/*.vcf.gz --recursive[/red]"
+        )
+        raise typer.Exit(1)
+
+    if files:
+        for pattern in files:
+            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
+            if not matched:
+                if Path(pattern).is_dir():
+                    continue  # shell-expanded a directory into the args list; skip it
+                missing_patterns.append(pattern)
+                continue
+            for file in matched:
+                if file in seen:
+                    continue
+                seen.add(file)
+                if recursive and "**" in pattern:
+                    root_str = pattern.split("**")[0]
+                    root = Path(root_str) if root_str else Path(".")
+                    key = str(file.relative_to(root)).replace("\\", "/")
+                else:
+                    key = file.name
+
+                destination_key = (remote_dir or "") + key
+                to_upload.append(ToUpload(file_path=file, destination_key=destination_key))
+
+    if file_list:
+        missing_files: list[Path] = []
+        with open(file_list) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                path = Path(line.strip())
+                if not path.is_file():
+                    missing_files.append(path)
+                    continue
+                if path not in seen:
+                    seen.add(path)
+                    to_upload.append(ToUpload(file_path=path, destination_key=(remote_dir or "") + path.name))
+
+        if missing_files:
+            print("[red bold]Error: The following file paths provided in your --file-list were not found:[/red bold]")
+            for path in missing_files:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
+
+    if missing_patterns:
+        print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
+        for pattern in missing_patterns:
+            print(f"[red]- '{pattern}'[/red]")
+        raise typer.Exit(1)
+
+    if not to_upload:
+        print(NO_FILES_SPECIFIED_MSG)
+        raise typer.Exit(1)
+
+    return to_upload
+
+
+def _check_for_duplicate_object_keys(to_upload: list[ToUpload]) -> None:
+    """Check that no two files resolve to the same S3 object key — they would silently overwrite each other."""
+    key_to_paths: dict[str, list[Path]] = {}
+    for s in to_upload:
+        key_to_paths.setdefault(s.destination_key, []).append(s.file_path)
+
+    duplicates = {key: paths for key, paths in key_to_paths.items() if len(paths) > 1}
     if duplicates:
         print(
-            "[red bold]Error: The following file names appear more than once in the upload list.[/red bold]\n"
-            "[red]Since directory structure is not preserved on upload, these files would collide:[/red]\n"
+            "[red bold]Error: The following S3 destination keys appear more than once in the upload list.[/red bold]\n"
+            "[red]Multiple local files would overwrite each other at the same key:[/red]\n"
         )
-        for name, paths in duplicates.items():
-            print(f"[red bold]'{name}':[/red bold]")
+        for key, paths in duplicates.items():
+            print(f"[red bold]'{key}':[/red bold]")
             for p in paths:
                 print(f"[red]- {p.resolve()}[/red]")
-        print("\nPlease rename the files so each has a unique name before uploading.")
+        print("\nEnsure each file maps to a unique destination key, or use --to to place them in separate folders.")
         raise typer.Exit(1)
 
 
-def _check_for_unsupported_files(all_files: list[Path]) -> None:
+def _check_for_unsupported_files(all_files: list[ToUpload]) -> None:
     """
     Helper fn to check if any of the files to be uploaded are not supported by DivBase.
     Raises error if so.
@@ -808,12 +868,12 @@ def _check_for_unsupported_files(all_files: list[Path]) -> None:
     This is not a security feature, just for UX purposes.
     """
     unsupported_file_types, unsupported_chars = [], []
-    for file_path in all_files:
-        if not any(file_path.name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
-            unsupported_file_types.append(file_path)
+    for file in all_files:
+        if not any(file.file_name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
+            unsupported_file_types.append(file.file_name)
 
-        if any(char in file_path.name for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
-            unsupported_chars.append(file_path)
+        if any(char in file.destination_key for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            unsupported_chars.append(file.file_name)
 
     if unsupported_file_types:
         print(
@@ -826,10 +886,10 @@ def _check_for_unsupported_files(all_files: list[Path]) -> None:
 
     if unsupported_chars:
         print(
-            f"[red bold]Error: The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: [/red bold]\n"
+            f"[red bold]Error: The following file(s) cannot be uploaded because their name or destination path contains unsupported characters:[/red bold]\n"
             f"[red]{'\n'.join(str(file) for file in unsupported_chars)}\n\n[/red]"
-            f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"
-            "Please rename the files and try again.",
+            f"Unsupported characters: [red]{UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            "Please rename the file or choose a different --to destination and try again.",
         )
 
     if unsupported_file_types or unsupported_chars:
@@ -838,16 +898,17 @@ def _check_for_unsupported_files(all_files: list[Path]) -> None:
 
 def _sanitize_directory_names(directories: list[str]) -> list[str]:
     cleaned_dir_names = []
-    for dir in directories:
-        if any(char in dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+    for directory in directories:
+        if any(char in directory for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
             print(
-                f"[red bold]ERROR: The directory name '{dir}' contains unsupported characters: {UNSUPPORTED_CHARACTERS_IN_FILENAMES}[/red bold]"
+                f"[red bold]Error: The directory name '{directory}' contains unsupported characters.[/red bold]\n"
+                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
             )
             raise typer.Exit(1)
 
-        dir = dir if dir.endswith("/") else dir + "/"
-        dir = dir[1:] if dir.startswith("/") else dir
-        cleaned_dir_names.append(dir)
+        directory = directory if directory.endswith("/") else directory + "/"
+        directory = directory[1:] if directory.startswith("/") else directory
+        cleaned_dir_names.append(directory)
     return cleaned_dir_names
 
 

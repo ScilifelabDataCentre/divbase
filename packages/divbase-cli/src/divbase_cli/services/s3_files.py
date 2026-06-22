@@ -71,7 +71,16 @@ class ToUpload:
     """
 
     file_path: Path
+    destination_key: str  # what the file will be called in the project store. Can include "/"s to represent "folder" paths e.g. "some/subdirs/file.tsv"
     checksum_local: str | None = None  # None if not uploaded with "safe-mode"
+
+    @property
+    def file_name(self) -> str:
+        return self.file_path.name
+
+    @property
+    def file_size(self) -> int:
+        return self.file_path.stat().st_size
 
 
 def list_files_command(
@@ -319,7 +328,7 @@ def stream_file_command(
 def upload_files_command(
     project_name: str,
     divbase_base_url: str,
-    all_files: list[Path],
+    all_files: list[ToUpload],
     safe_mode: bool,
     skip_existing: bool = False,
     dry_run: bool = False,
@@ -370,20 +379,20 @@ def upload_files_command(
                 for file in already_uploaded:
                     all_skipped_uploads.append(
                         SkippedUpload(
-                            object_name=file.file_path.name,
+                            object_name=file.destination_key,
                             file_path=file.file_path,
                             reason=f"The file with checksum {file.checksum_local} already exists in the project",
                         )
                     )
     else:
         # we don't provide checksums to server
-        to_upload = [ToUpload(file_path=file, checksum_local=None) for file in all_files]
+        to_upload = all_files
 
     if dry_run:
         if to_upload:
             print("\n[green bold]The following files would have been uploaded:[/green bold]")
             for file in to_upload:
-                print(f"- '{file.file_path}' -> would be stored as: '{file.file_path.name}' in the project")
+                print(f"- '{file.file_path}' -> would be stored as: '{file.destination_key}' in the project")
         if all_skipped_uploads:
             print("\n[yellow bold]The following files would have been skipped from upload:[/yellow bold]")
             for file in all_skipped_uploads:
@@ -395,7 +404,7 @@ def upload_files_command(
     files_below_threshold: list[ToUpload] = []
     files_above_threshold: list[ToUpload] = []
     for file in to_upload:
-        if file.file_path.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
+        if file.file_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
             files_below_threshold.append(file)
         else:
             files_above_threshold.append(file)
@@ -406,8 +415,8 @@ def upload_files_command(
         batch_of_objects_to_upload = []
         for file in batch_files:
             upload_object = {
-                "name": file.file_path.name,
-                "content_length": file.file_path.stat().st_size,
+                "name": file.destination_key,
+                "content_length": file.file_size,
             }
             if safe_mode and file.checksum_local:
                 # server expects base64 encoded checksum when provided
@@ -421,10 +430,10 @@ def upload_files_command(
             json=batch_of_objects_to_upload,
         )
         pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
+        dest_key_to_path = {f.destination_key: f.file_path for f in batch_files}
 
-        batch_to_upload = [file.file_path for file in batch_files]
         successful_uploads, failed_uploads = upload_multiple_singlepart_pre_signed_urls(
-            pre_signed_urls=pre_signed_urls, all_files=batch_to_upload
+            pre_signed_urls=pre_signed_urls, dest_key_to_path=dest_key_to_path
         )
         all_successful_uploads.extend(successful_uploads)
         all_failed_uploads.extend(failed_uploads)
@@ -436,6 +445,7 @@ def upload_files_command(
             divbase_base_url=divbase_base_url,
             file_path=file.file_path,
             safe_mode=safe_mode,
+            destination_name=file.destination_key,
         )
 
         if isinstance(outcome, SuccessfulUpload):
@@ -449,15 +459,14 @@ def upload_files_command(
 def filter_already_uploaded_files(
     project_name: str,
     divbase_base_url: str,
-    all_files: list[Path],
+    all_files: list[ToUpload],
 ) -> tuple[list[ToUpload], list[ToUpload]]:
     """
     Separate files into whether they are already in the projects bucket or not.
     (1st list to be uploaded, 2nd list is files already in projects bucket)
 
     For a file to be considered already in the project,
-    there must be a file with the same name and checksum in the project's S3 bucket.
-    We do not catch an attempt to upload an identical object if it has a different name.
+    there must be an object with the same key and checksum in the project's S3 bucket.
 
     This is only ran if 'safe_mode' is enabled for uploads.
     These checksums are later used when uploading to the server so the server can verify the upload.
@@ -468,27 +477,29 @@ def filter_already_uploaded_files(
     # have to batch requests if above max number allowed by divbase server
     for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
         batch_files = all_files[i : i + MAX_S3_API_BATCH_SIZE]
-        batch_files_names = [file.name for file in batch_files]
+        batch_object_keys = [file.destination_key for file in batch_files]
 
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=f"v1/s3/checksums?project_name={project_name}",
-            json=batch_files_names,
+            json=batch_object_keys,
         )
         server_checksum_responses = [FileChecksumResponse(**item) for item in response.json()]
         server_checksums = {item.object_name: item.md5_checksum for item in server_checksum_responses}
 
         for file in batch_files:
-            local_checksum = _calc_local_checksum(file_path=file)
-            file_to_upload = ToUpload(file_path=file, checksum_local=local_checksum)
+            local_checksum = _calc_local_checksum(file_path=file.file_path)
+            file_to_upload = ToUpload(
+                file_path=file.file_path, destination_key=file.destination_key, checksum_local=local_checksum
+            )
 
-            if server_checksums.get(file.name) and server_checksums[file.name] == local_checksum:
+            if server_checksums.get(file.destination_key) and server_checksums[file.destination_key] == local_checksum:
                 already_uploaded.append(file_to_upload)
             else:
                 to_be_uploaded.append(file_to_upload)
 
-            print(f"MD5 Checksum calculated for file: '{file.name}'")
+            print(f"MD5 Checksum calculated for file: '{file.destination_key}'")
 
     return to_be_uploaded, already_uploaded
 
