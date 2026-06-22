@@ -5,7 +5,7 @@ This document explains how resource usage metrics are tracked and reported for t
 The per-task metrics system can be implemented for any task that runs in the DivBase Celery workers. However, this document was written specifically with the Celery tasks that call on `bcftools` in mind. These are the most resource intensive tasks in DivBase and include e.g. downloading of VCF files from the S3 object store to the Celery workers and running of `bcftools`.
 
 !!! Note
-    This page uses `pymdownx.arithmatex` for mathematical typesetting. We have noticed that there sometimes is a bug with the rendering of the maths section. If that happens, try reloading the webpage.
+    This page uses `pymdownx.arithmatex` for mathematical typesetting. There is a known intermittent rendering bug in the maths sections; if equations do not render correctly, reloading the page resolves it.
 
 ## 1. Metrics definitions
 
@@ -25,7 +25,7 @@ In DivBase in general, and the VCF query task in particular, operations outside 
 
 Wall time (also known as ["wall clock time", "real elapsed time", and other names](https://en.wikipedia.org/wiki/Elapsed_real_time)) is the total time elapsed from when a process started to when it ended. Wall time includes all time spent on CPU operations, I/O operations, and any periods of idle waiting. From a DivBase user's point-of-view, this is how long it took for a task to run from start to finish once it was picked up from the queue by an idle worker. The wall time value is especially relevant for the user experience, but does not give any detailed hints on what part of the underlying process(es) that can be optimized.
 
-As will be discussed in the section on CPU time below, `bcftools` will be run in one or several subprocesses. Wall time is measured for the Python process and for the `bcftools` subprocesses with the `time` Python library. The wall time for the Python process is measured from the start to the finish of the Celery task (which is runs in the main Python process of the worker), and thus includes all subprocesses run during that time. This means that:
+As will be discussed in the section on CPU time below, `bcftools` will be run in one or several subprocesses. Wall time is measured for the Python process and for the `bcftools` subprocesses with the `time` Python library. The wall time for the Python process is measured from the start to the finish of the Celery task (which runs in the main Python process of the worker), and thus includes all subprocesses run during that time. This means that:
 
 $$
 \text{Total wall time for a DivBase task} = \text{Python process wall time}
@@ -91,7 +91,7 @@ The worker metrics capturing (general and per-task) is implemented in three laye
 
 - **"Persisting" the data with Prometheus scraping**
 
-    To capture the exposed data from the metrics endpoint, a separate Prometheus service scrapes each worker's `/metrics` endpoint with GET requests at a frequent periodicity (every 15 seconds by default) and persists it (for a limited time) in Prometheus own time-series database. This is set up as a pull-based model: the scraper fetches the data through requests, which means that the Celery worker never pushes data. As will further discussed in [Section 2.2.](#22-scraping-and-persisting-of-the-metrics-data-with-prometheus), the `/metrics` endpoint TTL implementation is s a simple strategy that gets the job done, it has its drawbacks and could be refined. Also worth noting is that the Prometheus database has a default retention time of 15 days before eviction per datapoint.
+    To capture the exposed data from the metrics endpoint, a separate Prometheus service scrapes each worker's `/metrics` endpoint with GET requests at a frequent periodicity (every 15 seconds by default) and persists it (for a limited time) in Prometheus own time-series database. This is set up as a pull-based model: the scraper fetches the data through requests, which means that the Celery worker never pushes data. As will further discussed in [Section 2.2.](#22-scraping-and-persisting-of-the-metrics-data-with-prometheus), the `/metrics` endpoint TTL implementation is a simple strategy that gets the job done, but it has its drawbacks and could be refined. Note also that the Prometheus database has a default retention time of 15 days per datapoint before eviction.
 
 - **Accessing the data from Prometheus time-series database**
 
@@ -99,7 +99,7 @@ The worker metrics capturing (general and per-task) is implemented in three laye
 
 ### 2.1 The Celery workers and their `/metrics` endpoint
 
-Each DivBase Celery worker container (`worker-quick` and `worker-long`) capture metrics independently. Both containers run the same image and start the `/metrics` server on port 8101 inside their container, but use their own network namespace and container hostname. After enabling the endpoint ([Section](#211-toggling-the-metrics-endpoint-and-per-task-metrics-capture)) and starting the stack, locally or on Kubernetes ([Section 3](#3-running-the-per-task-metrics)), the `/metrics` endpoint will be available for scraping by the DivBase Prometheus service. They can also be viewed in a web browser: for the local Docker compose stack, the endpoints can be inspected at <http://localhost:8101/metrics> for `worker-quick` and <http://localhost:8102/metrics> for `worker-long`.
+Each DivBase Celery worker container (`worker-quick` and `worker-long`) capture metrics independently. Both containers run the same image and start the `/metrics` server on port 8101 inside their container, but use their own network namespace and container hostname. Note that in the local Docker Compose stack, `worker-quick` additionally runs the Celery beat scheduler (`-B` flag in `docker/divbase_compose.yaml`). This means that a CPU or memory spike visible in `worker-quick`'s metrics could originate from scheduled task dispatch rather than from task execution — something to keep in mind when interpreting the metrics. In Kubernetes, the beat scheduler runs as a separate deployment and this distinction does not apply. After enabling the endpoint ([Section](#211-toggling-the-metrics-endpoint-and-per-task-metrics-capture)) and starting the stack, locally or on Kubernetes ([Section 3](#3-running-the-per-task-metrics)), the `/metrics` endpoint will be available for scraping by the DivBase Prometheus service. They can also be viewed in a web browser: for the local Docker compose stack, the endpoints can be inspected at <http://localhost:8101/metrics> for `worker-quick` and <http://localhost:8102/metrics> for `worker-long`.
 
 !!! Warning
 
@@ -205,7 +205,7 @@ The cache for per-task metrics is needed because metrics must persist after task
 !!! Note
     The Prometheus scraping implementation is, at the time of writing, a proof-of-concept that has not been optimized for data point deduplication. In fact, each successful scrape will store one timestamped sample, and there is no logic in place for deduplicating this. For example, a gauge holding `8.3` for the full 5-minute metric TTL will produce ~20 duplicate samples of `8.3` in the Prometheus time-series database, each with a different "scraped-at" timestamp. When writing PromQL queries, use `last_over_time(metric[5m])` or query at a single point in time to retrieve one value per task rather than summing or averaging across all samples. Data retention in the timeseries database is 15 days (Docker Compose stack: Prometheus default; Kubernetes: explicitly set).
 
-The metrics server is started once per worker and exposes an HTTP `/metrics` endpoint on port 8101 that can be scraped by Prometheus. For the local Docker Compose environment, the scraping is configured in `docker/prometheus.yml`. The server is started using a Celery signal (`@worker_process_init.connect`) in `packages/divbase-api/src/divbase_api/worker/tasks.py` that fires when a Celery worker process first starts.
+The HTTP `/metrics` endpoint on port 8101 is bound by the first worker process to start (`start_metrics_server()` in `metrics.py`), but a `collect_system_metrics()` background thread is started in every forked process. With `concurrency=1` this is the same process. With `concurrency>1`, Process 2+ each run their own collection thread but those threads write to gauge objects that are never served — only Process 1's gauges reach Prometheus. The per-task and system metrics consequences of `concurrency>1` are described in the Warning block below. For the local Docker Compose environment, the scraping is configured in `docker/prometheus.yml`. The server is started using a Celery signal (`@worker_process_init.connect`) in `packages/divbase-api/src/divbase_api/worker/tasks.py` that fires when a Celery worker process first starts.
 
 !!! Warning
     Celery prefork concurrency must be set to `1` for per-task metrics to be correct — both in the local Docker Compose setup and in Kubernetes.  Setting concurrency>1 will not crash the worker, but per-task metrics will be incomplete: only the process that bound the `/metrics` endpoint reports data, so any task routed to another process produces no visible metrics in Prometheus.
@@ -231,7 +231,7 @@ docker network create divbase-observability
 With the network in place, start the main app stack as usual,
 
 ```bash
-docker compose -f docker/monitoring_compose.yaml up"
+docker compose -f docker/monitoring_compose.yaml up
 ```
 
 and then start the monitoring stack separately:
@@ -246,7 +246,7 @@ Table 4. List of services in the local Docker Compose monitoring stack.
 
 | Service | URL | What it shows |
 |---|---|---|
-| Grafana | <http://localhost:3000> | Pre-provisioned dashboards for worker per-task metrics and RabbitMQ queue metrics |
+| Grafana | <http://localhost:3000> | Pre-provisioned dashboards for worker per-task metrics and RabbitMQ queue metrics. For the Docker Compose stack, [`monitoring_compose.yaml`](../../docker/monitoring_compose.yaml) sets the auth as the default Grafana username (`admin`) and `badpassword`. |
 | Prometheus | <http://localhost:9090> | Raw metrics browser and PromQL query interface |
 | cAdvisor | <http://localhost:8080> | Container-level CPU and memory usage for all running containers |
 
