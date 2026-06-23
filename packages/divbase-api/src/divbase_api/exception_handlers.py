@@ -385,15 +385,17 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
     """When a request contains invalid data, FastAPI internally raises a RequestValidationError"""
     logger.error(f"Request validation error for {request.method} {request.url.path}: {exc.errors()}", exc_info=True)
 
+    # pydantic return a list of validation errors, so extract all the messages to give to user
+    errors = [error["msg"] for error in exc.errors() if "msg" in error]
     if is_api_request(request):
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={"detail": exc.errors(), "type": "request_validation_error"},
+            content={"detail": errors, "type": "request_validation_error"},
         )
     else:
         return await render_error_page(
             request=request,
-            message="Badly formatted request. Please check your input and try again.",
+            message=f"Badly formatted request. Please check your input and try again. Details: {errors}",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
 

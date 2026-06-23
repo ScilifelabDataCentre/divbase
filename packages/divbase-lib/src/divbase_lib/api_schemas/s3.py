@@ -9,11 +9,27 @@ Pre-signed upload URLs need to account for single vs multipart uploads hence all
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
+from divbase_lib.divbase_constants import (
+    S3_MULTIPART_CHUNK_SIZE,
+    UNSUPPORTED_CHARACTERS_DISPLAY,
+    UNSUPPORTED_CHARACTERS_IN_FILENAMES,
+)
 
 MB = 1024 * 1024
+
+
+def validate_s3_object_name(name: str) -> str:
+    """Validate that the S3 object name does not contain unsupported characters."""
+    if name.startswith("/") or name.endswith("/"):
+        raise ValueError("Object name must not start or end with a '/'.")
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in name:
+            raise ValueError(
+                f"Object name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
+            )
+    return name
 
 
 ## list objects models ##
@@ -114,6 +130,11 @@ class UploadSinglePartObjectRequest(BaseModel):
     content_length: int = Field(..., ge=0, description="Size of the file in bytes")
     md5_hash: str | None = Field(None, description="Optional MD5 hash of the object for integrity check")
 
+    @field_validator("name")
+    @classmethod
+    def validate_s3_name(cls, name: str) -> str:
+        return validate_s3_object_name(name)
+
 
 class PreSignedSinglePartUploadResponse(BaseModel):
     """Response model to upload a single object as a single part using the pre-signed URL using PUT."""
@@ -129,6 +150,11 @@ class CreateMultipartUploadRequest(BaseModel):
 
     name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
     content_length: int = Field(..., ge=0, description="Size of the file in bytes")
+
+    @field_validator("name")
+    @classmethod
+    def validate_s3_name(cls, name: str) -> str:
+        return validate_s3_object_name(name)
 
 
 class CreateMultipartUploadResponse(BaseModel):
