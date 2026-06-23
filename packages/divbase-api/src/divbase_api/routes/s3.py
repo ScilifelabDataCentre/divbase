@@ -128,17 +128,24 @@ async def list_objects(
 async def list_soft_deleted_files(
     project_name: str,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
+    prefix: str | None = None,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
     List all soft-deleted files in the project's bucket.
-    All soft-deleted objects are obtained at once, so there is no need for pagination with next tokens.
+
+    You can optionally filter the files to look up based on a prefix string.
+    All soft-deleted objects are obtained at once, so there is no need to handle pagination client side.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list soft-deleted files in this project.")
 
-    return await run_in_threadpool(s3_file_manager.list_soft_deleted_files, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        s3_file_manager.list_soft_deleted_files,
+        bucket_name=project.bucket_name,
+        prefix=prefix,
+    )
 
 
 @s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)

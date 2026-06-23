@@ -125,7 +125,7 @@ class S3FileManager:
 
         return ListObjectsResponse(files=files, folders=folders, next_token=new_next_token)
 
-    def list_soft_deleted_files(self, bucket_name: str) -> list[SoftDeletedObjectDetails]:
+    def list_soft_deleted_files(self, bucket_name: str, prefix: str | None = None) -> list[SoftDeletedObjectDetails]:
         """
         list all soft-deleted filesobjects in a bucket.
         A soft-deleted object is one whose latest S3 object version is a delete marker.
@@ -134,9 +134,12 @@ class S3FileManager:
         rather than have the client make multiple calls with next tokens like in 'list_objects'.
         """
         paginator = self.s3_client.get_paginator("list_object_versions")
-        soft_deleted_files = []
+        operation_parameters = {"Bucket": bucket_name}
+        if prefix:
+            operation_parameters["Prefix"] = prefix
 
-        for page in paginator.paginate(Bucket=bucket_name):
+        soft_deleted_files = []
+        for page in paginator.paginate(**operation_parameters):
             for marker in page.get("DeleteMarkers", []):
                 if marker.get("IsLatest"):
                     soft_deleted_files.append(

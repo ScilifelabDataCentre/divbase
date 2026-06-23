@@ -134,9 +134,13 @@ def list_files_command(
     return files, folders
 
 
-def list_soft_deleted_files_command(divbase_base_url: str, project_name: str) -> list[SoftDeletedObjectDetails]:
-    """List all soft-deleted files in a project."""
+def list_soft_deleted_files_command(
+    divbase_base_url: str, project_name: str, prefix: str | None = None
+) -> list[SoftDeletedObjectDetails]:
+    """List all soft-deleted files in a project, with optional prefix filtering."""
     api_route = f"v1/s3/list/soft-deleted?project_name={project_name}"
+    api_route += f"&prefix={prefix}" if prefix else ""
+
     response = make_authenticated_request(
         method="GET",
         divbase_base_url=divbase_base_url,

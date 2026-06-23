@@ -93,7 +93,7 @@ def list_files(
 ):
     """
     List files and folders in the project's DivBase store.
-    # TODO - support a recursive option to show all files and subfolders as well?
+    # TODO - support a recursive option to show all files and subfolders as well? - can be called --tree or --recursive?
 
     Examples:
     - List all files and folders in the project:
@@ -105,12 +105,10 @@ def list_files(
     - List all files including DivBase query results files (hidden by default):
         divbase-cli files ls --include-results-files
     """
-    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix):
-        print(
-            "The --show-deleted-files option cannot be used with --include-results-files or --prefix. "
-            "Please use these options separately."
+    if show_deleted_files and include_results_files:
+        raise typer.BadParameter(
+            message="The --show-deleted-files option cannot be used with the flag --include-results-files. Please use these options separately."
         )
-        raise typer.Exit(1)
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -119,6 +117,7 @@ def list_files(
         files = list_soft_deleted_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
+            prefix=prefix,
         )
 
         if not files:
