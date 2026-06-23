@@ -85,7 +85,7 @@ class DownloadOutcome:
 
 
 def download_multiple_pre_signed_urls(
-    pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path
+    pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path, flatten: bool = False
 ) -> tuple[list[SuccessfulDownload], list[FailedDownload]]:
     """
     Download files using pre-signed URLs.
@@ -94,8 +94,13 @@ def download_multiple_pre_signed_urls(
     successful_downloads, failed_downloads = [], []
     with httpx.Client() as client:
         for obj in pre_signed_urls:
-            output_file_path = download_dir / obj.name
+            if flatten:
+                # If flatten, we only use the file name and ignore any s3 "folder" structure
+                output_file_path = download_dir / Path(obj.name).name
+            else:
+                output_file_path = download_dir / obj.name
             object_name = obj.name
+
             print(f"Downloading '{object_name}'...", end=" ")
             try:
                 result = _download_single_pre_signed_url(
@@ -131,7 +136,7 @@ def _download_single_pre_signed_url(
     content_length, server_checksum = _get_content_length_and_checksum(
         httpx_client=httpx_client, pre_signed_url=pre_signed_url
     )
-
+    output_file_path.parent.mkdir(parents=True, exist_ok=True)
     if content_length < MULTIPART_DOWNLOAD_THRESHOLD:
         _perform_singlepart_download(
             httpx_client=httpx_client,
@@ -141,7 +146,12 @@ def _download_single_pre_signed_url(
 
     else:
         logger.info(f"Starting multipart download for large file '{object_name}' of size {content_length} bytes.")
-        _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, content_length)
+        _perform_multipart_download(
+            httpx_client=httpx_client,
+            pre_signed_url=pre_signed_url,
+            output_file_path=output_file_path,
+            content_length=content_length,
+        )
 
     if verify_checksums:
         try:
@@ -181,7 +191,9 @@ def _perform_singlepart_download(httpx_client: httpx.Client, pre_signed_url: str
                 file.write(chunk)
 
 
-def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, content_length):
+def _perform_multipart_download(
+    httpx_client: httpx.Client, pre_signed_url: str, output_file_path: Path, content_length: int
+) -> None:
     """
     Download a large file in multiple chunks using range requests.
 
@@ -199,11 +211,11 @@ def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, 
             futures.append(
                 executor.submit(
                     _download_chunk,
-                    httpx_client,
-                    pre_signed_url,
-                    start,
-                    end,
-                    output_file_path,
+                    client=httpx_client,
+                    url=pre_signed_url,
+                    start=start,
+                    end=end,
+                    output_file_path=output_file_path,
                 )
             )
 

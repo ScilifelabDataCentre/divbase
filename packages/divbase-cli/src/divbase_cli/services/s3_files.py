@@ -58,7 +58,7 @@ class ToDownload:
     2. From a user defined project version (getting the files from the version details)"
     """
 
-    name: str
+    s3_key: str
     etag: str
     size_bytes: int
     version_id: str | None = None  # latest version if None
@@ -220,6 +220,7 @@ def download_files_command(
     project_name: str,
     raw_files_input: list[str],
     download_dir: Path,
+    flatten: bool,
     verify_checksums: bool,
     dry_run: bool,
     project_version: str | None = None,
@@ -297,6 +298,7 @@ def download_files_command(
         batch_download_success, batch_download_failed = download_multiple_pre_signed_urls(
             pre_signed_urls=pre_signed_urls,
             download_dir=download_dir,
+            flatten=flatten,
             verify_checksums=verify_checksums,
         )
         successful_downloads.extend(batch_download_success)
@@ -509,7 +511,7 @@ def filter_already_uploaded_files(
 
 
 def filter_out_already_downloaded_files(
-    all_files: list[ToDownload], download_dir: Path
+    all_files: list[ToDownload], download_dir: Path, flatten: bool = False
 ) -> tuple[list[ToDownload], list[ToDownload]]:
     """
     Filter out files that already exist in a local directory with the same checksum.
@@ -521,7 +523,8 @@ def filter_out_already_downloaded_files(
     files_to_download, files_to_overwrite = [], []
 
     for s3_file in all_files:
-        local_file_path = download_dir / s3_file.name
+        local_name = Path(s3_file.s3_key).name if flatten else s3_file.s3_key
+        local_file_path = download_dir / local_name
 
         if not local_file_path.exists():
             files_to_download.append(s3_file)

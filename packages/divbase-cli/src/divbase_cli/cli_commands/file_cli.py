@@ -2,6 +2,7 @@
 Command line interface for managing files in a DivBase project's store on DivBase.
 """
 
+from collections import defaultdict
 from glob import glob
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -30,6 +31,7 @@ from divbase_cli.services.s3_files import (
     upload_files_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
+from divbase_lib.api_schemas.s3 import ObjectDetails
 from divbase_lib.divbase_constants import (
     SUPPORTED_DIVBASE_FILE_TYPES,
     UNSUPPORTED_CHARACTERS_DISPLAY,
@@ -61,6 +63,14 @@ DRY_RUN_OPTION = typer.Option(
     "--dry-run",
     "-n",
     help="If set, will not actually download the files, just print what would be downloaded.",
+)
+
+FLATTEN_DOWNLOADS_OPTION = typer.Option(
+    False,
+    "--flatten",
+    "-f",
+    help="Download all files directly into the download directory, ignoring any folder paths. "
+    "By default the folder structure in the project store is preserved when downloading.",
 )
 
 
@@ -140,7 +150,14 @@ def list_files(
         project_name=project_config.name,
         prefix=prefix,
         include_results_files=include_results_files,
+        file_system_view=True,
     )
+
+    # When listing inside a folder (prefix ends with '/'), strip the search prefix from the output
+    # And exclude the possible directory placeholder object itself (the empty S3 key that is an object).
+    if prefix and prefix.endswith("/"):
+        files = [f.model_copy(update={"name": f.name[len(prefix) :]}) for f in files if f.name != prefix]
+        folders = [f[len(prefix) :] for f in folders if f != prefix]
 
     if not files and not folders:
         print("No files or folders found in the project's store on DivBase.")
@@ -165,6 +182,11 @@ def file_info(
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    if file_name.endswith("/"):
+        raise typer.BadParameter(
+            message="The 'info' command is only for files, not folders. Please provide a file name without a trailing '/'."
+        )
 
     file_info = get_file_info_command(
         divbase_base_url=logged_in_url,
@@ -216,6 +238,7 @@ def download_files(
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to download."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
+    flatten: bool = FLATTEN_DOWNLOADS_OPTION,
     dry_run: bool = DRY_RUN_OPTION,
     disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
     project_version: str | None = PROJECT_VERSION_OPTION,
@@ -224,6 +247,7 @@ def download_files(
     """
     Download files from the project's store on DivBase.
 
+    # TODO - use examples here instead.
     This can be done by either:
         1. providing a list of files paths directly in the command line
         2. providing a text file with a list of files to download (new file on each line).
@@ -240,12 +264,20 @@ def download_files(
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
     raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
+    raw_files_input = _expand_folder_prefixes(
+        files=raw_files_input,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+    )
+    if flatten:
+        check_no_overlap_on_flattened_downloads(to_download=raw_files_input)
 
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
+        flatten=flatten,
         verify_checksums=not disable_verify_checksums,
         dry_run=dry_run,
         project_version=project_version,
@@ -257,6 +289,7 @@ def download_files(
 @file_app.command("download-all")
 def download_all_files(
     download_dir: str = DOWNLOAD_DIR_OPTION,
+    flatten: bool = FLATTEN_DOWNLOADS_OPTION,
     resume: bool = typer.Option(
         False,
         "--resume",
@@ -270,10 +303,12 @@ def download_all_files(
 ):
     """
     Download all files in the project's store on DivBase.
+
     Before the download proceeds you'll be prompted if you want to continue.
+    You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
     DivBase Query results files will not be included in the download.
 
-    You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
+    TODO use examples here.
     """
     if resume and disable_verify_checksums:
         print(
@@ -295,7 +330,7 @@ def download_all_files(
         for version_name, file_details in version_details.files.items():
             all_files.append(
                 ToDownload(
-                    name=version_name,
+                    s3_key=version_name,
                     etag=file_details["etag"],
                     size_bytes=file_details["size"],
                     version_id=file_details["version_id"],
@@ -313,7 +348,7 @@ def download_all_files(
         for file_details in files:
             all_files.append(
                 ToDownload(
-                    name=file_details.name,
+                    s3_key=file_details.name,
                     etag=file_details.etag,
                     size_bytes=file_details.size,
                     version_id=None,  # latest version
@@ -324,10 +359,14 @@ def download_all_files(
         print("No files to download as there are no files in the project's store.")
         return
 
+    if flatten:
+        to_download_names = [file.s3_key for file in all_files]
+        check_no_overlap_on_flattened_downloads(to_download=to_download_names)
+
     # filter files to download based on those which already exist.
     if resume:
         files_to_download, files_to_overwrite = filter_out_already_downloaded_files(
-            all_files=all_files, download_dir=download_dir_path
+            all_files=all_files, download_dir=download_dir_path, flatten=flatten
         )
         if files_to_overwrite:
             print(
@@ -335,7 +374,7 @@ def download_all_files(
                 "If you choose to proceed, these files will be overwritten by the download:[/yellow bold]"
             )
             for file in files_to_overwrite:
-                print(f"- '{file.name}'")
+                print(f"- '{file.s3_key}'")
 
         files_to_download.extend(files_to_overwrite)
 
@@ -358,14 +397,15 @@ def download_all_files(
             return
 
     if project_version:
-        raw_files_input = [f"{file.name}:{file.version_id}" for file in files_to_download]
+        raw_files_input = [f"{file.s3_key}:{file.version_id}" for file in files_to_download]
     else:
-        raw_files_input = [file.name for file in files_to_download]
+        raw_files_input = [file.s3_key for file in files_to_download]
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
+        flatten=flatten,
         verify_checksums=not disable_verify_checksums,
         dry_run=dry_run,
         project_version=None,  # We already know the version id of each file, so can skip the processing here.
@@ -544,16 +584,17 @@ def make_directory(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
     )
-    if dirs_created.failed:
-        print("[red bold]WARNING: Failed to create the following directories:[/red bold]")
-        for dir in dirs_created.failed:
-            print(f"[red]'{dir}'[/red]")
-        print("This could be due to invalid characters in the directory name or an unexpected server error.\n")
-
     if dirs_created.created:
         print("Successfully created the following directories:")
         for dir in dirs_created.created:
             print(f"[bold blue]'{dir}'[/bold blue]")
+
+    if dirs_created.failed:
+        print("[red bold]Error: Failed to create the following directories:[/red bold]")
+        for dir in dirs_created.failed:
+            print(f"[red]'{dir}'[/red]")
+        print("This could be due to invalid characters in the directory name or an unexpected server error.\n")
+        raise typer.Exit(1)
 
 
 @file_app.command("rmdir")
@@ -585,7 +626,7 @@ def remove_directory(
         non_placeholder_files = [f for f in files if f.name != dir]
         if non_placeholder_files:
             print(
-                f"[red bold]ERROR: The directory '{dir}' is not empty. \n"
+                f"[red bold]Error: The directory '{dir}' is not empty. \n"
                 f"You must first remove all files inside it first using 'divbase-cli files rm'.[/red bold]"
             )
             raise typer.Exit(1)
@@ -694,7 +735,7 @@ def restore_soft_deleted_files(
         )
 
 
-def _print_ls_simple(files, folders) -> None:
+def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:
     """Compact folder-aware listing: bold blue folders first, then plain filenames."""
     console = Console()
     for folder in folders:
@@ -703,14 +744,13 @@ def _print_ls_simple(files, folders) -> None:
         console.print(file_details.name)
 
 
-def _print_ls_detailed(files, folders, format_as_tsv: bool) -> None:
-    """Unix ls -l style: one entry per line with size, date, checksum, and name."""
+def _print_ls_detailed(files: list[ObjectDetails], folders: list[str], format_as_tsv: bool) -> None:
+    """Unix ls -l style: one entry per line with name, size and date"""
     console = Console()
 
     if format_as_tsv:
         for folder in folders:
-            folder_name = folder[:-1] if folder.endswith("/") else folder
-            console.print(f"{folder_name}\t-\t-\t")
+            console.print(f"{folder}\t-\t-\t")
         for f in files:
             cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
             console.print(f"{f.name}\t{format_file_size(f.size)}\t{cet}")
@@ -854,6 +894,71 @@ def _check_for_duplicate_object_keys(to_upload: list[ToUpload]) -> None:
         raise typer.Exit(1)
 
 
+def _expand_folder_prefixes(
+    files: list[str],
+    divbase_base_url: str,
+    project_name: str,
+) -> list[str]:
+    """
+    Given a list of user provided file args, expand any args that are for folders, i.e. they end with a trailing '/'.
+    SO updates the list of files to (e.g. download) to include all files inside the folder(s) and returns the updated list.
+
+    Non-folder arguments are passed through unchanged. Raises Exit(1) if a prefix has no files.
+    """
+    all_files: set[str] = set()
+    for arg in files:
+        if not arg.endswith("/"):
+            all_files.add(arg)
+            continue
+
+        full_s3_file_paths, _ = list_files_command(
+            divbase_base_url=divbase_base_url,
+            project_name=project_name,
+            prefix=arg,
+            include_results_files=False,
+            file_system_view=False,
+        )
+        # strip off any subfolders
+        real_files = [f.name for f in full_s3_file_paths if not f.name.endswith("/")]
+        if not real_files:
+            print(f"[red bold]Error: No files found inside the folder: '{arg}' that you provided.[/red bold]")
+            raise typer.Exit(1)
+
+        all_files.update(real_files)
+
+    return list(all_files)
+
+
+def check_no_overlap_on_flattened_downloads(to_download: list[str]) -> None:
+    """
+    When downloading files with --flatten option, double check that no two files will resolve to same local file path.
+    If they do, then raise error.
+
+    Could happen if for example divbase-cli files download-all --flatten:
+    - file1.txt
+    - subdir/file1.txt
+    """
+    name_to_paths: dict[str, list[str]] = defaultdict(list)
+    for s3_path in to_download:
+        download_name = Path(s3_path).name  # what it would be download as if --flatten is used
+        name_to_paths[download_name].append(s3_path)
+
+    duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
+    if duplicates:
+        print(
+            "[red bold]Error: The following files would overwrite each other when downloaded with --flatten option.[/red bold]\n"
+            "[red]Multiple files would resolve to the same local file path:[/red]\n"
+        )
+        for name, paths in duplicates.items():
+            print(f"[red bold]'{name}':[/red bold]")
+            for p in paths:
+                print(f"[red]- {p}[/red]")
+        print(
+            "\nYou must either download without the --flatten option or only download a subset of the the files to avoid this error."
+        )
+        raise typer.Exit(1)
+
+
 def _check_for_unsupported_files(all_files: list[ToUpload]) -> None:
     """
     Helper fn to check if any of the files to be uploaded are not supported by DivBase.
@@ -919,7 +1024,7 @@ def _pretty_print_download_results(download_results):
             print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
 
     if download_results.failed:
-        print("\n[red bold]ERROR: Failed to download the following files:[/red bold]")
+        print("\n[red bold]Error: Failed to download the following files:[/red bold]")
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': [/red] Exception: '{failed.exception}'")
         raise typer.Exit(1)
