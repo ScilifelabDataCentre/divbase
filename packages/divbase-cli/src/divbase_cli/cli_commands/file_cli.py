@@ -11,6 +11,7 @@ import typer
 from rich import print
 from rich.console import Console
 from rich.table import Table
+from rich.tree import Tree
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
@@ -44,6 +45,11 @@ file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
 
+
+PREFIX_ARGUMENT = typer.Argument(
+    None,
+    help="Optional prefix to filter on. Use a '/' to specify a folder. e.g. 'vcfs/'",
+)
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
     "--disable-verify-checksums",
@@ -64,7 +70,6 @@ DRY_RUN_OPTION = typer.Option(
     "-n",
     help="If set, will not actually download the files, just print what would be downloaded.",
 )
-
 FLATTEN_DOWNLOADS_OPTION = typer.Option(
     False,
     "--flatten",
@@ -72,14 +77,17 @@ FLATTEN_DOWNLOADS_OPTION = typer.Option(
     help="Download all files directly into the download directory, ignoring any folder paths. "
     "By default the folder structure in the project store is preserved when downloading.",
 )
+INCLUDE_RESULTS_FILES_OPTION = typer.Option(
+    False,
+    "--include-results-files",
+    "-r",
+    help="If set, will also show DivBase query results files which are hidden by default.",
+)
 
 
 @file_app.command("ls")
 def list_files(
-    prefix: str | None = typer.Argument(
-        None,
-        help="Optional prefix to filter results. To list the contents of a specific folder, include a trailing '/': e.g. 'vcfs/'.",
-    ),
+    prefix: str | None = PREFIX_ARGUMENT,
     detailed: bool = typer.Option(
         False,
         "--detailed",
@@ -87,12 +95,7 @@ def list_files(
         help="Show a detailed view including the file size and upload date.",
     ),
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
-    include_results_files: bool = typer.Option(
-        False,
-        "--include-results-files",
-        "-r",
-        help="If set, will also show DivBase query results files which are hidden by default.",
-    ),
+    include_results_files: bool = INCLUDE_RESULTS_FILES_OPTION,
     show_deleted_files: bool = typer.Option(
         False,
         "--show-deleted-files",
@@ -175,6 +178,41 @@ def list_files(
         _print_ls_detailed(files=files, folders=folders, format_as_tsv=format_output_as_tsv)
     else:
         _print_ls_simple(files=files, folders=folders)
+
+
+@file_app.command("tree")
+def tree_files(
+    prefix: str | None = PREFIX_ARGUMENT,
+    include_results_files: bool = INCLUDE_RESULTS_FILES_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Display the project's file store in a tree like manner.
+
+    Examples:
+
+    - Show the full tree:
+        divbase-cli files tree
+
+    - Show the tree starting from the 'vcfs/' folder:
+        divbase-cli files tree vcfs/
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    files, _ = list_files_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        prefix=prefix,
+        include_results_files=include_results_files,
+        file_system_view=False,
+    )
+
+    if not files:
+        print("No files found in the project's store on DivBase.")
+        return
+
+    _print_file_sys_tree_view(files=files, prefix=prefix)
 
 
 @file_app.command("info")
@@ -812,6 +850,39 @@ def restore_soft_deleted_files(
             "3. An unexpected server error occurred during the restore attempt."
         )
         raise typer.Exit(1)
+
+
+def _print_file_sys_tree_view(files: list[ObjectDetails], prefix: str | None) -> None:
+    """
+    Print user file system in tree view using Rich Tree."""
+    if prefix and prefix.endswith("/"):
+        root_label = prefix.rstrip("/")
+        tree_label = f"[bold blue]{root_label}[/bold blue]"
+    else:
+        root_label = "."
+        tree_label = root_label
+
+    tree = Tree(label=tree_label)
+
+    nodes: dict[str, Tree] = {}
+    names = []
+    for file in files:
+        if prefix and prefix.endswith("/") and file.name.startswith(prefix):
+            names.append(file.name[len(prefix) :])
+        else:
+            names.append(file.name)
+
+    for name in sorted(names):
+        parts = name.split("/")
+        parent = tree
+        path = ""
+        for part in parts[:-1]:
+            path = path + part + "/"
+            if path not in nodes:
+                nodes[path] = parent.add(f"[bold blue]{part}/[/bold blue]")
+            parent = nodes[path]
+        parent.add(parts[-1])
+    Console().print(tree)
 
 
 def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:

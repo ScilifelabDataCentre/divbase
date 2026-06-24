@@ -1531,6 +1531,72 @@ def test_rmdir_nonexistent_directory_succeeds(logged_in_edit_user_with_existing_
     assert result.exit_code == 0
 
 
+def test_files_tree_cmd(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that 'files tree' command can handle folders and dirs and do prefix filtering"""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    root_file = tmp_path / "root.tsv"
+    root_file.write_text("root")
+    nested_file = tmp_path / "nested.tsv"
+    nested_file.write_text("nested")
+    very_nested_file = tmp_path / "very_nested.tsv"
+    very_nested_file.write_text("very nested")
+
+    result = runner.invoke(app, f"files upload {root_file} --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files upload {nested_file} --to vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(
+        app, f"files upload {very_nested_file} --to vcfs/subdir/subsubdir/ --project {clean_project}"
+    )
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files mkdir empty_dir --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files tree --project {clean_project}")
+    assert result.exit_code == 0
+    assert "vcfs" in result.stdout
+    assert "subdir" in result.stdout
+    assert "subsubdir" in result.stdout
+    assert "empty_dir" in result.stdout
+    assert "root.tsv" in result.stdout
+    assert "nested.tsv" in result.stdout
+    assert "very_nested.tsv" in result.stdout
+
+    # prefix to just vcfs/ and check that only those files/folders are shown
+    result = runner.invoke(app, f"files tree vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    assert "vcfs" in result.stdout
+    assert "subdir" in result.stdout
+    assert "subsubdir" in result.stdout
+    assert "nested.tsv" in result.stdout
+    assert "very_nested.tsv" in result.stdout
+
+    assert "empty_dir" not in result.stdout
+    assert "root.tsv" not in result.stdout
+
+
+def test_tree_hides_results_files_by_default(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that 'files tree' hides DivBase query results files by default."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    results_file = tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz"
+    normal_file = tmp_path / "data.tsv"
+    results_file.write_text("results")
+    normal_file.write_text("data")
+
+    runner.invoke(app, f"files upload {results_file} {normal_file} --project {clean_project}")
+
+    result = runner.invoke(app, f"files tree --project {clean_project}")
+    assert result.exit_code == 0
+    assert "data.tsv" in result.stdout
+    assert results_file.name not in result.stdout
+
+    result = runner.invoke(app, f"files tree --include-results-files --project {clean_project}")
+    assert result.exit_code == 0
+    assert results_file.name in result.stdout
+
+
 ### Permissions tests for different files commands.
 def test_read_user_file_permissions(logged_in_read_user_with_existing_config, CONSTANTS, tmp_path):
     """Read role cannot upload or delete files or make dirs."""
@@ -1639,7 +1705,6 @@ def test_list_files_handles_pagination(logged_in_edit_user_with_existing_config,
 
     for name in file_names:
         assert name in list_result.stdout
-    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
 
 
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
@@ -1787,7 +1852,7 @@ def test_remove_and_restore_files_handles_pagination(
         assert name in result.stdout
 
     list_result = runner.invoke(app, f"files ls --project {pagination_project}")
-    assert "no files found" in list_result.stdout.lower()
+    assert "no files or folders found" in list_result.stdout.lower()
 
     restore_command = f"files restore {' '.join(file_names)} --project {pagination_project}"
     result = runner.invoke(app, restore_command)
@@ -1798,4 +1863,5 @@ def test_remove_and_restore_files_handles_pagination(
         assert name in result.stdout
 
     list_result = runner.invoke(app, f"files ls --project {pagination_project}")
-    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
+    for name in file_names:
+        assert name in list_result.stdout

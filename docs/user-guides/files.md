@@ -16,6 +16,7 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
 ## Quick links to each `divbase-cli files` subcommand
 
 - [`ls`](#listing-files): List files and folders in your project
+- [`tree`](#view-all-project-files-as-a-directory-tree): Display the file store as a directory tree
 - [`info`](#getting-file-information): Get detailed info about a specific file (and every version of the file) in the project
 - [`download`](#downloading-files): Download files
 - [`download-all`](#downloading-all-files): Download all files in the project
@@ -117,6 +118,24 @@ Other options:
 
 - By default, files generated from DivBase queries are hidden. To include them, use `--include-results-files` (or `-r`).
 - Use `--tsv` (or `-t`) to output in TSV format (works with `--detailed`).
+
+### View all project files as a directory tree
+
+To see all files in your project displayed as a directory tree, use the `tree` command:
+
+```bash
+divbase-cli files tree
+```
+
+You can scope the tree to a specific folder by passing its prefix as a positional argument:
+
+```bash
+divbase-cli files tree vcfs/
+```
+
+Other options:
+
+- By default, DivBase query results files are hidden. To include them, use `--include-results-files` (or `-r`).
 
 ### Getting file information
 
