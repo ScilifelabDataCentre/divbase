@@ -6,13 +6,15 @@ import ast
 import gzip
 import os
 import re
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from typer.testing import CliRunner
 
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.vcf_dimensions import VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 from divbase_api.services.s3_client import create_s3_file_manager
 from divbase_api.worker.crud_dimensions import (
@@ -35,10 +37,31 @@ from tests.conftest import REGRESSION_GUARD_PREFIX
 
 runner = CliRunner()
 
+DIMENSIONS_UPDATE_TASK_NAME = "tasks.update_vcf_dimensions_task"
+
 
 @pytest.fixture(autouse=True, scope="function")
 def auto_clean_dimensions_entries_for_all_projects(clean_all_projects_dimensions):
     """Enable auto-cleanup of dimensions entries for all tests in this test file."""
+    yield
+
+
+@pytest.fixture(autouse=True, scope="function")
+def clean_dimensions_update_task_history(db_session_sync):
+    """
+    Delete all TaskHistoryDB + CeleryTaskMeta rows for dimensions update tasks before each test.
+
+    This is to avoid test pollution, a task dispatched by a previous test can be in PENDING/STARTED state
+    and cause a guard in the router to raise a 409.
+    The guard prevents more than 1 dimensions update task from running at a time in a given project.
+    """
+    stmt = select(CeleryTaskMeta.task_id).where(CeleryTaskMeta.name == DIMENSIONS_UPDATE_TASK_NAME)
+    result = db_session_sync.execute(stmt)
+    task_ids = result.scalars().all()
+    if task_ids:
+        db_session_sync.execute(delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(task_ids)))
+        db_session_sync.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(task_ids)))
+        db_session_sync.commit()
     yield
 
 
@@ -71,6 +94,21 @@ def _read_text_from_gz_file(path: os.PathLike) -> str:
         return f.read()
 
 
+def _insert_fake_dimensions_tasks(
+    db, project_id: int, status: str, task_name: str = DIMENSIONS_UPDATE_TASK_NAME
+) -> None:
+    """
+    Insert a TaskHistoryDB + CeleryTaskMeta row to simulate a dimensions update task in a given state.
+    Entries autocleaned after test by the clean_dimensions_update_task_history fixture.
+    """
+    task_id = str(uuid.uuid4())
+    db.add(TaskHistoryDB(task_id=task_id, project_id=project_id, user_id=1))
+    # as this is a celery managed table, sqlalchemy can't autoincrement the id, so we figure out the biggest id and add 1.
+    next_id = db.execute(select(func.coalesce(func.max(CeleryTaskMeta.id), 0) + 1)).scalar()
+    db.add(CeleryTaskMeta(id=next_id, task_id=task_id, status=status, name=task_name))
+    db.commit()
+
+
 def test_update_vcf_dimensions_task_directly(
     CONSTANTS,
     run_update_dimensions,
@@ -101,6 +139,79 @@ def test_read_user_cannot_trigger_dimensions_update(logged_in_read_user_with_exi
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "403" in str(result.exception)
+
+
+@pytest.mark.parametrize("status", ["PENDING", "STARTED", "RETRY"])
+def test_dimensions_update_blocked_when_task_already_in_progress_for_same_project(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+    status,
+):
+    """Dimensions update should be rejected if a PENDING/STARTED/RETRY task already exists for the same project."""
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+
+    _insert_fake_dimensions_tasks(db=db_session_sync, project_id=project_id, status=status)
+    result = runner.invoke(app, f"dimensions update --project {project_name}")
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "409" in str(result.exception)
+    assert "dimensions_update_task_already_in_process_error" in str(result.exception)
+
+
+def test_dimensions_update_allowed_when_ongoing_task_is_for_different_project(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+):
+    """Dimensions update job should be allowed even if there is a PENDING/STARTED task for a different project."""
+    target_project_name = CONSTANTS["CLEANED_PROJECT"]
+    other_project_name = CONSTANTS["NON_DEFAULT_PROJECT"]
+    other_project_id = project_map[other_project_name]
+
+    _insert_fake_dimensions_tasks(db=db_session_sync, project_id=other_project_id, status="PENDING")
+    _insert_fake_dimensions_tasks(db=db_session_sync, project_id=other_project_id, status="STARTED")
+    result = runner.invoke(app, f"dimensions update --project {target_project_name}")
+    assert result.exit_code == 0
+
+
+def test_dimensions_update_allowed_when_completed_task_exists_for_same_project(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+):
+    """Can run a dimensions update task even if a SUCCESS or FAILED task exists for the project."""
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+
+    _insert_fake_dimensions_tasks(db=db_session_sync, project_id=project_id, status="SUCCESS")
+    _insert_fake_dimensions_tasks(db=db_session_sync, project_id=project_id, status="FAILED")
+    result = runner.invoke(app, f"dimensions update --project {project_name}")
+    assert result.exit_code == 0
+
+
+def test_dimensions_update_allowed_when_pending_task_is_different_task_type(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+):
+    """Dimensions update can run even if there is a PENDING/STARTED task in the same project but with a different task name."""
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+
+    _insert_fake_dimensions_tasks(
+        db=db_session_sync, project_id=project_id, status="PENDING", task_name="tasks.other_task"
+    )
+    _insert_fake_dimensions_tasks(
+        db=db_session_sync, project_id=project_id, status="STARTED", task_name="tasks.other_task"
+    )
+    result = runner.invoke(app, f"dimensions update --project {project_name}")
+    assert result.exit_code == 0
 
 
 def test_show_vcf_dimensions_task(

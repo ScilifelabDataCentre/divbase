@@ -124,6 +124,18 @@ class VCFDimensionsEntryMissingError(DivBaseAPIException):
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
 
 
+class DimensionsUpdateAlreadyInProcessError(DivBaseAPIException):
+    """Raised when a user tries to queue a new VCF dimensions update task for a project that already has a queued or running update task."""
+
+    def __init__(self, project_name: str, ongoing_task_id: int):
+        message = (
+            f"A VCF dimensions update task (with id: {ongoing_task_id}) is already in process for the project '{project_name}'. \n"
+            f"Only one dimensions update task can be run at a time. \n"
+            "The dimensions update task will incorporate files uploaded/modified during runtime, so there is no need to start another update task while this one is in progress."
+        )
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
+
+
 class TaskNotFoundInBackendError(DivBaseAPIException):
     """Raised when a task ID exists in the task_history table in the database but not in the results backend."""
 
