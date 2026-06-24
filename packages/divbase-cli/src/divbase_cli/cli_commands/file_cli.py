@@ -912,8 +912,14 @@ def _resolve_user_upload_inputs(
                     continue
                 seen.add(file)
                 if recursive and "**" in pattern:
-                    root_str = pattern.split("**")[0]
-                    root = Path(root_str) if root_str else Path(".")
+                    # want to handle case where ** is used inside a dir name e.g. data/some**thing/ etc...
+                    before_doublestar = pattern.split("**")[0]
+                    if not before_doublestar:
+                        root = Path(".")
+                    elif before_doublestar.endswith("/"):
+                        root = Path(before_doublestar)
+                    else:
+                        root = Path(before_doublestar).parent
                     key = str(file.relative_to(root)).replace("\\", "/")
                 else:
                     key = file.name
