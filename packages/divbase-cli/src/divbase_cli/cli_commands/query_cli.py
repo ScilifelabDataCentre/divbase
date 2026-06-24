@@ -277,6 +277,7 @@ def get_results_from_query_job_by_task_id(
             project_name=project_config.name,
             raw_files_input=[result_filename],
             download_dir=resolved_download_dir,
+            flatten=False,
             verify_checksums=True,
             dry_run=False,
             project_version=None,

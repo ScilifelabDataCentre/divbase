@@ -32,6 +32,18 @@ def validate_s3_object_name(name: str) -> str:
     return name
 
 
+def validate_s3_object_prefix(prefix: str | None) -> str | None:
+    """Validate that the S3 object prefix does not contain unsupported characters."""
+    if not prefix:
+        return None
+    if prefix in (".", ".."):
+        raise ValueError(f"Prefix cannot be '{prefix}'.")
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in prefix:
+            raise ValueError(f"Prefix contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}")
+    return prefix
+
+
 ## list objects models ##
 class ObjectDetails(BaseModel):
     """Details about a single object in an S3 bucket."""
@@ -42,7 +54,6 @@ class ObjectDetails(BaseModel):
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
 
 
-# TODO - could constrain delimter to only allow '/' or None
 class ListObjectsRequest(BaseModel):
     """Request model for listing objects in an S3 bucket."""
 
@@ -54,6 +65,18 @@ class ListObjectsRequest(BaseModel):
     next_token: str | None = Field(
         None, description="Token to continue listing files from the end of a previous request."
     )
+
+    @field_validator("prefix")
+    @classmethod
+    def validate_prefix(cls, prefix: str | None) -> str | None:
+        return validate_s3_object_prefix(prefix)
+
+    @field_validator("delimiter")
+    @classmethod
+    def validate_delimiter(cls, delimiter: str | None) -> str | None:
+        if delimiter is not None and delimiter != "/":
+            raise ValueError("Delimiter must be either None or '/'.")
+        return delimiter
 
 
 class ListObjectsResponse(BaseModel):
@@ -80,6 +103,17 @@ class ListObjectsResponse(BaseModel):
 
 
 ## list soft-deleted objects models ##
+class ListDeletedObjectsRequest(BaseModel):
+    """Request model for listing soft-deleted objects in an S3 bucket."""
+
+    prefix: str | None = Field(..., description="Optional prefix to filter objects by name.")
+
+    @field_validator("prefix")
+    @classmethod
+    def validate_prefix(cls, prefix: str | None) -> str | None:
+        return validate_s3_object_prefix(prefix)
+
+
 class SoftDeletedObjectDetails(BaseModel):
     """Details about a single soft-deleted object in an S3 bucket."""
 

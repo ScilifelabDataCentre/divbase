@@ -130,6 +130,10 @@ def list_files(
         raise typer.BadParameter(
             message="The --show-deleted-files option cannot be used with the flag --include-results-files. Please use these options separately."
         )
+    if detailed and format_output_as_tsv:
+        raise typer.BadParameter(
+            message="The --detailed option cannot be used with the flag --format-output-as-tsv. Please use these options separately."
+        )
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -733,8 +737,9 @@ def remove_directory(
         non_placeholder_files = [f for f in files if f.name != dir]
         if non_placeholder_files:
             print(
-                f"[red bold]Error: The directory '{dir}' is not empty. \n"
-                f"You must first remove all files inside the directory using 'divbase-cli files rm'.[/red bold]"
+                f"[red bold]Error: The directory '{dir}' is not empty.\n"
+                f"You must first remove all files and/or subdirectories inside the directory using:\n"
+                "'divbase-cli files rm' and 'divbase-cli files rmdir' [/red bold]"
             )
             raise typer.Exit(1)
 
@@ -1094,10 +1099,15 @@ def check_no_overlap_on_flattened_downloads(to_download: list[str]) -> None:
     Could happen if for example divbase-cli files download-all --flatten:
     - file1.txt
     - subdir/file1.txt
+    or
+    - file1.txt
+    - file1.txt:specific-version-id
     """
     name_to_paths: dict[str, list[str]] = defaultdict(list)
     for s3_path in to_download:
-        download_name = Path(s3_path).name  # what it would be download as if --flatten is used
+        # Strip possible version ID suffix (e.g., "file.txt:VERSION_ID")
+        path_without_version = s3_path.split(":")[0]
+        download_name = Path(path_without_version).name  # what it would be download as if --flatten is used
         name_to_paths[download_name].append(s3_path)
 
     duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}

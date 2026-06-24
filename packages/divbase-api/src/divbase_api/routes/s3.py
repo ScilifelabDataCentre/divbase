@@ -32,6 +32,7 @@ from divbase_lib.api_schemas.s3 import (
     DownloadObjectRequest,
     FileChecksumResponse,
     GetPresignedPartUrlsRequest,
+    ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
     MakeDirectoriesResponse,
@@ -124,11 +125,12 @@ async def list_objects(
     )
 
 
-@s3_router.get("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
+# Post request instead of GET as GET doesn't support/encourage body content.
+@s3_router.post("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
 async def list_soft_deleted_files(
     project_name: str,
+    list_deleted_objects_request: ListDeletedObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
-    prefix: str | None = None,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
@@ -144,7 +146,7 @@ async def list_soft_deleted_files(
     return await run_in_threadpool(
         s3_file_manager.list_soft_deleted_files,
         bucket_name=project.bucket_name,
-        prefix=prefix,
+        prefix=list_deleted_objects_request.prefix,
     )
 
 

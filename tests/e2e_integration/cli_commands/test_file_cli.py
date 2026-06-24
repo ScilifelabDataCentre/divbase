@@ -211,11 +211,15 @@ def test_list_soft_deleted_files_empty_project(logged_in_edit_user_with_existing
     assert "no soft deleted files found" in result.stdout.lower()
 
 
-def test_list_soft_deleted_does_not_allow_include_results_flag(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """Test that 'files ls --show-deleted-files' cannot be used with --include-results-files."""
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files --include-results-files")
+def test_list_soft_deleted_does_not_allow_certain_option_combos(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that files ls cannot have certain option combinations"""
+    result = runner.invoke(app, "files ls --show-deleted-files --include-results-files")
     assert result.exit_code != 0
+    assert "use these options separately" in result.output.lower()
+
+    result = runner.invoke(app, "files ls --detailed --tsv")
+    assert result.exit_code != 0
+    assert "use these options separately" in result.output.lower()
 
 
 def test_list_files_with_prefix_filtering(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):

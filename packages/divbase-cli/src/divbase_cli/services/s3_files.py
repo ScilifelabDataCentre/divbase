@@ -27,6 +27,7 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
     MakeDirectoriesResponse,
@@ -95,7 +96,6 @@ def list_files_command(
 
     file_system_view = true will return both files and folders at the current prefix level, simulating a file system view.
     Otherwise all files are returned in a flat list
-    TODO - consider that we page through all results before returning.
     """
     if file_system_view:
         delimiter = "/"
@@ -139,12 +139,12 @@ def list_soft_deleted_files_command(
 ) -> list[SoftDeletedObjectDetails]:
     """List all soft-deleted files in a project, with optional prefix filtering."""
     api_route = f"v1/s3/list/soft-deleted?project_name={project_name}"
-    api_route += f"&prefix={prefix}" if prefix else ""
 
     response = make_authenticated_request(
-        method="GET",
+        method="POST",
         divbase_base_url=divbase_base_url,
         api_route=api_route,
+        json=ListDeletedObjectsRequest(prefix=prefix).model_dump(),
     )
     return [SoftDeletedObjectDetails(**obj) for obj in response.json()]
 
@@ -505,7 +505,7 @@ def filter_already_uploaded_files(
             else:
                 to_be_uploaded.append(file_to_upload)
 
-            print(f"MD5 Checksum calculated for file: '{file.destination_key}'")
+            print(f"MD5 Checksum calculated for file: '{file.file_path}'")
 
     return to_be_uploaded, already_uploaded
 
