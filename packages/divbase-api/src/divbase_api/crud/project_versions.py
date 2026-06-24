@@ -29,10 +29,12 @@ from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.project_versions import (
     AddVersionResponse,
     DeleteVersionResponse,
+    FileDetails,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
     UpdateVersionResponse,
 )
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
 logger = structlog.get_logger(__name__)
 
@@ -46,11 +48,18 @@ async def add_project_version(
     s3_file_manager: S3FileManager,
 ) -> AddVersionResponse:
     """Add a new project version entry into the database."""
-    files = await run_in_threadpool(
+    all_s3_files = await run_in_threadpool(
         s3_file_manager.state_of_latest_version_of_all_files, bucket_name=project.bucket_name
     )
 
-    if not files:
+    version_files: dict[str, FileDetails] = {}
+    for file, object_details in all_s3_files.items():
+        if file.endswith("/") or file.startswith(QUERY_RESULTS_FILE_PREFIX):
+            # skip directory placeholder objects and query results files
+            continue
+        version_files[file] = object_details
+
+    if not version_files:
         raise ProjectVersionCreationError(
             message="Cannot create version entry for an empty project. No files uploaded to the project yet.",
         )
@@ -58,7 +67,7 @@ async def add_project_version(
     new_version = ProjectVersionDB(
         name=name,
         description=description,
-        files=files,
+        files=version_files,
         project_id=project.id,
         user_id=user_id,
     )
