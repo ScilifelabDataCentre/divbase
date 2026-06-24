@@ -4,23 +4,23 @@ dynamic = ["version"]
 readme = "../../README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi[standard]==0.133.0",
-    "uvicorn==0.41.0",
+    "fastapi[standard]==0.138.0",
+    "uvicorn==0.49.0",
     "asyncpg==0.31.0", 
-    "pyjwt==2.12.0",
+    "pyjwt==2.13.0",
     "pwdlib[argon2]==0.3.0",
-    "starlette-admin==0.16.0",
-    "emails==1.1.1",
+    "starlette-admin==0.16.1",
+    "emails==1.1.2",
     "jinja2==3.1.6",
-    "celery==5.6.2",
+    "celery==5.6.3",
     "alembic==1.18.4",
-    "psycopg2-binary==2.9.11",
-    "sqlalchemy[asyncio]==2.0.47", # Note that a minor bump is considered a major change for sqlalchemy
-    "prometheus-client==0.24.1",
+    "psycopg2-binary==2.9.12",
+    "sqlalchemy[asyncio]==2.0.51", # Note that a minor bump is considered a major change for sqlalchemy
+    "prometheus-client==0.25.0",
     "psutil==7.2.2",
-    "boto3==1.42.56",
+    "boto3==1.43.34",
+    "structlog>=26.1.0",    
     "divbase-lib", # always uses version in repo, handled by uv
-    "structlog>=25.5.0",
 ]
 
 [build-system]
