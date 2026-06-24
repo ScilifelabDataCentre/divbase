@@ -59,7 +59,7 @@ You may prefer this if you want explicit per-job control of which token is used.
 
 ## Parse divbase-cli files ls/info output programmatically
 
-1. You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands in TSV format for easier parsing. Use the `--tsv` flag:
+You can make the output of the `divbase-cli files info` and `divbase-cli files ls --detailed` commands in TSV format for easier parsing. Use the `--tsv` flag:
 
     ```bash
     divbase-cli files ls --tsv
@@ -73,18 +73,22 @@ You may prefer this if you want explicit per-job control of which token is used.
     divbase-cli version info VERSION_NAME --tsv
     ```
 
-2. Rather than first downloading a file, you can stream a file from the command line and pipe it into other tools for processing directly without saving it to disk.
+## Stream files from the command line
+
+Rather than first downloading a file, you can stream a file from the command line and pipe it into other tools for processing directly without saving it to disk.
 
     ```bash
     divbase-cli files stream my_file.vcf.gz | zcat | less
     ```
 
-    !!! Info
-        BCFTools accepts stdin as input, so you can also pipe a VCF file directly into BCFTools without saving it first:
+!!! info "BCFTools accepts stdin as input"
+    You can pipe a VCF file directly into BCFTools without downloading it first:
 
-        ```bash
-        divbase-cli files stream my_file.vcf.gz | bcftools view -h -
-        ```
+    ```bash
+    divbase-cli files stream my_file.vcf.gz | bcftools view -h -
+    ```
+
+    Especially useful if you just want to view the header of a VCF file without having to download the entire file.
 
 ## Running VCF queries programmatically
 

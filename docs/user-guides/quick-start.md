@@ -72,14 +72,23 @@ divbase-cli auth login EMAIL_ADDRESS
 Upload your VCF files to your project:
 
 ```bash
-# Upload VCF files one by one (spaced seperated)
+# Upload VCF files one by one (space separated)
 divbase-cli files upload path/to/file1.vcf.gz path/to/file2.vcf.gz
 
 # Upload all VCF files in a directory
 divbase-cli files upload path/to/directory/*.vcf.gz
 
+# Upload all VCF files into a remote folder called 'vcfs/'
+divbase-cli files upload "*.vcf.gz" --to vcfs/
+
+# Upload all files recursively, preserving subdirectory structure
+divbase-cli files upload --recursive "path/to/directory/**"
+
 # run 'divbase-cli files upload -h' for more examples
 ```
+
+!!! note
+    By default, only the file name is used when storing the file — e.g. `path/to/data/sample.vcf.gz` becomes `sample.vcf.gz`. Use `--to` to place files inside a remote folder, or `--recursive` with a `**` glob to preserve subdirectory structure.
 
 Check your uploaded files:
 
