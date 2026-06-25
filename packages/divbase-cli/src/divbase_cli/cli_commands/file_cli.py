@@ -977,19 +977,21 @@ def _resolve_user_upload_inputs(
 
     if files:
         for pattern in files:
-            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
-            if not matched:
-                if Path(pattern).is_dir():
-                    continue  # shell-expanded a directory into the args list; skip it
+            # expands something like ~/Downloads/ to /home/user/Downloads/
+            expanded_pattern = str(Path(pattern).expanduser())
+            matches = [Path(p) for p in glob(expanded_pattern, recursive=recursive) if Path(p).is_file()]
+            if not matches:
+                if Path(expanded_pattern).is_dir():
+                    continue
                 missing_patterns.append(pattern)
                 continue
-            for file in matched:
+            for file in matches:
                 if file in seen:
                     continue
                 seen.add(file)
                 if recursive and "**" in pattern:
-                    # want to handle case where ** is used inside a dir name e.g. data/some**thing/ etc...
-                    before_doublestar = pattern.split("**")[0]
+                    # this handles case where ** is used inside a dir name e.g. data/some**thing/ etc...
+                    before_doublestar = expanded_pattern.split("**")[0]
                     if not before_doublestar:
                         root = Path(".")
                     elif before_doublestar.endswith("/"):
