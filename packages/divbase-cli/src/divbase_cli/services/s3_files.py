@@ -30,6 +30,7 @@ from divbase_lib.api_schemas.s3 import (
     ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
+    MakeDirectoriesRequest,
     MakeDirectoriesResponse,
     ObjectDetails,
     ObjectInfoResponse,
@@ -166,11 +167,12 @@ def make_directories_command(
     Create directories in the project's store.
     Pagination not supported here, so up to MAX_S3_API_BATCH_SIZE directories can be created at once.
     """
+    cleaned_directories = MakeDirectoriesRequest(directories=directories)
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
         api_route=f"v1/s3/mkdir?project_name={project_name}",
-        json=directories,
+        json=cleaned_directories.model_dump(),
     )
     return MakeDirectoriesResponse(**response.json())
 

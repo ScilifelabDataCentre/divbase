@@ -35,6 +35,7 @@ from divbase_lib.api_schemas.s3 import (
     ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
+    MakeDirectoriesRequest,
     MakeDirectoriesResponse,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
@@ -305,7 +306,7 @@ async def abort_multipart_upload(
 @s3_router.post("/mkdir", status_code=status.HTTP_200_OK, response_model=MakeDirectoriesResponse)
 async def make_directory(
     project_name: str,
-    directories: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
+    dirs_request: MakeDirectoriesRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
@@ -319,10 +320,10 @@ async def make_directory(
         raise AuthorizationError(
             f"You don't have permission to create directories for this project. You need at least '{ProjectRoles.QUERY}' level permissions."
         )
-    check_too_many_objects_in_request(numb_objects=len(directories))
+    check_too_many_objects_in_request(numb_objects=len(dirs_request.directories))
 
     return await run_in_threadpool(
-        s3_file_manager.make_directories, directories=directories, bucket_name=project.bucket_name
+        s3_file_manager.make_directories, directories=dirs_request.directories, bucket_name=project.bucket_name
     )
 
 

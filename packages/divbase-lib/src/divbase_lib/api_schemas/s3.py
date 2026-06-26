@@ -12,6 +12,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
     S3_MULTIPART_CHUNK_SIZE,
     UNSUPPORTED_CHARACTERS_DISPLAY,
     UNSUPPORTED_CHARACTERS_IN_FILENAMES,
@@ -29,6 +30,22 @@ def validate_s3_object_name(name: str) -> str:
             raise ValueError(
                 f"Object name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
             )
+    return name
+
+
+def validate_s3_directory_name(name: str) -> str:
+    """Validate + clean a S3 directory name."""
+    if "." in name or ".." in name:
+        raise ValueError(f"Directory '{name}' cannot contain '.' or '..'")
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in name:
+            raise ValueError(
+                f"Directory name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
+            )
+    if name.startswith("/"):
+        name = name[1:]
+    if not name.endswith("/"):
+        name = f"{name}/"
     return name
 
 
@@ -89,7 +106,10 @@ class ListObjectsResponse(BaseModel):
     """
 
     files: list[ObjectDetails] = Field(
-        ..., description="Files at this level (or all files when no delimiter is used).", min_length=0, max_length=1000
+        ...,
+        description="Files at this level (or all files when no delimiter is used).",
+        min_length=0,
+        max_length=1000,
     )
     folders: list[str] = Field(
         ...,
@@ -106,7 +126,7 @@ class ListObjectsResponse(BaseModel):
 class ListDeletedObjectsRequest(BaseModel):
     """Request model for listing soft-deleted objects in an S3 bucket."""
 
-    prefix: str | None = Field(..., description="Optional prefix to filter objects by name.")
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
 
     @field_validator("prefix")
     @classmethod
@@ -145,7 +165,7 @@ class DownloadObjectRequest(BaseModel):
     """Request model to download a single object using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be downloaded")
-    version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
+    version_id: str | None = Field(None, description="Version ID of the object, None if latest version")
 
 
 class PreSignedDownloadResponse(BaseModel):
@@ -153,7 +173,7 @@ class PreSignedDownloadResponse(BaseModel):
 
     name: str = Field(..., description="Name of the object to be downloaded")
     pre_signed_url: str = Field(..., description="Pre-signed URL for downloading the object")
-    version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
+    version_id: str | None = Field(None, description="Version ID of the object, None if latest version")
 
 
 ### Single-part upload models ###
@@ -264,7 +284,26 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
-### make and remove directories models ###
+### make directories models (remove directories done by standard soft delete) ###
+class MakeDirectoriesRequest(BaseModel):
+    """Request model for making directories in the bucket."""
+
+    directories: list[str] = Field(
+        ...,
+        description=("List of directories to be created."),
+        min_length=1,
+        max_length=MAX_S3_API_BATCH_SIZE,
+    )
+
+    @field_validator("directories")
+    @classmethod
+    def validate_directories(cls, directories: list[str]) -> list[str]:
+        cleaned = []
+        for name in directories:
+            cleaned.append(validate_s3_directory_name(name))
+        return cleaned
+
+
 class MakeDirectoriesResponse(BaseModel):
     """Response model for making directories in the bucket."""
 
@@ -277,17 +316,6 @@ class MakeDirectoriesResponse(BaseModel):
     failed: list[str] = Field(
         ...,
         description=("List of directories that could not be created."),
-    )
-
-
-class RemoveDirectoriesResponse(BaseModel):
-    """Response model for removing directories from the bucket."""
-
-    removed: list[str] = Field(
-        ...,
-        description=(
-            "List of directories that were successfully removed. This will include directories that did not exist.\n"
-        ),
     )
 
 

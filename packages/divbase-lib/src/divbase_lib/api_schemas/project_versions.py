@@ -35,7 +35,7 @@ class ProjectBasicInfo(BaseModel):
     """Base model for describing a single project version, not for direct use in an endpoint."""
 
     name: str = Field(..., description="Version name")
-    description: str | None = Field(..., description="Version description")
+    description: str | None = Field(None, description="Version description")
 
 
 class AddVersionResponse(ProjectBasicInfo):

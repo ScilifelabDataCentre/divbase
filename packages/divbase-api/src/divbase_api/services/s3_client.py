@@ -245,8 +245,7 @@ class S3FileManager:
         Returns a MakeDirectoriesResponse containing the created and failed directory paths.
         """
         created_directories, failed_directories = [], []
-        for dir in directories:
-            dir_key = dir if dir.endswith("/") else dir + "/"
+        for dir_key in directories:
             try:
                 self.s3_client.put_object(Bucket=bucket_name, Key=dir_key)
             except ClientError as err:

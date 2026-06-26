@@ -93,7 +93,9 @@ divbase-cli files upload --recursive "path/to/directory/**"
 Check your uploaded files:
 
 ```bash
-divbase-cli files ls
+divbase-cli files ls [PREFIX] -l # filter by prefix and show detailed view
+# or
+divbase-cli files tree # show all files in a directory tree view
 ```
 
 ## Step 7: Dimensions update

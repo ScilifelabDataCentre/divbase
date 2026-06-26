@@ -3,6 +3,7 @@ Command line interface for managing files in a DivBase project's store on DivBas
 """
 
 from collections import defaultdict
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -151,7 +152,7 @@ def list_files(
 
         print(f"Soft deleted files for the project '{project_config.name}':")
         for file_details in files:
-            cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+            cet_timestamp = _format_time_stamp(file_details.last_modified)
             if file_details.name.endswith("/"):
                 print(f"- [bold blue]'{file_details.name}'[/bold blue] (deleted at: '{cet_timestamp}')")
             else:
@@ -179,7 +180,9 @@ def list_files(
         return
 
     if detailed:
-        _print_ls_detailed(files=files, folders=folders, format_as_tsv=format_output_as_tsv)
+        _print_ls_detailed(files=files, folders=folders)
+    elif format_output_as_tsv:
+        _print_ls_tsv_format(files=files, folders=folders)
     else:
         _print_ls_simple(files=files, folders=folders)
 
@@ -273,7 +276,7 @@ def file_info(
     table.add_column("Version ID", justify="left", style="cyan")
 
     for version in file_info.versions:
-        cet_timestamp = version.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        cet_timestamp = _format_time_stamp(version.last_modified)
         file_size = format_file_size(size_bytes=version.size)
         table.add_row(
             file_size,
@@ -886,7 +889,8 @@ def _print_file_sys_tree_view(files: list[ObjectDetails], prefix: str | None) ->
             if path not in nodes:
                 nodes[path] = parent.add(f"[bold blue]{part}/[/bold blue]")
             parent = nodes[path]
-        parent.add(parts[-1])
+        if parts[-1]:
+            parent.add(parts[-1])
     Console().print(tree)
 
 
@@ -899,23 +903,23 @@ def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:
         console.print(file_details.name)
 
 
-def _print_ls_detailed(files: list[ObjectDetails], folders: list[str], format_as_tsv: bool) -> None:
+def _print_ls_tsv_format(files: list[ObjectDetails], folders: list[str]) -> None:
+    """Prints the files and folders in a tab-separated format - for programmatic use"""
+    for folder in folders:
+        print(f"{folder}\t-\t-")
+    for f in files:
+        cet = _format_time_stamp(f.last_modified)
+        print(f"{f.name}\t{format_file_size(f.size)}\t{cet}")
+
+
+def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
     """Unix ls -l style: one entry per line with name, size and date"""
     console = Console()
-
-    if format_as_tsv:
-        for folder in folders:
-            console.print(f"{folder}\t-\t-")
-        for f in files:
-            cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-            console.print(f"{f.name}\t{format_file_size(f.size)}\t{cet}")
-        return
-
     for folder in folders:
         console.print(f"[bold blue]{folder}[/bold blue]")
     for f in files:
         size_str = format_file_size(f.size).rjust(10)
-        cet = f.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        cet = _format_time_stamp(f.last_modified)
         console.print(f"{f.name} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
 
 
@@ -1197,3 +1201,8 @@ def _pretty_print_download_results(download_results):
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': [/red] Exception: '{failed.exception}'")
         raise typer.Exit(1)
+
+
+def _format_time_stamp(time_stamp: datetime) -> str:
+    """Helper fn to format a datetime object into a string for printing."""
+    return time_stamp.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M %Z")

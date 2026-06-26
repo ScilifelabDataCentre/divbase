@@ -47,6 +47,7 @@ If you run any of the following commands, you will automatically use/see the lat
 
 ```bash
 divbase-cli files ls
+divbase-cli files tree
 divbase-cli files download sample_metadata.tsv
 divbase-cli files stream sample_metadata.tsv
 ```
@@ -98,7 +99,7 @@ divbase-cli files ls
 This displays folders (highlighted in blue) followed by files. To also see file sizes and upload dates, use `--detailed` (or `-l`):
 
 ```bash
-divbase-cli files ls --detailed
+divbase-cli files ls -l # or --detailed
 ```
 
 You can filter the listing by providing a prefix as a positional argument:
@@ -117,7 +118,7 @@ divbase-cli files ls vcfs/
 Other options:
 
 - By default, files generated from DivBase queries are hidden. To include them, use `--include-results-files` (or `-r`).
-- Use `--tsv` (or `-t`) to output in TSV format (works with `--detailed`).
+- Use `--tsv` (or `-t`) to output the detailed view in TSV format.
 
 ### View all project files as a directory tree
 
@@ -289,7 +290,7 @@ To create one or more directories in your project store, use the `mkdir` command
 # Create a single directory
 divbase-cli files mkdir vcfs/
 
-# Create a single nested directory
+# Create a single nested directory (parent directories do not need to exist beforehand)
 divbase-cli files mkdir vcfs/batch1/metadata/
 
 # Create multiple directories at once
@@ -304,7 +305,7 @@ divbase-cli files mkdir vcfs/ metadata/ results/
 To remove an empty directory from your project store, use the `rmdir` command:
 
 ```bash
-divbase-cli files rmdir vcfs
+divbase-cli files rmdir vcfs/
 ```
 
 The directory must be empty before it can be removed. Use `divbase-cli files rm` to delete any files inside it first. If the directory does not exist, the command will exit without an error.
@@ -331,7 +332,7 @@ divbase-cli files restore file1.txt file2.csv
 
 As with the other commands, you can provide a list of files to restore with a text file using `--file-list` flag.
 
-To see which files can are currently soft deleted and can be restored you can do:
+To see which files are currently soft deleted and can be restored you can do:
 
 ```bash
 divbase-cli files ls --show-deleted-files
