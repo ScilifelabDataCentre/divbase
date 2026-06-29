@@ -3,6 +3,7 @@ The entry point for the DivBase CLI tool that lets users interact with DivBase p
 """
 
 import logging
+import os
 import sys
 
 import typer
@@ -56,17 +57,21 @@ def show_installed_version(
     pass
 
 
-app.add_typer(version_app, name="version")
-app.add_typer(file_app, name="files")
-app.add_typer(config_app, name="config")
-app.add_typer(query_app, name="query")
-app.add_typer(dimensions_app, name="dimensions")
 app.add_typer(auth_app, name="auth")
+app.add_typer(config_app, name="config")
+app.add_typer(dimensions_app, name="dimensions")
+app.add_typer(file_app, name="files")
+app.add_typer(query_app, name="query")
 app.add_typer(task_history_app, name="task-history")
+app.add_typer(version_app, name="version")
 
 
 def main():
-    if cli_settings.LOGGING_ON:
+    # auto-complete mode + logging does not work, as the log message gets included in the auto-complete output.
+    # so when running divbase-cli in auto-complete mode we should not log.
+    # (when any CLI command is actually run, you are not in_auto_complete_mode)
+    in_auto_complete_mode = "_DIVBASE_CLI_COMPLETE" in os.environ
+    if cli_settings.LOGGING_ON and not in_auto_complete_mode:
         logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stderr)])
         logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
     app()

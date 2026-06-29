@@ -46,6 +46,13 @@ Install `divbase-cli` using uv, a fast Python package manager:
 
 Refer to the [Installation Guide](installation.md) for more detailed instructions and other ways to install divbase-cli.
 
+!!! info "Add autocomplete for divbase-cli commands"
+    If you want to add autocomplete for divbase-cli commands, run the following command after installing divbase-cli:
+
+    ```bash
+    divbase-cli --install-completion
+    ```
+
 ## Step 4: Add your project(s) to your divbase-cli config
 
 Add your project(s) to the configuration file:
