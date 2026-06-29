@@ -149,8 +149,28 @@ TEST_PROJECTS = {
             "sample_metadata_HOM_files_that_need_mixed_bcftools_concat_and_merge.tsv",
         ],
     },
+    "folder-project": {
+        "description": "9th test project - for testing folder/path support, has identical data to split-scaffold-project but with files in subfolders",
+        "bucket_name": "divbase-local-folder-project",
+        "storage_quota_bytes": 10737418240,
+        "files": [
+            "HOM_20ind_17SNPs.1.vcf.gz",
+            "HOM_20ind_17SNPs.4.vcf.gz",
+            "work_data/HOM_20ind_17SNPs.5.vcf.gz",
+            "batch234/experiment1/HOM_20ind_17SNPs.6.vcf.gz",
+            "work_data2/HOM_20ind_17SNPs.7.vcf.gz",
+            "work_data/HOM_20ind_17SNPs.8.vcf.gz",
+            "data/HOM_20ind_17SNPs.13.vcf.gz",
+            "data/HOM_20ind_17SNPs.18.vcf.gz",
+            "data/split/nested/HOM_20ind_17SNPs.20.vcf.gz",
+            "data/split/nested/HOM_20ind_17SNPs.21.vcf.gz",
+            "batch1/HOM_20ind_17SNPs.22.vcf.gz",
+            "batch1/HOM_20ind_17SNPs.24.vcf.gz",
+            "metadata/sample_metadata_HOM_chr_split_version.tsv",
+        ],
+    },
     "pagination-project": {
-        "description": "8th test project",
+        "description": "10th test project",
         "bucket_name": "divbase-local-pagination-project",
         "storage_quota_bytes": 10737418240,
         "files": [],  # files added by fixture, as tests in these buckets only run if --run-slow flag set.
@@ -194,8 +214,13 @@ def setup_minio_data() -> None:
             VersioningConfiguration={"Status": "Enabled"},
         )
         files = proj_details["files"]
-        for file in files:
-            s3_client.upload_file(Filename=str(FIXTURES_DIR / file), Bucket=bucket_name, Key=file)
+        for desired_s3_key in files:
+            # in some cases the file path in the dict includes folder prefixes,
+            # (for where we want to put the file in the bucket)
+            # but all files are stored in the fixtures dir and not in subfolders.
+            filename = desired_s3_key.split("/")[-1]
+            fixture_file_path = str(FIXTURES_DIR / filename)
+            s3_client.upload_file(Filename=fixture_file_path, Bucket=bucket_name, Key=desired_s3_key)
 
 
 def get_admin_access_token() -> str:

@@ -362,7 +362,7 @@ def bcftools_pipe_task(
     divbase_lib_logger.addHandler(log_handler)
 
     # assigned here so even if early exit from error the finally block will be able to clean them up.
-    vcf_paths: list[Path] = []
+    s3_key_to_path: dict[str, Path] = {}
     metadata_path: Path | None = None
     output_file: Path | None = None
     task_succeeded = False
@@ -441,13 +441,11 @@ def bcftools_pipe_task(
             download_start = time.time()
 
         logger.info("Started downloading VCF files from S3 to worker")
-
-        vcf_paths = _download_vcf_files(
+        s3_key_to_path = _download_vcf_files(
             files_to_download=files_to_download,
             bucket_name=bucket_name,
             s3_file_manager=s3_file_manager,
         )
-
         logger.info("Finished downloading VCF files from S3 to worker")
 
         if worker_settings.metrics.enabled_per_task:
@@ -463,16 +461,23 @@ def bcftools_pipe_task(
                 f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
             )
 
+        # S3 keys can use "/" as folder separators, but local downloaded VCF files convert these to "@@"
+        # So we can preseve full s3 path in the file_name and avoid collisions when files with the same name exist in different folders.
+        # Convert filenames in sample_and_filename_subset to match local naming so the per-file
+        # sample lookup in BcftoolsQueryManager.run_current_command() succeeds for folder-based projects.
+        sample_and_filename_subset_mapped = [
+            SampleFileMapping(sample_id=entry.sample_id, filename=_convert_s3_key_to_local_filename(entry.filename))
+            for entry in sample_and_filename_subset
+        ]
         bcftools_inputs = BCFToolsInput(
-            sample_and_filename_subset=sample_and_filename_subset,
+            sample_and_filename_subset=sample_and_filename_subset_mapped,
             sampleIDs=resolved_sample_mode_results.unique_sample_ids,
-            filenames=[path.name for path in vcf_paths],
+            filenames=[path.name for path in s3_key_to_path.values()],
             # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
             auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
         )
 
         logger.info("Started bcftools subprocesses")
-
         # Execute bcftools and get true subprocess metrics
         # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
         # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
@@ -518,13 +523,16 @@ def bcftools_pipe_task(
                 f"User inputted bcftools command used: '{command}'\n"
                 f"Task ID: {job_id}\n"
                 f"DivBase internal task ID: {task_id}\n"
+                "Note: VCF files are downloaded to the worker with folder separators '/' replaced by '@@' to preserve the full path.\n"
+                "For example, a file stored at 'my_folder/my_subfolder/my_file.vcf.gz' in the project store will appear as 'my_folder@@my_subfolder@@my_file.vcf.gz' in log messages below.\n"
+                "This is expected and not an error.\n"
                 "=================\n\n"
             )
             _upload_log_file(log_file=log_file, header=header, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         except Exception as e:
             logger.error(f"Failed to upload user log file for job {job_id} to S3: {str(e)}", exc_info=True)
         _delete_job_files_from_worker(
-            vcf_paths=vcf_paths,
+            vcf_paths=list(s3_key_to_path.values()),
             metadata_path=metadata_path,
             output_file=output_file,
             log_file=log_file,
@@ -638,7 +646,7 @@ def update_vcf_dimensions_task(
         )
     ]
 
-    vcf_paths = _download_vcf_files(
+    s3_key_to_path = _download_vcf_files(
         files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
@@ -648,8 +656,7 @@ def update_vcf_dimensions_task(
 
     # Use a single session for all DB writes and post-run reads
     with SyncSessionLocal() as db:
-        for vcf_path in vcf_paths:
-            s3_key = vcf_path.name
+        for s3_key, vcf_path in s3_key_to_path.items():
             try:
                 vcf_dims = calculator.calculate_dimensions(vcf_path)
 
@@ -681,10 +688,10 @@ def update_vcf_dimensions_task(
 
             except Exception as e:
                 logger.error(f"Error indexing {s3_key}: {str(e)}")
-                _delete_job_files_from_worker(vcf_paths=vcf_paths)
+                _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
                 return {"status": "error", "error": str(e), "task_id": task_id}
 
-        _delete_job_files_from_worker(vcf_paths=vcf_paths)
+        _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
 
         # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
         # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
@@ -764,21 +771,34 @@ def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_
     )[0]
 
 
-def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
+def _download_vcf_files(
+    files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager
+) -> dict[str, Path]:
     """
-    Fetch input VCF files for bcftools run from the s3 bucket.
+    Fetch input VCF files from the project's s3 bucket.
+    Returns a mapping of S3 keys (keys) to their downloaded local file path (values).
     """
     logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
 
-    objects = {file_name: None for file_name in files_to_download}
-    downloaded_files = s3_file_manager.download_files(
-        objects=objects,
-        download_dir=Path.cwd(),
-        bucket_name=bucket_name,
-    )
+    download_dir = Path.cwd()
+    s3_key_to_path: dict[str, Path] = {}
 
-    logger.info(f"Downloaded VCF files: {[f.name for f in downloaded_files]}")
-    return downloaded_files
+    for s3_key in files_to_download:
+        target_path = download_dir / _convert_s3_key_to_local_filename(s3_key)
+        s3_file_manager._download_single_file(key=s3_key, dest=target_path, bucket_name=bucket_name, version_id=None)
+        s3_key_to_path[s3_key] = target_path
+
+    logger.info(f"Downloaded VCF files: {list(s3_key_to_path.keys())}")
+    return s3_key_to_path
+
+
+def _convert_s3_key_to_local_filename(s3_key: str) -> str:
+    """
+    Convert an S3 key to a local filename by replacing '/' with '@@'.
+    This avoids collisions when files with the same name exist in different folders.
+    Users cannot upload files to s3 with "@@" in the filename as in UNSUPPORTED_CHARACTERS_IN_FILENAMES
+    """
+    return s3_key.replace("/", "@@")
 
 
 @functools.lru_cache()

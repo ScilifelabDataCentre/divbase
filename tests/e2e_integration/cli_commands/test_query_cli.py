@@ -1061,3 +1061,132 @@ def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
         f"{REGRESSION_GUARD_PREFIX} expected descriptive 'Sample sets that are partly overlapping' message "
         f"in task-history. task-history output:\n{task_stdout}"
     )
+
+
+@pytest.mark.parametrize(
+    "sample_mode,tsv_sample_filter,bcftools_command",
+    [
+        ("all-samples", None, "view -r 1,4,6,21,24"),
+        ("metadata-filter", "Area:West of Ireland;Sex:F", "view -r 1,4,6,21,24"),
+        (
+            "sample-list",
+            "8_HOM-E78,1a_HOM-G34,5a_HOM-I13,5a_HOM-I20,1b_HOM-G55,1b_HOM-G58,1b_HOM-G83,5b_HOM-H17",
+            "view -r 1,4,6,21,24",
+        ),
+    ],
+)
+def test_folder_project_vcf_query_equivalence(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    sample_mode,
+    tsv_sample_filter,
+    bcftools_command,
+    tmp_path,
+):
+    """
+    Run identical VCF queries on the split-scaffold-project and folder-project with different sample modes.
+    Both projects contain the same VCF files and sample metadata but are organized in different folder structures.
+
+    Verify we get the same result for all 3 sample selection modes.
+    """
+    split_project = "split-scaffold-project"
+    folder_project = "folder-project"
+    user_id = 1
+
+    split_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][split_project]
+    folder_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][folder_project]
+
+    split_id = project_map[split_project]
+    folder_id = project_map[folder_project]
+
+    split_project_metadata = "sample_metadata_HOM_chr_split_version.tsv"
+    folder_project_metadata = "metadata/sample_metadata_HOM_chr_split_version.tsv"
+
+    # Ensure dimensions up to date for both projects
+    run_update_dimensions(bucket_name=split_bucket, project_id=split_id, project_name=split_project, user_id=user_id)
+    run_update_dimensions(bucket_name=folder_bucket, project_id=folder_id, project_name=folder_project, user_id=user_id)
+
+    # Build query commands based on sample mode
+    if sample_mode == "all-samples":
+        command_split = f"query vcf --all-samples --command '{bcftools_command}' --project {split_project}"
+        command_folder = f"query vcf --all-samples --command '{bcftools_command}' --project {folder_project}"
+    elif sample_mode == "metadata-filter":
+        command_split = f"query vcf --tsv-filter '{tsv_sample_filter}' --command '{bcftools_command}' --project {split_project} --metadata-tsv-name {split_project_metadata}"
+        command_folder = f"query vcf --tsv-filter '{tsv_sample_filter}' --command '{bcftools_command}' --project {folder_project} --metadata-tsv-name {folder_project_metadata}"
+    else:
+        command_split = (
+            f"query vcf --samples '{tsv_sample_filter}' --command '{bcftools_command}' --project {split_project}"
+        )
+        command_folder = (
+            f"query vcf --samples '{tsv_sample_filter}' --command '{bcftools_command}' --project {folder_project}"
+        )
+
+    # Submit and wait for both queries
+    result_split = runner.invoke(app, command_split)
+    result_folder = runner.invoke(app, command_folder)
+    assert result_split.exit_code == 0
+    assert result_folder.exit_code == 0
+
+    task_id_split = result_split.stdout.strip().split()[-1]
+    task_id_folder = result_folder.stdout.strip().split()[-1]
+    state_split, _ = wait_for_task_terminal_state_using_CLI(user_task_id=task_id_split)
+    state_folder, _ = wait_for_task_terminal_state_using_CLI(user_task_id=task_id_folder)
+    assert state_split == "SUCCESS"
+    assert state_folder == "SUCCESS"
+
+    # Download and compare results
+    output_file_split = f"{QUERY_RESULTS_FILE_PREFIX}{task_id_split}.vcf.gz"
+    output_file_folder = f"{QUERY_RESULTS_FILE_PREFIX}{task_id_folder}.vcf.gz"
+
+    result = runner.invoke(
+        app, f"files download {output_file_split} --download-dir {tmp_path} --project {split_project}"
+    )
+    assert result.exit_code == 0
+    result = runner.invoke(
+        app, f"files download {output_file_folder} --download-dir {tmp_path} --project {folder_project}"
+    )
+    assert result.exit_code == 0
+
+    # Compare checksums (excluding variable ## headers)
+    checksum_split = _checksum_vcf_skip_double_hash_headers(vcf_gz_file=tmp_path / output_file_split, tmp_path=tmp_path)
+    checksum_folder = _checksum_vcf_skip_double_hash_headers(
+        vcf_gz_file=tmp_path / output_file_folder, tmp_path=tmp_path
+    )
+    assert checksum_split == checksum_folder
+
+
+def test_folder_project_sample_metadata_query_equivalence(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+):
+    """Test sample metadata (TSV) queries produce same results on split-scaffold-project and folder-project."""
+    split_project = "split-scaffold-project"
+    folder_project = "folder-project"
+    user_id = 1
+
+    split_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][split_project]
+    folder_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][folder_project]
+    split_id = project_map[split_project]
+    folder_id = project_map[folder_project]
+
+    run_update_dimensions(bucket_name=split_bucket, project_id=split_id, project_name=split_project, user_id=user_id)
+    run_update_dimensions(bucket_name=folder_bucket, project_id=folder_id, project_name=folder_project, user_id=user_id)
+
+    query_string = "Area:West of Ireland;Sex:F"
+    result_split = runner.invoke(
+        app,
+        f"query tsv '{query_string}' --project {split_project} --metadata-tsv-name sample_metadata_HOM_chr_split_version.tsv",
+    )
+    result_folder = runner.invoke(
+        app,
+        f"query tsv '{query_string}' --project {folder_project} --metadata-tsv-name metadata/sample_metadata_HOM_chr_split_version.tsv",
+    )
+
+    assert result_split.exit_code == 0
+    assert result_folder.exit_code == 0
+    assert query_string in result_split.stdout
+    assert query_string in result_folder.stdout
