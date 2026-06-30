@@ -462,7 +462,7 @@ def bcftools_pipe_task(
             )
 
         # S3 keys can use "/" as folder separators, but local downloaded VCF files convert these to "@@"
-        # So we can preseve full s3 path in the file_name and avoid collisions when files with the same name exist in different folders.
+        # So we can preserve full s3 path in the file_name and avoid collisions when files with the same name exist in different folders.
         # Convert filenames in sample_and_filename_subset to match local naming so the per-file
         # sample lookup in BcftoolsQueryManager.run_current_command() succeeds for folder-based projects.
         sample_and_filename_subset_mapped = [

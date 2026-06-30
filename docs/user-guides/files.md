@@ -102,18 +102,15 @@ This displays folders (highlighted in blue) followed by files. To also see file 
 divbase-cli files ls -l # or --detailed
 ```
 
-You can filter the listing by providing a prefix as a positional argument:
+!!! tip "You can filter the file listing by providing a prefix as a positional argument:"
 
-```bash
-# List all files and folders whose name starts with 'sample'
-divbase-cli files ls sample
+    ```bash
+    # List all files and folders whose name starts with 'sample'
+    divbase-cli files ls sample
 
-# List the contents of the 'vcfs/' folder (include the trailing '/')
-divbase-cli files ls vcfs/
-```
-
-!!! tip
-    To browse the contents of a specific folder, include a trailing `/` in the prefix. For example, `divbase-cli files ls vcfs/` shows only what is inside `vcfs/`, with the folder prefix stripped from the output.
+    # List the contents of the 'vcfs/' folder (include the trailing '/')
+    divbase-cli files ls vcfs/
+    ```
 
 Other options:
 

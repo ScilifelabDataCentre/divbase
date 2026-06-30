@@ -59,7 +59,7 @@ You may prefer this if you want explicit per-job control of which token is used.
 
 ## Parse divbase-cli files ls/info output programmatically
 
-You can make the output of the `divbase-cli files info` and `divbase-cli files ls --detailed` commands in TSV format for easier parsing. Use the `--tsv` flag:
+You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands be TSV formated for easier parsing. Use the `--tsv` flag:
 
     ```bash
     divbase-cli files ls --tsv
