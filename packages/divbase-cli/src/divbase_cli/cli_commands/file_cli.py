@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import typer
 from rich import print
 from rich.console import Console
+from rich.markup import escape as markup_escape
 from rich.table import Table
 from rich.tree import Tree
 from typing_extensions import Annotated
@@ -36,6 +37,7 @@ from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.api_schemas.s3 import ObjectDetails
 from divbase_lib.divbase_constants import (
     SUPPORTED_DIVBASE_FILE_TYPES,
+    SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY,
     UNSUPPORTED_CHARACTERS_DISPLAY,
     UNSUPPORTED_CHARACTERS_IN_FILENAMES,
 )
@@ -898,29 +900,29 @@ def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:
     """Compact folder-aware listing: bold blue folders first, then plain filenames."""
     console = Console()
     for folder in folders:
-        console.print(f"[bold blue]{folder}[/bold blue]")
+        console.print(f"[bold blue]{markup_escape(folder)}[/bold blue]")
     for file_details in files:
-        console.print(file_details.name)
+        console.print(markup_escape(file_details.name))
 
 
 def _print_ls_tsv_format(files: list[ObjectDetails], folders: list[str]) -> None:
     """Prints the files and folders in a tab-separated format - for programmatic use"""
     for folder in folders:
-        print(f"{folder}\t-\t-")
+        print(f"{markup_escape(folder)}\t-\t-")
     for f in files:
         cet = _format_time_stamp(f.last_modified)
-        print(f"{f.name}\t{format_file_size(f.size)}\t{cet}")
+        print(f"{markup_escape(f.name)}\t{format_file_size(f.size)}\t{cet}")
 
 
 def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
     """Unix ls -l style: one entry per line with name, size and date"""
     console = Console()
     for folder in folders:
-        console.print(f"[bold blue]{folder}[/bold blue]")
+        console.print(f"[bold blue]{markup_escape(folder)}[/bold blue]")
     for f in files:
         size_str = format_file_size(f.size).rjust(10)
         cet = _format_time_stamp(f.last_modified)
-        console.print(f"{f.name} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
+        console.print(f"{markup_escape(f.name)} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
 
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
@@ -1083,7 +1085,7 @@ def _expand_folder_prefixes(
             divbase_base_url=divbase_base_url,
             project_name=project_name,
             prefix=arg,
-            include_results_files=False,
+            include_results_files=True,
             file_system_view=False,
         )
         # strip off any subfolders
@@ -1156,7 +1158,7 @@ def _check_for_unsupported_files(all_files: list[ToUpload]) -> None:
         print(
             f"[red bold]Error: The following files' types are not supported by DivBase and therefore cannot be uploaded: [/red bold] \n"
             f"[red]{'\n'.join(str(file) for file in unsupported_file_types)}\n\n[/red]"
-            f"DivBase currently supports the following file types: '{', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}'\n"
+            f"DivBase currently supports the following file types: {SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY}\n"
             "Note that while you can upload '.tbi' and '.csi' files they are not used by DivBase in queries, we create our own index files instead. \n"
             "If you want us to support another file type, please let us know.",
         )

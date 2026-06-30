@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 from divbase_lib.divbase_constants import (
     MAX_S3_API_BATCH_SIZE,
     S3_MULTIPART_CHUNK_SIZE,
+    SUPPORTED_DIVBASE_FILE_TYPES,
+    SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY,
     UNSUPPORTED_CHARACTERS_DISPLAY,
     UNSUPPORTED_CHARACTERS_IN_FILENAMES,
 )
@@ -25,6 +27,10 @@ def validate_s3_object_name(name: str) -> str:
     """Validate that the S3 object name does not contain unsupported characters."""
     if name.startswith("/") or name.endswith("/"):
         raise ValueError("Object name must not start or end with a '/'.")
+    if not any(name.endswith(ext) for ext in SUPPORTED_DIVBASE_FILE_TYPES):
+        raise ValueError(f"Object name must be one of the supported file types: {SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY}")
+    if any(part in (".", "..") for part in name.split("/")):
+        raise ValueError("Object name cannot contain '.' or '..' as a folder path or file name.")
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
         if char in name:
             raise ValueError(
@@ -35,17 +41,18 @@ def validate_s3_object_name(name: str) -> str:
 
 def validate_s3_directory_name(name: str) -> str:
     """Validate + clean a S3 directory name."""
-    if "." in name or ".." in name:
-        raise ValueError(f"Directory '{name}' cannot contain '.' or '..'")
+    if name.startswith("/"):
+        name = name[1:]
+    if not name.endswith("/"):
+        name = f"{name}/"
+    parts = [p for p in name.strip("/").split("/")]
+    if any(part in (".", "..") for part in parts):
+        raise ValueError(f"Directory '{name}' cannot contain '.' or '..' as a folder path.")
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
         if char in name:
             raise ValueError(
                 f"Directory name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
             )
-    if name.startswith("/"):
-        name = name[1:]
-    if not name.endswith("/"):
-        name = f"{name}/"
     return name
 
 
