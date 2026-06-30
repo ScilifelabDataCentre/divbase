@@ -9,23 +9,72 @@ Pre-signed upload URLs need to account for single vs multipart uploads hence all
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from divbase_lib.divbase_constants import S3_MULTIPART_CHUNK_SIZE
+from divbase_lib.divbase_constants import (
+    MAX_S3_API_BATCH_SIZE,
+    S3_MULTIPART_CHUNK_SIZE,
+    SUPPORTED_DIVBASE_FILE_TYPES,
+    SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY,
+    UNSUPPORTED_CHARACTERS_DISPLAY,
+    UNSUPPORTED_CHARACTERS_IN_FILENAMES,
+)
 
 MB = 1024 * 1024
 
 
+def validate_s3_object_name(name: str) -> str:
+    """Validate that the S3 object name does not contain unsupported characters."""
+    if name.startswith("/") or name.endswith("/"):
+        raise ValueError("Object name must not start or end with a '/'.")
+    if not any(name.endswith(ext) for ext in SUPPORTED_DIVBASE_FILE_TYPES):
+        raise ValueError(f"Object name must be one of the supported file types: {SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY}")
+    if any(part in (".", "..") for part in name.split("/")):
+        raise ValueError("Object name cannot contain '.' or '..' as a folder path or file name.")
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in name:
+            raise ValueError(
+                f"Object name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
+            )
+    return name
+
+
+def validate_s3_directory_name(name: str) -> str:
+    """Validate + clean a S3 directory name."""
+    if name.startswith("/"):
+        name = name[1:]
+    if not name.endswith("/"):
+        name = f"{name}/"
+
+    stripped = name.strip("/")
+    if not stripped:
+        raise ValueError("Directory name cannot be empty or '/'.")
+
+    parts = [p for p in stripped.split("/")]  # (handle nested dirs)
+    if any(part in (".", "..") for part in parts):
+        raise ValueError(f"Directory '{name}' cannot contain '.' or '..' as a folder path.")
+
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in name:
+            raise ValueError(
+                f"Directory name contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}"
+            )
+    return name
+
+
+def validate_s3_object_prefix(prefix: str | None) -> str | None:
+    """Validate that the S3 object prefix does not contain unsupported characters."""
+    if not prefix:
+        return None
+    if prefix in (".", ".."):
+        raise ValueError(f"Prefix cannot be '{prefix}'.")
+    for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
+        if char in prefix:
+            raise ValueError(f"Prefix contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}")
+    return prefix
+
+
 ## list objects models ##
-class ListObjectsRequest(BaseModel):
-    """Request model for listing objects in an S3 bucket."""
-
-    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
-    next_token: str | None = Field(
-        None, description="Token to continue listing files from the end of a previous request."
-    )
-
-
 class ObjectDetails(BaseModel):
     """Details about a single object in an S3 bucket."""
 
@@ -35,11 +84,51 @@ class ObjectDetails(BaseModel):
     etag: str = Field(..., description="The ETag of the object, which is the MD5 checksum.")
 
 
-class ListObjectsResponse(BaseModel):
-    """Response model for listing objects in an S3 bucket."""
+class ListObjectsRequest(BaseModel):
+    """Request model for listing objects in an S3 bucket."""
 
-    objects: list[ObjectDetails] = Field(
-        ..., description="A list of objects in the bucket.", min_length=0, max_length=1000
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
+    delimiter: str | None = Field(
+        None,
+        description="Delimiter for simulating a file-system view. Use '/' to do this. Leave as none to recursively list all files.",
+    )
+    next_token: str | None = Field(
+        None, description="Token to continue listing files from the end of a previous request."
+    )
+
+    @field_validator("prefix")
+    @classmethod
+    def validate_prefix(cls, prefix: str | None) -> str | None:
+        return validate_s3_object_prefix(prefix)
+
+    @field_validator("delimiter")
+    @classmethod
+    def validate_delimiter(cls, delimiter: str | None) -> str | None:
+        if delimiter is not None and delimiter != "/":
+            raise ValueError("Delimiter must be either None or '/'.")
+        return delimiter
+
+
+class ListObjectsResponse(BaseModel):
+    """
+    Response model for listing objects in an S3 bucket.
+
+    When delimiter is omitted: files contains all matching objects, folders is always empty.
+    When delimiter='/' is used: files contains objects at the current level only, folders contains
+    common prefixes (simulated directories).
+    """
+
+    files: list[ObjectDetails] = Field(
+        ...,
+        description="Files at this level (or all files when no delimiter is used).",
+        min_length=0,
+        max_length=1000,
+    )
+    folders: list[str] = Field(
+        ...,
+        description="Simulated folder prefixes. Only populated when a delimiter is used.",
+        min_length=0,
+        max_length=1000,
     )
     next_token: str | None = Field(
         None, description="Token for fetching the next page of results. If None, no more results."
@@ -47,6 +136,17 @@ class ListObjectsResponse(BaseModel):
 
 
 ## list soft-deleted objects models ##
+class ListDeletedObjectsRequest(BaseModel):
+    """Request model for listing soft-deleted objects in an S3 bucket."""
+
+    prefix: str | None = Field(None, description="Optional prefix to filter objects by name.")
+
+    @field_validator("prefix")
+    @classmethod
+    def validate_prefix(cls, prefix: str | None) -> str | None:
+        return validate_s3_object_prefix(prefix)
+
+
 class SoftDeletedObjectDetails(BaseModel):
     """Details about a single soft-deleted object in an S3 bucket."""
 
@@ -78,7 +178,7 @@ class DownloadObjectRequest(BaseModel):
     """Request model to download a single object using a pre-signed URL."""
 
     name: str = Field(..., description="Name of the object to be downloaded")
-    version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
+    version_id: str | None = Field(None, description="Version ID of the object, None if latest version")
 
 
 class PreSignedDownloadResponse(BaseModel):
@@ -86,7 +186,7 @@ class PreSignedDownloadResponse(BaseModel):
 
     name: str = Field(..., description="Name of the object to be downloaded")
     pre_signed_url: str = Field(..., description="Pre-signed URL for downloading the object")
-    version_id: str | None = Field(..., description="Version ID of the object, None if latest version")
+    version_id: str | None = Field(None, description="Version ID of the object, None if latest version")
 
 
 ### Single-part upload models ###
@@ -94,8 +194,13 @@ class UploadSinglePartObjectRequest(BaseModel):
     """Request model to upload a single object as a single part using a pre-signed URL."""
 
     name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
-    content_length: int = Field(..., description="Size of the file in bytes")
+    content_length: int = Field(..., ge=0, description="Size of the file in bytes")
     md5_hash: str | None = Field(None, description="Optional MD5 hash of the object for integrity check")
+
+    @field_validator("name")
+    @classmethod
+    def validate_s3_name(cls, name: str) -> str:
+        return validate_s3_object_name(name)
 
 
 class PreSignedSinglePartUploadResponse(BaseModel):
@@ -111,7 +216,12 @@ class CreateMultipartUploadRequest(BaseModel):
     """Request model to create a multipart upload using pre-signed URLs."""
 
     name: str = Field(..., min_length=3, max_length=255, description="Name of the object to be uploaded")
-    content_length: int = Field(..., description="Size of the file in bytes")
+    content_length: int = Field(..., ge=0, description="Size of the file in bytes")
+
+    @field_validator("name")
+    @classmethod
+    def validate_s3_name(cls, name: str) -> str:
+        return validate_s3_object_name(name)
 
 
 class CreateMultipartUploadResponse(BaseModel):
@@ -187,6 +297,42 @@ class AbortMultipartUploadResponse(BaseModel):
     upload_id: str = Field(..., description="Upload ID for the multipart upload that was aborted")
 
 
+### make directories models (remove directories done by standard soft delete) ###
+class MakeDirectoriesRequest(BaseModel):
+    """Request model for making directories in the bucket."""
+
+    directories: list[str] = Field(
+        ...,
+        description=("List of directories to be created."),
+        min_length=1,
+        max_length=MAX_S3_API_BATCH_SIZE,
+    )
+
+    @field_validator("directories")
+    @classmethod
+    def validate_directories(cls, directories: list[str]) -> list[str]:
+        cleaned = []
+        for name in directories:
+            cleaned.append(validate_s3_directory_name(name))
+        return cleaned
+
+
+class MakeDirectoriesResponse(BaseModel):
+    """Response model for making directories in the bucket."""
+
+    created: list[str] = Field(
+        ...,
+        description=(
+            "List of directories that were successfully created. This will include directories that already existed.\n"
+        ),
+    )
+    failed: list[str] = Field(
+        ...,
+        description=("List of directories that could not be created."),
+    )
+
+
+### restore objects models ###
 class RestoreObjectsResponse(BaseModel):
     """Response model for restoring soft-deleted objects in a bucket."""
 

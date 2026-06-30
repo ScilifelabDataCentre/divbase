@@ -82,5 +82,5 @@ def resolve_download_dir(download_dir: str | None) -> Path:
         download_dir = config.default_download_dir
 
     if download_dir and download_dir != ".":
-        return Path(download_dir)
+        return Path(download_dir).expanduser()
     return Path.cwd()

@@ -2,13 +2,18 @@
 Command line interface for managing files in a DivBase project's store on DivBase.
 """
 
+from collections import defaultdict
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
+from rich.console import Console
+from rich.markup import escape as markup_escape
 from rich.table import Table
+from rich.tree import Tree
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
@@ -16,18 +21,26 @@ from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, 
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
     ToDownload,
+    ToUpload,
     download_files_command,
     filter_out_already_downloaded_files,
     get_file_info_command,
     list_files_command,
     list_soft_deleted_files_command,
+    make_directories_command,
     restore_objects_command,
     soft_delete_objects_command,
     stream_file_command,
     upload_files_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
-from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
+from divbase_lib.api_schemas.s3 import ObjectDetails
+from divbase_lib.divbase_constants import (
+    SUPPORTED_DIVBASE_FILE_TYPES,
+    SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY,
+    UNSUPPORTED_CHARACTERS_DISPLAY,
+    UNSUPPORTED_CHARACTERS_IN_FILENAMES,
+)
 from divbase_lib.utils import format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
@@ -35,6 +48,11 @@ file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
 
+
+PREFIX_ARGUMENT = typer.Argument(
+    None,
+    help="Optional prefix to filter on. Use a '/' to specify a folder. e.g. 'vcfs/'",
+)
 DISABLE_VERIFY_CHECKSUMS_OPTION = typer.Option(
     False,
     "--disable-verify-checksums",
@@ -55,44 +73,70 @@ DRY_RUN_OPTION = typer.Option(
     "-n",
     help="If set, will not actually download the files, just print what would be downloaded.",
 )
+FLATTEN_DOWNLOADS_OPTION = typer.Option(
+    False,
+    "--flatten",
+    "-f",
+    help="Download all files directly into the download directory, ignoring any folder paths. "
+    "By default the folder structure in the project store is preserved when downloading.",
+)
+INCLUDE_RESULTS_FILES_OPTION = typer.Option(
+    False,
+    "--include-results-files",
+    "-r",
+    help="If set, will also show DivBase query results files which are hidden by default.",
+)
 
 
 @file_app.command("ls")
 def list_files(
-    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
-    prefix_filter: str | None = typer.Option(
-        None,
-        "--prefix",
-        "-pre",
-        help="Optional prefix to filter the listed files by name (only list files starting with this prefix).",
-    ),
-    include_results_files: bool = typer.Option(
+    prefix: str | None = PREFIX_ARGUMENT,
+    detailed: bool = typer.Option(
         False,
-        "--include-results-files",
-        "-r",
-        help="If set, will also show DivBase query results files which are hidden by default.",
+        "--detailed",
+        "-l",
+        help="Show a detailed view including the file size and upload date.",
     ),
+    format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
+    include_results_files: bool = INCLUDE_RESULTS_FILES_OPTION,
     show_deleted_files: bool = typer.Option(
         False,
         "--show-deleted-files",
         "-s",
-        help="Show the files in the project that are currently soft deleted. These files can be recovered within a certain time frame after deletion",
+        help="Show the files and folders in the project that are currently soft deleted. These can be recovered within a certain time frame after deletion.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    List all currently available files in the project's DivBase store.
+    List files and folders in the project's DivBase store.
 
-    You can optionally filter the listed files by providing a prefix.
-    By default, DivBase query results files are hidden from the listing. Use the --include-results-files option to include them.
-    To see information about the versions of each file, use the 'divbase-cli files info [FILE_NAME]' command instead
+    Folders are shown highlighted before files. Use --detailed / -l to also show file sizes and upload dates.
+
+    Examples:
+
+    - List all files and folders in the project:
+        divbase-cli files ls
+
+    - List files and folders in the 'vcfs/' folder (trailing '/' shows folder contents):
+        divbase-cli files ls vcfs/
+
+    - List all files and folders whose name starts with 'sample':
+        divbase-cli files ls sample
+
+    - Detailed listing with sizes and dates:
+        divbase-cli files ls --detailed
+
+    - List all files including DivBase query results files (hidden by default):
+        divbase-cli files ls --include-results-files
     """
-    if (show_deleted_files and include_results_files) or (show_deleted_files and prefix_filter):
-        print(
-            "The --show-deleted-files option cannot be used with --include-results-files or --prefix. "
-            "Please use these options separately."
+    if show_deleted_files and include_results_files:
+        raise typer.BadParameter(
+            message="The --show-deleted-files option cannot be used with the flag --include-results-files. Please use these options separately."
         )
-        raise typer.Exit(1)
+    if detailed and format_output_as_tsv:
+        raise typer.BadParameter(
+            message="The --detailed option cannot be used with the flag --format-output-as-tsv. Please use these options separately."
+        )
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -101,6 +145,7 @@ def list_files(
         files = list_soft_deleted_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
+            prefix=prefix,
         )
 
         if not files:
@@ -109,49 +154,81 @@ def list_files(
 
         print(f"Soft deleted files for the project '{project_config.name}':")
         for file_details in files:
-            cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-
-            print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
+            cet_timestamp = _format_time_stamp(file_details.last_modified)
+            if file_details.name.endswith("/"):
+                print(f"- [bold blue]'{file_details.name}'[/bold blue] (deleted at: '{cet_timestamp}')")
+            else:
+                print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
         print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
         print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
         return
 
-    files = list_files_command(
+    files, folders = list_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
-        prefix_filter=prefix_filter,
+        prefix=prefix,
         include_results_files=include_results_files,
+        file_system_view=True,
+    )
+
+    # When listing inside a folder (prefix ends with '/'), strip the search prefix from the output
+    # And exclude the possible directory placeholder object itself (the empty S3 key that is an object).
+    if prefix and prefix.endswith("/"):
+        files = [f.model_copy(update={"name": f.name[len(prefix) :]}) for f in files if f.name != prefix]
+        folders = [f[len(prefix) :] for f in folders if f != prefix]
+
+    if not files and not folders:
+        print("No files or folders found in the project's store on DivBase.")
+        return
+
+    if detailed:
+        _print_ls_detailed(files=files, folders=folders)
+    elif format_output_as_tsv:
+        _print_ls_tsv_format(files=files, folders=folders)
+    else:
+        _print_ls_simple(files=files, folders=folders)
+
+
+@file_app.command("tree")
+def tree_files(
+    prefix: str | None = PREFIX_ARGUMENT,
+    include_results_files: bool = INCLUDE_RESULTS_FILES_OPTION,
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Display the project's file store in a tree like manner.
+
+    Examples:
+
+    - Show the full tree:
+        divbase-cli files tree
+
+    - Show the tree starting from the 'vcfs/' folder:
+        divbase-cli files tree vcfs/
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    files, _ = list_files_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        prefix=prefix,
+        include_results_files=include_results_files,
+        file_system_view=False,
     )
 
     if not files:
         print("No files found in the project's store on DivBase.")
         return
 
-    table = Table(title=f"Files in [bold]{project_config.name}'s [/bold] DivBase Store:")
-    table.add_column("Name", justify="left", style="cyan")
-    table.add_column("File size", justify="left", style="magenta", no_wrap=True)
-    table.add_column("Upload date (CET)", justify="left", style="green", no_wrap=True)
-    table.add_column("MD5 checksum", justify="left", style="yellow")
-
-    for file_details in files:
-        cet_timestamp = file_details.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
-        file_size = format_file_size(size_bytes=file_details.size)
-        table.add_row(
-            file_details.name,
-            file_size,
-            cet_timestamp,
-            file_details.etag,
-        )
-
-    if not format_output_as_tsv:
-        print(table)
-    else:
-        print_rich_table_as_tsv(table=table)
+    _print_file_sys_tree_view(files=files, prefix=prefix)
 
 
 @file_app.command("info")
 def file_info(
-    file_name: str = typer.Argument(..., help="Name of the file to get information about."),
+    file_name: str = typer.Argument(
+        ..., help="Name of the file to get information about. Must be a file, not a folder (no trailing '/')."
+    ),
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     project: str | None = PROJECT_NAME_OPTION,
 ):
@@ -159,9 +236,19 @@ def file_info(
     Get detailed information about a specific file in the project's DivBase store.
 
     This includes all versions of the file and whether the file is currently marked as soft deleted.
+
+    Examples:
+
+    - Get information about a specific file in the project:
+        divbase-cli files info my_file.vcf.gz
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    if file_name.endswith("/"):
+        raise typer.BadParameter(
+            message="The 'info' command is only for files, not folders. Please provide a file name without a trailing '/'."
+        )
 
     file_info = get_file_info_command(
         divbase_base_url=logged_in_url,
@@ -191,7 +278,7 @@ def file_info(
     table.add_column("Version ID", justify="left", style="cyan")
 
     for version in file_info.versions:
-        cet_timestamp = version.last_modified.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M:%S %Z")
+        cet_timestamp = _format_time_stamp(version.last_modified)
         file_size = format_file_size(size_bytes=version.size)
         table.add_row(
             file_size,
@@ -209,10 +296,12 @@ def file_info(
 @file_app.command("download")
 def download_files(
     files: list[str] = typer.Argument(
-        None, help="Space separated list of files/objects to download from the project's store on DivBase."
+        None,
+        help="Space separated list of files to download. Use a trailing '/' to download all files inside a folder, e.g. 'vcfs/'.",
     ),
     file_list: Path | None = typer.Option(None, "--file-list", help="Text file with list of files to download."),
     download_dir: str = DOWNLOAD_DIR_OPTION,
+    flatten: bool = FLATTEN_DOWNLOADS_OPTION,
     dry_run: bool = DRY_RUN_OPTION,
     disable_verify_checksums: bool = DISABLE_VERIFY_CHECKSUMS_OPTION,
     project_version: str | None = PROJECT_VERSION_OPTION,
@@ -221,28 +310,46 @@ def download_files(
     """
     Download files from the project's store on DivBase.
 
-    This can be done by either:
-        1. providing a list of files paths directly in the command line
-        2. providing a text file with a list of files to download (new file on each line).
+    Files can be specified as a space-separated list or via --file-list. Use a trailing '/' to download
+    everything inside a folder. By default, any folder structure from the project store is recreated
+    locally; use --flatten to download all files into a single directory instead.
 
-    To download the latest version of a file, just provide its name. "file1" "file2" etc.
-    To download a specific/older version of a file, use the format: "file_name:version_id"
-    You can get a file's version id using the 'divbase-cli files info [FILE_NAME]' command.
-    You can mix and match latest and specific versions in the same command.
-    E.g. to download the latest version of file1 and version "3xcdsdsdiw829x"
-    of file2: 'divbase-cli files download file1 file2:3xcdsdsdiw829x'
+    Examples:
+
+    - Download specific files:
+        divbase-cli files download file1.vcf.gz file2.tsv
+
+    - Download all files inside the 'vcfs/' folder (this includes subfolders and their contents):
+        divbase-cli files download vcfs/
+
+    - Download and flatten all files into one directory:
+        divbase-cli files download vcfs/ --flatten --download-dir /path/to/save
+
+    - Download a specific older version of a file (obtain version ID from 'divbase-cli files info'):
+        divbase-cli files download "my_file.vcf.gz:VERSION_ID"
+
+    - Mix latest and versioned files in one command:
+        divbase-cli files download file1.vcf.gz "file2.tsv:VERSION_ID"
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
     raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
+    raw_files_input = _expand_folder_prefixes(
+        files=raw_files_input,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+    )
+    if flatten:
+        check_no_overlap_on_flattened_downloads(to_download=raw_files_input)
 
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
+        flatten=flatten,
         verify_checksums=not disable_verify_checksums,
         dry_run=dry_run,
         project_version=project_version,
@@ -254,6 +361,7 @@ def download_files(
 @file_app.command("download-all")
 def download_all_files(
     download_dir: str = DOWNLOAD_DIR_OPTION,
+    flatten: bool = FLATTEN_DOWNLOADS_OPTION,
     resume: bool = typer.Option(
         False,
         "--resume",
@@ -267,18 +375,30 @@ def download_all_files(
 ):
     """
     Download all files in the project's store on DivBase.
-    Before the download proceeds you'll be prompted if you want to continue.
-    DivBase Query results files will not be included in the download.
 
-    You can resume ('--resume' / '-r') a 'download-all' command, just make sure you're downloading into the same directory.
+    DivBase query results files are excluded. Before the download starts you will be prompted to confirm.
+    By default, the folder structure from the project store is recreated locally; use --flatten to
+    download all files into a single directory instead.
+
+    Examples:
+
+    - Download all files, preserving the folder structure from the project store:
+        divbase-cli files download-all --download-dir /path/to/save
+
+    - Resume an interrupted download (use the same --download-dir as the original run):
+        divbase-cli files download-all --resume --download-dir /path/to/save
+
+    - Download all files into a single flat directory:
+        divbase-cli files download-all --flatten --download-dir /path/to/save
+
+    - Preview what would be downloaded without downloading:
+        divbase-cli files download-all --dry-run
     """
     if resume and disable_verify_checksums:
-        print(
-            "The --resume and --disable-verify-checksums options cannot be used together, "
-            "as checksums are used to determine which files don't need to be downloaded. \n"
-            "Exiting... "
+        raise typer.BadParameter(
+            message="The --resume and --disable-verify-checksums options cannot be used together, "
+            "as checksums are used to determine which files don't need to be downloaded."
         )
-        return
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -292,7 +412,7 @@ def download_all_files(
         for version_name, file_details in version_details.files.items():
             all_files.append(
                 ToDownload(
-                    name=version_name,
+                    s3_key=version_name,
                     etag=file_details["etag"],
                     size_bytes=file_details["size"],
                     version_id=file_details["version_id"],
@@ -300,16 +420,20 @@ def download_all_files(
             )
 
     else:
-        list_files_response = list_files_command(
+        files, _ = list_files_command(
             divbase_base_url=logged_in_url,
             project_name=project_config.name,
-            prefix_filter=None,
+            prefix=None,
             include_results_files=False,
+            file_system_view=False,  # we want all files in a flat list to download al of them, not a file system view with folders and files
         )
-        for file_details in list_files_response:
+        for file_details in files:
+            if file_details.name.endswith("/"):
+                # skip the directory placeholder objects, we only want to download actual files
+                continue
             all_files.append(
                 ToDownload(
-                    name=file_details.name,
+                    s3_key=file_details.name,
                     etag=file_details.etag,
                     size_bytes=file_details.size,
                     version_id=None,  # latest version
@@ -320,18 +444,22 @@ def download_all_files(
         print("No files to download as there are no files in the project's store.")
         return
 
+    if flatten:
+        to_download_names = [file.s3_key for file in all_files]
+        check_no_overlap_on_flattened_downloads(to_download=to_download_names)
+
     # filter files to download based on those which already exist.
     if resume:
         files_to_download, files_to_overwrite = filter_out_already_downloaded_files(
-            all_files=all_files, download_dir=download_dir_path
+            all_files=all_files, download_dir=download_dir_path, flatten=flatten
         )
         if files_to_overwrite:
             print(
-                "[yellow bold]Warning: The following files already exist in the download directory but have a different checksum."
+                "[yellow bold]Warning: The following files already exist in the download directory but have a different checksum. "
                 "If you choose to proceed, these files will be overwritten by the download:[/yellow bold]"
             )
             for file in files_to_overwrite:
-                print(f"- '{file.name}'")
+                print(f"- '{file.s3_key}'")
 
         files_to_download.extend(files_to_overwrite)
 
@@ -354,14 +482,15 @@ def download_all_files(
             return
 
     if project_version:
-        raw_files_input = [f"{file.name}:{file.version_id}" for file in files_to_download]
+        raw_files_input = [f"{file.s3_key}:{file.version_id}" for file in files_to_download]
     else:
-        raw_files_input = [file.name for file in files_to_download]
+        raw_files_input = [file.s3_key for file in files_to_download]
     download_results = download_files_command(
         divbase_base_url=logged_in_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
+        flatten=flatten,
         verify_checksums=not disable_verify_checksums,
         dry_run=dry_run,
         project_version=None,  # We already know the version id of each file, so can skip the processing here.
@@ -384,12 +513,18 @@ def stream_file(
     """
     Stream a file's content to standard output.
 
-    This allows your to pipe the output to other tools like 'less', 'head', 'zcat' and 'bcftools'.
+    This allows you to pipe the output to other tools like 'less', 'head', 'zcat' and 'bcftools'.
 
     Examples:
-    - View a file: divbase-cli files stream my_file.tsv | less
-    - View a gzipped file: divbase-cli files stream my_file.vcf.gz | zcat | less
-    - Run a bcftools command: divbase-cli files stream my_file.vcf.gz | bcftools view -h -  # The "-" tells bcftools to read from standard input
+
+    - View a file:
+        divbase-cli files stream my_file.tsv | less
+
+    - View a gzipped file:
+        divbase-cli files stream my_file.vcf.gz | zcat | less
+
+    - Run a bcftools command (the "-" tells bcftools to read from standard input):
+        divbase-cli files stream my_file.vcf.gz | bcftools view -h -
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -406,6 +541,12 @@ def stream_file(
 def upload_files(
     files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
+    remote_dir: str | None = typer.Option(
+        None,
+        "--to",
+        "-t",
+        help="Remote folder to upload into, e.g. 'vcfs/batch1/'. Folder does not need to exist before uploading.",
+    ),
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
@@ -419,7 +560,8 @@ def upload_files(
         "-r",
         "-R",
         help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
-        "Without this flag, patterns only match files in the specified directory.",
+        "Without this flag, patterns only match files in the specified directory. "
+        "Put your argument in quotes to prevent shell expansion of the glob before it gets to the CLI, e.g. files upload 'data/**/*.vcf.gz' ",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", "-n", help="If set, will show what files would be uploaded, but not actually upload them."
@@ -438,33 +580,36 @@ def upload_files(
 ):
     """
     Upload files to your project's store on DivBase.
-    NOTE that directory structure is not preserved on upload, only the file name is used as the object name.
 
-    You can specify files directly as arguments including glob patterns (aka * or **) or use the --file-list option.
-    Use the flag --recursive / -R to expand glob patterns into subdirectories.
-    We recommend wrapping the glob pattern in quotes when using --recursive to ensure the correct behavior across different shells.
+    By default only the file name is used as the destination key (directory paths are stripped).
+    Use '--to' to place files inside a remote folder. Use '--recursive' with a '**' glob to
+    preserve subdirectory structure relative to the glob root.
 
     Examples:
-        # Upload multiple files by specifying them one after another
+
+    - Upload multiple files:
         divbase-cli files upload file1.vcf.gz file2.tsv
 
-        # Upload all .vcf.gz files in the current directory
-        divbase-cli files upload "*.vcf.gz"
+    - Upload all .vcf.gz files in the current directory into a remote folder:
+        divbase-cli files upload "*.vcf.gz" --to experiment1/
 
-        # Upload all files in a directory (non-recursive)
+    - Upload all files in a directory to the root of the project store:
         divbase-cli files upload "/path/to/data/*"
 
-        # Upload all files in a directory and its subdirectories
+    - Upload recursively, preserving subdirectory structure (wrap glob in quotes to prevent shell expansion):
         divbase-cli files upload --recursive "/path/to/data/**"
 
-        # Upload from a text file list (one file path per line)
-        divbase-cli files upload --file-list files_to_upload.txt
+    - Upload recursively into a remote folder:
+        divbase-cli files upload --recursive "/path/to/data/**" --to experiment1/
+
+    - Upload from a text file list (one file path per line):
+        divbase-cli files upload --file-list files_to_upload.txt --to experiment1/
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     if bool(files) + bool(file_list) > 1:
-        print("Please specify only space separated files or provide a --file-list.")
+        print("You cannot specify files as arguments and provide a --file-list.")
         raise typer.Exit(1)
 
     if skip_existing and disable_safe_mode:
@@ -475,54 +620,19 @@ def upload_files(
         )
         raise typer.Exit(1)
 
-    # (to preserve order of files provided by user, but ensure no duplicates)
-    all_files: list[Path] = []
-    missing_files_or_patterns: list[str] = []
-    _seen: set[Path] = set()
-    if files:
-        for pattern in files:
-            matched = [Path(p) for p in glob(pattern, recursive=recursive) if Path(p).is_file()]
-            if not matched:
-                missing_files_or_patterns.append(pattern)
-            for file in matched:
-                if file not in _seen:
-                    _seen.add(file)
-                    all_files.append(file)
-        if missing_files_or_patterns:
-            print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
-            for path in missing_files_or_patterns:
-                print(f"[red]- '{path}'[/red]")
-            raise typer.Exit(1)
-    if file_list:
-        missing_files = []
-        with open(file_list) as f:
-            for line in f:
-                path = Path(line.strip())
-                if path.is_file():
-                    if path not in _seen:
-                        _seen.add(path)
-                        all_files.append(path)
-                else:
-                    missing_files.append(path)
-        if missing_files:
-            print(
-                "[red bold]Error: The following file paths provided in the --file-list do not exist or are not files:[/red bold]"
-            )
-            for path in missing_files:
-                print(f"[red]- '{path}'[/red]")
-            raise typer.Exit(1)
-
-    if not all_files:
-        print(NO_FILES_SPECIFIED_MSG)
-        raise typer.Exit(1)
-
-    _check_for_duplicate_file_names(all_files)
-    _check_for_unsupported_files(all_files)
+    to_upload = _resolve_user_upload_inputs(
+        files=files,
+        file_list=file_list,
+        recursive=recursive,
+        remote_dir=remote_dir,
+    )
+    _check_for_duplicate_object_keys(to_upload)
+    _check_for_unsupported_files(to_upload)
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
         divbase_base_url=logged_in_url,
-        all_files=all_files,
+        all_files=to_upload,
         safe_mode=not disable_safe_mode,
         skip_existing=skip_existing,
         dry_run=dry_run,
@@ -549,6 +659,108 @@ def upload_files(
         print("\n[green bold]All files uploaded successfully![/green bold]")
 
 
+@file_app.command("mkdir")
+def make_directory(
+    directories: list[str] = typer.Argument(
+        ..., help="Space separated list of directories to create. A trailing '/' is added automatically if omitted."
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Create one or more directories in your project store.
+
+    Note: directories are created automatically when uploading files with '--to', so you only need
+    this command if you want to create the folder structure ahead of time.
+
+    Examples:
+
+    - Create a single directory:
+        divbase-cli files mkdir vcfs
+
+    - Create a nested directory structure:
+        divbase-cli files mkdir vcfs/batch1/metadata
+
+    - Create multiple directories at once:
+        divbase-cli files mkdir vcfs metadata results
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    cleaned_dir_names = _sanitize_directory_names(directories)
+    dirs_created = make_directories_command(
+        directories=cleaned_dir_names,
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+    )
+    if dirs_created.created:
+        print("Successfully created the following directories:")
+        for dir in dirs_created.created:
+            print(f"[bold blue]'{dir}'[/bold blue]")
+
+    if dirs_created.failed:
+        print("[red bold]Error: Failed to create the following directories:[/red bold]")
+        for dir in dirs_created.failed:
+            print(f"[red]'{dir}'[/red]")
+        print("This could be due to invalid characters in the directory name or an unexpected server error.\n")
+        raise typer.Exit(1)
+
+
+@file_app.command("rmdir")
+def remove_directory(
+    directories: list[str] = typer.Argument(
+        ...,
+        help="Space separated list of directories to remove. The directory must be empty (remove files first with 'divbase-cli files rm').",
+    ),
+    project: str | None = PROJECT_NAME_OPTION,
+):
+    """
+    Remove one or more empty directories from your project store.
+
+    All files inside the directory must be deleted first using 'divbase-cli files rm'.
+    If a directory does not exist, it is treated as a successful deletion.
+
+    Examples:
+
+    - Remove a single directory:
+        divbase-cli files rmdir vcfs/
+
+    - Remove multiple directories at once:
+        divbase-cli files rmdir vcfs/ metadata/
+    """
+    project_config = resolve_project(project_name=project)
+    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+
+    directories = _sanitize_directory_names(directories)
+    for dir in directories:
+        files, _ = list_files_command(
+            divbase_base_url=logged_in_url,
+            project_name=project_config.name,
+            prefix=dir,
+            include_results_files=True,
+            file_system_view=False,
+        )
+        non_placeholder_files = [f for f in files if f.name != dir]
+        if non_placeholder_files:
+            print(
+                f"[red bold]Error: The directory '{dir}' is not empty.\n"
+                f"You must first remove all files and/or subdirectories inside the directory using:\n"
+                "'divbase-cli files rm' and 'divbase-cli files rmdir' [/red bold]"
+            )
+            raise typer.Exit(1)
+
+    # NOTE: as dirs are just empty files which end with "/", we can just do a regular soft delete on them.
+    deleted_dirs = soft_delete_objects_command(
+        divbase_base_url=logged_in_url,
+        project_name=project_config.name,
+        all_files=directories,
+    )
+
+    if deleted_dirs:
+        print("Deleted the following directories:")
+        for dir in deleted_dirs:
+            print(f"[bold blue]'{dir}'[/bold blue]")
+
+
 @file_app.command("rm")
 def remove_files(
     files: list[str] | None = typer.Argument(
@@ -563,11 +775,17 @@ def remove_files(
     """
     Soft delete files from the project's store on DivBase
 
-    To provide files to delete you can either:
-        1. provide a list of file names directly in the command line
-        2. provide a text file with a list of files to delete.
-
     Note that deleting a non existent file will be treated as a successful deletion.
+
+    Examples:
+    - Delete specific files:
+        divbase-cli files rm file1.vcf.gz file2.tsv
+
+    - Delete files from a text file list (one file name per line):
+        divbase-cli files rm --file-list files_to_delete.txt
+
+    - Run a dry run to see what files would be deleted without actually deleting them:
+        divbase-cli files rm file1.vcf.gz file2.tsv --dry-run
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -605,11 +823,14 @@ def restore_soft_deleted_files(
     """
     Restore soft deleted files from the project's store on DivBase
 
-    To provide files to restore you can either:
-        1. provide a list of files directly in the command line.
-        2. provide a text file with a list of files to restore (new file on each line).
+    Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live.
 
-    NOTE: Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live. This means you can repeatedly run this command on the same file and get the same response.
+    Examples:
+    - Restore specific files:
+        divbase-cli files restore file1.vcf.gz file2.tsv
+
+    - Restore files from a text file list (one file name per line):
+        divbase-cli files restore --file-list files_to_restore.txt
     """
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -638,6 +859,70 @@ def restore_soft_deleted_files(
             "2. The object was hard-deleted and is unrecoverable.\n"
             "3. An unexpected server error occurred during the restore attempt."
         )
+        raise typer.Exit(1)
+
+
+def _print_file_sys_tree_view(files: list[ObjectDetails], prefix: str | None) -> None:
+    """
+    Print user file system in tree view using Rich Tree."""
+    if prefix and prefix.endswith("/"):
+        root_label = prefix.rstrip("/")
+        tree_label = f"[bold blue]{root_label}[/bold blue]"
+    else:
+        root_label = "."
+        tree_label = root_label
+
+    tree = Tree(label=tree_label)
+
+    nodes: dict[str, Tree] = {}
+    names = []
+    for file in files:
+        if prefix and prefix.endswith("/") and file.name.startswith(prefix):
+            names.append(file.name[len(prefix) :])
+        else:
+            names.append(file.name)
+
+    for name in sorted(names):
+        parts = name.split("/")
+        parent = tree
+        path = ""
+        for part in parts[:-1]:
+            path = path + part + "/"
+            if path not in nodes:
+                nodes[path] = parent.add(f"[bold blue]{part}/[/bold blue]")
+            parent = nodes[path]
+        if parts[-1]:
+            parent.add(parts[-1])
+    Console().print(tree)
+
+
+def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:
+    """Compact folder-aware listing: bold blue folders first, then plain filenames."""
+    console = Console()
+    for folder in folders:
+        console.print(f"[bold blue]{markup_escape(folder)}[/bold blue]")
+    for file_details in files:
+        console.print(markup_escape(file_details.name))
+
+
+def _print_ls_tsv_format(files: list[ObjectDetails], folders: list[str]) -> None:
+    """Prints the files and folders in a tab-separated format - for programmatic use"""
+    for folder in folders:
+        print(f"{markup_escape(folder)}\t-\t-")
+    for f in files:
+        cet = _format_time_stamp(f.last_modified)
+        print(f"{markup_escape(f.name)}\t{format_file_size(f.size)}\t{cet}")
+
+
+def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
+    """Unix ls -l style: one entry per line with name, size and date"""
+    console = Console()
+    for folder in folders:
+        console.print(f"[bold blue]{markup_escape(folder)}[/bold blue]")
+    for f in files:
+        size_str = format_file_size(f.size).rjust(10)
+        cet = _format_time_stamp(f.last_modified)
+        console.print(f"{markup_escape(f.name)} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
 
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
@@ -650,8 +935,9 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     if files:
         all_files.update(files)
     if file_list:
-        with open(file_list) as f:
-            for line in f:
+        lines = file_list.read_text().splitlines()
+        for line in lines:
+            if line.strip():
                 all_files.add(line.strip())
 
     if not all_files:
@@ -660,32 +946,195 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
     return list(all_files)
 
 
-def _check_for_duplicate_file_names(all_files: list[Path]) -> None:
+def _resolve_user_upload_inputs(
+    files: list[str] | None,
+    file_list: Path | None,
+    recursive: bool,
+    remote_dir: str | None,
+) -> list[ToUpload]:
     """
-    Helper fn to check if any two files in the upload set share the same file name.
-    Since directory structure is not preserved on upload, duplicate names would overwrite each other.
+    Take user CLI input arguments for files upload cmd and create a list of ToUpload objects.
+
+    Handles the multiple ways a user can specify files for upload.
     """
-    name_to_paths: dict[str, list[Path]] = {}
-    for f in all_files:
-        if f.name not in name_to_paths:
-            name_to_paths[f.name] = []
-        name_to_paths[f.name].append(f)
+    to_upload: list[ToUpload] = []
+    missing_patterns: list[str] = []
+    seen: set[Path] = set()
+
+    if remote_dir:
+        remote_dir = remote_dir[1:] if remote_dir.startswith("/") else remote_dir
+        remote_dir = remote_dir if remote_dir.endswith("/") else remote_dir + "/"
+        if any(char in remote_dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            print(
+                f"[red bold]Error: The --to destination path contains unsupported characters.[/red bold]\n"
+                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            )
+            raise typer.Exit(1)
+
+    if recursive and files and not any("*" in p for p in files) and any(len(Path(p).parts) > 1 for p in files):
+        print(
+            "[red bold]Error: --recursive was passed but all arguments provided are file paths.[/red bold]\n"
+            "Your shell likely expanded the glob before passing it to this command.\n"
+            "To solve the problem, wrap the pattern(s) in quotes to prevent shell expansion, e.g.:\n"
+            "  [green]divbase-cli files upload 'my_data/**/*.vcf.gz' --recursive[/green] AND NOT \n"
+            "  [red]divbase-cli files upload my_data/**/*.vcf.gz --recursive[/red]"
+        )
+        raise typer.Exit(1)
+
+    if files:
+        for pattern in files:
+            # expands something like ~/Downloads/ to /home/user/Downloads/
+            expanded_pattern = str(Path(pattern).expanduser())
+            matches = [Path(p) for p in glob(expanded_pattern, recursive=recursive) if Path(p).is_file()]
+            if not matches:
+                if Path(expanded_pattern).is_dir():
+                    continue
+                missing_patterns.append(pattern)
+                continue
+            for file in matches:
+                if file in seen:
+                    continue
+                seen.add(file)
+                if recursive and "**" in pattern:
+                    # this handles case where ** is used inside a dir name e.g. data/some**thing/ etc...
+                    before_doublestar = expanded_pattern.split("**")[0]
+                    if not before_doublestar:
+                        root = Path(".")
+                    elif before_doublestar.endswith("/"):
+                        root = Path(before_doublestar)
+                    else:
+                        root = Path(before_doublestar).parent
+                    key = str(file.relative_to(root)).replace("\\", "/")
+                else:
+                    key = file.name
+
+                destination_key = (remote_dir or "") + key
+                to_upload.append(ToUpload(file_path=file, destination_key=destination_key))
+
+    if file_list:
+        missing_files: list[Path] = []
+        lines = file_list.read_text().splitlines()
+        for line in lines:
+            if not line.strip():
+                continue
+            path = Path(line.strip())
+            if not path.is_file():
+                missing_files.append(path)
+                continue
+            if path not in seen:
+                seen.add(path)
+                to_upload.append(ToUpload(file_path=path, destination_key=(remote_dir or "") + path.name))
+
+        if missing_files:
+            print("[red bold]Error: The following file paths provided in your --file-list were not found:[/red bold]")
+            for path in missing_files:
+                print(f"[red]- '{path}'[/red]")
+            raise typer.Exit(1)
+
+    if missing_patterns:
+        print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
+        for pattern in missing_patterns:
+            print(f"[red]- '{pattern}'[/red]")
+        raise typer.Exit(1)
+
+    if not to_upload:
+        print(NO_FILES_SPECIFIED_MSG)
+        raise typer.Exit(1)
+
+    return to_upload
+
+
+def _check_for_duplicate_object_keys(to_upload: list[ToUpload]) -> None:
+    """Check that no two files resolve to the same S3 object key — they would silently overwrite each other."""
+    key_to_paths: dict[str, list[Path]] = {}
+    for s in to_upload:
+        key_to_paths.setdefault(s.destination_key, []).append(s.file_path)
+
+    duplicates = {key: paths for key, paths in key_to_paths.items() if len(paths) > 1}
+    if duplicates:
+        print(
+            "[red bold]Error: The following S3 destination keys appear more than once in the upload list.[/red bold]\n"
+            "[red]Multiple local files would overwrite each other at the same key:[/red]\n"
+        )
+        for key, paths in duplicates.items():
+            print(f"[red bold]'{key}':[/red bold]")
+            for p in paths:
+                print(f"[red]- {p.resolve()}[/red]")
+        print("\nEnsure each file maps to a unique destination key, or use --to to place them in separate folders.")
+        raise typer.Exit(1)
+
+
+def _expand_folder_prefixes(
+    files: list[str],
+    divbase_base_url: str,
+    project_name: str,
+) -> list[str]:
+    """
+    Given a list of user provided file args, expand any args that are for folders, i.e. they end with a trailing '/'.
+    SO updates the list of files to (e.g. download) to include all files inside the folder(s) and returns the updated list.
+
+    Non-folder arguments are passed through unchanged. Raises Exit(1) if a prefix has no files.
+    """
+    all_files: set[str] = set()
+    for arg in files:
+        if not arg.endswith("/"):
+            all_files.add(arg)
+            continue
+
+        full_s3_file_paths, _ = list_files_command(
+            divbase_base_url=divbase_base_url,
+            project_name=project_name,
+            prefix=arg,
+            include_results_files=True,
+            file_system_view=False,
+        )
+        # strip off any subfolders
+        real_files = [f.name for f in full_s3_file_paths if not f.name.endswith("/")]
+        if not real_files:
+            print(f"[red bold]Error: No files found inside the folder: '{arg}' that you provided.[/red bold]")
+            raise typer.Exit(1)
+
+        all_files.update(real_files)
+
+    return list(all_files)
+
+
+def check_no_overlap_on_flattened_downloads(to_download: list[str]) -> None:
+    """
+    When downloading files with --flatten option, double check that no two files will resolve to same local file path.
+    If they do, then raise error.
+
+    Could happen if for example divbase-cli files download-all --flatten:
+    - file1.txt
+    - subdir/file1.txt
+    or
+    - file1.txt
+    - file1.txt:specific-version-id
+    """
+    name_to_paths: dict[str, list[str]] = defaultdict(list)
+    for s3_path in to_download:
+        # Strip possible version ID suffix (e.g., "file.txt:VERSION_ID")
+        path_without_version = s3_path.split(":")[0]
+        download_name = Path(path_without_version).name  # what it would be download as if --flatten is used
+        name_to_paths[download_name].append(s3_path)
 
     duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
     if duplicates:
         print(
-            "[red bold]Error: The following file names appear more than once in the upload list.[/red bold]\n"
-            "[red]Since directory structure is not preserved on upload, these files would collide:[/red]\n"
+            "[red bold]Error: The following files would overwrite each other when downloaded with --flatten option.[/red bold]\n"
+            "[red]Multiple files would resolve to the same local file path:[/red]\n"
         )
         for name, paths in duplicates.items():
             print(f"[red bold]'{name}':[/red bold]")
             for p in paths:
-                print(f"[red]- {p.resolve()}[/red]")
-        print("\nPlease rename the files so each has a unique name before uploading.")
+                print(f"[red]- {p}[/red]")
+        print(
+            "\nYou must either download without the --flatten option or only download a subset of the the files to avoid this error."
+        )
         raise typer.Exit(1)
 
 
-def _check_for_unsupported_files(all_files: list[Path]) -> None:
+def _check_for_unsupported_files(all_files: list[ToUpload]) -> None:
     """
     Helper fn to check if any of the files to be uploaded are not supported by DivBase.
     Raises error if so.
@@ -698,32 +1147,48 @@ def _check_for_unsupported_files(all_files: list[Path]) -> None:
     This is not a security feature, just for UX purposes.
     """
     unsupported_file_types, unsupported_chars = [], []
-    for file_path in all_files:
-        if not any(file_path.name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
-            unsupported_file_types.append(file_path)
+    for file in all_files:
+        if not any(file.file_name.endswith(supported) for supported in SUPPORTED_DIVBASE_FILE_TYPES):
+            unsupported_file_types.append(file.file_name)
 
-        if any(char in file_path.name for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
-            unsupported_chars.append(file_path)
+        if any(char in file.destination_key for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            unsupported_chars.append(file.file_name)
 
     if unsupported_file_types:
         print(
             f"[red bold]Error: The following files' types are not supported by DivBase and therefore cannot be uploaded: [/red bold] \n"
             f"[red]{'\n'.join(str(file) for file in unsupported_file_types)}\n\n[/red]"
-            f"DivBase currently supports the following file types: '{', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}'\n"
+            f"DivBase currently supports the following file types: {SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY}\n"
             "Note that while you can upload '.tbi' and '.csi' files they are not used by DivBase in queries, we create our own index files instead. \n"
             "If you want us to support another file type, please let us know.",
         )
 
     if unsupported_chars:
         print(
-            f"[red bold]Error: The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: [/red bold]\n"
+            f"[red bold]Error: The following file(s) cannot be uploaded because their name or destination path contains unsupported characters:[/red bold]\n"
             f"[red]{'\n'.join(str(file) for file in unsupported_chars)}\n\n[/red]"
-            f"Filenames cannot contain any of the following characters: [green]{' '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)} [/green]\n"
-            "Please rename the files and try again.",
+            f"Unsupported characters: [red]{UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            "Please rename the file or choose a different --to destination and try again.",
         )
 
     if unsupported_file_types or unsupported_chars:
         raise typer.Exit(1)
+
+
+def _sanitize_directory_names(directories: list[str]) -> list[str]:
+    cleaned_dir_names = []
+    for directory in directories:
+        if any(char in directory for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
+            print(
+                f"[red bold]Error: The directory name '{directory}' contains unsupported characters.[/red bold]\n"
+                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            )
+            raise typer.Exit(1)
+
+        directory = directory if directory.endswith("/") else directory + "/"
+        directory = directory[1:] if directory.startswith("/") else directory
+        cleaned_dir_names.append(directory)
+    return cleaned_dir_names
 
 
 def _pretty_print_download_results(download_results):
@@ -734,7 +1199,12 @@ def _pretty_print_download_results(download_results):
             print(f"- '{success.object_name}' downloaded to: '{success.file_path.resolve()}'")
 
     if download_results.failed:
-        print("\n[red bold]ERROR: Failed to download the following files:[/red bold]")
+        print("\n[red bold]Error: Failed to download the following files:[/red bold]")
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': [/red] Exception: '{failed.exception}'")
         raise typer.Exit(1)
+
+
+def _format_time_stamp(time_stamp: datetime) -> str:
+    """Helper fn to format a datetime object into a string for printing."""
+    return time_stamp.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M %Z")

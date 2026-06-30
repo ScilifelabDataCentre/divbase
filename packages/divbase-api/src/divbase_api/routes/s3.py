@@ -32,8 +32,11 @@ from divbase_lib.api_schemas.s3 import (
     DownloadObjectRequest,
     FileChecksumResponse,
     GetPresignedPartUrlsRequest,
+    ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
+    MakeDirectoriesRequest,
+    MakeDirectoriesResponse,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
     PreSignedSinglePartUploadResponse,
@@ -94,47 +97,58 @@ async def generate_download_urls(
 
 # Post request instead of GET as GET doesn't support/encourage body content.
 @s3_router.post("/list", status_code=status.HTTP_200_OK, response_model=ListObjectsResponse)
-async def list_file_details(
+async def list_objects(
     project_name: str,
     list_request: ListObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
-    List all files in the project's bucket
+    List objects in the project's bucket.
 
-    You can provide a prefix to only list files that start with that prefix.
-    The response object includes a next_token if there are more files to list.
-    Which you can append to the next request to get the next page of results.
-    1000 files are returned at most per request.
+    The response includes a next_token when there are more results to page through.
+    Up to 1000 entries are returned per request.
+
+    You can modify the behavior of the listing by via the ListObjectsRequest parameters.
+    To get a file-system-like view with both files and folders at the current prefix level, set delimiter to '/'.
+    Otherwise, all files are returned in a flat list, and the prefix is just used to filter files that start with the prefix string.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list files in this project.")
 
     return await run_in_threadpool(
-        s3_file_manager.list_files_detailed,
+        s3_file_manager.list_objects,
         bucket_name=project.bucket_name,
         prefix=list_request.prefix,
         next_token=list_request.next_token,
+        delimiter=list_request.delimiter,
     )
 
 
-@s3_router.get("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
+# Post request instead of GET as GET doesn't support/encourage body content.
+@s3_router.post("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
 async def list_soft_deleted_files(
     project_name: str,
+    list_deleted_objects_request: ListDeletedObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
 ):
     """
     List all soft-deleted files in the project's bucket.
-    All soft-deleted objects are obtained at once, so there is no need for pagination with next tokens.
+
+    You can optionally filter the files to look up based on a prefix string.
+    All soft-deleted objects are obtained at once, so there is no need to handle pagination client side.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
         raise AuthorizationError("You don't have permission to list soft-deleted files in this project.")
 
-    return await run_in_threadpool(s3_file_manager.list_soft_deleted_files, bucket_name=project.bucket_name)
+    return await run_in_threadpool(
+        s3_file_manager.list_soft_deleted_files,
+        bucket_name=project.bucket_name,
+        prefix=list_deleted_objects_request.prefix,
+    )
 
 
 @s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)
@@ -287,6 +301,30 @@ async def abort_multipart_upload(
         upload_id=abort_request.upload_id,
     )
     return AbortMultipartUploadResponse(name=abort_request.name, upload_id=abort_request.upload_id)
+
+
+@s3_router.post("/mkdir", status_code=status.HTTP_200_OK, response_model=MakeDirectoriesResponse)
+async def make_directory(
+    project_name: str,
+    dirs_request: MakeDirectoriesRequest,
+    s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
+    project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
+):
+    """
+    Create directories in the projects store.
+
+    This adds a directory marker to the specified paths.
+    """
+    project, current_user, role = project_and_user_and_role
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(
+            f"You don't have permission to create directories for this project. You need at least '{ProjectRoles.QUERY}' level permissions."
+        )
+    check_too_many_objects_in_request(numb_objects=len(dirs_request.directories))
+
+    return await run_in_threadpool(
+        s3_file_manager.make_directories, directories=dirs_request.directories, bucket_name=project.bucket_name
+    )
 
 
 @s3_router.delete("/", status_code=status.HTTP_200_OK, response_model=list[str])

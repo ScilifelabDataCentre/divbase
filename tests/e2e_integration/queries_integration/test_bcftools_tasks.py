@@ -435,13 +435,14 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
         """
         return Path(ensure_fixture_path(metadata_tsv_name, fixture_dir="tests/fixtures"))
 
-    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager):
+    def patched_download_vcf_files(files_to_download, bucket_name, s3_file_manager) -> dict[str, Path]:
         """
         Needs the path in the worker container so that it is compatible with the docker exec patch below for running bcftools jobs.
         """
-        return [
-            Path(ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures")) for file_name in files_to_download
-        ]
+        result = {}
+        for file_name in files_to_download:
+            result[file_name] = Path(ensure_fixture_path(file_name, fixture_dir="/app/tests/fixtures"))
+        return result
 
     def patched_run_bcftools(command: str, capture_output: bool = False, capture_stderr: bool = False):
         """

@@ -85,7 +85,7 @@ class DownloadOutcome:
 
 
 def download_multiple_pre_signed_urls(
-    pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path
+    pre_signed_urls: list[PreSignedDownloadResponse], verify_checksums: bool, download_dir: Path, flatten: bool = False
 ) -> tuple[list[SuccessfulDownload], list[FailedDownload]]:
     """
     Download files using pre-signed URLs.
@@ -94,8 +94,13 @@ def download_multiple_pre_signed_urls(
     successful_downloads, failed_downloads = [], []
     with httpx.Client() as client:
         for obj in pre_signed_urls:
-            output_file_path = download_dir / obj.name
+            if flatten:
+                # If flatten, we only use the file name and ignore any s3 "folder" structure
+                output_file_path = download_dir / Path(obj.name).name
+            else:
+                output_file_path = download_dir / obj.name
             object_name = obj.name
+
             print(f"Downloading '{object_name}'...", end=" ")
             try:
                 result = _download_single_pre_signed_url(
@@ -131,7 +136,7 @@ def _download_single_pre_signed_url(
     content_length, server_checksum = _get_content_length_and_checksum(
         httpx_client=httpx_client, pre_signed_url=pre_signed_url
     )
-
+    output_file_path.parent.mkdir(parents=True, exist_ok=True)
     if content_length < MULTIPART_DOWNLOAD_THRESHOLD:
         _perform_singlepart_download(
             httpx_client=httpx_client,
@@ -141,7 +146,12 @@ def _download_single_pre_signed_url(
 
     else:
         logger.info(f"Starting multipart download for large file '{object_name}' of size {content_length} bytes.")
-        _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, content_length)
+        _perform_multipart_download(
+            httpx_client=httpx_client,
+            pre_signed_url=pre_signed_url,
+            output_file_path=output_file_path,
+            content_length=content_length,
+        )
 
     if verify_checksums:
         try:
@@ -181,7 +191,9 @@ def _perform_singlepart_download(httpx_client: httpx.Client, pre_signed_url: str
                 file.write(chunk)
 
 
-def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, content_length):
+def _perform_multipart_download(
+    httpx_client: httpx.Client, pre_signed_url: str, output_file_path: Path, content_length: int
+) -> None:
     """
     Download a large file in multiple chunks using range requests.
 
@@ -199,11 +211,11 @@ def _perform_multipart_download(httpx_client, pre_signed_url, output_file_path, 
             futures.append(
                 executor.submit(
                     _download_chunk,
-                    httpx_client,
-                    pre_signed_url,
-                    start,
-                    end,
-                    output_file_path,
+                    client=httpx_client,
+                    url=pre_signed_url,
+                    start=start,
+                    end=end,
+                    output_file_path=output_file_path,
                 )
             )
 
@@ -263,23 +275,31 @@ class UploadOutcome:
 
 
 def upload_multiple_singlepart_pre_signed_urls(
-    pre_signed_urls: list[PreSignedSinglePartUploadResponse], all_files: list[Path]
+    pre_signed_urls: list[PreSignedSinglePartUploadResponse],
+    dest_key_to_path: dict[str, Path],
 ) -> tuple[list[SuccessfulUpload], list[FailedUpload]]:
     """
     Upload singlepart files using pre-signed PUT URLs.
-    Returns a tuple of both the successful and failed uploads
-    """
-    file_map = {file.name: file for file in all_files}
+    Returns a tuple of both the successful and failed uploads.
 
+    dest_key_to_path maps each object's destination key (aka name in bucket) to its location in the local file path.
+    """
     successful_uploads, failed_uploads = [], []
     with httpx.Client() as client:
         for obj in pre_signed_urls:
-            print(f"Uploading '{obj.name}'...", end=" ")
+            destination_key = obj.name
+            file_path = dest_key_to_path[destination_key]
+
+            if file_path.name != destination_key:
+                print(f"Uploading '{file_path}' to '{destination_key}'...", end=" ")
+            else:
+                print(f"Uploading '{file_path}'...", end=" ")
+
             result = _upload_one_singlepart_pre_signed_url(
                 httpx_client=client,
                 pre_signed_url=obj.pre_signed_url,
-                file_path=file_map[obj.name],
-                object_name=obj.name,
+                file_path=file_path,
+                object_name=destination_key,
                 headers=obj.put_headers,
             )
 
@@ -301,10 +321,7 @@ def _upload_one_singlepart_pre_signed_url(
     object_name: str,
     headers: dict[str, str],
 ) -> SuccessfulUpload | FailedUpload:
-    """
-    Upload one singlepart file to S3 using a pre-signed PUT URL.
-    Helper function, do not call directly from outside this module.
-    """
+    """Upload one singlepart file to S3 using a pre-signed PUT URL."""
     with open(file_path, "rb") as file:
         try:
             response = httpx_client.put(pre_signed_url, content=file, headers=headers)
@@ -324,17 +341,20 @@ def perform_multipart_upload(
     divbase_base_url: str,
     file_path: Path,
     safe_mode: bool,
+    destination_name: str,
 ) -> SuccessfulUpload | FailedUpload:
     """
     Manages the entire multi-part upload process for a single file.
     See the docs docs/development/s3_transfers.md for high level overview of the process.
     """
-    object_name = file_path.name
     file_size = file_path.stat().st_size
-    print(f"Uploading '{object_name}'...", end=" ")
+    if file_path.name != destination_name:
+        print(f"Uploading '{file_path.name}' to '{destination_name}'...", end=" ")
+    else:
+        print(f"Uploading '{file_path.name}'...", end=" ")
 
     # 1. Create multipart upload
-    create_request = CreateMultipartUploadRequest(name=object_name, content_length=file_size)
+    create_request = CreateMultipartUploadRequest(name=destination_name, content_length=file_size)
     response = make_authenticated_request(
         method="POST",
         divbase_base_url=divbase_base_url,
@@ -352,7 +372,7 @@ def perform_multipart_upload(
             part_urls = _get_part_urls(
                 project_name=project_name,
                 divbase_base_url=divbase_base_url,
-                object_name=object_name,
+                object_name=destination_name,
                 upload_id=object_data.upload_id,
                 part_numbers=part_batch_numbers,
                 file_path=file_path,
@@ -365,7 +385,7 @@ def perform_multipart_upload(
         # must be uploaded in part order otherwise InvalidPartOrder error from S3
         uploaded_parts.sort(key=lambda part: part.part_number)
         complete_request_body = CompleteMultipartUploadRequest(
-            name=object_name,
+            name=destination_name,
             upload_id=object_data.upload_id,
             parts=uploaded_parts,
         )
@@ -383,7 +403,7 @@ def perform_multipart_upload(
     # To avoid leaving incomplete uploads in S3
     except Exception as e:
         try:
-            abort_request = AbortMultipartUploadRequest(name=object_name, upload_id=object_data.upload_id)
+            abort_request = AbortMultipartUploadRequest(name=destination_name, upload_id=object_data.upload_id)
             make_authenticated_request(
                 method="DELETE",
                 divbase_base_url=divbase_base_url,
@@ -391,10 +411,10 @@ def perform_multipart_upload(
                 json=abort_request.model_dump(),
             )
         except (DivBaseAPIConnectionError, DivBaseAPIError):
-            logger.info(f"Failed to abort multipart upload for object '{object_name}' after an upload error.")
+            logger.warning(f"Failed to abort multipart upload for object '{destination_name}' after an upload error.")
 
         print("[bold red]Failed[/bold red]")
-        return FailedUpload(object_name=object_name, file_path=file_path, exception=e)
+        return FailedUpload(object_name=destination_name, file_path=file_path, exception=e)
 
 
 def _get_part_urls(

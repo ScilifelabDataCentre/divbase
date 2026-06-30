@@ -33,11 +33,12 @@ LARGEST_FILE_UPLOADABLE_TO_DIVBASE_BYTES = 10_000 * S3_MULTIPART_CHUNK_SIZE
 # Whilst we can't realistically limit what file types a user actually uploads,
 # this is here to say what we know should work in DivBase.
 SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi", ".txt", ".md")
-
+SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY = ", ".join(f"'{ext}'" for ext in SUPPORTED_DIVBASE_FILE_TYPES)
 # Characters that are not allowed in file names uploaded to DivBase
 # This is to prevent issues when users try to filter/query files on DivBase using these characters
 # or when downloading files (e.g. ":" is used to specify file versions when downloading files
-UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\")
+UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\", "//", "@", "~")
+UNSUPPORTED_CHARACTERS_DISPLAY = ", ".join(f"'{c}'" for c in UNSUPPORTED_CHARACTERS_IN_FILENAMES)
 
 # This prefix is used for all *.vcf.gz results files from a query job/task.
 # After the prefix comes the job id which is a rolling integer.
