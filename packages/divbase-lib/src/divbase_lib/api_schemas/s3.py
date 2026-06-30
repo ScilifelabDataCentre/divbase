@@ -45,9 +45,15 @@ def validate_s3_directory_name(name: str) -> str:
         name = name[1:]
     if not name.endswith("/"):
         name = f"{name}/"
-    parts = [p for p in name.strip("/").split("/")]
+
+    stripped = name.strip("/")
+    if not stripped:
+        raise ValueError("Directory name cannot be empty or '/'.")
+
+    parts = [p for p in stripped.split("/")]  # (handle nested dirs)
     if any(part in (".", "..") for part in parts):
         raise ValueError(f"Directory '{name}' cannot contain '.' or '..' as a folder path.")
+
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
         if char in name:
             raise ValueError(
