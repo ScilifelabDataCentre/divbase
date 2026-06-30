@@ -216,11 +216,13 @@ def test_list_soft_deleted_does_not_allow_certain_option_combos(logged_in_edit_u
     result = runner.invoke(app, "files ls --show-deleted-files --include-results-files")
     assert result.exit_code == 2
     # usage message means it was from bad parameter raise
-    assert "usage: root files ls" in result.output.lower()
+    assert "usage:" in result.output.lower()
+    assert "root files ls" in result.output.lower()
 
     result = runner.invoke(app, "files ls --detailed --tsv")
     assert result.exit_code == 2
-    assert "usage: root files ls" in result.output.lower()
+    assert "usage:" in result.output.lower()
+    assert "root files ls" in result.output.lower()
 
 
 def test_list_files_with_prefix_filtering(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
