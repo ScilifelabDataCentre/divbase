@@ -459,7 +459,7 @@ def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in
 ):
     """
     Regression test (negative outcome): dimensions update must fail for VCFs with duplicate sample IDs in one file header.
-    Why: duplicate sample IDs violate VCF validity and must not be accepted into the dimensions index.
+    Why: duplicate sample IDs violate VCF validity and must not be accepted into the dimensions cache.
     Reference: docs/development/bcftools_task_constraints.md ("1.3. There cannot be duplicate sample names ...").
     """
 

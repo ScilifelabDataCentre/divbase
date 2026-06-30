@@ -15,7 +15,7 @@ All queries depend on that the prerequisites are fulfilled, as described in the 
 First, ensure that the VCF files fulfill the requirements described in [Working with VCF Files in DivBase](vcf-files.md) and have been uploaded to the DivBase project. Then ensure that the project's VCF dimensions cache is up-to-date by running:
 
 ```bash
-# Submit a job to that ensure that the project's dimensions cache is up-to-date
+# Submit a job to ensure that the project's dimensions cache is up-to-date
 divbase-cli dimensions update --project <PROJECT_NAME>
 
 # To check the progress of the dimensions update job, use
@@ -28,11 +28,15 @@ Once the VCF dimensions update job is finished and the dimensions cache of the p
 
 ## Query paths
 
+`divbase-cli query vcf` requires exactly one sample-selection mode. The table below covers all options.
+
 | What you want to do | Command | Full guide |
 |---|---|---|
 | Find samples/files from metadata TSV | `divbase-cli query tsv "<FILTER>"` | [Sidecar Metadata TSV files](sidecar-metadata.md) |
-| Submit a VCF subset job | `divbase-cli query vcf --all-samples --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
-| Use metadata filter + VCF filter together | `divbase-cli query vcf --tsv-filter "<FILTER>" --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
+| Submit a VCF query on a named list of samples | `divbase-cli query vcf --samples "S1,S2" --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
+| Submit a VCF query on samples listed in a file | `divbase-cli query vcf --samples-file samples.txt --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
+| Submit a VCF query on all samples in the project | `divbase-cli query vcf --all-samples --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
+| Use a metadata filter to select samples for a VCF query | `divbase-cli query vcf --tsv-filter "<FILTER>" --command "view ..."` | [DivBase VCF query syntax](vcf-query-syntax.md) |
 
 ## Minimal examples
 
@@ -40,7 +44,10 @@ Once the VCF dimensions update job is finished and the dimensions cache of the p
 # Metadata query only
 divbase-cli query tsv "Area:North"
 
-# VCF query only (explicit all-samples mode)
+# VCF query — named sample list
+divbase-cli query vcf --samples "S1,S2,S10" --command "view -r 21:15000000-25000000"
+
+# VCF query — all samples in the project
 divbase-cli query vcf --all-samples --command "view -r 21:15000000-25000000"
 
 # Combined metadata + VCF query
@@ -52,14 +59,14 @@ divbase-cli query vcf \
 ## What happens after query submission?
 
 - `query tsv` directly returns the sample IDs and VCF filenames in the project matching the query.
-- `query vcf` submits an asynchronous job and returns a task ID.
+- `query vcf` submits an asynchronous job and returns a DivBase Task ID.
 - On successful VCF jobs, DivBase uploads a results VCF file with the subset data in the project's data storage.
 
 Check VCF job status with:
 
 ```bash
-# By the job ID
-divbase-cli task-history id <JOB_ID>
+# By the DivBase Task ID
+divbase-cli task-history id <TASK_ID>
 
 # Or by all the jobs submitted by the user
 divbase-cli task-history user

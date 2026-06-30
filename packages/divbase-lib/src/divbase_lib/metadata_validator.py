@@ -713,8 +713,8 @@ class SharedMetadataValidator:
             errors.append(
                 ValidationMessage(
                     ValidationCategory.DIMENSIONS,
-                    f"The following samples in the TSV were not found in the DivBase project's dimensions index ({examples}). "
-                    "DivBase requires that all samples in the TSV file must be present in the project's dimensions index to be used for queries."
+                    f"The following samples in the TSV were not found in the DivBase project's dimensions cache ({examples}). "
+                    "DivBase requires that all samples in the TSV file must be present in the project's dimensions cache to be used for queries."
                     f"{full_output_hint}",
                 )
             )
@@ -728,7 +728,7 @@ class SharedMetadataValidator:
             warnings.append(
                 ValidationMessage(
                     ValidationCategory.DIMENSIONS,
-                    f"The following samples in the DivBase project's dimensions index were not found in the TSV ({examples}). "
+                    f"The following samples in the DivBase project's dimensions cache were not found in the TSV ({examples}). "
                     "This is allowed for DivBase metadata TSV files, but please be aware that these samples will not be considered when making queries with this metadata file."
                     f"{full_output_hint}",
                 )

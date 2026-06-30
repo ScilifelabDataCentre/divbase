@@ -32,7 +32,7 @@ dimensions_app = typer.Typer(
 def update_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
-    """Calculate and add the dimensions of all VCF files in the project to the dimensions index in the project."""
+    """Calculate and add the dimensions of all VCF files in the project to the dimensions cache in the project."""
 
     project_config = resolve_project(project_name=project)
 
@@ -96,7 +96,7 @@ def show_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Show the dimensions index file for a project.
+    Show the dimensions cache file for a project.
     When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
     """
     project_config = resolve_project(project_name=project)
@@ -297,7 +297,7 @@ def create_metadata_template_with_project_samples_names(
     )
 
     if sample_count == 0:
-        # Fallback in case there are no samples in the dimensions index. If no dimensions entry for the project
+        # Fallback in case there are no samples in the dimensions cache. If no dimensions entry for the project
         # VCFDimensionsEntryMissingError will be returned. But for some reason, there are no samples in the VCF, this will catch that.
         print("No samples found for this project. No file written.")
         return
@@ -344,7 +344,7 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     """
     # Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
     # Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
-    # in the TSV file match the sample names in the dimensions index for the project
+    # in the TSV file match the sample names in the dimensions cache for the project
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)

@@ -111,13 +111,13 @@ class VCFDimensionsEntryMissingError(DivBaseAPIException):
     def __init__(self, project_name: str | None = None):
         if project_name:
             message = (
-                f"The VCF dimensions index in project '{project_name}' is missing or empty. "
+                f"The VCF dimensions cache in project '{project_name}' is missing or empty. "
                 "Please ensure that there are VCF files in the project and run:\n"
                 "'divbase-cli dimensions update --project <project_name>'\n"
             )
         else:
             message = (
-                "The VCF dimensions index is missing or empty. "
+                "The VCF dimensions cache is missing or empty. "
                 "Please ensure that there are VCF files in the project and run:\n"
                 "'divbase-cli dimensions update --project <project_name>'\n"
             )

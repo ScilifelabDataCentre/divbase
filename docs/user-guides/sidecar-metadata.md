@@ -1,6 +1,6 @@
 # Sidecar Metadata TSV files: creating and querying sample metadata files
 
-DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project. The user can then send metadata queries to DivBase to find the samples that fulfil the the query, and which VCF files that the files are found in. Metadata queries can be run on their own (as is described in this guide), but can also be used for VCF queries to automate the checkout data related to specific samples from DivBase (described in the guide for [DivBase Query Syntax for VCF data](vcf-query-syntax.md)).
+DivBase supports that users supply a sidecar TSV (tab separated variables) file with metadata on the samples contained within the VCF files in the DivBase project. The user can then send metadata queries to DivBase to find the samples that fulfil the query, and which VCF files that the files are found in. Metadata queries can be run on their own (as is described in this guide), but can also be used for VCF queries to automate the checkout data related to specific samples from DivBase (described in the guide for [DivBase Query Syntax for VCF data](vcf-query-syntax.md)).
 
 While there are ways for sample metadata to be stored in the VCF itself (see [The Variant Call Format Specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf)), it is not really standardized. Metadata can for instance be specified instance in a global `##SAMPLE` header (once per sample) or in a custom per-variant genotype `FORMAT` field in each variant and sample. The downside of the former is that common tools like `bcftools view` do not filter on the headers; the downside of the latter is that writing the metadata once per variant will result in a lot of repeated data, which in turn leads to elevated file size and processing times as the VCF file scales.
 
@@ -8,7 +8,7 @@ DivBase takes a different approach by decoupling the sample metadata from the VC
 
 To be able to accomodate metadata needs for any research project that deals with VCF files, the sidecar sample metadata TSV and filtering in DivBase has been designed to be very open-ended and user-defined. As long as a few format and filter syntax requirements are followed, the user is free to design their metadata TSV as they like using the format: column names represent metadata categories and rows represent the samples found in the VCF files in the DivBase project. However, this flexibility put the responsibility on the user that spelling and values in columns and rows are correct: if not, the sample metadata filters will return incomplete or unintended results.
 
-!!! Notes
+!!! note
     There is a CLI command to help check that a user-defined sample metadata TSV file aligns with the requirements described on this page. This validator tool will be [described in its own section below](#12-validating-a-sidecar-metadata-tsv-with-divbase-cli), but, in short, it can be run with:
 
     ```bash
@@ -17,8 +17,8 @@ To be able to accomodate metadata needs for any research project that deals with
 
 This guide contains sections on how to [Create a sample metadata TSV](#1-creating-a-sidecar-sample-metadata-tsv-for-a-divbase-project), and [How to run queries on sample metadata TSV files](#2-query-syntax-for-sidecar-metadata). Instructions on how to run combined sample metadata and VCF data queries are found on the separate page on [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
-!!! Warning
-    All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions index is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
+!!! warning
+    All instructions regarding running DivBase queries, generating sample metadata templates, and validating sample metadata TSV files required that the project's VCF dimensions cache is updated against the current versions of the VCF files in the project's data store. This can be assured by running the command:
 
     ```bash
     divbase-cli dimensions update
@@ -38,8 +38,8 @@ If the dimensions VCF files in the project have been cached in DivBase, a templa
 divbase-cli dimensions create-metadata-template
 ```
 
-!!! Note
-    There can be multiple TSVs in the same project and it is possible to call them for the queries with the `--metadata-tsv-name` flag. If not specified, the default `sample_metadata.tsv` will be assumed. It is up to the user if the want to have multiple TSVs in the same project to organise their metadata in a specific way. It is allowed to have duplicate sample names and metadata across multiple TSV files, since only one TSV can be called per query. It is recommended to a have a master TSV that contains all samples from all the VCFs in the project: querying on TSVs that contain subsets of all sample names is possible, but will sample names not included in the TSV used for the query will be disregarded for the query.
+!!! note
+    The template is saved to `sample_metadata_<project_name>.tsv` in the current directory by default. You can specify a different output path with `--output path/to/file.tsv`. If you upload the file under its generated name, remember to pass `--metadata-tsv-name sample_metadata_<project_name>.tsv` in your queries, or rename the file to `sample_metadata.tsv` before uploading (which is the query default).
 
 ### 1.1. Sidecar TSV format requirements
 
@@ -69,7 +69,7 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: `" Sample 1 "` will be processed as `"Sample 1"`.
 
 !!! Note
-    Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions indexing (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
+    Note that the TSV does not need contain any information of which VCF files the samples are found in: this is handled by the project's VCF dimensions caching (`divbase-cli dimensions update`). We advice against putting sample-VCF file mappings in TSV file to reduce the risk of confusion and data mismatch.
 
 #### 1.1.3. Example
 
@@ -106,9 +106,9 @@ divbase-cli dimensions validate-metadata-file path/to/your/sample_metadata.tsv -
 
 The validation runs on the user's local computer and not as a job on the DivBase server. It is intended to be used on sidecar metadata TSV files before they are uploaded to the DivBase project. The validator will check the formatting requirements as described in [Mandatory contents](#111-mandatory-content) and [User-defined columns](#112-user-defined-columns).
 
-The command requires that the project's dimensions index is up-to-date with the VCF files in the project, and that is why it is sorted under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions index is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
+The command requires that the project's dimensions cache is up-to-date with the VCF files in the project, and that is why it is sorted under `divbase-cli dimensions` in the CLI command tree. If you are unsure if the dimensions cache is up-to-date, just run `divbase-cli dimensions update` and wait until that job has completed by checking `divbase-cli task-history user`.
 
-The validation command will fetch all sample names from the project dimensions index from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
+The validation command will fetch all sample names from the project dimensions cache from the DivBase server and use that to validate that the sample names in the TSV are correct. Misspelled, missing, or otherwise incorrect sample names in the TSV will result in erroneous or even misleading query results, and the validator will help with spotting that. Several of the checks that the validator performs are also done at the start of a sample metadata query, but this sample name check is currently only done by the validator.
 
 #### 1.2.1. Errors from TSV content validation
 
@@ -122,7 +122,7 @@ The following will return **Errors**. These must be fixed for the sidecar TSV be
 
 - `Sample_ID` column issues: Empty value, value containing bracket array notation (e.g. `["S1", "S2"]`), rows with duplicate sample names.
 
-- Samples in TSV not found in project dimensions index: All samples listed in the TSV must exist in the project's dimensions index. If a sample is known to be in a VCF file in the DivBase project but is missing from the VCF dimensions index, the user needs to run `divbase-cli dimensions update` to submit an update job and then try the validator again after the job has finished.
+- Samples in TSV not found in project dimensions cache: All samples listed in the TSV must exist in the project's dimensions cache. If a sample is known to be in a VCF file in the DivBase project but is missing from the VCF dimensions cache, the user needs to run `divbase-cli dimensions update` to submit an update job and then try the validator again after the job has finished.
 
 - Mixed element types within a single multi-value cell: e.g. `[1, "two", 3]` (since it contains different types: `int`, `string`, `int`).
 
@@ -137,7 +137,7 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 
 - Cell value has leading or trailing whitespace (will be stripped by DivBase when a query is run)
 
-- Samples in the project's dimensions index not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, especially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
+- Samples in the project's dimensions cache not found in the TSV. These samples will not be considered in queries, and that might in fact be what the user wants, especially if using multiple TSVs. Just be sure to be careful when using this since it will affect the results.
 
 - Mixed-type columns (a column with numeric and string values, e.g. `8`, `1a`, `5a`). They are allowed but the user should keep in mind that since they will be treated as string columns, numeric query operations (ranges, inequalities) will not work on these columns.
 
@@ -149,6 +149,17 @@ The validator will also raise **Warnings**. DivBase queries can still be run wit
 
 This section describes how to query on the sample metadata file itself. The same syntax used here will also be used when running combined sample metadata and VCF data queries; how to do that is covered in [DivBase Query Syntax for VCF data](vcf-query-syntax.md).
 
+The command for running the sidecar metadata queries is:
+
+```bash
+divbase-cli query tsv
+```
+
+!!! note
+    By default, the `divbase-cli query tsv` assumes that there is a sample metadata TSV named `sample_metadata.tsv` in the DivBase project's data store. The option `--metadata-tsv-name` option allows you call on sample metadata TSV with other names.
+
+    One consequence of this is that it is possible to have multiple sample metadata TSVs in the same DivBase project. We do not reccomend that you split the sample metadata across different files since only one TSV can be included in a query. For the most complete queries, please store all sample metadata in the same TSV.
+
 ### 2.1. Overview: querys are applied as filters on columns in the TSV
 
 Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user wants to query on need to be entered as a string (i.e. enclosed in quotes, `""`).
@@ -159,7 +170,7 @@ It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `"K
 !!! note
     Please note that semicolons (`;`) have special meaning in the query filter syntax: to separate key:value filter pairs (e.g. `"Area:North;Population:1"`). This means that if a TSV cell contains a literal semicolon, it cannot be matched via query filters because the query parser will consider it a delimiter and split the string on it. DivBase will return warnings to the user if the TSV contains semicolons.
 
-For example, if the user wants to query the TSV on column `Area` for all samples that contain the value `North`,:
+For example, if the user wants to query the TSV on column `Area` for all samples that contain the value `North`:
 
 ```bash
 divbase-cli query tsv "Area:North"

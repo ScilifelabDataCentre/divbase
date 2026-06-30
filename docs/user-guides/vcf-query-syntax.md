@@ -6,13 +6,13 @@ Users can checkout subsets of their VCF data from their DivBase project using th
 divbase-cli query vcf
 ```
 
-This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a job ID when they submit their query to the task queue, and can view the status of the job with the `task-history` commands, such as:
+This data checkout is run as an asynchronous job that is sent to the queue on the DivBase server, and eventually run once there are idle resources to process the job. Users will get a DivBase Task ID when they submit their query to the task queue, and can view the status of the job with the `task-history` commands, such as:
 
 ```bash
-divbase-cli task-history id <JOB_ID>
+divbase-cli task-history id <TASK_ID>
 ```
 
-The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the job ID.
+The processing of the VCF files on the DivBase server is done with [`bcftools`](https://github.com/samtools/bcftools). DivBase will detect the VCF files in the project's data store that are needed for the query; if more than one VCF file is needed, DivBase will ensure that the files are compatible with each other according to the requirements of `bcftools` and ensure that a single results file with the subset data is returned to the user by running `bcftools merge` and `bcftools concat` on the intermediate files as needed. The result is a single VCF file that is uploaded to the projects data store and named after the DivBase Task ID.
 
 Users can query the VCF data in their project with or without combining it with a [sample metadata query](sidecar-metadata.md).
 
@@ -21,7 +21,7 @@ Example of a VCF query that identifies the samples and VCF files to filter on in
 ```bash
 divbase-cli query vcf --tsv-filter  "Area:North,West;Weight:>10" --command "view -r 21:15000000-25000000"
 
-# This will return the job ID of the submitted job. Example:
+# This will return the DivBase Task ID of the submitted job. Example:
 # Job submitted successfully with task id: 123
 
 # Job status can be viewed with e.g.
@@ -185,7 +185,7 @@ Example of piped commands in DivBase VCF queries:
 divbase-cli query vcf --samples "S1,S2" --command "view -r 21:15000000-25000000; view -g hom; view -i 'MAF>=0.05'"
 ```
 
-The DivBase will apply the command(s) specified in `--command` in turn to a copy of each VCF file included in the query, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
+DivBase will apply the command(s) specified in `--command` in turn to a copy of each VCF file included in the query, and finally merge and/concatenate them in to a single results file. This means that the user should not state `merge` or `concat` in their commands.
 
 !!! Note
     The [bcftools view manual](https://samtools.github.io/bcftools/bcftools.html#view) has the following recommendation:
@@ -198,7 +198,7 @@ The DivBase will apply the command(s) specified in `--command` in turn to a copy
 
 Samples and filenames are automatically handled by the DivBase server based on the user input discussed in [Sample and VCF file selection](#3-sample-and-vcf-file-selection) above.
 
-If there is more one command specified by the user in the `--command` string, the sample filtering command `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY` will be automatically appended by the DivBase server to the first command in the user-defined pipe. This means that the user only need to explicitly include `view -s` in the `--command` straing when that is the only bcftools filtering command in their query.
+If there is more one command specified by the user in the `--command` string, the sample filtering command `view -s <SAMPLES_FROM_USER_OR_METADATA_QUERY>` will be automatically appended by the DivBase server to the first command in the user-defined pipe. This means that the user only need to explicitly include `view -s` in the `--command` straing when that is the only bcftools filtering command in their query.
 
 For example, a command like
 
@@ -287,7 +287,7 @@ Failing to not escape the inner double quotes might lead to the string given by 
 
 ### 5.1. What the user can see after submitting the job
 
-1. CLI returns `Job submitted successfully with task id: <ID>`
+1. CLI returns `Job submitted successfully with task id: <ID>` — this integer is the DivBase Task ID
 2. User monitors status via task-history commands `divbase-cli task-history`
 3. On job success, DivBase uploads a result VCF file to project's data storage. If the job fails, user can read the error message in the task-history.
 4. User can list/download result files from the project's data storage.
@@ -305,7 +305,7 @@ See also the manual for `bcftools view` [bcftools manual](https://samtools.githu
 
 - Source VCF files: uploaded by project members to the DivBase project. Read, but not modified by the query jobs. Source VCF files are indexed in the VCF dimensions cache of the project.
 - Sidecar metadata TSV: read-only during queries.
-- Result VCF files: new files created on successful jobs. Are never considered towards the VCF dimensions cache or subsequent VCF queries. Will be named `result_of_job_<JOB_ID>`. As an extra layer of provenence in case the file name of the results file is change, a the following is also added to the file header using `bcftools annotate`: `##DivBase_created="This is a results file created by a DivBase query; Date=<TIME_STAMP>"`
+- Result VCF files: new files created on successful jobs. Are never considered towards the VCF dimensions cache or subsequent VCF queries. Will be named `result_of_job_<TASK_ID>`. As an extra layer of provenence in case the file name of the results file is change, a the following is also added to the file header using `bcftools annotate`: `##DivBase_created="This is a results file created by a DivBase query; Date=<TIME_STAMP>"`
 
 !!! Note
     - Re-running queries creates identical jobs and new result files. The system does not have any limitations for duplicate queries, so please be mindful of this.
@@ -318,7 +318,7 @@ TODO describe cron job for old results files
 
 This section is aimed towards the technical user that would like to understand how DivBase uses `bcftools` to process VCF data queries on the files in a project's data storage.
 
-Figure 1 below shows a schematic overview of how DivBase processes VCF queries for the general case of _n_ user-defined `bcftools view` commands in `--comands` and _m_ VCF files needed for the given query.
+Figure 1 below shows a schematic overview of how DivBase processes VCF queries for the general case of _n_ user-defined `bcftools view` commands in `--command` and _m_ VCF files needed for the given query.
 
 ![VCF query processing](../assets/diagrams/vcf_query_processing_for_user_guide.png)
 
@@ -344,7 +344,7 @@ bcftools view -s S1,S2 temp_2_1.bcf -Ou temp_2_1.bcf
 bcftools view -s S1,S2 temp_2_2.bcf -Ou temp_2_2.bcf
 
 # Assume that the files have no overlapping sample sets, i.e. can be merged (this check happens before the job starts)
-bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<JOB_ID>.vcf.gz
+bcftools merge temp_2_1.bcf temp_2_2.bcf result_of_job_<TASK_ID>.vcf.gz
 ```
 
 ## 6. Examples
@@ -388,7 +388,7 @@ Result VCF file will contain samples S1,S2. The input VCF files needed for this 
 | Error | Likely cause | Suggested fix |
 |---|---|---|
 | `Use only one of --tsv-filter, --samples, --samples-file, or --all-samples` | More than one sample-selection mode was provided in the same query. | Use exactly one of: `--tsv-filter`, `--samples`, `--samples-file`, or `--all-samples`. |
-| `Unknown sample IDs` / `were not found in the project's dimensions index` | One or more sample IDs are not present in current VCF dimensions cache. | Run `divbase-cli dimensions show --unique-samples` to verify names. If needed, update cache with `divbase-cli dimensions update --project <project>`. |
+| `Unknown sample IDs` / `were not found in the project's dimensions cache` | One or more sample IDs are not present in current VCF dimensions cache. | Run `divbase-cli dimensions show --unique-samples` to verify names. If needed, update cache with `divbase-cli dimensions update --project <project>`. |
 | `Invalid --samples-file format` (warnings/errors about delimiters or only one parsed sample) | The samples file has comma/semicolon/tab/pipe-separated values, header-like rows, or malformed lines. | Use plain UTF-8 text with one sample ID per line. Keep comments as lines starting with `#`. |
 | `Dimensions not up to date` | Bucket contents changed since dimensions were last indexed. | Run `divbase-cli dimensions update --project <project>` and retry the query. |
 | `Unsupported bcftools command ...` | `--command` used a command other than `view` (for example `merge`). | Use only `bcftools view` syntax in `--command`. |

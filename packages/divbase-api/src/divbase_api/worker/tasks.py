@@ -598,7 +598,7 @@ def update_vcf_dimensions_task(
             db=db,
         )
 
-    # Early exit if there are no VCF files left in the bucket after updating the dimensions index. If there were no VCF files to begin with, raise exception
+    # Early exit if there are no VCF files left in the bucket after updating the dimensions cache. If there were no VCF files to begin with, raise exception
     if not vcf_files:
         if vcfs_deleted_from_bucket_since_last_indexing:
             result = DimensionUpdateTaskResult(
@@ -693,7 +693,7 @@ def update_vcf_dimensions_task(
 
         _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
 
-        # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
+        # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions cache accordingly before returning result.
         # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
         # Updating dimensions, however, is a more expensive operation, so if a version or new VCF has been added, the job will need to be resubmitted to the queue.
 
@@ -986,7 +986,7 @@ def _resolve_inputs_for_cli_samples_mode(
 
     if missing_samples:
         raise TaskUserError(
-            f"The following sample IDs were not found in the project's dimensions index: {', '.join(missing_samples)}."
+            f"The following sample IDs were not found in the project's dimensions cache: {', '.join(missing_samples)}."
         )
 
     matched_sample_ids = []
@@ -1138,11 +1138,11 @@ def _check_if_samples_can_be_combined_with_bcftools(
     file_to_samples = {}
     for file in files_to_download:
         if file not in vcf_lookup:
-            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions cache.")
 
         sample_names = vcf_lookup[file].samples
         if not sample_names:
-            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions cache.")
 
         file_to_samples[file] = sample_names
 
@@ -1213,7 +1213,7 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     project_id: int,
 ) -> None:
     """
-    Check that all VCF files in the bucket are tracked in the dimensions index and
+    Check that all VCF files in the bucket are tracked in the dimensions cache and
     that tracked files have matching version IDs.
 
     Skipped VCF files (DivBase-generated result files) are considered tracked.

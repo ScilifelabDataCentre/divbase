@@ -137,7 +137,7 @@ class NoVCFFilesFoundError(Exception):
 
 
 class DimensionsNotUpToDateWithBucketError(Exception):
-    """Raised when VCF files in a bucket are missing or outdated in the dimensions index."""
+    """Raised when VCF files in a bucket are missing or outdated in the dimensions cache."""
 
     pass
 

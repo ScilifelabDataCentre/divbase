@@ -3,10 +3,10 @@ flowchart TB
     A["`User submits:
     divbase-cli query vcf
     --all-samples --command &quot;cmd-1;cmd-2;...;cmd-n&quot;`"] --> B["`Server validates that the user-submitted bcftools commands are supported by DivBase`"]
-    B --> C[Server checks the VCF Dimensions cache to identify the VCF files 1, 2, ..., m  that are needed for samples specified inthe query.]
+    B --> C[Server checks the VCF Dimensions cache to identify the VCF files 1, 2, ..., m  that are needed for samples specified in the query.]
     C --> D["`For each command
     cmd-1, cmd-2, ..., cmd-n:
-    Process each VCF file in parallel`"]
+    Process each VCF file sequentially`"]
     D --> VCF1_START([VCF1])
     D --> VCF2_START([VCF2])
     D --> VCF3_START([VCF3])
@@ -79,7 +79,7 @@ flowchart TB
     VCFm_OUT --> MERGE
     MERGE --> ANNOTATE[Annotate combined file with custom header line with DivBase provenance]
     ANNOTATE --> SORT[Sort and compress the VCF]
-    SORT --> RESULT([results_of_job_&lt;JOB_ID&gt;.vcf.gz])
+    SORT --> RESULT([result_of_job_&lt;TASK_ID&gt;.vcf.gz])
     RESULT --> UPLOAD["`Upload results file to
     DivBase project`"]
 
@@ -94,6 +94,6 @@ flowchart TB
 %% mmdc -i docs/assets/diagrams/vcf_query_processing_for_user_guide.mermaid \
 %%      -o docs/assets/diagrams/vcf_query_processing_for_user_guide.png --theme dark --backgroundColor  "#22272e" --scale 2
 
-%% Turns out the SVG became too large
+%% Command used to export to SVG, but it was too large
 %% mmdc -i docs/assets/diagrams/vcf_query_processing_for_user_guide.mermaid \
 %%      -o docs/assets/diagrams/vcf_query_processing_for_user_guide.svg --theme dark --backgroundColor  "#22272e"

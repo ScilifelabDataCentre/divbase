@@ -1,11 +1,11 @@
-# VCF Dimensions caching
+# VCF dimensions caching
 
-The DivBase query system is built around the DivBase server having cached key technical metadata from each VCF file in a project. In DivBase, this information as the "VCF dimensions", and for instance includes the names of samples and scaffolds in each VCF file and the version ID of the file in the project data store. The VCF Dimensions is a snapshot of the VCF files in the object store at the time the command to update the VCF Dimensions cache for the project was last run.
+The DivBase query system is built around the DivBase server having cached key technical metadata from each VCF file in a project. In DivBase, this information is referred to as the "VCF dimensions", and for instance includes the names of samples and scaffolds in each VCF file and the version ID of the file in the project data store. The VCF dimensions is a snapshot of the VCF files in the object store at the time the command to update the VCF dimensions cache for the project was last run.
 
-This allows the DivBase server to make quick checks against against the project VCF Dimensions cache when users submit a query or validate a sidecar metadata TSV file instead of having to read each VCF file every time a query is submitted. This makes the server-side operations more efficient when it comes to internal transfer and reading of files, and for checking VCF query feasibility against the requirements of `bcftools`. For the user, this will lead to faster feedback, especially when the system needs to send an error or warning message.
+This allows the DivBase server to make quick checks against against the project VCF dimensions cache when users submit a query or validate a sidecar metadata TSV file instead of having to read each VCF file every time a query is submitted. This makes the server-side operations more efficient when it comes to internal transfer and reading of files, and for checking VCF query feasibility against the requirements of `bcftools`. For the user, this will lead to faster feedback, especially when the system needs to send an error or warning message.
 
 !!! Note
-    An updated VCF Dimensions cache for DivBase project is a prerequisite step before submitting any queries to the DivBase server.
+    An updated VCF dimensions cache for DivBase project is a prerequisite step before submitting any queries to the DivBase server.
 
 All query commands rely on the dimensions cache to quickly resolve samples, scaffolds, and file compatibility.
 Every time a new VCF file has been added or an existing VCF version has been replaced, run:
@@ -13,7 +13,7 @@ Every time a new VCF file has been added or an existing VCF version has been rep
 ```bash
 divbase-cli dimensions update --project <PROJECT_NAME>
 
-# This will return the job ID of the submitted job. Example:
+# This will return the DivBase Task ID of the submitted job. Example:
 # Job submitted successfully with task id: 123. To check the status of your job, use the command: divbase-cli task-history id 123
 
 # Job status can be viewed with e.g.
@@ -34,7 +34,7 @@ There are four CLI commands sorted under `divbase-cli dimensions`:
 
 - [divbase-cli dimensions validate-metadata-file](sidecar-metadata.md#12-validating-a-sidecar-metadata-tsv-with-divbase-cli)
 
-The former two relate generating/updating and viewing the VCF dimensions of a project and will be described on this page. The latter two relate to the user-defined sidecar metadata TSV and are described in the guide on [Sidecar sample metadata TSV queries](sidecar-metadata.md). The commands are sorted under `divbase-cli dimensions` since they rely on calling the VCF dimensions cache of the project. A list of all DivBase CLI commands that require an up-to-date VCF Dimensions cache is found in the section [CLI Commands that rely on that the project's VCF dimensions cache is up to date](#cli-commands-that-rely-on-that-the-projects-vcf-dimensions-cache-is-up-to-date)
+The former two relate generating/updating and viewing the VCF dimensions of a project and will be described on this page. The latter two relate to the user-defined sidecar metadata TSV and are described in the guide on [Sidecar sample metadata TSV queries](sidecar-metadata.md). The commands are sorted under `divbase-cli dimensions` since they rely on calling the VCF dimensions cache of the project. A list of all DivBase CLI commands that require an up-to-date VCF dimensions cache is found in the section [CLI Commands that rely on that the project's VCF dimensions cache is up to date](#cli-commands-that-rely-on-that-the-projects-vcf-dimensions-cache-is-up-to-date)
 
 ## Dimensions update
 
@@ -45,26 +45,27 @@ The `divbase-cli dimensions update` pre-reads the VCF files in the project's dat
 
 The `divbase-cli dimensions update` will look for `.vcf.gz` files in the project's data store. If there is no VCF dimensions cache for the project, it will create it. If not, it will compare the existing record in the cache with the current status of the object store. If any new VCF files have been added or if any VCF file version have been updated, it will update the VCF dimensions cache with that information. DivBase uses `bcftools` to extract the dimensions information from the VCF files.
 
-The update of the VCF Dimensions is scheduled as a job in the DivBase job queue system since it can a potentially take little time to update a VCF dimensions for projects that contain many or large VCF files that has not been previously cached. This is an up-front time investment: the time it takes to run the update command is saved on every subsequent command that needs to check the VCF dimensions. After submitting a job with `divbase-cli dimensions update`, use `divbase-cli task-history user` or `divbase-cli task-history id <JOB_ID_RECIEVED_AT_JOB_SUBMISSION>` to check the status of the VCF Dimensions Update job.
+The update of the VCF dimensions is scheduled as a job in the DivBase job queue system since it can potentially take a little time to update a VCF dimensions for projects that contain many or large VCF files that has not been previously cached. This is an up-front time investment: the time it takes to run the update command is saved on every subsequent command that needs to check the VCF dimensions. After submitting a job with `divbase-cli dimensions update`, use `divbase-cli task-history user` or `divbase-cli task-history id <TASK_ID>` (replacing `<TASK_ID>` with the DivBase Task ID printed in the terminal at submission) to check the status of the VCF dimensions update job.
 
-VCF results files that have been produced by DivBase are not indexed in the VCF Dimensions cache. The main reason for this is that they result files contain a subset of the VCF data in the project, and will thus contain duplicate data. The results files are not used for any queries: only the source VCF files uploaded by the users are. DivBase recognizes its results files on two levels: the files names have a `result_of_job_` prefix, and their VCF headers contain a row with `##DivBase_created`.
+VCF results files that have been produced by DivBase are not indexed in the VCF dimensions cache. The main reason for this is that they result files contain a subset of the VCF data in the project, and will thus contain duplicate data. The results files are not used for any queries: only the source VCF files uploaded by the users are. DivBase recognizes its results files on two levels: the files names have a `result_of_job_` prefix, and their VCF headers contain a row with `##DivBase_created`.
 
 ### What is cached by divbase-cli dimensions update?
 
-The VCF Dimensions cache stores this information for each VCF file in the project's data store:
+The VCF dimensions cache stores this information for each VCF file in the project's data store:
 
 - filename (`*.vcf.gz`)
-- version ID in the data store (each file name is versioned and has a version history. The VCF Dimensions cache uses the latest version of all files in the data store.)
+- version ID in the data store (each file name is versioned and has a version history. The VCF dimensions cache uses the latest version of all files in the data store.)
 - time stamp of when the VCF dimensions for this file was updated
 - sample names contained in this VCF file
 - sample count
 - scaffold names contained in this VCF file
 - scaffold count
 - variant count
+- file size in bytes
 
 ## Dimensions show
 
-The `divbase-cli dimensions show` command print **the current state** of the VCF Dimensions cache for the project to the user's terminal. It will display the cached dimensions data for each VCF file, as described in [the previous section](#what-is-cached-by-divbase-cli-dimensions-update). If a project has many VCF files, samples, and/or scaffolds, this display can potentially be long.
+The `divbase-cli dimensions show` command print **the current state** of the VCF dimensions cache for the project to the user's terminal. It will display the cached dimensions data for each VCF file, as described in [the previous section](#what-is-cached-by-divbase-cli-dimensions-update). If a project has many VCF files, samples, and/or scaffolds, this display can potentially be long.
 
 ```bash
 divbase-cli dimensions show

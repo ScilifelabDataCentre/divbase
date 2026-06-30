@@ -156,7 +156,7 @@ class TaskHistoryDisplayManager:
 
         elif isinstance(task.result, DimensionUpdateTaskResult):
             result_message = (
-                f"VCF file dimensions index added or updated:\n  {task.result.VCF_files_added}\n"
+                f"VCF file dimensions cache added or updated:\n  {task.result.VCF_files_added}\n"
                 f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
