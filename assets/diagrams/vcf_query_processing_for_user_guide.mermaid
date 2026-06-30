@@ -1,0 +1,99 @@
+flowchart TB
+
+    A["`User submits:
+    divbase-cli query vcf
+    --all-samples --command &quot;cmd-1;cmd-2;...;cmd-n&quot;`"] --> B["`Server validates that the user-submitted bcftools commands are supported by DivBase`"]
+    B --> C[Server checks the VCF Dimensions cache to identify the VCF files 1, 2, ..., m  that are needed for samples specified in the query.]
+    C --> D["`For each command
+    cmd-1, cmd-2, ..., cmd-n:
+    Process each VCF file sequentially`"]
+    D --> VCF1_START([VCF1])
+    D --> VCF2_START([VCF2])
+    D --> VCF3_START([VCF3])
+    D -.-> VCFm_START([VCFm])
+
+
+    subgraph stage1[" "]
+        direction LR
+        VCF1_CMD1[Run Command 1 on VCF1]
+        VCF2_CMD1[Run Command 1 on VCF2]
+        VCF3_CMD1[Run Command 1 on VCF3]
+        VCFm_CMD1[Run Command 1 on VCFm]
+    end
+
+    subgraph stage2[" "]
+        direction LR
+        VCF1_CMD2[Run Command 2 on temp_file_1_1]
+        VCF2_CMD2[Run Command 2 on temp_file_1_2]
+        VCF3_CMD2[Run Command 2 on temp_file_1_3]
+        VCFm_CMD2[Run Command 2 on temp_file_1_m]
+    end
+
+    subgraph stageN[" "]
+        direction LR
+        VCF1_CMDN[Run Command n on temp_file_2_1]
+        VCF2_CMDN[Run Command n on temp_file_2_2]
+        VCF3_CMDN[Run Command n on temp_file_2_3]
+        VCFm_CMDN[Run Command n on temp_file_2_m]
+    end
+
+
+    %% Track for VCF1
+    VCF1_START --> VCF1_CMD1[ Run Command 1 on VCF1]
+    VCF1_CMD1--> VCF1_TEMP1([temp_file_1_1 for cmd-1, VCF1])
+    VCF1_TEMP1 --> VCF1_CMD2[Run Command 2 on temp_file_1_1]
+    VCF1_CMD2--> VCF1_TEMP2([temp_file_2_1 for cmd-2, VCF1])
+    VCF1_TEMP2 -.-> VCF1_CMDN[Run Command n on temp_file_2_1]
+    VCF1_CMDN --> VCF1_OUT([temp_file_n_1 for cmd-n, VCF1])
+
+    %% Track for VCF2
+    VCF2_START --> VCF2_CMD1[Run Command 1 on VCF2]
+    VCF2_CMD1--> VCF2_TEMP1([temp_file_1_2 for cmd-1, VCF2])
+    VCF2_TEMP1 --> VCF2_CMD2[Run Command 2 on temp_file_1_2]
+    VCF2_CMD2--> VCF2_TEMP2([temp_file_2_2 for cmd-2, VCF2])
+    VCF2_TEMP2 -.-> VCF2_CMDN[Run Command n on temp_file_2_2]
+    VCF2_CMDN --> VCF2_OUT([temp_file_n_2 for cmd-n, VCF2])
+
+    %% Track for VCF3
+    VCF3_START --> VCF3_CMD1[Run Command 1 on VCF3]
+    VCF3_CMD1--> VCF3_TEMP1([temp_file_1_3 for cmd-1, VCF3])
+    VCF3_TEMP1 --> VCF3_CMD2[Run Command 2 on temp_file_1_3]
+    VCF3_CMD2--> VCF3_TEMP2([temp_file_2_3 for cmd-2, VCF3])
+    VCF3_TEMP2 -.-> VCF3_CMDN[Run Command n on temp_file_2_3]
+    VCF3_CMDN --> VCF3_OUT([temp_file_n_3 for cmd-n, VCF3])
+
+
+    %% Track for VCFN
+    VCFm_START --> VCFm_CMD1[Run Command 1 on VCFm]
+    VCFm_CMD1--> VCFm_TEMP1([temp_file_1_m for cmd-1, VCFm])
+    VCFm_TEMP1 --> VCFm_CMD2[Run Command 2 on temp_file_1_m]
+    VCFm_CMD2--> VCFm_TEMP2([temp_file_2_m for cmd-2, VCFm])
+    VCFm_TEMP2 -.-> VCFm_CMDN[Run Command n on temp_file_2_m]
+    VCFm_CMDN --> VCFm_OUT([temp_file_n_m for cmd-n, VCFm])
+
+
+    %% Merge step
+    VCF1_OUT --> MERGE[Merge/Concat all temp outputs from cmd-n]
+    VCF2_OUT --> MERGE
+    VCF3_OUT --> MERGE
+    VCFm_OUT --> MERGE
+    MERGE --> ANNOTATE[Annotate combined file with custom header line with DivBase provenance]
+    ANNOTATE --> SORT[Sort and compress the VCF]
+    SORT --> RESULT([result_of_job_&lt;TASK_ID&gt;.vcf.gz])
+    RESULT --> UPLOAD["`Upload results file to
+    DivBase project`"]
+
+    %% subgraph Legend [Legend]
+    %%     direction LR
+    %%     Round([VCF file])
+    %%     Square[Process/Command]
+    %% end
+
+%% Exported to dark theme PNG with:
+
+%% mmdc -i docs/assets/diagrams/vcf_query_processing_for_user_guide.mermaid \
+%%      -o docs/assets/diagrams/vcf_query_processing_for_user_guide.png --theme dark --backgroundColor  "#22272e" --scale 2
+
+%% Command used to export to SVG, but it was too large
+%% mmdc -i docs/assets/diagrams/vcf_query_processing_for_user_guide.mermaid \
+%%      -o docs/assets/diagrams/vcf_query_processing_for_user_guide.svg --theme dark --backgroundColor  "#22272e"

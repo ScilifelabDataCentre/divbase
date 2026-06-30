@@ -1,0 +1,183 @@
+flowchart TB
+    subgraph Legend
+        direction TB
+        key1[Start and End]:::green
+        key2[User: CLI input]:::gray
+        key3[WebAPI requests]:::amber
+        key4[Celery worker: pre-processing]:::teal
+        key5[Celery worker: VCF processing]:::blue
+        key6[ERROR: abort task]:::red
+    end
+
+    start([Start]):::green
+    CLI_command["`divbase-cli query vcf
+    --command 'view ...'
+    --project project_name
+
+    Sample selection — exactly one required:
+      --tsv-filter column:value
+      --samples SAMPLE1,SAMPLE2
+      --samples-file samples.txt
+      --all-samples`"]:::gray
+    API_request["`API request to
+    endpoint v1/query/vcf/projects/{project_name}`"]:::amber
+    api_validate_command["`API: Validate bcftools command
+    (only 'view' is supported)`"]:::amber
+    submit_task["`Submit bcftools_pipe_task (tasks.bcftools_query)
+    to Celery task queue`"]:::amber
+
+    worker_picks_up_task[Idle worker picks up task from queue and runs it]:::teal
+    connect_to_bucket["`Connect to project bucket and create an instance of S3FileManager`"]:::teal
+    get_vcf_dimensions{Is there a VCF dimensions entry in the database?}:::teal
+    raise_error_no_dimensions_file["`ERROR: No VCF dimensions entry found.
+    Please run 'divbase-cli dimensions update --project &lt;project_name&gt;'`"]:::red
+    get_latest_vcf_file_version_ID["`Call get_vcf_metadata_by_project() and
+    s3_file_manager.latest_version_of_all_files()
+    to get current VCF file version IDs`"]:::teal
+    check_versions_matching_dimensions["`Check that VCF file version IDs in bucket match version IDs
+     stored in dimensions database`"]:::teal
+    raise_error_version_mismatch["`ERROR: VCF dimensions not up-to-date. Please run
+    'divbase-cli dimensions update`"]:::red
+
+    sample_selection_mode{Sample selection mode?}:::teal
+    tsv_download_metadata[Download metadata TSV from bucket to worker]:::teal
+    tsv_run_query[Run sample metadata query to get VCF filenames and sample IDs]:::teal
+    cli_samples_lookup[Look up requested sample IDs in dimensions database to get VCF filenames]:::teal
+    all_samples_get[Get all VCF files and sample IDs from dimensions database]:::teal
+
+    check_if_view_r{Is view -r part of the query?}:::teal
+    check_if_scaffolds_in_vcf["`Check files in list of VCF files needed for query against dimensions database`"]:::teal
+
+    any_unnecessary_files{Are there files that do not contain any of the scaffolds needed?}:::teal
+    drop_unnecessary_files[Drop unnecessary files from list of VCF files needed]:::teal
+
+    check_if_samples_can_be_combined["`Check if sample sets across all
+    VCF files can be combined with bcftools`"]:::teal
+    group_vcfs_by_sample_set[Group VCF files by sample sets]:::teal
+    calculate_pairwise_overlap[Calculate all pairwise overlaps between sample sets]:::teal
+    check_sample_set_overlap{Sample set overlap types present among VCF files?}:::teal
+    valid_overlap[Sample set overlap is compatible with bcftools]:::teal
+    all_overlaps_checked{Have all pairwise overlaps been checked?}:::teal
+    invalid_overlap[Sample set overlap is incompatible with bcftools]:::red
+    raise_error_invalid_overlap[ERROR: Sample set overlap between VCF files is not compatible with bcftools]:::red
+
+    transfer_files_to_worker[Transfer required VCF files from bucket to worker]:::teal
+    run_bcftools[Run BcftoolsQueryManager.execute_pipe to perform subsets and merge/concat]:::blue
+
+    command_list["`Make list of all input commands
+    e.g. view -s SAMPLES; view -r chr1,chr3`"]:::blue
+    process_commands{Commands in command_list left to process?}:::blue
+    init_loop{Processing the first command in command_list?}:::blue
+    input_vcf[Set current_inputs as the VCF files]:::blue
+    input_temp[Set current_inputs as the latest temp_files]:::blue
+    process_files{Files in current_inputs left to process?}:::blue
+    generate_temp[Generate temp file name]:::blue
+    format_command[Build bcftools command from current state of the loops]:::blue
+    run_command[Run command]:::blue
+    temp_output[Output: temp files]:::blue
+    ensure_index[Ensure .csi index exists]:::blue
+
+    check_overlaps_for_merge_concat[Group subset VCFs by sample set and check sample set overlaps]:::blue
+    check_if_more_than_one_temp{Is there only one temp file?}:::blue
+    rename_output_file[Rename single temp file to intermediate unsorted file name]:::blue
+    concat_files["`For each sample set, concatenate
+    all VCF files — bcftools concat`"]:::blue
+    any_overlaps_for_merge_concat{Among all sample sets, are there VCF files with overlapping sample sets?}:::blue
+    mixed_merge_overlap{Are there any non-overlapping sample sets left?}:::blue
+    merge_files[Merge the temp files — bcftools merge]:::blue
+    annotate_results_file[Add DivBase header with bcftools annotate]:::blue
+    sort_results_file[Sort results file with bcftools sort]:::blue
+    cleanup_temp_files[Delete bcftools-created temp files from worker]:::blue
+    results_file_created[Results file from bcftools created on worker]:::blue
+
+    upload_results_file[Upload results file to bucket]:::teal
+    delete_job_files[Delete remaining job files from worker]:::teal
+    task_completed["`Task finished, return
+    {status: completed, output_file: ...} to job system`"]:::teal
+    end_node([End]):::green
+
+    start --> CLI_command
+    CLI_command --> API_request
+    API_request --> api_validate_command
+    api_validate_command --> submit_task
+    submit_task --> worker_picks_up_task
+    worker_picks_up_task --> connect_to_bucket
+    connect_to_bucket --> get_vcf_dimensions
+    get_vcf_dimensions -->|Yes| get_latest_vcf_file_version_ID
+    get_vcf_dimensions -->|No| raise_error_no_dimensions_file
+    get_latest_vcf_file_version_ID --> check_versions_matching_dimensions
+    check_versions_matching_dimensions -->|Mismatch| raise_error_version_mismatch
+    check_versions_matching_dimensions -->|Match| sample_selection_mode
+    sample_selection_mode -->|--tsv-filter| tsv_download_metadata
+    tsv_download_metadata --> tsv_run_query
+    tsv_run_query --> check_if_view_r
+    sample_selection_mode -->|"--samples / --samples-file"| cli_samples_lookup
+    cli_samples_lookup --> check_if_view_r
+    sample_selection_mode -->|--all-samples| all_samples_get
+    all_samples_get --> check_if_view_r
+    check_if_view_r -->|Yes| check_if_scaffolds_in_vcf
+    check_if_scaffolds_in_vcf --> any_unnecessary_files
+    any_unnecessary_files -->|Yes| drop_unnecessary_files
+    any_unnecessary_files -->|No| check_if_samples_can_be_combined
+    drop_unnecessary_files --> check_if_samples_can_be_combined
+    check_if_view_r -->|No| check_if_samples_can_be_combined
+    check_if_samples_can_be_combined --> group_vcfs_by_sample_set
+    group_vcfs_by_sample_set --> calculate_pairwise_overlap
+    calculate_pairwise_overlap --> check_sample_set_overlap
+    check_sample_set_overlap -->|"Complete overlap,<br/>same sample order"| valid_overlap
+    check_sample_set_overlap -->|"Non-overlapping<br/>sample sets"| valid_overlap
+    check_sample_set_overlap -->|"Complete overlap,<br/>different order"| invalid_overlap
+    check_sample_set_overlap -->|Partial overlap| invalid_overlap
+    invalid_overlap --> raise_error_invalid_overlap
+    valid_overlap --> all_overlaps_checked
+    all_overlaps_checked -->|Yes| transfer_files_to_worker
+    all_overlaps_checked -->|No| check_sample_set_overlap
+    transfer_files_to_worker --> run_bcftools
+    run_bcftools --> command_list
+
+    command_list --> process_commands
+    process_commands -->|Yes| init_loop
+    init_loop -->|Yes| input_vcf
+    init_loop -->|No| input_temp
+    input_vcf --> process_files
+    input_temp --> process_files
+    process_files -->|Yes| generate_temp
+    generate_temp --> format_command
+    format_command --> run_command
+    run_command --> temp_output
+    temp_output --> ensure_index
+    ensure_index --> process_files
+    process_files -->|No| process_commands
+    process_commands -->|No| check_overlaps_for_merge_concat
+    check_overlaps_for_merge_concat --> check_if_more_than_one_temp
+    check_if_more_than_one_temp -->|Yes| rename_output_file
+    rename_output_file --> annotate_results_file
+    check_if_more_than_one_temp -->|No| any_overlaps_for_merge_concat
+    any_overlaps_for_merge_concat -->|Yes| concat_files
+    concat_files --> mixed_merge_overlap
+    mixed_merge_overlap -->|Yes| merge_files
+    mixed_merge_overlap -->|No| annotate_results_file
+    any_overlaps_for_merge_concat -->|No| merge_files
+    merge_files --> annotate_results_file
+    annotate_results_file --> sort_results_file
+    sort_results_file --> results_file_created
+    results_file_created --> cleanup_temp_files
+    cleanup_temp_files --> upload_results_file
+    upload_results_file --> delete_job_files
+    delete_job_files --> task_completed
+    task_completed --> end_node
+
+    classDef green fill:#14532d,stroke:#16a34a,color:#86efac,stroke-width:2px
+    classDef gray  fill:#1e293b,stroke:#475569,color:#cbd5e1,stroke-width:2px
+    classDef amber fill:#431407,stroke:#ea580c,color:#fdba74,stroke-width:2px
+    classDef teal  fill:#0c3547,stroke:#0ea5e9,color:#7dd3fc,stroke-width:2px
+    classDef blue  fill:#1e1b4b,stroke:#818cf8,color:#c7d2fe,stroke-width:2px
+    classDef red   fill:#450a0a,stroke:#dc2626,color:#fca5a5,stroke-width:2px
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/bcftools_task_logic_flow_full.mermaid \
+%%      -o docs/assets/diagrams/bcftools_task_logic_flow_full.svg \
+%%      --theme dark --backgroundColor "#22272e"
+
+%% mmdc -i docs/assets/diagrams/bcftools_task_logic_flow_full.mermaid \
+%%      -o docs/assets/diagrams/bcftools_task_logic_flow_full.png --theme dark --backgroundColor  "#22272e" --scale 2
