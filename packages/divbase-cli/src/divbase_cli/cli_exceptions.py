@@ -184,8 +184,8 @@ class ProjectNotInConfigError(DivBaseCLIError):
         super().__init__(error_message)
 
 
-class PolledTaskNotFinalError(Exception):
-    """Raised when a polled celerytask is not in a final state."""
+class PolledTaskNotFinalError(DivBaseCLIError):
+    """Raised when a polled DivBase task is not in a final state."""
 
     def __init__(self, error_message: str = "The polled task is still running."):
         super().__init__(error_message)

@@ -930,7 +930,7 @@ def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
     """Helper function to resolve file inputs from command line arguments."""
     if bool(files) + bool(file_list) != 1:
-        raise typer.BadParameter("Please specify only one of --files or --file-list.")
+        raise typer.BadParameter("Please specify files as arguments or provide a --file-list.")
 
     all_files = set()
     if files:
@@ -975,8 +975,8 @@ def _resolve_user_upload_inputs(
             "--recursive was passed but all arguments provided are file paths.\n"
             "Your shell likely expanded the glob before passing it to this command.\n"
             "To solve the problem, wrap the pattern(s) in quotes to prevent shell expansion, e.g.:\n"
-            "  [green]divbase-cli files upload 'my_data/**/*.vcf.gz' --recursive[/green] AND NOT \n"
-            "  [red]divbase-cli files upload my_data/**/*.vcf.gz --recursive[/red]"
+            "  'divbase-cli files upload 'my_data/**/*.vcf.gz' --recursive' AND NOT \n"
+            "  'divbase-cli files upload my_data/**/*.vcf.gz --recursive'"
         )
 
     if files:

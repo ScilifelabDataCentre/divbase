@@ -27,10 +27,12 @@ if DEV_MODE:
     DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
     DEFAULT_LOGGING_ON = "1"
     DEFAULT_TRACEBACKS_ON = "1"
+    DEFAULT_DIVBASE_DOCS_URL = "http://localhost:8008/divbase"
 else:
     DEFAULT_DIVBASE_API_URL = "https://divbase.scilifelab-2-prod.sys.kth.se/api"
     DEFAULT_LOGGING_ON = "0"
     DEFAULT_TRACEBACKS_ON = "0"
+    DEFAULT_DIVBASE_DOCS_URL = "https://scilifelabdatacentre.github.io/divbase"
 
 
 @dataclass
@@ -52,6 +54,7 @@ class DivBaseCLISettings:
     TOKENS_FALLBACK_PATH: Path = Path(os.getenv("DIVBASE_CLI_TOKENS_PATH", DEFAULT_TOKENS_PATH))
     PATS_FALLBACK_PATH: Path = Path(os.getenv("DIVBASE_CLI_PATS_PATH", DEFAULT_PATS_PATH))
 
+    DIVBASE_DOCS_URL: str = os.getenv("DIVBASE_DOCS_URL", DEFAULT_DIVBASE_DOCS_URL)
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
     TRACEBACKS_ON: bool = os.getenv("DIVBASE_TRACEBACKS_ON", DEFAULT_TRACEBACKS_ON) == "1"
