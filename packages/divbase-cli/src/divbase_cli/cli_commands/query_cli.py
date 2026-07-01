@@ -21,7 +21,7 @@ from rich import print
 from divbase_cli.cli_commands.file_cli import _pretty_print_download_results
 from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, PROJECT_NAME_OPTION
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import PolledTaskNotFinalError
+from divbase_cli.cli_exceptions import PolledTaskNotFinalError, QueryTaskFailedError
 from divbase_cli.config_resolver import (
     ensure_logged_in,
     resolve_download_dir,
@@ -284,12 +284,11 @@ def get_results_from_query_job_by_task_id(
         )
         _pretty_print_download_results(download_results=download_results)
     else:
-        print(f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.")
-        print(
+        raise QueryTaskFailedError(
+            f"Task {task_id} failed. Run 'divbase-cli task-history id {task_id}' for more details on the failure.\n"
             f"The task's log file can be downloaded for debugging using the command:\n'divbase-cli files download {log_filename}'\n"
             f"You can view the log file contents directly in your terminal with:\n'divbase-cli files stream {log_filename}'"
         )
-        raise typer.Exit(code=1)
 
 
 def poll_task_until_final_state_reached(divbase_url: str, task_id: int, timeout_mins: int) -> str:

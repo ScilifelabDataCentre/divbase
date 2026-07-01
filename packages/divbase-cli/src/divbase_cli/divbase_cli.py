@@ -41,7 +41,7 @@ def version_callback(show_version: bool) -> None:
     """
     if show_version:
         typer.echo(f"divbase-cli version: {__version__}")
-        raise typer.Exit()
+        raise typer.Exit(0)
 
 
 @app.callback()

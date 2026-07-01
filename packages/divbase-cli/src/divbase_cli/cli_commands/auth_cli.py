@@ -11,7 +11,12 @@ from pydantic import SecretStr
 from rich import print
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.cli_exceptions import (
+    DivBaseAPIConnectionError,
+    DivBaseAPIError,
+    InvalidPersonalAccessTokenError,
+    PersonalAccessTokenAlreadyExistsError,
+)
 from divbase_cli.config_resolver import resolve_url_for_non_project_specific_commands
 from divbase_cli.services.announcements import get_and_display_announcements
 from divbase_cli.user_auth import (
@@ -109,27 +114,26 @@ def add_pat(
     """
     existing = load_stored_user_pat()
     if existing and not overwrite_existing:
-        print(
+        raise PersonalAccessTokenAlreadyExistsError(
             f"A personal access token named '{existing.name}' is already stored on your device \n"
             f"It is due to expire on: {existing.pat_expiry_formatted()} \n"
             "Append the flag --overwrite-existing (-o) to this command if you want to replace it. \n"
             "You can only store one PAT at a time."
         )
-        raise typer.Exit(code=1)
 
     if expires_unix_timestamp and expires_unix_timestamp < time.time():
-        print("The expiry time you entered is in the past. Please enter a valid expiry time for the PAT.")
-        raise typer.Exit(code=1)
+        raise InvalidPersonalAccessTokenError(
+            "The expiry time you entered is in the past. Please enter a valid expiry time for the PAT."
+        )
 
     pat = SecretStr(
         typer.prompt("please paste your personal access token now", hide_input=True, confirmation_prompt=False)
     )
     if not pat.get_secret_value().startswith(PAT_TOKEN_PREFIX):
-        print(
+        raise InvalidPersonalAccessTokenError(
             "It looks like the token you entered is not a valid personal access token. "
             f"Please make sure you copied the entire token, including the '{PAT_TOKEN_PREFIX}' prefix."
         )
-        raise typer.Exit(code=1)
 
     pat_data = PATData(name=name, pat=pat, pat_expires_at=expires_unix_timestamp)
     pat_data.dump_pat_data()

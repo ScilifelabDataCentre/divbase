@@ -11,7 +11,9 @@ import typer
 from rich import print
 
 from divbase_cli.cli_exceptions import (
+    FileAlreadyUploadedError,
     FileDoesNotExistInSpecifiedVersionError,
+    InvalidInputError,
 )
 from divbase_cli.services.pre_signed_urls import (
     DownloadOutcome,
@@ -235,19 +237,16 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
-    if project_version is not None:
+    if project_version:
         offending_files = [file for file in raw_files_input if ":" in file]
         if offending_files:
-            print(
-                "[red] ERROR: bad Input: If you provide a global project version (using --project-version) "
-                "you cannot also specify specific versions of individual files to download. \n"
-                "offending files in your input: \n"
-                f"{'\n'.join(offending_files)} \n"
-                "Exiting..."
+            raise InvalidInputError(
+                "If you provide a global project version (using --project-version) "
+                "you cannot also specify specific versions of individual files to download.\n"
+                "Offending files in your input:\n"
+                f"{'\n'.join(offending_files)}"
             )
-            raise typer.Exit(1)
 
-    if project_version:
         project_version_details = get_version_details_command(
             project_name=project_name, divbase_base_url=divbase_base_url, version_name=project_version
         )
@@ -370,19 +369,17 @@ def upload_files_command(
         if already_uploaded:
             # skip_existing means we just skip uploading those files that are already there
             if not skip_existing:
-                if dry_run:
-                    print(
-                        "[red bold]Error: The following upload attempt would have failed due to the below error:\n[/red bold]"
-                    )
-
-                files_str = "\n".join(f"'{f.file_path}' (Checksum: {f.checksum_local})" for f in already_uploaded)
-                print(
-                    f"\n[red bold]Error: For the project: '{project_name}'\n"
-                    "The exact version of the following files that you're trying to upload already exist inside the project:\n[/red bold]"
-                    f"[red]{files_str}[/red]\n"
-                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, re-run this command with the '--skip-existing' flag.[/bold green]"
+                files_str = "\n".join(f"'{f.file_path}' (Checksum: '{f.checksum_local}')" for f in already_uploaded)
+                message = (
+                    f"For the project: '{project_name}'\n"
+                    "The exact version of the following files that you're trying to upload already exist inside the project:\n"
+                    f"{files_str}\n\n"
+                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, "
+                    "re-run this command with the '--skip-existing' flag.[/bold green]"
                 )
-                raise typer.Exit(1)
+                if dry_run:
+                    message = "The following upload attempt would have failed due to the below error:\n" + message
+                raise FileAlreadyUploadedError(message)
             else:
                 for file in already_uploaded:
                     all_skipped_uploads.append(

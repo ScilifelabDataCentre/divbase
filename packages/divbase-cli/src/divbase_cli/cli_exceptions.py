@@ -18,6 +18,20 @@ class AuthenticationError(DivBaseCLIError):
         super().__init__(error_message)
 
 
+class PersonalAccessTokenAlreadyExistsError(DivBaseCLIError):
+    """Raised when a user tries to store a new personal access token while one is already stored."""
+
+    def __init__(self, error_message: str = "A personal access token is already stored on this device."):
+        super().__init__(error_message)
+
+
+class InvalidPersonalAccessTokenError(DivBaseCLIError):
+    """Raised when a personal access token provided by the user is invalid."""
+
+    def __init__(self, error_message: str = "The personal access token provided is invalid."):
+        super().__init__(error_message)
+
+
 class DivBaseAPIConnectionError(DivBaseCLIError):
     """Raised when CLI tool can't connect to the provided DivBase API URL."""
 
@@ -63,6 +77,17 @@ class DivBaseAPIError(DivBaseCLIError):
         super().__init__(error_message)
 
 
+class InvalidInputError(DivBaseCLIError):
+    """
+    Raised when invalid input is provided to a CLI command.
+
+    Use this when the issue in the input is only discovered in e.g. service layer, and therefore using typer.BadParameter is not recommended.
+    """
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
 class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
     """Raised when a file does not exist in the project at the specified project version"""
 
@@ -79,6 +104,48 @@ class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
             f"{missing_files_str}"
             "\n Maybe they only existed in a later version of the project?"
         )
+        super().__init__(error_message)
+
+
+class FileAlreadyUploadedError(DivBaseCLIError):
+    """Raised when one or more files being uploaded already exist in the project's store on DivBase."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class NotEmptyDirectoryError(DivBaseCLIError):
+    """Raised when trying to remove a directory from the project's store that still contains files."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class NoFilesSpecifiedError(DivBaseCLIError):
+    """Raised when no files were specified or resolved for a command that requires at least one."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class UnsupportedCharactersError(DivBaseCLIError):
+    """Raised when a user-provided file or directory name contains characters that DivBase does not support."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class ShellExpandedGlobError(DivBaseCLIError):
+    """Raised when --recursive is passed but the shell has already expanded the glob pattern into file paths."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class DuplicateFileNamesError(DivBaseCLIError):
+    """Raised when two or more files would resolve to the same destination name."""
+
+    def __init__(self, error_message: str):
         super().__init__(error_message)
 
 
@@ -120,4 +187,12 @@ class ProjectNotInConfigError(DivBaseCLIError):
 class PolledTaskNotFinalError(Exception):
     """Raised when a polled celerytask is not in a final state."""
 
-    pass
+    def __init__(self, error_message: str = "The polled task is still running."):
+        super().__init__(error_message)
+
+
+class QueryTaskFailedError(DivBaseCLIError):
+    """Raised when a submitted query task did not complete successfully."""
+
+    def __init__(self, error_message: str = "The query task failed."):
+        super().__init__(error_message)

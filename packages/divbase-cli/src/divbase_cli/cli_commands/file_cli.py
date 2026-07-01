@@ -17,6 +17,13 @@ from rich.tree import Tree
 from typing_extensions import Annotated
 
 from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
+from divbase_cli.cli_exceptions import (
+    DuplicateFileNamesError,
+    NoFilesSpecifiedError,
+    NotEmptyDirectoryError,
+    ShellExpandedGlobError,
+    UnsupportedCharactersError,
+)
 from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
@@ -46,7 +53,7 @@ from divbase_lib.utils import format_file_size
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
-NO_UPLOAD_MATCHES_MSG = "Error: The following file paths or glob patterns did not match any existing files:"
+NO_UPLOAD_MATCHES_MSG = "The following file paths or glob patterns did not match any existing files:"
 
 
 PREFIX_ARGUMENT = typer.Argument(
@@ -737,12 +744,11 @@ def remove_directory(
         )
         non_placeholder_files = [f for f in files if f.name != dir]
         if non_placeholder_files:
-            print(
-                f"[red bold]Error: The directory '{dir}' is not empty.\n"
-                f"You must first remove all files and/or subdirectories inside the directory using:\n"
-                "'divbase-cli files rm' and 'divbase-cli files rmdir' [/red bold]"
+            raise NotEmptyDirectoryError(
+                f"The directory '{dir}' is not empty.\n"
+                "You must first remove all files and/or subdirectories inside the directory using:\n"
+                "'divbase-cli files rm' and 'divbase-cli files rmdir'"
             )
-            raise typer.Exit(1)
 
     # NOTE: as dirs are just empty files which end with "/", we can just do a regular soft delete on them.
     deleted_dirs = soft_delete_objects_command(
@@ -845,7 +851,7 @@ def restore_soft_deleted_files(
             print(f"- '{file}'")
 
     if restored_objects_response.not_restored:
-        print("[bold red]WARNING: Some files could not be restored:[/bold red]")
+        print("[bold red]Error: Some files could not be restored:[/bold red]")
         for file in restored_objects_response.not_restored:
             print(f"[red]- '{file}'[/red]")
 
@@ -936,8 +942,7 @@ def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> lis
                 all_files.add(line.strip())
 
     if not all_files:
-        print(NO_FILES_SPECIFIED_MSG)
-        raise typer.Exit(1)
+        raise NoFilesSpecifiedError(NO_FILES_SPECIFIED_MSG)
     return list(all_files)
 
 
@@ -960,21 +965,19 @@ def _resolve_user_upload_inputs(
         remote_dir = remote_dir[1:] if remote_dir.startswith("/") else remote_dir
         remote_dir = remote_dir if remote_dir.endswith("/") else remote_dir + "/"
         if any(char in remote_dir for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
-            print(
-                f"[red bold]Error: The --to destination path contains unsupported characters.[/red bold]\n"
-                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            raise UnsupportedCharactersError(
+                "The --to destination path contains unsupported characters.\n"
+                f"Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}"
             )
-            raise typer.Exit(1)
 
     if recursive and files and not any("*" in p for p in files) and any(len(Path(p).parts) > 1 for p in files):
-        print(
-            "[red bold]Error: --recursive was passed but all arguments provided are file paths.[/red bold]\n"
+        raise ShellExpandedGlobError(
+            "--recursive was passed but all arguments provided are file paths.\n"
             "Your shell likely expanded the glob before passing it to this command.\n"
             "To solve the problem, wrap the pattern(s) in quotes to prevent shell expansion, e.g.:\n"
             "  [green]divbase-cli files upload 'my_data/**/*.vcf.gz' --recursive[/green] AND NOT \n"
             "  [red]divbase-cli files upload my_data/**/*.vcf.gz --recursive[/red]"
         )
-        raise typer.Exit(1)
 
     if files:
         for pattern in files:
@@ -1021,20 +1024,17 @@ def _resolve_user_upload_inputs(
                 to_upload.append(ToUpload(file_path=path, destination_key=(remote_dir or "") + path.name))
 
         if missing_files:
-            print("[red bold]Error: The following file paths provided in your --file-list were not found:[/red bold]")
-            for path in missing_files:
-                print(f"[red]- '{path}'[/red]")
-            raise typer.Exit(1)
+            missing_files_str = "\n".join(f"- '{path}'" for path in missing_files)
+            raise NoFilesSpecifiedError(
+                f"The following file paths provided in your --file-list were not found:\n{missing_files_str}"
+            )
 
     if missing_patterns:
-        print(f"[red bold]{NO_UPLOAD_MATCHES_MSG}[/red bold]")
-        for pattern in missing_patterns:
-            print(f"[red]- '{pattern}'[/red]")
-        raise typer.Exit(1)
+        missing_patterns_str = "\n".join(f"- '{pattern}'" for pattern in missing_patterns)
+        raise NoFilesSpecifiedError(f"{NO_UPLOAD_MATCHES_MSG}\n{missing_patterns_str}")
 
     if not to_upload:
-        print(NO_FILES_SPECIFIED_MSG)
-        raise typer.Exit(1)
+        raise NoFilesSpecifiedError(NO_FILES_SPECIFIED_MSG)
 
     return to_upload
 
@@ -1047,16 +1047,15 @@ def _check_for_duplicate_object_keys(to_upload: list[ToUpload]) -> None:
 
     duplicates = {key: paths for key, paths in key_to_paths.items() if len(paths) > 1}
     if duplicates:
-        print(
-            "[red bold]Error: The following S3 destination keys appear more than once in the upload list.[/red bold]\n"
-            "[red]Multiple local files would overwrite each other at the same key:[/red]\n"
+        duplicates_str = "\n".join(
+            f"'{key}':\n" + "\n".join(f"- {p.resolve()}" for p in paths) for key, paths in duplicates.items()
         )
-        for key, paths in duplicates.items():
-            print(f"[red bold]'{key}':[/red bold]")
-            for p in paths:
-                print(f"[red]- {p.resolve()}[/red]")
-        print("\nEnsure each file maps to a unique destination key, or use --to to place them in separate folders.")
-        raise typer.Exit(1)
+        raise DuplicateFileNamesError(
+            "The following destination names appear more than once in the upload list.\n"
+            "Multiple local files would overwrite each other at the same key:\n"
+            f"{duplicates_str}\n"
+            "Ensure each file maps to a unique destination file, or upload them seperately and use '--to' to place them in separate folders."
+        )
 
 
 def _expand_folder_prefixes(
@@ -1086,8 +1085,7 @@ def _expand_folder_prefixes(
         # strip off any subfolders
         real_files = [f.name for f in full_s3_file_paths if not f.name.endswith("/")]
         if not real_files:
-            print(f"[red bold]Error: No files found inside the folder: '{arg}' that you provided.[/red bold]")
-            raise typer.Exit(1)
+            raise NoFilesSpecifiedError(f"No files found inside the folder: '{arg}' that you provided.")
 
         all_files.update(real_files)
 
@@ -1115,18 +1113,15 @@ def check_no_overlap_on_flattened_downloads(to_download: list[str]) -> None:
 
     duplicates = {name: paths for name, paths in name_to_paths.items() if len(paths) > 1}
     if duplicates:
-        print(
-            "[red bold]Error: The following files would overwrite each other when downloaded with --flatten option.[/red bold]\n"
-            "[red]Multiple files would resolve to the same local file path:[/red]\n"
+        duplicates_str = "\n".join(
+            f"'{name}':\n" + "\n".join(f"-  '{p}'" for p in paths) for name, paths in duplicates.items()
         )
-        for name, paths in duplicates.items():
-            print(f"[red bold]'{name}':[/red bold]")
-            for p in paths:
-                print(f"[red]- {p}[/red]")
-        print(
-            "\nYou must either download without the --flatten option or only download a subset of the the files to avoid this error."
+        raise DuplicateFileNamesError(
+            "The following files would overwrite each other when downloaded with the --flatten option.\n"
+            "Multiple files would resolve to the same local file path:\n"
+            f"{duplicates_str}\n"
+            "You must either download without the --flatten option or only download a subset of the the files to avoid this error."
         )
-        raise typer.Exit(1)
 
 
 def _check_for_unsupported_files(all_files: list[ToUpload]) -> None:
@@ -1174,11 +1169,10 @@ def _sanitize_directory_names(directories: list[str]) -> list[str]:
     cleaned_dir_names = []
     for directory in directories:
         if any(char in directory for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES):
-            print(
-                f"[red bold]Error: The directory name '{directory}' contains unsupported characters.[/red bold]\n"
-                f"[red]Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}[/red]\n"
+            raise UnsupportedCharactersError(
+                f"The directory name '{directory}' contains unsupported characters.\n"
+                f"Unsupported characters: {UNSUPPORTED_CHARACTERS_DISPLAY}"
             )
-            raise typer.Exit(1)
 
         directory = directory if directory.endswith("/") else directory + "/"
         directory = directory[1:] if directory.startswith("/") else directory
