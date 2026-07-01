@@ -131,12 +131,10 @@ def list_files(
     """
     if show_deleted_files and include_results_files:
         raise typer.BadParameter(
-            message="The --show-deleted-files option cannot be used with the flag --include-results-files. Please use these options separately."
+            message="The --show-deleted-files and --include-results-files options cannot be used together."
         )
     if detailed and format_output_as_tsv:
-        raise typer.BadParameter(
-            message="The --detailed option cannot be used with the flag --format-output-as-tsv. Please use these options separately."
-        )
+        raise typer.BadParameter(message="The --detailed option and --tsv option cannot be used together.")
 
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
@@ -609,16 +607,14 @@ def upload_files(
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
     if bool(files) + bool(file_list) > 1:
-        print("You cannot specify files as arguments and provide a --file-list.")
-        raise typer.Exit(1)
+        raise typer.BadParameter("You cannot specify files as arguments and provide a --file-list.")
 
     if skip_existing and disable_safe_mode:
-        print(
+        raise typer.BadParameter(
             "The --skip-existing and --disable-safe-mode options cannot be used together.\n"
             "Safe mode calculates file checksums, "
             "and these checksums are needed for --skip-existing to know what files to skip uploading."
         )
-        raise typer.Exit(1)
 
     to_upload = _resolve_user_upload_inputs(
         files=files,
@@ -927,9 +923,8 @@ def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
     """Helper function to resolve file inputs from command line arguments."""
-    if bool(files) + bool(file_list) > 1:
-        print("Please specify only one of --files or --file-list.")
-        raise typer.Exit(1)
+    if bool(files) + bool(file_list) != 1:
+        raise typer.BadParameter("Please specify only one of --files or --file-list.")
 
     all_files = set()
     if files:
