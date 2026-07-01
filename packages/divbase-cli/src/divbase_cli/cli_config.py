@@ -26,9 +26,11 @@ DEFAULT_PATS_PATH = APP_DIR / ".pat"  # no plural because only 1 stored.
 if DEV_MODE:
     DEFAULT_DIVBASE_API_URL = "http://localhost:8000/api"
     DEFAULT_LOGGING_ON = "1"
+    DEFAULT_TRACEBACKS_ON = "1"
 else:
     DEFAULT_DIVBASE_API_URL = "https://divbase.scilifelab-2-prod.sys.kth.se/api"
     DEFAULT_LOGGING_ON = "0"
+    DEFAULT_TRACEBACKS_ON = "0"
 
 
 @dataclass
@@ -52,6 +54,7 @@ class DivBaseCLISettings:
 
     DIVBASE_API_URL: str = os.getenv("DIVBASE_API_URL", DEFAULT_DIVBASE_API_URL)
     METADATA_TSV_NAME: str = os.getenv("DIVBASE_METADATA_TSV_NAME", DEFAULT_METADATA_TSV_NAME)
+    TRACEBACKS_ON: bool = os.getenv("DIVBASE_TRACEBACKS_ON", DEFAULT_TRACEBACKS_ON) == "1"
     LOGGING_ON: bool = os.getenv("DIVBASE_LOGGING_ON", DEFAULT_LOGGING_ON) == "1"
     LOG_LEVEL: str = os.getenv("DIVBASE_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 

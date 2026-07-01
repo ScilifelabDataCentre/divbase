@@ -7,6 +7,7 @@ import os
 import sys
 
 import typer
+from rich import print
 
 from divbase_cli import __version__
 from divbase_cli.cli_commands.auth_cli import auth_app
@@ -74,7 +75,15 @@ def main():
     if cli_settings.LOGGING_ON and not in_auto_complete_mode:
         logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stderr)])
         logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
-    app()
+
+    # Pretty print any errors for users so they don't see full traceback, unless they have set: DIVBASE_TRACEBACKS_ON=1
+    try:
+        app()
+    except Exception as exc:
+        if cli_settings.TRACEBACKS_ON:
+            raise
+        print(f"[red bold]Error:[/red bold] {str(exc)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
