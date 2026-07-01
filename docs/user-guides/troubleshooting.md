@@ -20,5 +20,5 @@ If you want to see the full traceback for debugging purposes, you can set the en
 For example, this command will fail and show the full traceback:
 
 ```bash
-DIVBASE_TRACEBACKS_ON=1 divbase-cli files mkdir dir-?with:invalid:ch@rs
+DIVBASE_TRACEBACKS_ON=1 divbase-cli files mkdir 'dir-?with:invalid:ch@rs'
 ```

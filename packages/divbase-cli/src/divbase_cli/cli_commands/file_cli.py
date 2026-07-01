@@ -340,6 +340,12 @@ def download_files(
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
+    if project_version == "":
+        raise typer.BadParameter(
+            "It seems like you provided an empty string for --project-version. \n"
+            "Please provide a valid project version or omit the flag."
+        )
+
     raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
     raw_files_input = _expand_folder_prefixes(
         files=raw_files_input,
@@ -403,6 +409,11 @@ def download_all_files(
         raise typer.BadParameter(
             message="The --resume and --disable-verify-checksums options cannot be used together, "
             "as checksums are used to determine which files don't need to be downloaded."
+        )
+    if project_version == "":
+        raise typer.BadParameter(
+            "It seems like you provided an empty string for --project-version. \n"
+            "Please provide a valid project version or omit the flag."
         )
 
     project_config = resolve_project(project_name=project)
@@ -1054,7 +1065,7 @@ def _check_for_duplicate_object_keys(to_upload: list[ToUpload]) -> None:
             "The following destination names appear more than once in the upload list.\n"
             "Multiple local files would overwrite each other at the same key:\n"
             f"{duplicates_str}\n"
-            "Ensure each file maps to a unique destination file, or upload them seperately and use '--to' to place them in separate folders."
+            "Ensure each file maps to a unique destination file, or upload them separately and use the '--to' flag to place the files in separate folders."
         )
 
 
@@ -1067,7 +1078,7 @@ def _expand_folder_prefixes(
     Given a list of user provided file args, expand any args that are for folders, i.e. they end with a trailing '/'.
     SO updates the list of files to (e.g. download) to include all files inside the folder(s) and returns the updated list.
 
-    Non-folder arguments are passed through unchanged. Raises Exit(1) if a prefix has no files.
+    Non-folder arguments are passed through unchanged. Raises NoFilesSpecifiedError if a prefix has no files.
     """
     all_files: set[str] = set()
     for arg in files:
@@ -1120,7 +1131,7 @@ def check_no_overlap_on_flattened_downloads(to_download: list[str]) -> None:
             "The following files would overwrite each other when downloaded with the --flatten option.\n"
             "Multiple files would resolve to the same local file path:\n"
             f"{duplicates_str}\n"
-            "You must either download without the --flatten option or only download a subset of the the files to avoid this error."
+            "You must either download without the --flatten option or only download a subset of the files to avoid this error."
         )
 
 
