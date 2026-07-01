@@ -15,8 +15,14 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG, NO_UPLOAD_MATCHES_MSG
-from divbase_cli.cli_exceptions import DivBaseAPIError
+from divbase_cli.cli_exceptions import (
+    DivBaseAPIError,
+    DuplicateFileNamesError,
+    FileAlreadyUploadedError,
+    NoFilesSpecifiedError,
+    NotEmptyDirectoryError,
+    UnsupportedCharactersError,
+)
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
     QUERY_RESULTS_FILE_PREFIX,
@@ -83,8 +89,13 @@ def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_con
     full_command = f"files {command} --project {clean_project}"
 
     result = runner.invoke(app, full_command)
-    assert result.exit_code == 1
-    assert NO_FILES_SPECIFIED_MSG in result.stdout
+
+    if command == "upload":
+        assert isinstance(result.exception, NoFilesSpecifiedError)
+    else:
+        # typer.BadParameter raised here
+        assert result.exit_code == 2
+        assert "Please specify only one of --files or --file-list" in result.output
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -488,9 +499,7 @@ def test_upload_without_recursive_does_not_match_subdirectories(
 
     command = f"files upload '{data_dir}/**' --project {clean_project}"
     result = runner.invoke(app, command)
-
-    assert result.exit_code != 0
-    assert NO_UPLOAD_MATCHES_MSG in result.stdout
+    assert isinstance(result.exception, NoFilesSpecifiedError)
 
 
 def test_upload_duplicate_file_names_rejected(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
@@ -506,10 +515,7 @@ def test_upload_duplicate_file_names_rejected(logged_in_query_user_with_existing
 
     command = f"files upload {dir_a / 'data.tsv'} {dir_b / 'data.tsv'} --project {clean_project}"
     result = runner.invoke(app, command)
-
-    assert result.exit_code != 0
-    assert "appear more than once" in result.stdout.lower()
-    assert "data.tsv" in result.stdout
+    assert isinstance(result.exception, DuplicateFileNamesError)
 
 
 def test_upload_recursive_preserves_subdir_paths(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
@@ -548,8 +554,7 @@ def test_upload_skip_existing_skips_already_uploaded_files(
 
     # should fail as no --skip-existing flag
     result = runner.invoke(app, f"files upload {existing_file} {new_file}  --project {clean_project}")
-    assert result.exit_code != 0
-    assert "--skip-existing" in result.stdout
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
     # with --skip-existing flag, new should be uploaded, old should be skipped
     command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
@@ -631,9 +636,7 @@ def test_reupload_same_file_fails(logged_in_query_user_with_existing_config, CON
     assert result.exit_code == 0
 
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert "the exact version of the following files" in result.stdout.lower()
-    assert "already exist" in result.stdout.lower()
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
 
 def test_reupload_of_same_file_with_safe_mode_off_works(
@@ -666,16 +669,14 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_query_user_with_existing_
     # none should be uploaded as the first one already exists
     command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert "the exact version of the following files" in result.stdout.lower()
-    assert "already exist" in result.stdout.lower()
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
     command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert test_files[0].name in result.stdout
     for file in test_files[1:]:
-        assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
+        assert file.name not in result.stdout
 
 
 def test_upload_nonexistent_files(logged_in_query_user_with_existing_config, tmp_path):
@@ -688,31 +689,26 @@ def test_upload_nonexistent_files(logged_in_query_user_with_existing_config, tmp
 
     command = "files upload nonexistent_file.tsv"
     result = runner.invoke(app, command)
-
-    assert result.exit_code != 0
-    assert NO_UPLOAD_MATCHES_MSG in result.stdout
-    assert "nonexistent_file.tsv" in result.stdout
+    assert isinstance(result.exception, NoFilesSpecifiedError)
 
     # only those that don't exist should be in the error message.
     command = f"files upload nonexistent_file.tsv another_nonexistent_file.vcf.gz {real_file_str}"
     result = runner.invoke(app, command)
-
-    assert result.exit_code != 0
-    assert NO_UPLOAD_MATCHES_MSG in result.stdout
-    assert "nonexistent_file.tsv" in result.stdout
-    assert "another_nonexistent_file.vcf.gz" in result.stdout
-    assert real_file_str not in result.stdout
+    assert isinstance(result.exception, NoFilesSpecifiedError)
+    message = str(result.exception)
+    assert "nonexistent_file.tsv" in message
+    assert "another_nonexistent_file.vcf.gz" in message
+    assert real_file_str not in message
 
     # same idea as above but using globs
     real_file_glob = real_file_str[:-4] + "*"
     command = f"files upload 'nonexistent*' 'another*.vcf.gz' {real_file_glob}"
     result = runner.invoke(app, command)
-
-    assert result.exit_code != 0
-    assert NO_UPLOAD_MATCHES_MSG in result.stdout
-    assert "nonexistent*" in result.stdout
-    assert "another*.vcf.gz" in result.stdout
-    assert real_file_glob not in result.stdout
+    assert isinstance(result.exception, NoFilesSpecifiedError)
+    message = str(result.exception)
+    assert "nonexistent*" in message
+    assert "another*.vcf.gz" in message
+    assert real_file_glob not in message
 
 
 @pytest.mark.parametrize(
@@ -773,10 +769,7 @@ def test_safe_mode_fails_with_large_file_duplicate(
     assert result.exit_code == 0
 
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert "the exact version of the following files" in result.stdout.lower()
-    assert "already exist" in result.stdout.lower()
-    assert large_file_path.name in result.stdout
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
     # validate turning off safe mode allows re-upload
     command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
@@ -891,9 +884,7 @@ def test_download_nonexistent_file_and_folder(logged_in_edit_user_with_existing_
     assert non_existent_file in result.stdout
 
     result = runner.invoke(app, f"files download {non_existent_folder}")
-    assert result.exit_code != 0
-    assert "no files found" in result.stdout.lower()
-    assert non_existent_folder in result.stdout
+    assert isinstance(result.exception, NoFilesSpecifiedError)
 
 
 def test_download_specific_file_versions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -1241,14 +1232,10 @@ def test_download_and_download_all_with_flatten_collision_rejected(
     assert result.exit_code == 0
 
     result = runner.invoke(app, f"files download vcfs/data.tsv samples/data.tsv --flatten --project {clean_project}")
-    assert result.exit_code != 0
-    assert "--flatten" in result.stdout
-    assert "would overwrite each other" in result.stdout.lower()
+    assert isinstance(result.exception, DuplicateFileNamesError)
 
     result = runner.invoke(app, f"files download-all --flatten --project {clean_project}")
-    assert result.exit_code != 0
-    assert "--flatten" in result.stdout
-    assert "would overwrite each other" in result.stdout.lower()
+    assert isinstance(result.exception, DuplicateFileNamesError)
 
 
 def test_stream_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
@@ -1412,7 +1399,7 @@ def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CON
 
     result = runner.invoke(app, f"files restore {non_existent_file} --project {clean_project}")
     assert result.exit_code != 0
-    assert "warning: some files could not be restored" in result.stdout.lower()
+    assert "some files could not be restored" in result.stdout.lower()
     assert non_existent_file in result.stdout
 
 
@@ -1497,8 +1484,7 @@ def test_mkdir_unsupported_characters_rejected(logged_in_query_user_with_existin
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
     result = runner.invoke(app, f"files mkdir 'invalid:dir' --project {clean_project}")
-    assert result.exit_code != 0
-    assert "unsupported characters" in result.stdout.lower()
+    assert isinstance(result.exception, UnsupportedCharactersError)
 
 
 def test_rmdir_removes_empty_directory(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -1528,7 +1514,7 @@ def test_rmdir_fails_on_non_empty_directory(logged_in_edit_user_with_existing_co
 
     result = runner.invoke(app, f"files rmdir data --project {clean_project}")
     assert result.exit_code != 0
-    assert "not empty" in result.stdout.lower()
+    assert isinstance(result.exception, NotEmptyDirectoryError)
 
 
 def test_rmdir_nonexistent_directory_succeeds(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -1807,16 +1793,13 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     for idx, file_name in enumerate(safe_mode_files):
         (upload_dir / file_name).write_text(f"content_{idx}")
 
-    # Add the duplicate file (already in bucket) to upload dir
+    # Add the duplicate file (already in bucket) to upload dir, so fails
     duplicate_file = files_in_bucket[S3_PAGINATION_LIMIT + 1]
     shutil.copy(src=duplicate_file, dst=upload_dir)
-
     command = f"files upload '{upload_dir}/*' --project {pagination_project}"
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert "the exact version of the following files" in result.stdout.lower()
-    assert "already exist" in result.stdout.lower()
-    assert duplicate_file.name in result.stdout
+    assert isinstance(result.exception, FileAlreadyUploadedError)
+    assert duplicate_file.name in str(result.exception)
 
     # Verify that none of the files were uploaded.
     command = f"files ls --project {pagination_project}"
