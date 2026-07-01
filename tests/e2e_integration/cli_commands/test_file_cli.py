@@ -95,7 +95,7 @@ def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_con
     else:
         # typer.BadParameter raised here
         assert result.exit_code == 2
-        assert "Please specify only one of --files or --file-list" in result.output
+        assert "Please specify files as arguments or provide a --file-list" in result.output
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
