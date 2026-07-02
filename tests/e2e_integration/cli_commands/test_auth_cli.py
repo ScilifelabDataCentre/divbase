@@ -13,7 +13,13 @@ from pydantic import SecretStr
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
-from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
+from divbase_cli.cli_exceptions import (
+    AuthenticationError,
+    DivBaseAPIConnectionError,
+    DivBaseAPIError,
+    InvalidPersonalAccessTokenError,
+    PersonalAccessTokenAlreadyExistsError,
+)
 from divbase_cli.divbase_cli import app
 from divbase_cli.user_auth import LOGIN_AGAIN_MESSAGE
 from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
@@ -334,16 +340,14 @@ def test_add_pat_stores_pat(cleanup_stored_cli_pat):
 def test_add_pat_rejects_invalid_pat_prefix(cleanup_stored_cli_pat):
     """add-pat should fail if the token doesn't start with the PAT prefix."""
     result = run_add_pat_cmd(pat="not_a_real_pat")
-    assert result.exit_code != 0
-    assert "not a valid personal access token" in result.stdout
+    assert isinstance(result.exception, InvalidPersonalAccessTokenError)
 
 
 def test_add_pat_rejects_already_expired_pat(cleanup_stored_cli_pat):
     """add-pat should fail if the token doesn't start with the PAT prefix."""
     one_day_ago = datetime.now() - timedelta(days=1)
     result = run_add_pat_cmd(expires=int(one_day_ago.timestamp()))
-    assert result.exit_code != 0
-    assert "expiry" in result.stdout
+    assert isinstance(result.exception, InvalidPersonalAccessTokenError)
 
 
 def test_add_pat_with_no_expiry(cleanup_stored_cli_pat):
@@ -366,9 +370,7 @@ def test_cannot_add_pat_without_overwrite_flag(cleanup_stored_cli_pat):
     assert _FAKE_PAT_NAME in result.stdout
 
     result = run_add_pat_cmd()
-    assert result.exit_code != 0
-    assert "already stored" in result.stdout
-    assert "--overwrite-existing" in result.stdout
+    assert isinstance(result.exception, PersonalAccessTokenAlreadyExistsError)
 
     result = run_add_pat_cmd(overwrite=True)
     assert result.exit_code == 0

@@ -7,6 +7,7 @@ import os
 import sys
 
 import typer
+from rich import print
 
 from divbase_cli import __version__
 from divbase_cli.cli_commands.auth_cli import auth_app
@@ -17,6 +18,7 @@ from divbase_cli.cli_commands.task_history_cli import task_history_app
 from divbase_cli.cli_commands.user_config_cli import config_app
 from divbase_cli.cli_commands.version_cli import version_app
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import DivBaseCLIError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ def version_callback(show_version: bool) -> None:
     """
     if show_version:
         typer.echo(f"divbase-cli version: {__version__}")
-        raise typer.Exit()
+        raise typer.Exit(0)
 
 
 @app.callback()
@@ -74,7 +76,17 @@ def main():
     if cli_settings.LOGGING_ON and not in_auto_complete_mode:
         logging.basicConfig(level=cli_settings.LOG_LEVEL, handlers=[logging.StreamHandler(sys.stderr)])
         logger.info(f"Starting divbase_cli CLI application with logging level: {cli_settings.LOG_LEVEL}")
-    app()
+
+    try:
+        app()
+    except DivBaseCLIError as exc:
+        if cli_settings.TRACEBACKS_ON:
+            raise
+        print(f"[red bold]Error:[/red bold] {str(exc)}")
+        print(
+            f"[dim]Tip: see our guide if you want to see the full traceback for debugging purposes: {cli_settings.DIVBASE_DOCS_URL}/user-guides/troubleshooting/ [/dim]"
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

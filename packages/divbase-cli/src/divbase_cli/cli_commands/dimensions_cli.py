@@ -102,11 +102,8 @@ def show_dimensions_index(
     project_config = resolve_project(project_name=project)
     logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
 
-    # These two options are mutually exclusive. But due to how typer handles options, this error will only be raised if --sample-names-output has an input value (i.e. path).
-    # If the path is missing, it will raise an error about the missing path argument instead...
     if sample_names_output and sample_names_stdout:
-        typer.echo("Use only one of --sample-names-output or --sample-names-stdout.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.BadParameter("Use only one of --sample-names-output or --sample-names-stdout.")
 
     if unique_samples:
         response = make_authenticated_request(
