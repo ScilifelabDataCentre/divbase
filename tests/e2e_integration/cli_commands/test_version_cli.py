@@ -87,7 +87,7 @@ def test_attempt_add_version_that_already_exists_fails(logged_in_query_user_with
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_already_exists_error"
+    assert result.exception.error_type == "ProjectVersionAlreadyExistsError"
     assert result.exception.status_code == 400
 
 
@@ -249,7 +249,7 @@ def test_update_version_that_does_not_exist(logged_in_edit_user_with_existing_co
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 
@@ -262,7 +262,7 @@ def test_update_version_name_to_already_existing_name_fails(logged_in_edit_user_
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_already_exists_error"
+    assert result.exception.error_type == "ProjectVersionAlreadyExistsError"
     assert result.exception.status_code == 400
 
 
@@ -288,7 +288,7 @@ def test_update_soft_deleted_version_fails(logged_in_edit_user_with_existing_con
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_soft_deleted_error"
+    assert result.exception.error_type == "ProjectVersionSoftDeletedError"
     assert result.exception.status_code == 400
 
 
@@ -315,7 +315,7 @@ def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 
@@ -360,7 +360,7 @@ def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_wi
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 
