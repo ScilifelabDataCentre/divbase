@@ -87,15 +87,15 @@ def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_con
     """Test that different files subcommands that require file inputs fail when none are provided."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
     full_command = f"files {command} --project {clean_project}"
-
     result = runner.invoke(app, full_command)
 
     if command == "upload":
         assert isinstance(result.exception, NoFilesSpecifiedError)
     else:
-        # typer.BadParameter raised here
+        # will raise typer.BadParameter and print usage message
         assert result.exit_code == 2
-        assert "Please specify files as arguments or provide a --file-list" in result.output
+        assert "usage:" in result.output.lower()
+        assert f"root files {command}" in result.output.lower()
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):

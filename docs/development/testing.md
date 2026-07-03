@@ -38,6 +38,14 @@ pytest -s tests/migration
 
 **The e2e_integration tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker compose building steps.**
 
+## Tips
+
+1. Testing `typer.Badparameter` rasies
+
+    If a divbase-cli command is expected to raise `typer.BadParameter`, (because the user provided invalid input or input combinations), the test should check for an exit code of 2 and that the output contains the usage message.
+    Trying to check for specific substrings in the output message will likely fail in the GH actions runner. If you really want to test for the exact error message phrasing, consider a unit test instead.
+    See existing tests in the codebase for how to do this.
+
 ## To run tests together with code coverage analysis
 
 The testing suite can be run with [`coverage.py`](https://coverage.readthedocs.io/) through the [`pytest-cov` plugin](https://github.com/pytest-dev/pytest-cov). By default, the code coverage analysis is performed on the Python code that is executed on the local machine. DivBase, however, consists of several containerized services that run Python code upon request from the CLI client that `coverage.py` does not capture out-of-the-box.

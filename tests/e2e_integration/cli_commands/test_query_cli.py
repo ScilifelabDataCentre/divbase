@@ -626,11 +626,10 @@ class TestQueryVCFSubmissionValidation:
 
         command = f"query vcf --command 'view -r 21:15000000-25000000' --project {project_name} "
         result = runner.invoke(app, command)
-
-        assert result.exit_code == 2  # Typer exits with code 2 for argument validation errors
-        assert isinstance(result.exception, SystemExit)
-        output = result.stdout + (str(result.exception) if result.exception else "")
-        assert "Job submitted successfully with task id:" not in output
+        # raises typer.BadParameter
+        assert result.exit_code == 2
+        assert "usage:" in result.output.lower()
+        assert "root query vcf" in result.output.lower()
 
     def test_bcftools_pipe_fails_on_project_not_in_config(self, CONSTANTS, logged_in_edit_user_with_existing_config):
         project_name = "non_existent_project"

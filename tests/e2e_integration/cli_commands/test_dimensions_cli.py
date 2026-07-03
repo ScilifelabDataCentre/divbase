@@ -1233,9 +1233,10 @@ def test_show_dimensions_rejects_output_and_stdout_together(
     output_path = tmp_path / "sample_names.tsv"
     command = f"dimensions show --project {project_name} --sample-names-output {output_path} --sample-names-stdout"
     cli_result = runner.invoke(app, command)
-    assert cli_result.exit_code != 0, "Expected command to fail when both output modes are provided"
-    assert "Use only one of --sample-names-output" in cli_result.stderr
-    assert "--sample-names-stdout" in cli_result.stderr
+    # will raise typer.BadParameter and print usage message
+    assert cli_result.exit_code == 2
+    assert "usage:" in cli_result.output.lower()
+    assert "root dimensions show" in cli_result.output.lower()
 
 
 @pytest.mark.parametrize(
