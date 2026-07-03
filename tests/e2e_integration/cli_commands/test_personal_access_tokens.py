@@ -65,7 +65,7 @@ def assert_401_error(result):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "401" in str(result.exception)
-    assert "authentication_error" in str(result.exception)
+    assert "AuthenticationError" in str(result.exception)
 
 
 def assert_403_error(result):
@@ -73,7 +73,7 @@ def assert_403_error(result):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "403" in str(result.exception)
-    assert "authorization_error" in str(result.exception)
+    assert "AuthorizationError" in str(result.exception)
 
 
 @pytest.fixture

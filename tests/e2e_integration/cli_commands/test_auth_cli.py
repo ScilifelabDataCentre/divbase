@@ -260,7 +260,7 @@ def test_login_with_outdated_cli_version_fails(monkeypatch):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "400" in str(result.exception)
-    assert "cli_version_outdated_error" in str(result.exception)
+    assert "CLIVersionOutdatedError" in str(result.exception)
 
 
 def test_any_command_with_outdated_cli_version_fails(monkeypatch):
@@ -275,7 +275,7 @@ def test_any_command_with_outdated_cli_version_fails(monkeypatch):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "400" in str(result.exception)
-    assert "cli_version_outdated_error" in str(result.exception)
+    assert "CLIVersionOutdatedError" in str(result.exception)
 
 
 def test_jwt_session_takes_priority_over_pat(disable_keyring_backend, monkeypatch):

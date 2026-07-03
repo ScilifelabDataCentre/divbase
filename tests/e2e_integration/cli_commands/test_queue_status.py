@@ -72,7 +72,7 @@ def test_regular_users_cannot_submit_tasks_when_queue_closed(
         assert result.exit_code != 0
         assert isinstance(result.exception, DivBaseAPIError)
         assert "400" in str(result.exception)
-        assert "queue_closed_error" in str(result.exception)
+        assert "QueueClosedError" in str(result.exception)
 
 
 def test_admin_users_can_submit_tasks_when_queue_closed(
@@ -87,7 +87,7 @@ def test_admin_users_can_submit_tasks_when_queue_closed(
         # We just want the error to not be from the queue being closed
         # This check happens early enough, that a badly formulated query does not matter
         if result.exit_code != 0:
-            assert "queue_closed_error" not in str(result.exception)
+            assert "QueueClosedError" not in str(result.exception)
 
 
 def test_regular_users_can_submit_tasks_when_queue_not_yet_closed(
@@ -102,4 +102,4 @@ def test_regular_users_can_submit_tasks_when_queue_not_yet_closed(
         # We just want the error to not be from the queue being closed
         # This check happens early enough, that a badly formulated query does not matter
         if result.exit_code != 0:
-            assert "queue_closed_error" not in str(result.exception)
+            assert "QueueClosedError" not in str(result.exception)

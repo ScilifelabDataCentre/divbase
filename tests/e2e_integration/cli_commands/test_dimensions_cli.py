@@ -158,7 +158,7 @@ def test_dimensions_update_blocked_when_task_already_in_progress_for_same_projec
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "409" in str(result.exception)
-    assert "dimensions_update_task_already_in_process_error" in str(result.exception)
+    assert "DimensionsUpdateAlreadyInProcessError" in str(result.exception)
 
 
 def test_dimensions_update_allowed_when_ongoing_task_is_for_different_project(
@@ -286,7 +286,7 @@ def test_show_vcf_dimensions_task_when_file_missing(
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert project_name in str(result.exception)
-    assert "vcf_dimensions_entry_missing_error" in str(result.exception)
+    assert "VCFDimensionsEntryMissingError" in str(result.exception)
 
 
 def test_get_dimensions_info_returns_empty(
