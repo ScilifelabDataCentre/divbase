@@ -1,16 +1,32 @@
 """
 DivBase API custom exceptions.
 
-All exceptions in this module should inherit from DivBaseAPIException, so we can catch for that externally.
+All exceptions in this module should inherit from DivBaseAPIException.
 """
 
+import logging
 from pathlib import Path
 
 from fastapi import status
 
 
 class DivBaseAPIException(Exception):
-    """Base exception for all DivBase errors."""
+    """
+    Base exception for all DivBaseAPI errors
+
+    Each subclass declares how `exception_handlers.divbase_api_exception_handler` should treat it:
+    - log_level: What log level to use
+    - include_exc_info: whether to include the exception traceback in the logs.
+    - frontend_redirect_url: if set, frontend (non-API) requests are redirected here instead of shown the
+      generic error page.
+    - frontend_message: if set, frontend requests see this instead of `message` (API responses always see
+      `message`) - used when the raw message is too internal/technical for a human-facing page.
+    """
+
+    log_level: int = logging.INFO
+    include_exc_info: bool = False
+    frontend_redirect_url: str | None = None
+    frontend_message: str | None = None
 
     def __init__(self, message: str, status_code: int, headers: dict[str, str] | None = None):
         self.message = message
@@ -18,14 +34,27 @@ class DivBaseAPIException(Exception):
         self.headers = headers or {}
         super().__init__(self.message)
 
+    @property
+    def error_type(self) -> str:
+        """Returned in API responses as the (error) type."""
+        return type(self).__name__
+
 
 class AuthenticationError(DivBaseAPIException):
+    log_level = logging.INFO
+    include_exc_info = False
+    frontend_redirect_url = "/login"
+
     def __init__(self, message: str = "Authentication required"):
         default_headers = {"WWW-Authenticate": "Bearer"}
         super().__init__(message=message, status_code=status.HTTP_401_UNAUTHORIZED, headers=default_headers)
 
 
 class AuthorizationError(DivBaseAPIException):
+    log_level = logging.INFO
+    include_exc_info = False
+    frontend_redirect_url = "/login"
+
     def __init__(self, message: str = "Authorization required"):
         default_headers = {"WWW-Authenticate": "Bearer"}
         super().__init__(message=message, status_code=status.HTTP_403_FORBIDDEN, headers=default_headers)
@@ -33,6 +62,9 @@ class AuthorizationError(DivBaseAPIException):
 
 class UserRegistrationError(DivBaseAPIException):
     """Exception for failed registration of new user or update of existing user."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(
         self,
@@ -44,39 +76,52 @@ class UserRegistrationError(DivBaseAPIException):
 
 
 class ProjectNotFoundError(DivBaseAPIException):
+    log_level = logging.DEBUG
+    include_exc_info = False
+    frontend_message = "Project not found or you don't have access."
+
     def __init__(self, message: str = "Project not found or you don't have access"):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
 class ProjectMemberNotFoundError(DivBaseAPIException):
+    log_level = logging.INFO
+    include_exc_info = False
+    frontend_redirect_url = "/projects"
+
     def __init__(self, message: str = "Project member not found"):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
 class UserNotFoundError(DivBaseAPIException):
+    log_level = logging.DEBUG
+    include_exc_info = False
+
     def __init__(self, message: str = "User not found"):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
 class ProjectMemberAlreadyExistsError(DivBaseAPIException):
+    log_level = logging.DEBUG
+    include_exc_info = False
+
     def __init__(self, message: str = "User is already a member of this project"):
         super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
 
 
 class ProjectCreationError(DivBaseAPIException):
+    log_level = logging.WARNING
+    include_exc_info = True
+
     def __init__(self, message: str = "Project creation failed"):
-        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
-
-
-class TooManyObjectsInRequestError(DivBaseAPIException):
-    """Raise when e.g. too many files are requested to be downloaded in a single request."""
-
-    def __init__(self, message: str = "Too many objects to work on in a single request"):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class ProjectVersionCreationError(DivBaseAPIException):
     """Raised when there is an error creating a new project version."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(self, message: str = "Failed to create a new project version"):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
@@ -85,14 +130,20 @@ class ProjectVersionCreationError(DivBaseAPIException):
 class ProjectVersionAlreadyExistsError(DivBaseAPIException):
     """Raised when attempting to create a project version that already exists."""
 
+    log_level = logging.INFO
+    include_exc_info = False
+
     def __init__(
-        self, message: str = "A project version with the specified name already exists, please choose a different name."
+        self, message: str = "A project version with this name already exists, please choose a different name."
     ):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class ProjectVersionNotFoundError(DivBaseAPIException):
     """Raised when a project version is not found."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(self, message: str = "Could not find the specified project version"):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
@@ -101,12 +152,18 @@ class ProjectVersionNotFoundError(DivBaseAPIException):
 class ProjectVersionSoftDeletedError(DivBaseAPIException):
     """Raised when a user tries to modify a project version that is soft-deleted."""
 
+    log_level = logging.INFO
+    include_exc_info = False
+
     def __init__(self, message: str):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class VCFDimensionsEntryMissingError(DivBaseAPIException):
     """Raised when there are no entries in the VCF dimensions db table."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(self, project_name: str | None = None):
         if project_name:
@@ -127,6 +184,9 @@ class VCFDimensionsEntryMissingError(DivBaseAPIException):
 class DimensionsUpdateAlreadyInProcessError(DivBaseAPIException):
     """Raised when a user tries to queue a new VCF dimensions update task for a project that already has a queued or running update task."""
 
+    log_level = logging.INFO
+    include_exc_info = False
+
     def __init__(self, project_name: str, ongoing_task_id: int):
         message = (
             f"A VCF dimensions update task (with id: {ongoing_task_id}) is already in process for the project '{project_name}'. \n"
@@ -136,18 +196,11 @@ class DimensionsUpdateAlreadyInProcessError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
 
 
-class TaskNotFoundInBackendError(DivBaseAPIException):
-    """Raised when a task ID exists in the task_history table in the database but not in the results backend."""
-
-    def __init__(
-        self,
-        message: str = "Task ID not found in results backend. It may have been purged during cleanup of old task records.",
-    ):
-        super().__init__(message=message, status_code=status.HTTP_410_GONE)
-
-
 class DownloadedFileChecksumMismatchError(DivBaseAPIException):
     """Raised when a worker downloads a file but the calculated checksum does not match the checksum provided by s3."""
+
+    log_level = logging.ERROR
+    include_exc_info = True
 
     def __init__(self, file_path: Path, calculated_checksum: str, expected_checksum: str):
         message = (
@@ -158,16 +211,32 @@ class DownloadedFileChecksumMismatchError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
 
 
+class TooManyObjectsInRequestError(DivBaseAPIException):
+    """Raise when e.g. too many files are requested to be downloaded in a single request."""
+
+    log_level = logging.WARNING
+    include_exc_info = False
+
+    def __init__(self, message: str = "Too many objects to work on in a single request"):
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+
+
 class ObjectDoesNotExistError(DivBaseAPIException):
     """Raised when an S3 object/key does not exist in the project's bucket."""
 
+    log_level = logging.INFO
+    include_exc_info = False
+
     def __init__(self, key: str, bucket_name: str):
-        message = f"The file/object '{key}' does not exist in the project '{bucket_name}'. "
+        message = f"The file/object '{key}' does not exist in the project's store: '{bucket_name}'. "
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
 class TSVFileNotFoundInProjectError(DivBaseAPIException):
     """Raised when a TSV doesn't exist in project storage."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(self, filename: str | None = None, project_name: str | None = None):
         self.filename = filename
@@ -189,12 +258,18 @@ class TSVFileNotFoundInProjectError(DivBaseAPIException):
 class QueueClosedError(DivBaseAPIException):
     """Raised when the queue is closed for new tasks (e.g. before a maintenance window)."""
 
+    log_level = logging.INFO
+    include_exc_info = False
+
     def __init__(self, message: str):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 class PATLimitExceededError(DivBaseAPIException):
     """Raised when a user has reached the maximum number of active personal access tokens."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(
         self,
@@ -205,6 +280,9 @@ class PATLimitExceededError(DivBaseAPIException):
 
 class PATDuplicateNameError(DivBaseAPIException):
     """Raised when a user already has an active (not soft-deleted) personal access token with the same name."""
+
+    log_level = logging.INFO
+    include_exc_info = False
 
     def __init__(self, message: str = "You already have an active token with this name."):
         super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)

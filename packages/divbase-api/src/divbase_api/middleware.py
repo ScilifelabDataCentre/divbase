@@ -13,7 +13,7 @@ import uuid
 from urllib.parse import urlparse
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -94,8 +94,8 @@ class CLIVersionMiddleware(BaseHTTPMiddleware):
                 "If you're not sure how to do that, you can find instructions on how to upgrade here: "
                 f"{api_settings.general.mkdocs_site_url}/user-guides/installation"
             )
-            body = {"detail": message, "type": "cli_version_outdated_error"}
-            return JSONResponse(content=body, status_code=400)
+            body = {"detail": message, "type": "CLIVersionOutdatedError"}
+            return JSONResponse(content=body, status_code=status.HTTP_400_BAD_REQUEST)
 
         response = await call_next(request)
         return response
