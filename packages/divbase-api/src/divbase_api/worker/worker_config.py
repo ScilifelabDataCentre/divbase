@@ -65,6 +65,7 @@ class WorkerCronSettings:
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
     log_retention_days: int = int(os.getenv("LOG_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
+    non_email_confirmed_user_retention_days: int = int(os.getenv("NON_EMAIL_CONFIRMED_USER_RETENTION_DAYS", "7"))
     soft_deleted_project_version_retention_days: int = int(
         os.getenv("SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS", "30")
     )
