@@ -36,8 +36,6 @@ class UserDB(BaseDBModel):
     is_admin: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
     is_deleted: Mapped[bool] = mapped_column(default=False)
-    # NOTE: Users with email_verified=False are considered non-confirmed users and can be deleted by the cleanup_non_email_confirmed_users cron task.
-    # Need to handle this if we ever allow for a user to change their email address/have unverified email.
     email_verified: Mapped[bool] = mapped_column(default=False)
     date_deleted: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     last_password_change: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

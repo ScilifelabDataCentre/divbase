@@ -464,10 +464,13 @@ def test_cleanup_old_jwts_and_pats_with_no_old_entries(db_session_sync, create_r
 
 @pytest.fixture
 def create_user(db_session_sync):
-    """Create user db entries with backdated created_at timestamps."""
+    """Create user db entries with backdated created_at (and matching updated_at) timestamps."""
 
-    def _create_user(days_old: int, email_verified: bool = False, is_active: bool = True) -> int:
+    def _create_user(days_old: int, email_verified: bool = False, is_active: bool = True, touched: bool = False) -> int:
         created_at = datetime.now(timezone.utc) - timedelta(days=days_old)
+        # A "touched" user simulates a row modified after creation (e.g. an admin edit),
+        # which should make it ineligible for cleanup regardless of email_verified/created_at.
+        updated_at = created_at + timedelta(days=1) if touched else created_at
         unique_id = uuid.uuid4().hex[:8]
         user = UserDB(
             name=f"test-user-{unique_id}",
@@ -478,6 +481,7 @@ def create_user(db_session_sync):
             email_verified=email_verified,
             is_active=is_active,
             created_at=created_at,
+            updated_at=updated_at,
         )
         db_session_sync.add(user)
         db_session_sync.commit()
@@ -488,7 +492,7 @@ def create_user(db_session_sync):
 
 
 def test_cleanup_non_email_confirmed_users_deletes_only_old_non_confirmed_users(db_session_sync, create_user):
-    """Test that cleanup_non_email_confirmed_users only deletes non email confirmed users"""
+    """Test that cleanup_non_email_confirmed_users only deletes untouched non email confirmed users"""
     test_retention_days = 5
 
     # should delete
@@ -498,9 +502,16 @@ def test_cleanup_non_email_confirmed_users_deletes_only_old_non_confirmed_users(
     # should keep
     old_user_confirmed = create_user(days_old=test_retention_days + 3, email_verified=True)
     old_inactive_confirmed = create_user(days_old=test_retention_days + 3, email_verified=True, is_active=False)
+    old_touched_not_confirmed = create_user(days_old=test_retention_days + 4, email_verified=False, touched=True)
     recent_user_not_confirmed = create_user(days_old=test_retention_days - 1, email_verified=False)
     recent_user_confirmed = create_user(days_old=test_retention_days - 2, email_verified=True)
-    keep_users = [old_user_confirmed, old_inactive_confirmed, recent_user_not_confirmed, recent_user_confirmed]
+    keep_users = [
+        old_user_confirmed,
+        old_inactive_confirmed,
+        recent_user_not_confirmed,
+        recent_user_confirmed,
+        old_touched_not_confirmed,
+    ]
 
     result = cleanup_non_email_confirmed_users(retention_days=test_retention_days)
 

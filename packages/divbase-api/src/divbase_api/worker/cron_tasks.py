@@ -190,12 +190,18 @@ def cleanup_non_email_confirmed_users(
     retention_days: int = worker_settings.cron.non_email_confirmed_user_retention_days,
 ):
     """
-    Periodic task to clean up non-confirmed users who have not verified their email within the retention period.
+    Periodic task to cleanup new sign ups that don't confirm their email within the retention period.
+
+    This task is primarily for handling bot accounts signing up currently easy to identify as they never confirm their email.
+
+    To only catch new sign ups in this cleanup, we compare the created_at and updated_at timestamps.
+    It is possible to manually set email_verified=False in the admin panel.
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
     stmt = delete(UserDB)
-    stmt = stmt.where(UserDB.email_verified == False)  # noqa: E712
+    stmt = stmt.where(UserDB.email_verified.is_(False))
     stmt = stmt.where(UserDB.created_at < cutoff_date)
+    stmt = stmt.where(UserDB.updated_at - UserDB.created_at < timedelta(seconds=5))
 
     with SyncSessionLocal() as db:
         deleted_count = db.execute(stmt).rowcount
