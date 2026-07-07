@@ -17,6 +17,7 @@ from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
+from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
@@ -184,6 +185,36 @@ def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron
     }
 
 
+@app.task(name="cron_tasks.cleanup_non_email_confirmed_users")
+def cleanup_non_email_confirmed_users(
+    retention_days: int = worker_settings.cron.non_email_confirmed_user_retention_days,
+):
+    """
+    Periodic task to cleanup new sign ups that don't confirm their email within the retention period.
+
+    This task is primarily for handling bot accounts signing up currently easy to identify as they never confirm their email.
+
+    To only catch new sign ups in this cleanup, we compare the created_at and updated_at timestamps.
+    It is possible to manually set email_verified=False in the admin panel.
+    """
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    stmt = delete(UserDB)
+    stmt = stmt.where(UserDB.email_verified.is_(False))
+    stmt = stmt.where(UserDB.created_at < cutoff_date)
+    stmt = stmt.where(UserDB.updated_at - UserDB.created_at < timedelta(seconds=5))
+
+    with SyncSessionLocal() as db:
+        deleted_count = db.execute(stmt).rowcount
+        db.commit()
+
+    return {
+        "status": "completed",
+        "number_of_non_confirmed_users_deleted": deleted_count,
+        "cutoff_date": cutoff_date.isoformat(),
+        "non_confirmed_user_retention_period_days": retention_days,
+    }
+
+
 @app.task(name="cron_tasks.cleanup_soft_deleted_project_versions")
 def cleanup_soft_deleted_project_versions(
     retention_days: int = worker_settings.cron.soft_deleted_project_version_retention_days,
@@ -275,28 +306,32 @@ def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_rete
 # Don't set to 2 AM or 3 AM due to daylight saving.
 # Timezone for job schedule is CET (defined in app in tasks.py).
 app.conf.beat_schedule = {
-    "cleanup-old-tasks-daily": {
+    "cleanup-old-task-history-daily": {
         "task": "cron_tasks.cleanup_old_task_history",
-        "schedule": crontab(hour=5, minute=0),  # Run daily at 5 AM CET
+        "schedule": crontab(hour=4, minute=0),
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",
-        "schedule": crontab(hour=5, minute=15),  # Run daily at 5:15 AM CET
+        "schedule": crontab(hour=4, minute=15),
     },
-    "cleanup-old-revoked-daily": {
+    "cleanup-old-jwts-and-pats-daily": {
         "task": "cron_tasks.cleanup_old_jwts_and_pats",
-        "schedule": crontab(hour=5, minute=20),  # Run daily at 5:20 AM CET
+        "schedule": crontab(hour=4, minute=30),
+    },
+    "cleanup-non-email-confirmed-users-daily": {
+        "task": "cron_tasks.cleanup_non_email_confirmed_users",
+        "schedule": crontab(hour=4, minute=45),
     },
     "cleanup-soft-deleted-project-versions-daily": {
         "task": "cron_tasks.cleanup_soft_deleted_project_versions",
-        "schedule": crontab(hour=5, minute=25),  # Run daily at 5:25 AM CET
+        "schedule": crontab(hour=5, minute=0),
     },
     "update-storage-usage-metrics-daily": {
         "task": "cron_tasks.update_storage_usage_metrics",
-        "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
+        "schedule": crontab(hour=5, minute=15),
     },
-    "clear-out-old-log-files-daily": {
+    "remove-old-log-files-daily": {
         "task": "cron_tasks.remove_old_log_files",
-        "schedule": crontab(hour=5, minute=35),  # Run daily at 5:35 AM CET
+        "schedule": crontab(hour=5, minute=30),
     },
 }
