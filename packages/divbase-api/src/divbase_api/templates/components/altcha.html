@@ -3,3 +3,7 @@
         <altcha-widget challengeurl="/api/v1/auth/altcha" hidefooter></altcha-widget>
     </div>
 </div>
+
+{% block custom_scripts %}
+<script async defer src="/static/js/altcha.min.js" type="module"></script>
+{% endblock %}
