@@ -163,7 +163,7 @@ def generate_altcha_challenge() -> dict:
     return challenge.to_dict()
 
 
-def verify_altcha_solution(altcha: str | None) -> bool:
+def verify_altcha_solution(altcha: str | None, email: str) -> bool:
     """
     Verify the Altcha captcha solution. Returns True for a valid solution.
     Validation skipped if in test environment (to avoid having to deal with Altcha in e2e playwright tests).
@@ -182,6 +182,6 @@ def verify_altcha_solution(altcha: str | None) -> bool:
         check_expires=True,
     )
     if not verified:
-        logger.warning(f"Altcha verification failed with error message: {error}")
+        logger.warning(f"Altcha verification failed for email {email} with error message: {error}")
         return False
     return True

@@ -161,7 +161,6 @@ async def post_register(
 
     def registration_failed_response(error_message: str):
         """Helper to return registration failed response with custom error message."""
-        logger.info(f"User registration failed for email: {email} with error: {error_message}")
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/register.html",
@@ -178,7 +177,7 @@ async def post_register(
             },
         )
 
-    captcha_verified = verify_altcha_solution(altcha)
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
     if not captcha_verified:
         return registration_failed_response(ALTCHA_VERIFICATION_FAILED_MSG)
 
@@ -298,6 +297,7 @@ async def get_resend_verification_email(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+    email: str | None = Query(None, description="Optional email to pre-fill the form."),
 ):
     """Display the resend verification email page."""
     if current_user:
@@ -306,7 +306,7 @@ async def get_resend_verification_email(
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/email_verification.html",
-        context={"current_user": None},
+        context={"current_user": None, "email": email},
     )
 
 
@@ -321,7 +321,7 @@ async def resend_verification_email(
     """Handle resending the email verification link."""
     LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
 
-    captcha_verified = verify_altcha_solution(altcha)
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
     if not captcha_verified:
         return templates.TemplateResponse(
             request=request,
@@ -392,7 +392,7 @@ async def post_forgot_password_form(
         + f"The email will be sent from {api_settings.email.from_email}."
     )
 
-    captcha_verified = verify_altcha_solution(altcha)
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
     if not captcha_verified:
         return templates.TemplateResponse(
             request=request,

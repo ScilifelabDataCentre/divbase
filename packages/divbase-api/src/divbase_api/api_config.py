@@ -37,6 +37,12 @@ class GeneralSettings:
     # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
     latest_cli_version: str = lib_version
 
+    def __post_init__(self):
+        if self.frontend_base_url.endswith("/"):
+            self.frontend_base_url = self.frontend_base_url[:-1]
+        if self.mkdocs_site_url.endswith("/"):
+            self.mkdocs_site_url = self.mkdocs_site_url[:-1]
+
 
 @dataclass
 class DBSettings:
