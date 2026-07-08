@@ -96,7 +96,13 @@ async def whoami_endpoint(
     return UserResponse.model_validate(current_user)
 
 
-@auth_router.get("/altcha", response_model=dict, status_code=status.HTTP_200_OK, response_class=JSONResponse)
+@auth_router.get(
+    "/altcha",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    response_class=JSONResponse,
+    include_in_schema=False,  # hide from docs as this is only used by Altcha widget
+)
 async def get_altcha_challenge():
     """
     Endpoint for Altcha widget to hit to get a fresh challenge.
