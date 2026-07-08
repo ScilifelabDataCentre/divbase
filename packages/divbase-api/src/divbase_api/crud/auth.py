@@ -32,6 +32,9 @@ from divbase_api.security import TokenType, get_password_hash, verify_password, 
 
 logger = structlog.get_logger(__name__)
 
+# Altcha (Captcha for e.g. registration + password reset) is disabled in test enviroments
+ALTCHA_ENABLED = api_settings.general.environment != "test"
+
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
     """
@@ -53,8 +56,9 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
         raise AuthenticationError(message=generic_error_msg)
 
     if not user.email_verified:
+        verify_url = f"{api_settings.general.frontend_base_url}/resend-email-verification"
         raise AuthenticationError(
-            message="Email address not verified, check your inbox or visit the DivBase website to resend a new verification email."
+            message=f"Email address not verified, check your inbox or visit {verify_url} to get a new verification email."
         )
 
     return user
@@ -159,12 +163,12 @@ def generate_altcha_challenge() -> dict:
     return challenge.to_dict()
 
 
-def verify_altcha_solution(altcha: str | None, test_mode: bool) -> bool:
+def verify_altcha_solution(altcha: str | None) -> bool:
     """
     Verify the Altcha captcha solution. Returns True for a valid solution.
     Validation skipped if in test environment (to avoid having to deal with Altcha in e2e playwright tests).
     """
-    if test_mode:
+    if not ALTCHA_ENABLED:
         logger.info("Skipping Altcha verification as in test mode.")
         return True
 

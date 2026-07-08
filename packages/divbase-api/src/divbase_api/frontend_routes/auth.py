@@ -47,8 +47,6 @@ fr_auth_router = APIRouter()
 INVALID_EXPIRED_PASSWORD_TOKEN_MSG = "Invalid or expired reset password link. Please request a new link below."
 INVALID_EXPIRED_EMAIL_TOKEN_MSG = "Invalid or expired email verification link. Please request a new link below."
 
-# Altcha (Captcha for registration + password reset) is disabled in test enviroments
-ALTCHA_ENABLED = api_settings.general.environment != "test"
 ALTCHA_VERIFICATION_FAILED_MSG = "Captcha verification failed, please try again."
 
 
@@ -140,7 +138,6 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
             "current_user": None,
             "swedish_universities": SWEDISH_UNIVERSITIES,
             "known_job_roles": KNOWN_JOB_ROLES,
-            "altcha_enabled": ALTCHA_ENABLED,
         },
     )
 
@@ -178,11 +175,10 @@ async def post_register(
                 "role_other": role_other,
                 "swedish_universities": SWEDISH_UNIVERSITIES,
                 "known_job_roles": KNOWN_JOB_ROLES,
-                "altcha_enabled": ALTCHA_ENABLED,
             },
         )
 
-    captcha_verified = verify_altcha_solution(altcha=altcha, test_mode=not ALTCHA_ENABLED)
+    captcha_verified = verify_altcha_solution(altcha)
     if not captcha_verified:
         return registration_failed_response(ALTCHA_VERIFICATION_FAILED_MSG)
 
@@ -272,9 +268,7 @@ async def confirm_email_verification(
     token: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Confirm email verification after user explicitly clicks a button.
-    """
+    """Confirm email verification after user explicitly clicks a button."""
     token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
     if not token_data:
         return templates.TemplateResponse(
@@ -299,17 +293,41 @@ async def confirm_email_verification(
     )
 
 
+@fr_auth_router.get("/resend-email-verification", response_class=HTMLResponse)
+async def get_resend_verification_email(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+):
+    """Display the resend verification email page."""
+    if current_user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/email_verification.html",
+        context={"current_user": None},
+    )
+
+
 @fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
 async def resend_verification_email(
     request: Request,
     background_tasks: BackgroundTasks,
     email: str = Form(...),
+    altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Handle resending the email verification link.
-    """
+    """Handle resending the email verification link."""
     LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
+
+    captcha_verified = verify_altcha_solution(altcha)
+    if not captcha_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"email": email, "error": ALTCHA_VERIFICATION_FAILED_MSG},
+        )
 
     user = await get_user_by_email(db=db, email=email)
     if not user:
@@ -340,25 +358,6 @@ async def resend_verification_email(
     )
 
 
-@fr_auth_router.get("/resend-verification-email", response_class=HTMLResponse)
-async def get_resend_verification_email(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
-    """
-    Display the resend verification email page.
-    """
-    if current_user:
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-
-    return templates.TemplateResponse(
-        request=request,
-        name="auth_pages/email_verification.html",
-        context={"current_user": None},
-    )
-
-
 @fr_auth_router.get("/forgot-password", response_class=HTMLResponse)
 async def get_forgot_password_page(
     request: Request,
@@ -371,7 +370,10 @@ async def get_forgot_password_page(
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/forgot_password.html",
-        context={"current_user": current_user, "email": current_user.email if current_user else ""},
+        context={
+            "current_user": current_user,
+            "email": current_user.email if current_user else "",
+        },
     )
 
 
@@ -380,14 +382,23 @@ async def post_forgot_password_form(
     request: Request,
     background_tasks: BackgroundTasks,
     email: str = Form(...),
+    altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """Handle forgot password form submission to send a password reset email."""
     RESET_LINK_SENT_MSG = (
-        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. Please check your inbox."
+        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. Please check your inbox. "
         + f"The email will be sent from {api_settings.email.from_email}."
     )
+
+    captcha_verified = verify_altcha_solution(altcha)
+    if not captcha_verified:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "email": email, "error": ALTCHA_VERIFICATION_FAILED_MSG},
+        )
 
     user = await get_user_by_email(db=db, email=email)
     # do not differentiate between existing and non-existing users for security reasons

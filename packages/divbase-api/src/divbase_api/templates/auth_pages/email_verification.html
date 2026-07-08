@@ -9,3 +9,7 @@
     {% include "components/resend_verification_form.html" %}
 </div>
 {% endblock %}
+
+{% block custom_scripts %}
+{% if altcha_enabled %}<script async defer src="/static/js/altcha.min.js" type="module"></script>{% endif %}
+{% endblock %}
