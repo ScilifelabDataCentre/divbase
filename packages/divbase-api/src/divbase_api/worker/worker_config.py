@@ -47,7 +47,7 @@ class WorkerMetricsSettings:
     # ENABLE_WORKER_METRICS controls whether the Prometheus metrics server is started (system metrics, etc.)
     enabled: bool = os.getenv("ENABLE_WORKER_METRICS", "1") == "1"
     # ENABLE_WORKER_METRICS_PER_TASK controls whether per-task metrics (task/bcftools/VCF download) are collected and exposed
-    enabled_per_task: bool = os.getenv("ENABLE_WORKER_METRICS_PER_TASK", "1") == "1"
+    enabled_per_task: bool = os.getenv("ENABLE_WORKER_METRICS_PER_TASK", "0") == "1"
     # Prometheus scrapes every 15 seconds in DivBase setup. A TTL of 5 min means it is available for 20 scrapes.
     # Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
     cache_ttl_minutes: int = int(os.getenv("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
