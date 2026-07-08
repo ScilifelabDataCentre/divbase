@@ -16,6 +16,7 @@ from divbase_api.crud.auth import (
     confirm_user_email,
     delete_auth_cookies,
     update_user_password,
+    verify_altcha_solution,
 )
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_password_reset_token, token_is_revoked
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise, resolve_dropdown_form_input
@@ -45,6 +46,10 @@ fr_auth_router = APIRouter()
 
 INVALID_EXPIRED_PASSWORD_TOKEN_MSG = "Invalid or expired reset password link. Please request a new link below."
 INVALID_EXPIRED_EMAIL_TOKEN_MSG = "Invalid or expired email verification link. Please request a new link below."
+
+# Altcha (Captcha for registration + password reset) is disabled in test enviroments
+ALTCHA_ENABLED = api_settings.general.environment != "test"
+ALTCHA_VERIFICATION_FAILED_MSG = "Captcha verification failed, please try again."
 
 
 @fr_auth_router.get("/login", response_class=HTMLResponse)
@@ -135,6 +140,7 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
             "current_user": None,
             "swedish_universities": SWEDISH_UNIVERSITIES,
             "known_job_roles": KNOWN_JOB_ROLES,
+            "altcha_enabled": ALTCHA_ENABLED,
         },
     )
 
@@ -151,12 +157,14 @@ async def post_register(
     role_other: str | None = Form(None),
     password: str = Form(...),
     confirm_password: str = Form(...),
+    altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Handle registration form submission."""
 
     def registration_failed_response(error_message: str):
         """Helper to return registration failed response with custom error message."""
+        logger.info(f"User registration failed for email: {email} with error: {error_message}")
         return templates.TemplateResponse(
             request=request,
             name="auth_pages/register.html",
@@ -170,8 +178,13 @@ async def post_register(
                 "role_other": role_other,
                 "swedish_universities": SWEDISH_UNIVERSITIES,
                 "known_job_roles": KNOWN_JOB_ROLES,
+                "altcha_enabled": ALTCHA_ENABLED,
             },
         )
+
+    captcha_verified = verify_altcha_solution(altcha=altcha, test_mode=not ALTCHA_ENABLED)
+    if not captcha_verified:
+        return registration_failed_response(ALTCHA_VERIFICATION_FAILED_MSG)
 
     resolved_organisation = resolve_dropdown_form_input(dropdown_value=organisation, other_value=organisation_other)
     if not resolved_organisation:

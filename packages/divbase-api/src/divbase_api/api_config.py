@@ -29,6 +29,7 @@ class GeneralSettings:
     log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
+    altcha_hmac_secret: SecretStr = SecretStr(os.getenv("ALTCHA_HMAC_SECRET", "NOT_SET"))
 
     # versions before this are denied access to the API, until the user has upgraded
     minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.0")
@@ -148,6 +149,7 @@ class APISettings:
             "FRONTEND_BASE_URL": self.general.frontend_base_url,
             "MKDOCS_SITE_URL": self.general.mkdocs_site_url,
             "USER_SUPPORT_EMAIL": self.general.user_support_email,
+            "ALTCHA_HMAC_SECRET": self.general.altcha_hmac_secret,
             "ASYNC_DATABASE_URL": self.database.url,
             "SYNC_DATABASE_URL": self.database.sync_url,
             "JWT_SECRET_KEY": self.jwt.secret_key,

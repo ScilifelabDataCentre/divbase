@@ -195,6 +195,7 @@ services:
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+    - ALTCHA_HMAC_SECRET=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
     - S3_ENDPOINT_URL=http://host.docker.internal:9000
