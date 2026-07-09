@@ -166,6 +166,9 @@ class APISettings:
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
+            if setting_name == "ALTCHA_HMAC_SECRET" and self.general.environment == "test":
+                # we do not run Captcha checks with ALTCHA in e2e tests.
+                continue
             if isinstance(setting, str) and setting == "NOT_SET":
                 raise ValueError(f"A required environment variable was not set: {setting_name=}")
             if isinstance(setting, SecretStr):

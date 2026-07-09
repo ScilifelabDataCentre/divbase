@@ -32,7 +32,7 @@ from divbase_api.security import TokenType, get_password_hash, verify_password, 
 
 logger = structlog.get_logger(__name__)
 
-# Altcha (Captcha for e.g. registration + password reset) is disabled in test enviroments
+# Altcha (Captcha for e.g. registration + password reset) is disabled in test environments
 ALTCHA_ENABLED = api_settings.general.environment != "test"
 
 

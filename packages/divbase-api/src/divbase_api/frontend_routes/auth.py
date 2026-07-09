@@ -295,7 +295,6 @@ async def confirm_email_verification(
 @fr_auth_router.get("/resend-email-verification", response_class=HTMLResponse)
 async def get_resend_verification_email(
     request: Request,
-    db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
     email: str | None = Query(None, description="Optional email to pre-fill the form."),
 ):
