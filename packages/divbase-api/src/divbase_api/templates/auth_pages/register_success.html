@@ -32,10 +32,9 @@
             </div>
 
             <p class="text-center text-muted">Didn't get the email? You can request a new one:</p>
-            <form method="post" action="/resend-email-verification" class="text-center">
-                <input type="hidden" name="email" value="{{ email }}">
-                <button type="submit" class="btn scilife-confirm-button px-5">Resend email</button>
-            </form>
+            <div class="text-center">
+                <a href="/resend-email-verification?email={{ email | urlencode }}" class="btn scilife-confirm-button px-5">Resend email verification link</a>
+            </div>
 
             <div class="text-center mt-4">
                 <a href="/" class="scilife-back-link">

@@ -136,6 +136,7 @@
                                 required>
                         </div>
                     </div>
+                    {% if altcha_enabled %}{% include "components/altcha.html" %}{% endif %}
 
                     <p class="text-muted small mb-3">
                         By signing up, you accept the <a href="/terms">Terms</a> and

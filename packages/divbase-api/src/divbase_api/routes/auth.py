@@ -9,10 +9,11 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user, verify_user_from_refresh_token
+from divbase_api.crud.auth import authenticate_user, generate_altcha_challenge, verify_user_from_refresh_token
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user
@@ -93,3 +94,19 @@ async def whoami_endpoint(
     # so it works as long as user authenticated either via JWT or (any) PAT
     current_user, _ = current_user_and_scopes
     return UserResponse.model_validate(current_user)
+
+
+@auth_router.get(
+    "/altcha",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    response_class=JSONResponse,
+    include_in_schema=False,  # hide from docs as this is only used by Altcha widget
+)
+async def get_altcha_challenge():
+    """
+    Endpoint for Altcha widget to hit to get a fresh challenge.
+
+    Used in frontend registration and password reset forms to prevent/reduce automated bot submissions.
+    """
+    return generate_altcha_challenge()

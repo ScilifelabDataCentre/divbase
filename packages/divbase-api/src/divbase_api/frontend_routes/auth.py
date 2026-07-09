@@ -16,6 +16,7 @@ from divbase_api.crud.auth import (
     confirm_user_email,
     delete_auth_cookies,
     update_user_password,
+    verify_altcha_solution,
 )
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout, revoke_used_password_reset_token, token_is_revoked
 from divbase_api.crud.users import create_user, get_user_by_email, get_user_by_id_or_raise, resolve_dropdown_form_input
@@ -45,6 +46,8 @@ fr_auth_router = APIRouter()
 
 INVALID_EXPIRED_PASSWORD_TOKEN_MSG = "Invalid or expired reset password link. Please request a new link below."
 INVALID_EXPIRED_EMAIL_TOKEN_MSG = "Invalid or expired email verification link. Please request a new link below."
+
+ALTCHA_VERIFICATION_FAILED_MSG = "Captcha verification failed, please try again."
 
 
 @fr_auth_router.get("/login", response_class=HTMLResponse)
@@ -151,11 +154,12 @@ async def post_register(
     role_other: str | None = Form(None),
     password: str = Form(...),
     confirm_password: str = Form(...),
+    altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Handle registration form submission."""
 
-    def registration_failed_response(error_message: str):
+    def _registration_failed_response(error_message: str):
         """Helper to return registration failed response with custom error message."""
         return templates.TemplateResponse(
             request=request,
@@ -173,18 +177,22 @@ async def post_register(
             },
         )
 
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
+    if not captcha_verified:
+        return _registration_failed_response(ALTCHA_VERIFICATION_FAILED_MSG)
+
     resolved_organisation = resolve_dropdown_form_input(dropdown_value=organisation, other_value=organisation_other)
     if not resolved_organisation:
-        return registration_failed_response("Please specify your organisation, it must be at least 3 characters long.")
+        return _registration_failed_response("Please specify your organisation, it must be at least 3 characters long.")
 
     resolved_role = resolve_dropdown_form_input(dropdown_value=role, other_value=role_other)
     if not resolved_role:
-        return registration_failed_response("Please specify your role, it must be at least 3 characters long.")
+        return _registration_failed_response("Please specify your role, it must be at least 3 characters long.")
 
     existing_user = await get_user_by_email(db=db, email=email.strip())
     if existing_user:  # Not recommended to specify why failed, just say failed.
         logger.warning(f"Attempt to register new account with already registered email: {email}")
-        return registration_failed_response("Registration failed, please try again.")
+        return _registration_failed_response("Registration failed, please try again.")
 
     try:
         user_data = UserCreate(
@@ -204,10 +212,10 @@ async def post_register(
         # someone bypassing client side validation (could be accidently or intentionally).
         # Don't think it is a good idea to return the validation error messages to the user as it could leak info.
         logger.warning(f"User registration failed backend validation for email: {email} - {error_msg}")
-        return registration_failed_response("Registration failed, please try again.")
+        return _registration_failed_response("Registration failed, please try again.")
     except Exception as e:
         logger.error(f"Unexpected error during user registration for email: {email} - {str(e)}")
-        return registration_failed_response("Registration failed, please try again.")
+        return _registration_failed_response("Registration failed, please try again.")
 
     background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
     logger.info(f"New user registered: {user_data.email=}")
@@ -259,9 +267,7 @@ async def confirm_email_verification(
     token: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Confirm email verification after user explicitly clicks a button.
-    """
+    """Confirm email verification after user explicitly clicks a button."""
     token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
     if not token_data:
         return templates.TemplateResponse(
@@ -286,79 +292,75 @@ async def confirm_email_verification(
     )
 
 
-@fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
-async def resend_verification_email(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    email: str = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Handle resending the email verification link.
-    """
-    LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
-
-    user = await get_user_by_email(db=db, email=email)
-    if not user:
-        # Do not differentiate between existing and non-existing users for security reasons
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/email_verification.html",
-            context={"email": email, "success": LINK_SENT_MSG},
-        )
-
-    if user.email_verified:
-        # User is already verified, inform them by email
-        # To prevent information leakage (which accounts exist and don't exists),
-        # we show the same success message on the frontend, but email them to inform them they can already login.
-
-        background_tasks.add_task(send_email_already_verified_email, email_to=user.email)
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/login.html",
-            context={"success": LINK_SENT_MSG},
-        )
-
-    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
-    return templates.TemplateResponse(
-        request=request,
-        name="auth_pages/email_verification.html",
-        context={"email": email, "success": LINK_SENT_MSG},
-    )
-
-
-@fr_auth_router.get("/resend-verification-email", response_class=HTMLResponse)
+@fr_auth_router.get("/resend-email-verification", response_class=HTMLResponse)
 async def get_resend_verification_email(
     request: Request,
-    db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
+    email: str | None = Query(None, description="Optional email to pre-fill the form."),
 ):
-    """
-    Display the resend verification email page.
-    """
+    """Display the resend verification email page."""
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/email_verification.html",
-        context={"current_user": None},
+        context={"current_user": None, "email": email},
     )
+
+
+@fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
+async def resend_verification_email(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    email: str = Form(...),
+    altcha: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Handle resending the email verification link."""
+    LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
+
+    def _verify_email_response(error: str | None = None, success: str | None = None) -> HTMLResponse:
+        """Helper fn to return a response for the resend verification email page."""
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/email_verification.html",
+            context={"email": email, "error": error, "success": success},
+        )
+
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
+    if not captcha_verified:
+        return _verify_email_response(error=ALTCHA_VERIFICATION_FAILED_MSG)
+
+    user = await get_user_by_email(db=db, email=email)
+    if not user:
+        # Do not differentiate between existing and non-existing users for security reasons
+        return _verify_email_response(success=LINK_SENT_MSG)
+
+    if user.email_verified:
+        # User is already verified, inform them by email
+        # To prevent information leakage (which accounts exist and don't exists),
+        # we show the same success message on the frontend, but email them to inform them they can already login.
+        background_tasks.add_task(send_email_already_verified_email, email_to=user.email)
+        return _verify_email_response(success=LINK_SENT_MSG)
+
+    background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
+    return _verify_email_response(success=LINK_SENT_MSG)
 
 
 @fr_auth_router.get("/forgot-password", response_class=HTMLResponse)
 async def get_forgot_password_page(
     request: Request,
-    db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
-    """
-    Display the forgot password page.
-    """
+    """Display the forgot password page."""
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/forgot_password.html",
-        context={"current_user": current_user, "email": current_user.email if current_user else ""},
+        context={
+            "current_user": current_user,
+            "email": current_user.email if current_user else "",
+        },
     )
 
 
@@ -367,34 +369,64 @@ async def post_forgot_password_form(
     request: Request,
     background_tasks: BackgroundTasks,
     email: str = Form(...),
+    altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
     """Handle forgot password form submission to send a password reset email."""
+
+    def _forgot_password_response(error: str | None = None, success: str | None = None) -> HTMLResponse:
+        """Helper fn to return a response for the forgot password page."""
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_pages/forgot_password.html",
+            context={"current_user": current_user, "email": email, "error": error, "success": success},
+        )
+
+    captcha_verified = verify_altcha_solution(altcha=altcha, email=email)
+    if not captcha_verified:
+        return _forgot_password_response(error=ALTCHA_VERIFICATION_FAILED_MSG)
+
     RESET_LINK_SENT_MSG = (
-        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. Please check your inbox."
+        f"If your account exists, and your email is verified, a password reset email has been sent to {email}. Please check your inbox. "
         + f"The email will be sent from {api_settings.email.from_email}."
     )
-
     user = await get_user_by_email(db=db, email=email)
     # do not differentiate between existing and non-existing users for security reasons
     if not user or not user.email_verified:
         logger.info(
             f"A password reset email was requested for '{email}' but not sent. User exists: {bool(user)}, email verified: {user.email_verified if user else 'N/A'}"
         )
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={"current_user": current_user, "success": RESET_LINK_SENT_MSG},
-        )
+        return _forgot_password_response(success=RESET_LINK_SENT_MSG)
 
     background_tasks.add_task(send_password_reset_email, email_to=user.email, user_id=user.id)
-
     logger.info(f"Password reset email sent to: {email}")
+    return _forgot_password_response(success=RESET_LINK_SENT_MSG)
+
+
+def _invalid_reset_token_response(request: Request, current_user: UserDB | None) -> HTMLResponse:
+    """
+    Helper fn to return a response for an invalid, expired, or revoked password reset token.
+    Used by multiple routes hence defined at module level.
+    """
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/forgot_password.html",
-        context={"current_user": current_user, "success": RESET_LINK_SENT_MSG},
+        context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
+    )
+
+
+def _reset_password_page_response(
+    request: Request, current_user: UserDB | None, token: str, email: str, error: str | None = None
+) -> HTMLResponse:
+    """
+    Helper fn to return a response rendering the reset password page.
+    Used by multiple routes hence defined at module level.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="auth_pages/reset_password.html",
+        context={"current_user": current_user, "token": token, "email": email, "error": error},
     )
 
 
@@ -413,27 +445,15 @@ async def get_reset_password_page(
     """
     token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not token_data:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
-        )
+        return _invalid_reset_token_response(request=request, current_user=current_user)
     if await token_is_revoked(db=db, token_jti=token_data.jti):
         logger.warning(
             f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
         )
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
-        )
+        return _invalid_reset_token_response(request=request, current_user=current_user)
 
     user = await get_user_by_id_or_raise(db=db, id=token_data.user_id)
-    return templates.TemplateResponse(
-        request=request,
-        name="auth_pages/reset_password.html",
-        context={"current_user": current_user, "token": token, "email": user.email},
-    )
+    return _reset_password_page_response(request=request, current_user=current_user, token=token, email=user.email)
 
 
 @fr_auth_router.post("/reset-password", response_class=HTMLResponse)
@@ -447,26 +467,16 @@ async def post_reset_password_form(
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
 ):
-    """
-    Handle reset password form submission.
-    """
+    """Handle reset password form submission."""
     token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not token_data:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
-        )
+        return _invalid_reset_token_response(request=request, current_user=current_user)
 
     if await token_is_revoked(db=db, token_jti=token_data.jti):
         logger.warning(
             f"Attempt to use revoked password reset token with jti: {token_data.jti} for user id: {token_data.user_id}"
         )
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/forgot_password.html",
-            context={"current_user": current_user, "error": INVALID_EXPIRED_PASSWORD_TOKEN_MSG},
-        )
+        return _invalid_reset_token_response(request=request, current_user=current_user)
 
     # Client side validation should mean these are never raised, but always have to check on server side.
     try:
@@ -476,15 +486,8 @@ async def post_reset_password_form(
         if "Value error, " in error_msg:
             error_msg = error_msg.replace("Value error, ", "")
 
-        return templates.TemplateResponse(
-            request=request,
-            name="auth_pages/reset_password.html",
-            context={
-                "current_user": current_user,
-                "token": token,
-                "email": email,
-                "error": str(error_msg),
-            },
+        return _reset_password_page_response(
+            request=request, current_user=current_user, token=token, email=email, error=str(error_msg)
         )
 
     user = await update_user_password(db=db, user_id=token_data.user_id, password_data=password_data)
