@@ -2,10 +2,11 @@
 Project DB Model.
 """
 
+from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from divbase_api.models.base import BaseDBModel
@@ -34,6 +35,7 @@ class ProjectDB(BaseDBModel):
     bucket_name: Mapped[str] = mapped_column(String(63), index=True, unique=True)
     is_active: Mapped[bool] = mapped_column(default=True)
     is_deleted: Mapped[bool] = mapped_column(default=False)
+    date_deleted: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     # if not BigInteger, max size would be ~2.1 GB
     storage_quota_bytes: Mapped[int] = mapped_column(BigInteger)
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
