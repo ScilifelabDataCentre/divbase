@@ -54,8 +54,8 @@ async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -
                 "variant_count": entry.variant_count,
                 "sample_count": entry.sample_count,
                 "file_size_bytes": entry.file_size_bytes,
-                "created_at": entry.created_at.isoformat(),
-                "updated_at": entry.updated_at.isoformat(),
+                "created_at": entry.created_at,
+                "updated_at": entry.updated_at,
             }
             for entry in entries
         ],

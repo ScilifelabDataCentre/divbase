@@ -1,8 +1,5 @@
 """CLI commands for managing project versions in DivBase."""
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 import typer
 from rich import print
 from rich.table import Table
@@ -17,19 +14,12 @@ from divbase_cli.services.project_versions import (
     update_version_command,
 )
 from divbase_cli.utils import print_rich_table_as_tsv
-from divbase_lib.utils import format_file_size
+from divbase_lib.utils import format_datetime_for_cli, format_file_size
 
 version_app = typer.Typer(
     no_args_is_help=True,
     help="Add, view and remove versions representing the state of all files in the entire project at the current timestamp.",
 )
-
-
-def format_timestamp(timestamp_str: str) -> str:
-    """Format ISO timestamp to Europe/Stockholm format with timezone"""
-    dt = datetime.fromisoformat(timestamp_str)
-    cet_dt = dt.astimezone(ZoneInfo("Europe/Stockholm"))
-    return cet_dt.strftime("%d/%m/%Y %H:%M:%S %Z")
 
 
 @version_app.command("add")
@@ -132,7 +122,7 @@ def list_versions(
     for version in versions_info:
         name = version.name
         desc = version.description or "No description provided"
-        created_at = format_timestamp(version.created_at)
+        created_at = format_datetime_for_cli(dt=version.created_at)
         if include_deleted:
             soft_deleted = "Yes" if version.is_deleted else "No"
             table.add_row(name, created_at, desc, soft_deleted)
@@ -178,7 +168,7 @@ def get_version_info(
 
     if not format_output_as_tsv:
         print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
-        print(f"Entry created at: {format_timestamp(version_details.created_at)}")
+        print(f"Entry created at: {format_datetime_for_cli(dt=version_details.created_at)}")
         if version_details.description:
             print(f"Description: {version_details.description}")
         if version_details.is_deleted:
@@ -208,7 +198,7 @@ def delete_version(
         project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
     )
     if deleted_version.already_deleted:
-        date_deleted = format_timestamp(deleted_version.date_deleted)
+        date_deleted = format_datetime_for_cli(dt=deleted_version.date_deleted)
         print(f"The version: '{deleted_version.name}' has already been soft-deleted on {date_deleted}.")
     else:
         print(f"The version: '{deleted_version.name}' was deleted from the project: '{project_config.name}'")

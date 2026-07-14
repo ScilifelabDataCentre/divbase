@@ -5,7 +5,6 @@ All routes here should rely on get_current_user_from_cookie dependency to ensure
 """
 
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
@@ -26,6 +25,7 @@ from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.email_sender import send_pat_created_email, send_pat_revoked_email
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
+from divbase_lib.utils import format_datetime, to_unix_timestamp
 
 fr_pat_router = APIRouter()
 
@@ -189,9 +189,8 @@ async def create_pat_endpoint(
         return form_error(e.message)
 
     if expires_at_dt:
-        dt = expires_at_dt.astimezone(ZoneInfo("Europe/Stockholm"))
-        expires_at_cet = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        expires_at_unix = int(expires_at_dt.timestamp())
+        expires_at_unix = to_unix_timestamp(expires_at_dt)
+        expires_at_cet = format_datetime(expires_at_dt)
     else:
         expires_at_cet = None
         expires_at_unix = None

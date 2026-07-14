@@ -3,10 +3,8 @@ Command line interface for managing files in a DivBase project's store on DivBas
 """
 
 from collections import defaultdict
-from datetime import datetime
 from glob import glob
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import typer
 from rich import print
@@ -48,13 +46,12 @@ from divbase_lib.divbase_constants import (
     UNSUPPORTED_CHARACTERS_DISPLAY,
     UNSUPPORTED_CHARACTERS_IN_FILENAMES,
 )
-from divbase_lib.utils import format_file_size
+from divbase_lib.utils import format_datetime_for_cli, format_file_size
 
 file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 NO_UPLOAD_MATCHES_MSG = "The following file paths or glob patterns did not match any existing files:"
-
 
 PREFIX_ARGUMENT = typer.Argument(
     None,
@@ -159,11 +156,11 @@ def list_files(
 
         print(f"Soft deleted files for the project '{project_config.name}':")
         for file_details in files:
-            cet_timestamp = _format_time_stamp(file_details.last_modified)
+            deleted_at = format_datetime_for_cli(dt=file_details.last_modified)
             if file_details.name.endswith("/"):
-                print(f"- [bold blue]'{file_details.name}'[/bold blue] (deleted at: '{cet_timestamp}')")
+                print(f"- [bold blue]'{file_details.name}'[/bold blue] (deleted at: '{deleted_at}')")
             else:
-                print(f"- '{file_details.name}' (deleted at: '{cet_timestamp}')")
+                print(f"- '{file_details.name}' (deleted at: '{deleted_at}')")
         print("\nTo restore a soft deleted file, use the 'divbase-cli files restore' command.")
         print("To get more information about one of the soft deleted files, use the 'divbase-cli files info' command.")
         return
@@ -278,16 +275,16 @@ def file_info(
         caption="Versions shown are ordered with the latest/current version first/at the top",
     )
     table.add_column("File size", justify="left", style="magenta", no_wrap=True)
-    table.add_column("Upload date (CET)", justify="left", style="green", no_wrap=True)
+    table.add_column("Upload date", justify="left", style="green", no_wrap=True)
     table.add_column("MD5 checksum", justify="left", style="yellow")
     table.add_column("Version ID", justify="left", style="cyan")
 
     for version in file_info.versions:
-        cet_timestamp = _format_time_stamp(version.last_modified)
+        upload_date = format_datetime_for_cli(dt=version.last_modified)
         file_size = format_file_size(size_bytes=version.size)
         table.add_row(
             file_size,
-            cet_timestamp,
+            upload_date,
             version.etag,
             version.version_id,
         )
@@ -923,8 +920,8 @@ def _print_ls_tsv_format(files: list[ObjectDetails], folders: list[str]) -> None
     for folder in folders:
         print(f"{markup_escape(folder)}\t-\t-")
     for f in files:
-        cet = _format_time_stamp(f.last_modified)
-        print(f"{markup_escape(f.name)}\t{format_file_size(f.size)}\t{cet}")
+        last_modified = format_datetime_for_cli(dt=f.last_modified)
+        print(f"{markup_escape(f.name)}\t{format_file_size(f.size)}\t{last_modified}")
 
 
 def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
@@ -934,8 +931,8 @@ def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
         console.print(f"[bold blue]{markup_escape(folder)}[/bold blue]")
     for f in files:
         size_str = format_file_size(f.size).rjust(10)
-        cet = _format_time_stamp(f.last_modified)
-        console.print(f"{markup_escape(f.name)} [magenta]{size_str}[/magenta]  [green]{cet}[/green]")
+        last_modified = format_datetime_for_cli(dt=f.last_modified)
+        console.print(f"{markup_escape(f.name)} [magenta]{size_str}[/magenta]  [green]{last_modified}[/green]")
 
 
 def _resolve_file_inputs(files: list[str] | None, file_list: Path | None) -> list[str]:
@@ -1203,8 +1200,3 @@ def _pretty_print_download_results(download_results):
         for failed in download_results.failed:
             print(f"[red]- '{failed.object_name}': [/red] Exception: '{failed.exception}'")
         raise typer.Exit(1)
-
-
-def _format_time_stamp(time_stamp: datetime) -> str:
-    """Helper fn to format a datetime object into a string for printing."""
-    return time_stamp.astimezone(ZoneInfo("CET")).strftime("%Y-%m-%d %H:%M %Z")

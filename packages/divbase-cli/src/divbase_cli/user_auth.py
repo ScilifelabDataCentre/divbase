@@ -18,7 +18,6 @@ import os
 import time
 import warnings
 from dataclasses import dataclass
-from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
@@ -37,6 +36,7 @@ from divbase_cli.retries import retry_only_on_retryable_divbase_api_errors
 from divbase_cli.user_config import load_user_config
 from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
+from divbase_lib.utils import format_unix_timestamp_for_cli
 
 LOGIN_AGAIN_MESSAGE = "Your session has expired. Please log in again with 'divbase-cli auth login [EMAIL]'."
 PERSONAL_ACCESS_TOKEN_EXPIRED_MESSAGE = (
@@ -113,15 +113,15 @@ class PATData:
 
     def is_pat_expired(self) -> bool:
         """Check if the PAT is expired"""
-        cutoff = time.time() + 10  # 10 second buffer to account for clock skew or time delay
-        return self.pat_expires_at is not None and self.pat_expires_at <= cutoff
+        if self.pat_expires_at is None:
+            return False
+        return self.pat_expires_at <= time.time() + 10  # 10 second buffer to account for clock skew or time delay
 
     def pat_expiry_formatted(self) -> str:
         """Returns the token's expiry time in a human readable format in user's current timezone."""
         if self.pat_expires_at is None:
             return "Never"
-        expiry = datetime.fromtimestamp(self.pat_expires_at).astimezone()
-        return expiry.strftime("%Y-%m-%d %H:%M:%S %Z")
+        return format_unix_timestamp_for_cli(unix_timestamp=self.pat_expires_at)
 
 
 def delete_stored_pat(pat_path: Path = cli_settings.PATS_FALLBACK_PATH) -> None:

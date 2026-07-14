@@ -4,7 +4,6 @@ CLI subcommand for managing user auth with DivBase server.
 
 import logging
 import time
-from datetime import datetime
 
 import typer
 from pydantic import SecretStr
@@ -31,6 +30,7 @@ from divbase_cli.user_auth import (
 )
 from divbase_cli.user_config import load_user_config
 from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
+from divbase_lib.utils import format_unix_timestamp_for_cli
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def login(
         session_expires_at = check_existing_session(divbase_url=divbase_url, config=config)
         if session_expires_at:
             print(f"Already logged in to {divbase_url} with email: {config.logged_in_email}.")
-            print(f"Session expires: {datetime.fromtimestamp(session_expires_at)}")
+            print(f"Session expires: {format_unix_timestamp_for_cli(unix_timestamp=session_expires_at)}")
 
             if not typer.confirm("Do you want to login again? This will replace your current session."):
                 print("Login cancelled.")

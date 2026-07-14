@@ -66,7 +66,7 @@ from divbase_api.worker.metrics import (
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
-from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.divbase_constants import DIVBASE_SERVER_TIMEZONE, QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
 
 logger = structlog.get_logger(__name__)
@@ -126,7 +126,7 @@ app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     result_extended=True,
-    timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
+    timezone=DIVBASE_SERVER_TIMEZONE,  # for internal scheduling, e.g. celery beat
     worker_cancel_long_running_tasks_on_connection_loss=True,  # silence warning as will become default in celery 6
     control_queue_durable=True,
     event_queue_durable=True,

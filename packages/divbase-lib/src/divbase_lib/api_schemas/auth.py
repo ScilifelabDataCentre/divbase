@@ -1,5 +1,8 @@
 """
 Schemas for login + access and refresh tokens
+
+NOTE: Expiry fields are unix timestamps (not datetimes like the rest of the API returns).
+This is to mirror how the JWT's stores the expiry, and it is convenient as the CLI stores these expiries locally as unix timestamps too.
 """
 
 from pydantic import BaseModel, Field

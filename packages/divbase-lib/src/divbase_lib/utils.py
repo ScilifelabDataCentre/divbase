@@ -1,6 +1,63 @@
+from datetime import datetime, timezone
 from typing import Literal, TypeAlias
+from zoneinfo import ZoneInfo
+
+from divbase_lib.divbase_constants import (
+    DEFAULT_CLI_DISPLAY_DATETIME_FORMAT,
+    DEFAULT_DISPLAY_DATETIME_FORMAT,
+    DIVBASE_SERVER_TIMEZONE,
+)
 
 QuoteChar: TypeAlias = Literal["'", '"']
+
+
+def set_default_timezone(dt: datetime) -> datetime:
+    """
+    If the datetime is naive (aka no timezone info), set it to UTC.
+    If it already has timezone info, return it unchanged.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def to_unix_timestamp(dt: datetime) -> int:
+    """
+    Convert a datetime to a unix timestamp (whole seconds since epoch, UTC).
+    Datetimes are assumed to be UTC timezone if not already a timezone aware object.
+    """
+    dt = set_default_timezone(dt)
+    return int(dt.timestamp())
+
+
+def format_datetime(
+    dt: datetime,
+    desired_timezone: str = DIVBASE_SERVER_TIMEZONE,
+    format: str = DEFAULT_DISPLAY_DATETIME_FORMAT,
+) -> str:
+    """
+    Convert a datetime into a human-readable string in a given timezone.
+    Datetimes are assumed to be UTC timezone if not already a timezone aware object.
+    """
+    dt = set_default_timezone(dt)
+    return dt.astimezone(ZoneInfo(desired_timezone)).strftime(format)
+
+
+def format_datetime_for_cli(dt: datetime, format: str = DEFAULT_CLI_DISPLAY_DATETIME_FORMAT) -> str:
+    """
+    Convert a datetime into a human-readable string in the user's local system timezone.
+
+    For use by DivBase CLI commands, which are run on the user's own machine and
+    should therefore display timestamps in their local timezone.
+    """
+    dt = set_default_timezone(dt)
+    return dt.astimezone().strftime(format)
+
+
+def format_unix_timestamp_for_cli(unix_timestamp: int | float, fmt: str = DEFAULT_CLI_DISPLAY_DATETIME_FORMAT) -> str:
+    """Convert a unix timestamp into a human-readable string in the user's local system timezone."""
+    dt = datetime.fromtimestamp(unix_timestamp, tz=timezone.utc)
+    return format_datetime_for_cli(dt=dt, format=fmt)
 
 
 def format_file_size(size_bytes: int | float | None, decimals: int = 2) -> str:
