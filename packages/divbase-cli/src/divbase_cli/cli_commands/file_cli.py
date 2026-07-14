@@ -22,7 +22,10 @@ from divbase_cli.cli_exceptions import (
     ShellExpandedGlobError,
     UnsupportedCharactersError,
 )
-from divbase_cli.config_resolver import ensure_logged_in, resolve_download_dir, resolve_project
+from divbase_cli.config_resolver import (
+    resolve_and_authenticate_project,
+    resolve_download_dir,
+)
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
     ToDownload,
@@ -140,12 +143,11 @@ def list_files(
     if detailed and format_output_as_tsv:
         raise typer.BadParameter(message="The --detailed option and --tsv option cannot be used together.")
 
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    project_config = resolve_and_authenticate_project(project_name=project)
 
     if show_deleted_files:
         files = list_soft_deleted_files_command(
-            divbase_base_url=logged_in_url,
+            divbase_base_url=project_config.divbase_url,
             project_name=project_config.name,
             prefix=prefix,
         )
@@ -166,7 +168,7 @@ def list_files(
         return
 
     files, folders = list_files_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         prefix=prefix,
         include_results_files=include_results_files,
@@ -208,17 +210,14 @@ def tree_files(
     - Show the tree starting from the 'vcfs/' folder:
         divbase-cli files tree vcfs/
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     files, _ = list_files_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         prefix=prefix,
         include_results_files=include_results_files,
         file_system_view=False,
     )
-
     if not files:
         print("No files found in the project's store on DivBase.")
         return
@@ -244,16 +243,14 @@ def file_info(
     - Get information about a specific file in the project:
         divbase-cli files info my_file.vcf.gz
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
     if file_name.endswith("/"):
         raise typer.BadParameter(
             message="The 'info' command is only for files, not folders. Please provide a file name without a trailing '/'."
         )
 
+    project_config = resolve_and_authenticate_project(project_name=project)
     file_info = get_file_info_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         object_name=file_name,
     )
@@ -333,27 +330,26 @@ def download_files(
     - Mix latest and versioned files in one command:
         divbase-cli files download file1.vcf.gz "file2.tsv:VERSION_ID"
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-    download_dir_path = resolve_download_dir(download_dir=download_dir)
-
     if project_version == "":
         raise typer.BadParameter(
             "It seems like you provided an empty string for --project-version. \n"
             "Please provide a valid project version or omit the flag."
         )
 
+    project_config = resolve_and_authenticate_project(project_name=project)
+    download_dir_path = resolve_download_dir(download_dir=download_dir)
+
     raw_files_input = _resolve_file_inputs(files=files, file_list=file_list)
     raw_files_input = _expand_folder_prefixes(
         files=raw_files_input,
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
     )
     if flatten:
         check_no_overlap_on_flattened_downloads(to_download=raw_files_input)
 
     download_results = download_files_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
@@ -413,14 +409,15 @@ def download_all_files(
             "Please provide a valid project version or omit the flag."
         )
 
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    project_config = resolve_and_authenticate_project(project_name=project)
     download_dir_path = resolve_download_dir(download_dir=download_dir)
 
     all_files: list[ToDownload] = []
     if project_version:
         version_details = get_version_details_command(
-            project_name=project_config.name, divbase_base_url=logged_in_url, version_name=project_version
+            project_name=project_config.name,
+            divbase_base_url=project_config.divbase_url,
+            version_name=project_version,
         )
         for version_name, file_details in version_details.files.items():
             all_files.append(
@@ -434,7 +431,7 @@ def download_all_files(
 
     else:
         files, _ = list_files_command(
-            divbase_base_url=logged_in_url,
+            divbase_base_url=project_config.divbase_url,
             project_name=project_config.name,
             prefix=None,
             include_results_files=False,
@@ -499,7 +496,7 @@ def download_all_files(
     else:
         raw_files_input = [file.s3_key for file in files_to_download]
     download_results = download_files_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         raw_files_input=raw_files_input,
         download_dir=download_dir_path,
@@ -539,11 +536,9 @@ def stream_file(
     - Run a bcftools command (the "-" tells bcftools to read from standard input):
         divbase-cli files stream my_file.vcf.gz | bcftools view -h -
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     stream_file_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         file_name=file_name,
         version_id=version_id,
@@ -618,19 +613,15 @@ def upload_files(
     - Upload from a text file list (one file path per line):
         divbase-cli files upload --file-list files_to_upload.txt --to experiment1/
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
     if bool(files) + bool(file_list) > 1:
         raise typer.BadParameter("You cannot specify files as arguments and provide a --file-list.")
-
     if skip_existing and disable_safe_mode:
         raise typer.BadParameter(
             "The --skip-existing and --disable-safe-mode options cannot be used together.\n"
             "Safe mode calculates file checksums, "
             "and these checksums are needed for --skip-existing to know what files to skip uploading."
         )
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     to_upload = _resolve_user_upload_inputs(
         files=files,
         file_list=file_list,
@@ -642,7 +633,7 @@ def upload_files(
 
     uploaded_results = upload_files_command(
         project_name=project_config.name,
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         all_files=to_upload,
         safe_mode=not disable_safe_mode,
         skip_existing=skip_existing,
@@ -694,13 +685,12 @@ def make_directory(
     - Create multiple directories at once:
         divbase-cli files mkdir vcfs metadata results
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     cleaned_dir_names = _sanitize_directory_names(directories)
+
     dirs_created = make_directories_command(
         directories=cleaned_dir_names,
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
     )
     if dirs_created.created:
@@ -738,13 +728,12 @@ def remove_directory(
     - Remove multiple directories at once:
         divbase-cli files rmdir vcfs/ metadata/
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     directories = _sanitize_directory_names(directories)
+
     for dir in directories:
         files, _ = list_files_command(
-            divbase_base_url=logged_in_url,
+            divbase_base_url=project_config.divbase_url,
             project_name=project_config.name,
             prefix=dir,
             include_results_files=True,
@@ -760,7 +749,7 @@ def remove_directory(
 
     # NOTE: as dirs are just empty files which end with "/", we can just do a regular soft delete on them.
     deleted_dirs = soft_delete_objects_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         all_files=directories,
     )
@@ -797,9 +786,7 @@ def remove_files(
     - Run a dry run to see what files would be deleted without actually deleting them:
         divbase-cli files rm file1.vcf.gz file2.tsv --dry-run
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     all_files = _resolve_file_inputs(files=files, file_list=file_list)
 
     if dry_run:
@@ -809,7 +796,7 @@ def remove_files(
         return
 
     deleted_files = soft_delete_objects_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         all_files=all_files,
     )
@@ -842,13 +829,11 @@ def restore_soft_deleted_files(
     - Restore files from a text file list (one file name per line):
         divbase-cli files restore --file-list files_to_restore.txt
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     all_files = _resolve_file_inputs(files=files, file_list=file_list)
 
     restored_objects_response = restore_objects_command(
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         project_name=project_config.name,
         all_files=all_files,
     )

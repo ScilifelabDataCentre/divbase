@@ -9,7 +9,7 @@ from rich import print
 from rich.table import Table
 
 from divbase_cli.cli_commands.shared_args_options import PROJECT_NAME_OPTION
-from divbase_cli.config_resolver import ensure_logged_in, resolve_project
+from divbase_cli.config_resolver import resolve_and_authenticate_project
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.utils import print_rich_table_as_tsv
 from divbase_lib.api_schemas.vcf_dimensions import (
@@ -35,9 +35,7 @@ def update_dimensions_index(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """Calculate and add the dimensions of all VCF files in the project to the dimensions index in the project."""
-
-    project_config = resolve_project(project_name=project)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     response = make_authenticated_request(
         method="PUT",
         divbase_base_url=project_config.divbase_url,
@@ -101,16 +99,14 @@ def show_dimensions_index(
     Show the dimensions index file for a project.
     When running --unique-scaffolds, the sorting separates between numeric and non-numeric scaffold names.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
     if sample_names_output and sample_names_stdout:
         raise typer.BadParameter("Use only one of --sample-names-output or --sample-names-stdout.")
 
+    project_config = resolve_and_authenticate_project(project_name=project)
     if unique_samples:
         response = make_authenticated_request(
             method="GET",
-            divbase_base_url=logged_in_url,
+            divbase_base_url=project_config.divbase_url,
             api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
         )
         unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
@@ -280,12 +276,10 @@ def create_metadata_template_with_project_samples_names(
     """
     Create a template sample metadata file (TSV format) pre-filled with the sample names from the project's VCF files based on the information stored in the project's VCF dimensions cache. Tip: run 'divbase-cli dimensions update' first to ensure that the VCF dimensions are up-to-date.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     response = make_authenticated_request(
         method="GET",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
     unique_sample_names_sorted = DimensionsSamplesResult(**response.json()).unique_samples
@@ -344,16 +338,13 @@ def validate_metadata_template_versus_dimensions_and_formatting_constraints(
     # Client-side validation of a sidecar metadata TSV file, intended to be run before upload to DivBase.
     # Uses the SharedMetadataValidator (that is also used on the server-side) which checks for formatting errors and also validates that the sample names
     # in the TSV file match the sample names in the dimensions index for the project
-
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     print(f"Validating local metadata file: {input_path}")
     print(f"Project: {project_config.name}\n")
 
     response = make_authenticated_request(
         method="GET",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         api_route=f"v1/vcf-dimensions/projects/{project_config.name}/samples",
     )
     unique_sample_names = DimensionsSamplesResult(**response.json()).unique_samples

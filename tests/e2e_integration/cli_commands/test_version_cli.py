@@ -234,14 +234,14 @@ def test_update_version_short_flags(logged_in_edit_user_with_existing_config):
 
 
 def test_update_version_no_options_provided(logged_in_edit_user_with_existing_config):
-    """Test that running update without any options exits without error as just does no operation."""
+    """Test that running update without any options exits with an error"""
     runner.invoke(app, f"version add {VERSION_1_NAME}")
 
     result = runner.invoke(app, f"version update {VERSION_1_NAME}")
-
-    assert result.exit_code == 0
-    assert "--new-name" in result.stdout
-    assert "--new-description" in result.stdout
+    # raises typer.BadParameter error, which exits with code 2
+    assert result.exit_code == 2
+    assert "--new-name" in result.output
+    assert "--new-description" in result.output
 
 
 def test_update_version_that_does_not_exist(logged_in_edit_user_with_existing_config):

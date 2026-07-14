@@ -2,8 +2,6 @@
 Custom exceptions for the divbase CLI.
 """
 
-from pathlib import Path
-
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -173,12 +171,11 @@ class ProjectNotInConfigError(DivBaseCLIError):
     But info about the project could not be obtained from the user config file.
     """
 
-    def __init__(self, config_path: Path, project_name: str):
-        self.config_path = config_path
+    def __init__(self, project_name: str):
         self.project_name = project_name
         error_message = (
             f"Couldn't get information about the project named: '{project_name}' \n"
-            f"Please check the project is included in '{config_path.resolve()}'.\n"
+            f"Use the command 'divbase-cli config add [PROJECT_NAME]' to add the project to your config.\n"
             f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
         super().__init__(error_message)
