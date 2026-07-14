@@ -1,5 +1,6 @@
 import csv
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -18,6 +19,7 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsVCFFilesResult,
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator
+from divbase_lib.utils import format_datetime_for_cli
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +238,7 @@ def _format_api_response_for_display_in_terminal(api_response: DimensionsShowRes
         dimensions_entry = {
             "filename": entry["vcf_file_s3_key"],
             "file_version_ID_in_bucket": entry["s3_version_id"],
-            "last_updated": entry.get("updated_at"),
+            "last_updated": format_datetime_for_cli(datetime.fromisoformat(entry["updated_at"])),
             "dimensions": {
                 "scaffold_count": len(sorted_scaffolds),
                 "scaffolds": sorted_scaffolds,

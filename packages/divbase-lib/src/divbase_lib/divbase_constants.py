@@ -62,3 +62,5 @@ LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
 # The default timezone and formats used for display (e.g. in the frontend, admin panel and in emails).
 DIVBASE_SERVER_TIMEZONE = "Europe/Stockholm"
 DEFAULT_DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
+# divbase-cli uses user's local timezone for display
+DEFAULT_CLI_DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M %Z"
