@@ -88,7 +88,7 @@ async def add_project_version(
 
     await db.refresh(new_version)
     return AddVersionResponse(
-        name=new_version.name, description=new_version.description, created_at=new_version.created_at.isoformat()
+        name=new_version.name, description=new_version.description, created_at=new_version.created_at
     )
 
 
@@ -114,7 +114,7 @@ async def list_project_versions(
         ProjectVersionInfo(
             name=row.name,
             description=row.description,
-            created_at=row.created_at.isoformat(),
+            created_at=row.created_at,
             is_deleted=row.is_deleted,
         )
         for row in result
@@ -151,7 +151,7 @@ async def get_project_version_details(
     return ProjectVersionDetailResponse(
         name=name,
         description=description,
-        created_at=created_at.isoformat(),
+        created_at=created_at,
         is_deleted=is_deleted,
         files=files,
     )
@@ -213,7 +213,7 @@ async def update_project_version(
     return UpdateVersionResponse(
         name=version_entry.name,
         description=version_entry.description,
-        created_at=version_entry.created_at.isoformat(),
+        created_at=version_entry.created_at,
     )
 
 
@@ -241,7 +241,7 @@ async def soft_delete_version(
         return DeleteVersionResponse(
             name=version_name,
             already_deleted=True,
-            date_deleted=version_entry.date_deleted.isoformat(),
+            date_deleted=version_entry.date_deleted,
         )
 
     version_entry.is_deleted = True
@@ -251,5 +251,5 @@ async def soft_delete_version(
     return DeleteVersionResponse(
         name=version_name,
         already_deleted=False,
-        date_deleted=version_entry.date_deleted.isoformat(),
+        date_deleted=version_entry.date_deleted,
     )

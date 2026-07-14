@@ -2,6 +2,7 @@
 Schemas for task history routes.
 """
 
+from datetime import datetime
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ class TaskHistoryResult(BaseModel):
     """
 
     id: int
+    created_at: datetime  # NOTE: This comes from TaskHistoryDB, so cannot be None unlike the other datetimes here.
     submitter_email: Optional[str] = None
     status: Optional[str] = None
     result: Optional[
@@ -33,7 +35,7 @@ class TaskHistoryResult(BaseModel):
             DimensionUpdateTaskResult,
         ]
     ] = None
-    date_done: Optional[str] = None
+    date_done: Optional[datetime] = None
     name: Optional[str] = None
     args: Optional[str] = None
     kwargs: Optional[
@@ -44,7 +46,7 @@ class TaskHistoryResult(BaseModel):
         ]
     ] = None
     worker: Optional[str] = None
-    created_at: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     runtime: Optional[float] = None

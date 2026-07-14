@@ -58,3 +58,7 @@ PAT_TOKEN_PREFIX = "divbase_pat_"
 
 # Both divbase-api and divbase-worker(s) configs want to know if we are in a deployed environment or not
 LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
+
+# The default timezone and formats used for display (e.g. in the frontend, admin panel and in emails).
+DIVBASE_SERVER_TIMEZONE = "Europe/Stockholm"
+DEFAULT_DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"

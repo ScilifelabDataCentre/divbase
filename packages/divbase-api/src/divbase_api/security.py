@@ -24,6 +24,7 @@ from pydantic import SecretStr
 
 from divbase_api.api_config import api_settings
 from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
+from divbase_lib.utils import to_unix_timestamp
 
 password_hash = PasswordHash(hashers=[Argon2Hasher()])
 
@@ -87,11 +88,11 @@ def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
     Tokens specify the "type" field in the payload,
     so we can validate an access token is not used for e.g. password reset.
     """
-    expire = datetime.now(timezone.utc) + token_expires_delta[token_type]
+    expires = datetime.now(timezone.utc) + token_expires_delta[token_type]
     jti = str(uuid.uuid4())
 
     to_encode = {
-        "exp": expire,
+        "exp": expires,
         "iat": datetime.now(timezone.utc),
         "jti": jti,
         "sub": str(subject),
@@ -100,7 +101,7 @@ def create_token(subject: str | Any, token_type: TokenType) -> TokenData:
     encoded_jwt = jwt.encode(
         to_encode, api_settings.jwt.secret_key.get_secret_value(), algorithm=api_settings.jwt.algorithm
     )
-    return TokenData(token=encoded_jwt, expires_at=int(expire.timestamp()))
+    return TokenData(token=encoded_jwt, expires_at=to_unix_timestamp(expires))
 
 
 def verify_token(token: str, desired_token_type: TokenType) -> VerifiedTokenData | None:
