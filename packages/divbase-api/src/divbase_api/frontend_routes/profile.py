@@ -6,7 +6,7 @@ All routes here should rely on get_current_user_from_cookie dependency to ensure
 
 import structlog
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,12 +24,12 @@ fr_profile_router = APIRouter()
 logger = structlog.get_logger(__name__)
 
 
-@fr_profile_router.get("/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@fr_profile_router.get("/", status_code=status.HTTP_200_OK)
 async def user_profile_endpoint(
     request: Request,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Render the user's profile page with their information."""
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
     projects = create_user_project_responses(user_projects)
@@ -45,11 +45,11 @@ async def user_profile_endpoint(
     )
 
 
-@fr_profile_router.get("/edit", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@fr_profile_router.get("/edit", status_code=status.HTTP_200_OK)
 async def get_edit_user_profile_endpoint(
     request: Request,
     current_user: UserDB = Depends(get_current_user_from_cookie),
-):
+) -> HTMLResponse:
     """Render the edit user's profile page."""
     # little awkward, but this logic is needed to handle the "Other" option for
     # organisation and roles, and pre-fill each field appropriately on page load.
@@ -81,7 +81,7 @@ async def get_edit_user_profile_endpoint(
     )
 
 
-@fr_profile_router.post("/edit", response_class=HTMLResponse, status_code=status.HTTP_303_SEE_OTHER)
+@fr_profile_router.post("/edit", status_code=status.HTTP_303_SEE_OTHER)
 async def post_edit_user_profile_endpoint(
     request: Request,
     name: str = Form(...),
@@ -91,7 +91,7 @@ async def post_edit_user_profile_endpoint(
     role: str = Form(...),
     role_other: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     """
     Handle the submission of the edit user's profile form.
 
@@ -100,7 +100,7 @@ async def post_edit_user_profile_endpoint(
     We validate this here too.
     """
 
-    def edit_profile_failed_response(error_message: str):
+    def edit_profile_failed_response(error_message: str) -> HTMLResponse:
         """Helper function to render the edit profile page with an error message."""
         return templates.TemplateResponse(
             request=request,
