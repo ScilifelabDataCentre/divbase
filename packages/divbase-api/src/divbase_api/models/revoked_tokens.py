@@ -54,7 +54,7 @@ class RevokedTokenDB(BaseDBModel):
         return f"<RevokedTokenDB id={self.id}, token_jti={self.token_jti}, token_type={self.token_type}, revoked_reason={self.revoked_reason}>"
 
     @validates("token_type")
-    def validate_token_type(self, key, value):
+    def validate_token_type(self, key: str, value: TokenType) -> TokenType:
         """
         Only allow refresh and password reset tokens to be revoked.
 

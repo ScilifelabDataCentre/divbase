@@ -26,7 +26,7 @@ logger = structlog.get_logger(__name__)
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
-def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days):
+def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days) -> dict:
     """
     Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
     Runs daily to remove entries older than retention_days.
@@ -80,7 +80,7 @@ def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.tas
 def cleanup_stuck_tasks_task(
     stuck_pending_hours: int = worker_settings.cron.stuck_pending_hours,
     stuck_started_hours: int = worker_settings.cron.stuck_started_hours,
-):
+) -> dict:
     """
     Periodic task to clean up tasks stuck in PENDING or STARTED status from
     TaskHistoryDB and CeleryTaskMeta.
@@ -155,7 +155,9 @@ def cleanup_stuck_tasks_task(
 
 
 @app.task(name="cron_tasks.cleanup_old_jwts_and_pats")
-def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron.revoked_token_retention_days):
+def cleanup_old_revoked_jwts_and_pats(
+    retention_days: int = worker_settings.cron.revoked_token_retention_days,
+) -> dict:
     """
     Periodic task to clean up old revoked token entries.
 
@@ -188,7 +190,7 @@ def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron
 @app.task(name="cron_tasks.cleanup_non_email_confirmed_users")
 def cleanup_non_email_confirmed_users(
     retention_days: int = worker_settings.cron.non_email_confirmed_user_retention_days,
-):
+) -> dict:
     """
     Periodic task to cleanup new sign ups that don't confirm their email within the retention period.
 
@@ -218,7 +220,7 @@ def cleanup_non_email_confirmed_users(
 @app.task(name="cron_tasks.cleanup_soft_deleted_project_versions")
 def cleanup_soft_deleted_project_versions(
     retention_days: int = worker_settings.cron.soft_deleted_project_version_retention_days,
-):
+) -> dict:
     """
     Periodic task to hard delete any soft-deleted project versions older than the retention period.
     """
@@ -239,7 +241,7 @@ def cleanup_soft_deleted_project_versions(
 
 
 @app.task(name="cron_tasks.update_storage_usage_metrics")
-def update_storage_usage_metrics():
+def update_storage_usage_metrics() -> dict:
     """
     Periodic task to update storage usage metrics for all projects.
 
@@ -266,7 +268,7 @@ def update_storage_usage_metrics():
 
 
 @app.task(name="cron_tasks.remove_old_log_files")
-def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_retention_days):
+def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_retention_days) -> dict:
     """
     If a deployed enviroment is writing logs to files, this task will clean up outdated log files to prevent disk clutter.
     NOTE: If loki/grafana alloy is setup, then this task can be removed.

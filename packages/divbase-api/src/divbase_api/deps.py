@@ -92,10 +92,10 @@ async def _authenticate_frontend_user_from_tokens(
 
 
 async def get_current_user_from_cookie_optional(
+    response: Response,
     access_token: str | None = Cookie(None),
     refresh_token: str | None = Cookie(None),
     db: AsyncSession = Depends(get_db),
-    response: Response = None,
 ) -> UserDB | None:
     """
     Get user from the JWT access token stored inside the httponly cookie.
@@ -109,10 +109,10 @@ async def get_current_user_from_cookie_optional(
 
 
 async def get_current_user_from_cookie(
+    response: Response,
     access_token: str | None = Cookie(None),
     refresh_token: str | None = Cookie(None),
     db: AsyncSession = Depends(get_db),
-    response: Response = None,
 ) -> UserDB:
     """
     Get user from the JWT access token stored inside the httponly cookie.

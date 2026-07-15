@@ -323,7 +323,7 @@ class MakeDirectoriesResponse(BaseModel):
     created: list[str] = Field(
         ...,
         description=(
-            "List of directories that were successfully created. This will include directories that already existed.\n"
+            "List of directories that were successfully created. This will include directories that already existed."
         ),
     )
     failed: list[str] = Field(

@@ -32,6 +32,7 @@ from starlette_admin import (
     DateTimeField,
     EmailField,
     EnumField,
+    HasMany,
     HasOne,
     IntegerField,
     JSONField,
@@ -153,7 +154,7 @@ class UserView(DivBaseModelView):
                 help_text="Timestamp when the user last changed their password.",
                 disabled=True,
             ),
-            "project_memberships",
+            HasMany("project_memberships", identity="memberships", label="Project Memberships"),
         ]
         + _is_deleted_date_deleted_fields()
         + _basedb_model_fields()
@@ -588,7 +589,7 @@ class QueueStatusView(DivBaseModelView):
         return await super().edit(request=request, pk=pk, data=data)
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
-        errors: dict[str, str] = {}
+        errors: dict[str | int, Any] = {}
 
         if data.get("scheduled_start") and not data.get("is_closed"):
             errors["scheduled_start"] = "Cannot have a scheduled start time without the queue being closed."
@@ -682,6 +683,7 @@ class DivBaseAuthProvider(AuthProvider):
         if not access_token and not refresh_token:
             return False
 
+        authenticated = False
         try:
             # Starlette does not support dependency injection like FastAPI,
             # so we need to manually obtain the database session here.
@@ -693,14 +695,13 @@ class DivBaseAuthProvider(AuthProvider):
                 if user and user.is_admin and user.is_active:
                     # Store user info in the request state so it can be accessed by e.g. get_admin_user
                     request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
-                    return True
+                    authenticated = True
         except Exception as e:
             logger.warning(
                 f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
             )
             return False
-
-        return False
+        return authenticated
 
     def get_admin_user(self, request: Request) -> AdminUser | None:
         """
@@ -731,7 +732,11 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
 
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
-    admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(
+        ProjectMembershipView(
+            ProjectMembershipDB, icon="fas fa-link", label="Project Memberships", identity="memberships"
+        )
+    )
     admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
     admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
     admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))

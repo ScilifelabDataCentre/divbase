@@ -26,7 +26,7 @@ class UserBase(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def lowercase_email(cls, v):
+    def lowercase_email(cls, v: EmailStr) -> EmailStr:
         return v.lower() if v else v
 
 

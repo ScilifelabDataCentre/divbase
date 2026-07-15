@@ -73,7 +73,7 @@ async def _render_error_page(
     message: str,
     error_template: str = "error.html",
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-):
+) -> Response:
     """Helper function to render an error page for frontend requests."""
     current_user = await _get_current_user_from_request_object(request)
     response = templates.TemplateResponse(
@@ -118,7 +118,7 @@ async def divbase_api_exception_handler(request: Request, exc: DivBaseAPIExcepti
     )
 
 
-async def unexpected_exception_handler(request: Request, exc: Exception):
+async def unexpected_exception_handler(request: Request, exc: Exception) -> Response:
     """
     Handle unexpected exceptions. In the ideal world this is never triggered.
     """
@@ -140,7 +140,7 @@ async def unexpected_exception_handler(request: Request, exc: Exception):
         )
 
 
-async def user_registration_error_handler(request: Request, exc: UserRegistrationError):
+async def user_registration_error_handler(request: Request, exc: UserRegistrationError) -> Response:
     """
     UserRegistrationError has its own dedicated handler. As it needs to
     (1) show different user-facing message vs internal logging message and
@@ -181,7 +181,7 @@ async def user_registration_error_handler(request: Request, exc: UserRegistratio
     )
 
 
-async def generic_http_exception_handler(request: Request, exc: HTTPException):
+async def generic_http_exception_handler(request: Request, exc: HTTPException) -> Response:
     """
     Generic handler for HTTP exceptions. 401 and 403s are handled by custom exceptions which inherit from DivBaseAPIException.
 
@@ -220,7 +220,7 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException):
         )
 
 
-async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> Response:
     """
     When a request contains invalid data, FastAPI internally raises a RequestValidationError
 

@@ -16,7 +16,7 @@ from divbase_api.crud.projects import add_project_member, create_project
 from divbase_api.crud.users import create_user
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_admin_user
-from divbase_api.models.projects import ProjectRoles
+from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 from divbase_api.schemas.users import UserCreate, UserResponse
@@ -34,7 +34,7 @@ async def create_user_endpoint(
     email_verified: bool = Query(False, description="Set to true to skip the email verification process"),
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> UserDB:
     """Create a new regular or admin user."""
     new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin, email_verified=email_verified)
     logger.info(f"Admin user: {current_admin.email} created a new user: {new_user.email}")
@@ -46,7 +46,7 @@ async def create_project_endpoint(
     proj_data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> ProjectDB:
     new_project = await create_project(db=db, proj_data=proj_data)
     logger.info(f"Admin user: {current_admin.email} created a new project: {new_project.name}")
     return new_project
@@ -63,7 +63,7 @@ async def add_project_member_endpoint(
     role: ProjectRoles,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> ProjectMembershipResponse:
     membership = await add_project_member(db=db, project_id=project_id, user_email=user_email.lower(), role=role)
     logger.info(
         f"Admin user: {current_admin.email} added user with email: {user_email} to project with id: {project_id} with role: {role}"
@@ -83,7 +83,7 @@ async def test_email_endpoint(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> dict[str, str]:
     """Send a test email"""
     background_tasks.add_task(send_test_email, email_to=email_to)
     return {"message": f"Test email sent to {email_to} in the background."}
