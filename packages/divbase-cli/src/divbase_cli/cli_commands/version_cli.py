@@ -5,7 +5,7 @@ from rich import print
 from rich.table import Table
 
 from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION, PROJECT_NAME_OPTION
-from divbase_cli.config_resolver import ensure_logged_in, resolve_project
+from divbase_cli.config_resolver import resolve_and_authenticate_project
 from divbase_cli.services.project_versions import (
     add_version_command,
     delete_version_command,
@@ -29,14 +29,12 @@ def add_version(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """Add a new project version entry which specifies the current state of all files in the project at the current timestamp."""
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     add_version_response = add_version_command(
         name=name,
         description=description,
         project_name=project_config.name,
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
     )
     print(f"New version: '{add_version_response.name}' added to the project: '{project_config.name}'")
 
@@ -65,17 +63,14 @@ def update_version(
     To see your current version entries run: `divbase-cli version ls`
     """
     if not new_name and not new_description:
-        print(
+        raise typer.BadParameter(
             "No updates specified. Please provide a new name (--new-name) and/or description (--new-description) to update for this entry."
         )
-        return
 
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     updated_version = update_version_command(
         project_name=project_config.name,
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         version_name=version_name,
         new_name=new_name,
         new_description=new_description,
@@ -101,11 +96,11 @@ def list_versions(
     If you specify --include-deleted, soft-deleted versions will also be shown.
     Soft-deleted versions can be restored by a DivBase admin within 30 days of deletion.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     versions_info = list_versions_command(
-        project_name=project_config.name, include_deleted=include_deleted, divbase_base_url=logged_in_url
+        project_name=project_config.name,
+        include_deleted=include_deleted,
+        divbase_base_url=project_config.divbase_url,
     )
 
     if not versions_info:
@@ -144,11 +139,11 @@ def get_version_info(
     """
     Provide detailed information about a user specified project version, including all files present and their unique hashes.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     version_details = get_version_details_command(
-        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=version
+        project_name=project_config.name,
+        divbase_base_url=project_config.divbase_url,
+        version_name=version,
     )
 
     table = Table(title=f"Project version files for {project_config.name}")
@@ -191,11 +186,11 @@ def delete_version(
     Deleted version entries older than 30 days will be permanently deleted.
     You can ask a DivBase admin to restore a deleted version within that time period.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     deleted_version = delete_version_command(
-        project_name=project_config.name, divbase_base_url=logged_in_url, version_name=name
+        project_name=project_config.name,
+        divbase_base_url=project_config.divbase_url,
+        version_name=name,
     )
     if deleted_version.already_deleted:
         date_deleted = format_datetime_for_cli(dt=deleted_version.date_deleted)

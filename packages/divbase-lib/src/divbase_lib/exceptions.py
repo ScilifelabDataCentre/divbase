@@ -19,17 +19,16 @@ class BcftoolsEnvironmentError(Exception):
             f"No running container found with name {self.container_name}. Ensure the Docker image is available.\n"
         )
         super().__init__(error_message)
-
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 
 class BcftoolsCommandError(Exception):
     """Raised when a bcftools command fails to execute properly."""
 
-    def __init__(self, command: str, error_details: Exception = None):
+    def __init__(self, command: str, error_details: str | None = None):
         self.command = command
         self.error_details = error_details
 
@@ -38,11 +37,10 @@ class BcftoolsCommandError(Exception):
             error_message += f" with error details: {error_details}"
 
         super().__init__(error_message)
+        self.error_message = error_message
 
-    def __str__(self):
-        if hasattr(self.error_details, "stderr") and self.error_details.stderr:
-            return f"bcftools command failed: '{self.command}' with error: {self.error_details.stderr}"
-        return super().__str__()
+    def __str__(self) -> str:
+        return self.error_message
 
 
 class BcftoolsPipeEmptyCommandError(Exception):
@@ -53,7 +51,7 @@ class BcftoolsPipeEmptyCommandError(Exception):
         super().__init__(error_message)
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 
@@ -85,7 +83,7 @@ class SidecarNoDataLoadedError(Exception):
         super().__init__(error_message)
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 

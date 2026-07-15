@@ -90,7 +90,7 @@ class TaskHistoryDisplayManager:
             console = Console()
             console.print(table)
 
-    def _create_task_history_table(self):
+    def _create_task_history_table(self) -> Table:
         """
         Use the Rich library to initiate a table for displaying task history.
         """
@@ -118,7 +118,7 @@ class TaskHistoryDisplayManager:
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
 
-    def _format_result(self, task, state):
+    def _format_result(self, task: TaskHistoryResult, state: str) -> str:
         """
         Format the result message based on the task state and type.
         """

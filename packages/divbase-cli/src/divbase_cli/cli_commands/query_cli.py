@@ -23,9 +23,8 @@ from divbase_cli.cli_commands.shared_args_options import DOWNLOAD_DIR_OPTION, PR
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import PolledTaskNotFinalError, QueryTaskFailedError
 from divbase_cli.config_resolver import (
-    ensure_logged_in,
+    resolve_and_authenticate_project,
     resolve_download_dir,
-    resolve_project,
 )
 from divbase_cli.retries import (
     retry_polling_until_final_or_retryable_api_errors,
@@ -110,19 +109,16 @@ def sample_metadata_query(
     Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
     """
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     request_data = SampleMetadataQueryRequest(tsv_filter=tsv_filter, metadata_tsv_name=metadata_tsv_name)
 
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         api_route=f"v1/query/sample-metadata/projects/{project_config.name}",
         json=request_data.model_dump(),
         timeout=20,  # This is longer than default (5), as api call response is query result, not a task-id.
     )
-
     results = SampleMetadataQueryTaskResult(**response.json())
 
     if results.warnings:
@@ -211,9 +207,7 @@ def vcf_query(
             print(f"  • {warning}")
         print()
 
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
-
+    project_config = resolve_and_authenticate_project(project_name=project)
     request_data = BcftoolsQueryRequest(
         tsv_filter=tsv_filter,
         command=command,
@@ -221,10 +215,9 @@ def vcf_query(
         samples=normalized_samples,
         all_samples=all_samples,
     )
-
     response = make_authenticated_request(
         method="POST",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         api_route=f"v1/query/vcf/projects/{project_config.name}",
         json=request_data.model_dump(),
     )
@@ -260,11 +253,12 @@ def get_results_from_query_job_by_task_id(
             f"--max-wait-mins must be between 1 and {MAX_WAIT_MINS_HARD_LIMIT} minutes, got {max_wait_mins}."
         )
 
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    project_config = resolve_and_authenticate_project(project_name=project)
 
     task_status = poll_task_until_final_state_reached(
-        divbase_url=logged_in_url, task_id=task_id, timeout_mins=max_wait_mins
+        divbase_url=project_config.divbase_url,
+        task_id=task_id,
+        timeout_mins=max_wait_mins,
     )
 
     resolved_download_dir = resolve_download_dir(download_dir=download_dir)
@@ -273,7 +267,7 @@ def get_results_from_query_job_by_task_id(
     if task_status == "SUCCESS":
         result_filename = f"{QUERY_RESULTS_FILE_PREFIX}{task_id}.vcf.gz"
         download_results = download_files_command(
-            divbase_base_url=logged_in_url,
+            divbase_base_url=project_config.divbase_url,
             project_name=project_config.name,
             raw_files_input=[result_filename],
             download_dir=resolved_download_dir,

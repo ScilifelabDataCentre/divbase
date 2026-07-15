@@ -267,7 +267,7 @@ def download_files_command(
     else:
         # parse raw file inputs to see if any specific version ids were provided using format:
         # file_name:version_id (not possible when using project_version)
-        json_data = []
+        json_data: list[dict[str, str | None]] = []
         for file_input in raw_files_input:
             if ":" in file_input:
                 name, version_id = file_input.split(sep=":", maxsplit=1)

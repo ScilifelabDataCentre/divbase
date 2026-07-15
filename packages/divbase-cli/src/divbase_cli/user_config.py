@@ -128,7 +128,7 @@ class UserConfig:
         for project in self.projects:
             if project.name == name:
                 return project
-        raise ProjectNotInConfigError(config_path=self.config_path, project_name=name)
+        raise ProjectNotInConfigError(project_name=name)
 
     def set_login_status(self, url: str | None, email: str | None) -> None:
         """

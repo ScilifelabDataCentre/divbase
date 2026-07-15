@@ -354,10 +354,11 @@ def test_file_info_on_non_existent_file_or_folder(logged_in_edit_user_with_exist
     assert "does not exist" in str(result.exception)
 
     # that it is a folder is determined by CLI, so does not need to exist for test to work
+    # will raise typer.BadParameter
     result = runner.invoke(app, f"files info somefolder/ --project {clean_project}")
-    assert result.exit_code != 0
-    assert "folder" in result.output.lower()
-    assert "please provide a file" in result.output.lower()
+    assert result.exit_code == 2
+    assert "usage:" in result.output.lower()
+    assert "root files info" in result.output.lower()
 
 
 def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
