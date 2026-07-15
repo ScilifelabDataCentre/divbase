@@ -36,9 +36,7 @@ logger = structlog.get_logger(__name__)
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=DimensionsShowResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def list_vcf_metadata_by_project_name_user_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -119,9 +117,7 @@ async def update_vcf_dimensions_endpoint(
     return job_id
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/samples", status_code=status.HTTP_200_OK, response_model=DimensionsSamplesResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/samples", status_code=status.HTTP_200_OK)
 async def list_unique_samples_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -139,9 +135,7 @@ async def list_unique_samples_endpoint(
     return DimensionsSamplesResult(unique_samples=result)
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/scaffolds", status_code=status.HTTP_200_OK, response_model=DimensionsScaffoldsResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/scaffolds", status_code=status.HTTP_200_OK)
 async def list_unique_scaffolds_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -159,9 +153,7 @@ async def list_unique_scaffolds_endpoint(
     return DimensionsScaffoldsResult(unique_scaffolds=result)
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/vcf-files", status_code=status.HTTP_200_OK, response_model=DimensionsVCFFilesResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/vcf-files", status_code=status.HTTP_200_OK)
 async def list_unique_vcf_files_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),

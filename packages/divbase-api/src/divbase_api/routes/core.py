@@ -16,14 +16,14 @@ from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 core_router = APIRouter()
 
 
-@core_router.get("/health", status_code=status.HTTP_200_OK, response_model=dict[str, str])
-def health():
+@core_router.get("/health", status_code=status.HTTP_200_OK)
+def health() -> dict[str, str]:
     """Basic health check endpoint for the server."""
     return {"status": "ok"}
 
 
-@core_router.get("/announcements", status_code=status.HTTP_200_OK, response_model=list[AnnouncementResponse])
-async def announcements(request: Request, db: AsyncSession = Depends(get_db)):
+@core_router.get("/announcements", status_code=status.HTTP_200_OK)
+async def announcements(request: Request, db: AsyncSession = Depends(get_db)) -> list[AnnouncementResponse]:
     """Returns active announcements for CLI users from the server."""
     db_announcements = await get_active_announcements(db=db, target=AnnouncementTarget.CLI)
 

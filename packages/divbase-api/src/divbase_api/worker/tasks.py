@@ -23,6 +23,7 @@ from celery.signals import (
     worker_process_init,
 )
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from divbase_api import __version__ as divbase_version
 from divbase_api.crud.s3 import validate_s3_service_account
@@ -339,7 +340,7 @@ def bcftools_pipe_task(
     job_id: int,
     samples: list[str] | None = None,
     all_samples: bool = False,
-):
+) -> dict:
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
@@ -858,7 +859,7 @@ def _remove_stale_dimensions_db_entries(
     skipped_vcf_keys: set[str],
     current_vcf_files_in_bucket: set[str],
     project_id: int,
-    db,
+    db: Session,
 ) -> list[str]:
     """
     Delete VCF dimensions DB entries (both indexed and skipped) for VCF files that are no longer present

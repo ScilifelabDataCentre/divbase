@@ -4,7 +4,7 @@ Frontend routes for authentication-related pages.
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,8 +50,10 @@ INVALID_EXPIRED_EMAIL_TOKEN_MSG = "Invalid or expired email verification link. P
 ALTCHA_VERIFICATION_FAILED_MSG = "Captcha verification failed, please try again."
 
 
-@fr_auth_router.get("/login", response_class=HTMLResponse)
-async def get_login(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
+@fr_auth_router.get("/login")
+async def get_login(
+    request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)
+) -> Response:
     """
     Render the login page.
     If user is already logged in, redirect to home page.
@@ -62,10 +64,10 @@ async def get_login(request: Request, current_user: UserDB | None = Depends(get_
     return templates.TemplateResponse(request=request, name="auth_pages/login.html", context={"current_user": None})
 
 
-@fr_auth_router.post("/login", response_class=HTMLResponse)
+@fr_auth_router.post("/login")
 async def post_login(
     request: Request, email: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """
     Handle login form submission.
 
@@ -107,11 +109,11 @@ async def post_login(
     return response
 
 
-@fr_auth_router.post("/logout", response_class=HTMLResponse)
+@fr_auth_router.post("/logout")
 async def post_logout(
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     """
     Handle logout form submission.
 
@@ -126,8 +128,10 @@ async def post_logout(
     return delete_auth_cookies(response=response)
 
 
-@fr_auth_router.get("/register", response_class=HTMLResponse)
-async def get_register(request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)):
+@fr_auth_router.get("/register")
+async def get_register(
+    request: Request, current_user: UserDB | None = Depends(get_current_user_from_cookie_optional)
+) -> Response:
     """Render the registration page."""
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
@@ -142,7 +146,7 @@ async def get_register(request: Request, current_user: UserDB | None = Depends(g
     )
 
 
-@fr_auth_router.post("/register", response_class=HTMLResponse)
+@fr_auth_router.post("/register")
 async def post_register(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -156,10 +160,10 @@ async def post_register(
     confirm_password: str = Form(...),
     altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Handle registration form submission."""
 
-    def _registration_failed_response(error_message: str):
+    def _registration_failed_response(error_message: str) -> HTMLResponse:
         """Helper to return registration failed response with custom error message."""
         return templates.TemplateResponse(
             request=request,
@@ -218,21 +222,21 @@ async def post_register(
         return _registration_failed_response("Registration failed, please try again.")
 
     background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
-    logger.info(f"New user registered: {user_data.email=}")
+    logger.info(f"New user registered: {user.email=}")
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register_success.html",
-        context={"name": user_data.name, "email": user_data.email, "from_email": api_settings.email.from_email},
+        context={"name": user.name, "email": user.email, "from_email": api_settings.email.from_email},
     )
 
 
-@fr_auth_router.get("/verify-email", response_class=HTMLResponse)
+@fr_auth_router.get("/verify-email")
 async def get_verify_email(
     request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> Response:
     """
     Handle email verification and redirect to confirmation page.
 
@@ -261,12 +265,12 @@ async def get_verify_email(
     )
 
 
-@fr_auth_router.post("/confirm-email-verification", response_class=HTMLResponse)
+@fr_auth_router.post("/confirm-email-verification")
 async def confirm_email_verification(
     request: Request,
     token: str = Form(...),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Confirm email verification after user explicitly clicks a button."""
     token_data = verify_token(token=token, desired_token_type=TokenType.EMAIL_VERIFICATION)
     if not token_data:
@@ -292,12 +296,12 @@ async def confirm_email_verification(
     )
 
 
-@fr_auth_router.get("/resend-email-verification", response_class=HTMLResponse)
+@fr_auth_router.get("/resend-email-verification")
 async def get_resend_verification_email(
     request: Request,
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
     email: str | None = Query(None, description="Optional email to pre-fill the form."),
-):
+) -> Response:
     """Display the resend verification email page."""
     if current_user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
@@ -309,14 +313,14 @@ async def get_resend_verification_email(
     )
 
 
-@fr_auth_router.post("/resend-email-verification", response_class=HTMLResponse)
+@fr_auth_router.post("/resend-email-verification")
 async def resend_verification_email(
     request: Request,
     background_tasks: BackgroundTasks,
     email: str = Form(...),
     altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Handle resending the email verification link."""
     LINK_SENT_MSG = "If your account exists, a verification email has been sent. Please check your inbox."
 
@@ -348,11 +352,11 @@ async def resend_verification_email(
     return _verify_email_response(success=LINK_SENT_MSG)
 
 
-@fr_auth_router.get("/forgot-password", response_class=HTMLResponse)
+@fr_auth_router.get("/forgot-password")
 async def get_forgot_password_page(
     request: Request,
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> HTMLResponse:
     """Display the forgot password page."""
     return templates.TemplateResponse(
         request=request,
@@ -364,7 +368,7 @@ async def get_forgot_password_page(
     )
 
 
-@fr_auth_router.post("/forgot-password", response_class=HTMLResponse)
+@fr_auth_router.post("/forgot-password")
 async def post_forgot_password_form(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -372,7 +376,7 @@ async def post_forgot_password_form(
     altcha: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> HTMLResponse:
     """Handle forgot password form submission to send a password reset email."""
 
     def _forgot_password_response(error: str | None = None, success: str | None = None) -> HTMLResponse:
@@ -430,13 +434,13 @@ def _reset_password_page_response(
     )
 
 
-@fr_auth_router.get("/reset-password", response_class=HTMLResponse)
+@fr_auth_router.get("/reset-password")
 async def get_reset_password_page(
     request: Request,
     token: str,
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> HTMLResponse:
     """
     Display the reset password page.
 
@@ -456,7 +460,7 @@ async def get_reset_password_page(
     return _reset_password_page_response(request=request, current_user=current_user, token=token, email=user.email)
 
 
-@fr_auth_router.post("/reset-password", response_class=HTMLResponse)
+@fr_auth_router.post("/reset-password")
 async def post_reset_password_form(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -466,7 +470,7 @@ async def post_reset_password_form(
     confirm_password: str = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> Response:
     """Handle reset password form submission."""
     token_data = verify_token(token=token, desired_token_type=TokenType.PASSWORD_RESET)
     if not token_data:

@@ -21,9 +21,10 @@ class TaskHistoryResult(BaseModel):
     Task details as returned by queries to the SQAlchemy+pg results backend.
     """
 
-    id: int
+    id: int  # This is TaskHistoryDB.id
     created_at: datetime  # NOTE: This comes from TaskHistoryDB, so cannot be None unlike the other datetimes here.
-    submitter_email: Optional[str] = None
+    submitter_email: str
+    name: str
     status: Optional[str] = None
     result: Optional[
         Union[
@@ -36,7 +37,6 @@ class TaskHistoryResult(BaseModel):
         ]
     ] = None
     date_done: Optional[datetime] = None
-    name: Optional[str] = None
     args: Optional[str] = None
     kwargs: Optional[
         Union[
@@ -46,7 +46,6 @@ class TaskHistoryResult(BaseModel):
         ]
     ] = None
     worker: Optional[str] = None
-
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     runtime: Optional[float] = None
