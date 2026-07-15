@@ -22,7 +22,7 @@ class BcftoolsEnvironmentError(Exception):
 
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 
@@ -39,7 +39,7 @@ class BcftoolsCommandError(Exception):
 
         super().__init__(error_message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         if hasattr(self.error_details, "stderr") and self.error_details.stderr:
             return f"bcftools command failed: '{self.command}' with error: {self.error_details.stderr}"
         return super().__str__()
@@ -53,7 +53,7 @@ class BcftoolsPipeEmptyCommandError(Exception):
         super().__init__(error_message)
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 
@@ -85,7 +85,7 @@ class SidecarNoDataLoadedError(Exception):
         super().__init__(error_message)
         self.error_message = error_message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error_message
 
 

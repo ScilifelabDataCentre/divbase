@@ -26,6 +26,7 @@ from divbase_cli.config_resolver import (
     resolve_and_authenticate_project,
     resolve_download_dir,
 )
+from divbase_cli.services.pre_signed_urls import DownloadOutcome
 from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.services.s3_files import (
     ToDownload,
@@ -1173,7 +1174,7 @@ def _sanitize_directory_names(directories: list[str]) -> list[str]:
     return cleaned_dir_names
 
 
-def _pretty_print_download_results(download_results):
+def _pretty_print_download_results(download_results: DownloadOutcome) -> None:
     """Helper fn used by download and download all commands to print the results of the download in a nice format."""
     if download_results.successful:
         print("\n[green bold]Successfully downloaded the following files:[/green bold]")

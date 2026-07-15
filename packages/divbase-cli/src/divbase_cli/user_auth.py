@@ -33,7 +33,7 @@ from divbase_cli import __version__ as cli_version
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, DivBaseAPIConnectionError, DivBaseAPIError
 from divbase_cli.retries import retry_only_on_retryable_divbase_api_errors
-from divbase_cli.user_config import load_user_config
+from divbase_cli.user_config import UserConfig, load_user_config
 from divbase_lib.api_schemas.auth import LogoutRequest
 from divbase_lib.divbase_constants import CLI_VERSION_HEADER_KEY
 from divbase_lib.utils import format_unix_timestamp_for_cli
@@ -131,7 +131,7 @@ def delete_stored_pat(pat_path: Path = cli_settings.PATS_FALLBACK_PATH) -> None:
     pat_path.unlink(missing_ok=True)
 
 
-def check_existing_session(divbase_url: str, config) -> int | None:
+def check_existing_session(divbase_url: str, config: UserConfig) -> int | None:
     """
     Check if a user is already logged in to DivBase.
     Used to prevent unnecessary multiple logins.
