@@ -175,8 +175,8 @@ class ProjectNotInConfigError(DivBaseCLIError):
         self.project_name = project_name
         error_message = (
             f"Couldn't get information about the project named: '{project_name}' \n"
-            f"Use the command 'divbase-cli config add [PROJECT_NAME]' to add the project to your config.\n"
-            f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
+            f"Use the command 'divbase-cli config add <project_name>' to add the project to your config.\n"
+            f"You can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
         super().__init__(error_message)
 
