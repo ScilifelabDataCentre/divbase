@@ -71,7 +71,7 @@ class TaskHistoryDisplayManager:
                 colour = self.STATE_COLOURS.get(state, "white")
                 state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = task.submitter_email or "Unknown"
+            submitter = task.submitter_email
             result = self._format_result(task, state)
 
             table.add_row(

@@ -75,7 +75,7 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to decode JSON result for task {task.get('task_id')}: {e}")
 
-    task_name = task.get("name")
+    task_name = task.get("name") or "Unknown"
 
     is_error_result = isinstance(result_data, dict) and (
         "exc_type" in result_data or "exc_message" in result_data or result_data.get("status") == "error"
@@ -110,8 +110,8 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
         runtime = (completed_at - started_at).total_seconds()
 
     return TaskHistoryResult(
-        id=task.get("user_task_id"),
-        submitter_email=task.get("submitter_email"),
+        id=task["user_task_id"],
+        submitter_email=task.get("submitter_email") or "Unknown",
         status=task.get("status"),
         result=parsed_result,
         date_done=_format_celery_datetime(task.get("date_done")),

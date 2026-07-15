@@ -98,7 +98,13 @@ class TestPollTaskUntilFinalStateReached:
     def test_poll_raises_for_unsupported_task_type(self, mock_make_request):
         """Test that poll_task_until_final_state_reached raises BadParameter when the task is not a VCF query task."""
         mock_make_request.return_value.json.return_value = [
-            {"id": 7, "status": "SUCCESS", "name": "tasks.some_other_task", "created_at": "2020-01-01T12:00:00Z"}
+            {
+                "id": 7,
+                "status": "SUCCESS",
+                "submitter_email": "user@example.com",
+                "name": "tasks.some_other_task",
+                "created_at": "2020-01-01T12:00:00Z",
+            }
         ]
 
         with pytest.raises(typer.BadParameter, match="unsupported task type"):

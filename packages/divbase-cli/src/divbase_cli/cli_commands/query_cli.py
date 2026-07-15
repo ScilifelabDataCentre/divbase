@@ -322,7 +322,7 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int, timeout_
                     f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."
                 )
 
-            if task_results.status in FINAL_STATES:
+            if task_results.status and task_results.status in FINAL_STATES:
                 return task_results.status
 
             raise PolledTaskNotFinalError(f"Task {task_id} state is {task_results.status}")
