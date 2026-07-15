@@ -16,7 +16,7 @@ from divbase_api.crud.projects import add_project_member, create_project
 from divbase_api.crud.users import create_user
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_admin_user
-from divbase_api.models.projects import ProjectDB, ProjectRoles
+from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import ProjectCreate, ProjectMembershipResponse, ProjectResponse
 from divbase_api.schemas.users import UserCreate, UserResponse
@@ -27,26 +27,26 @@ logger = structlog.get_logger(__name__)
 admin_router = APIRouter()
 
 
-@admin_router.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/users/", status_code=status.HTTP_201_CREATED)
 async def create_user_endpoint(
     user_data: UserCreate,
     is_admin: bool = Query(False, description="Set to true to create an admin user"),
     email_verified: bool = Query(False, description="Set to true to skip the email verification process"),
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-) -> UserDB:
+) -> UserResponse:
     """Create a new regular or admin user."""
     new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin, email_verified=email_verified)
     logger.info(f"Admin user: {current_admin.email} created a new user: {new_user.email}")
     return new_user
 
 
-@admin_router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/projects", status_code=status.HTTP_201_CREATED)
 async def create_project_endpoint(
     proj_data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-) -> ProjectDB:
+) -> ProjectResponse:
     new_project = await create_project(db=db, proj_data=proj_data)
     logger.info(f"Admin user: {current_admin.email} created a new project: {new_project.name}")
     return new_project
@@ -54,7 +54,6 @@ async def create_project_endpoint(
 
 @admin_router.post(
     "/projects/{project_id}/members/{user_email}",
-    response_model=ProjectMembershipResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def add_project_member_endpoint(

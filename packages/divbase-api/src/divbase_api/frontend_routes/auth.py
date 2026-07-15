@@ -222,11 +222,11 @@ async def post_register(
         return _registration_failed_response("Registration failed, please try again.")
 
     background_tasks.add_task(send_verification_email, email_to=user.email, user_id=user.id)
-    logger.info(f"New user registered: {user_data.email=}")
+    logger.info(f"New user registered: {user.email=}")
     return templates.TemplateResponse(
         request=request,
         name="auth_pages/register_success.html",
-        context={"name": user_data.name, "email": user_data.email, "from_email": api_settings.email.from_email},
+        context={"name": user.name, "email": user.email, "from_email": api_settings.email.from_email},
     )
 
 

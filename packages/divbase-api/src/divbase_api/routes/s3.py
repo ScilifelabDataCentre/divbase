@@ -71,13 +71,13 @@ def check_too_many_objects_in_request(
 
 
 # Post request instead of GET as GET doesn't support/encourage body content.
-@s3_router.post("/download", status_code=status.HTTP_200_OK, response_model=list[PreSignedDownloadResponse])
+@s3_router.post("/download", status_code=status.HTTP_200_OK)
 async def generate_download_urls(
     project_name: str,
     objects_to_download: Annotated[list[DownloadObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[PreSignedDownloadResponse]:
     """Generate pre-signed URLs for downloading files at specific versions from S3."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
@@ -96,13 +96,13 @@ async def generate_download_urls(
 
 
 # Post request instead of GET as GET doesn't support/encourage body content.
-@s3_router.post("/list", status_code=status.HTTP_200_OK, response_model=ListObjectsResponse)
+@s3_router.post("/list", status_code=status.HTTP_200_OK)
 async def list_objects(
     project_name: str,
     list_request: ListObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> ListObjectsResponse:
     """
     List objects in the project's bucket.
 
@@ -127,13 +127,13 @@ async def list_objects(
 
 
 # Post request instead of GET as GET doesn't support/encourage body content.
-@s3_router.post("/list/soft-deleted", status_code=status.HTTP_200_OK, response_model=list[SoftDeletedObjectDetails])
+@s3_router.post("/list/soft-deleted", status_code=status.HTTP_200_OK)
 async def list_soft_deleted_files(
     project_name: str,
     list_deleted_objects_request: ListDeletedObjectsRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[SoftDeletedObjectDetails]:
     """
     List all soft-deleted files in the project's bucket.
 
@@ -151,13 +151,13 @@ async def list_soft_deleted_files(
     )
 
 
-@s3_router.get("/info", status_code=status.HTTP_200_OK, response_model=ObjectInfoResponse)
+@s3_router.get("/info", status_code=status.HTTP_200_OK)
 async def get_object_info(
     project_name: str,
     object_name: str,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> ObjectInfoResponse:
     """Get details about all versions of a specific object/file in the project's store."""
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.READ):
@@ -170,15 +170,13 @@ async def get_object_info(
     )
 
 
-@s3_router.post(
-    "/upload/single-part", status_code=status.HTTP_200_OK, response_model=list[PreSignedSinglePartUploadResponse]
-)
+@s3_router.post("/upload/single-part", status_code=status.HTTP_200_OK)
 async def generate_single_part_upload_urls(
     project_name: str,
     objects: Annotated[list[UploadSinglePartObjectRequest], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[PreSignedSinglePartUploadResponse]:
     """
     Generate pre-signed POST urls to upload 1 or more file to S3 via single part uploads.
     Constraints:
@@ -206,15 +204,13 @@ async def generate_single_part_upload_urls(
     return response
 
 
-@s3_router.post(
-    "/upload/multi-part/create", status_code=status.HTTP_200_OK, response_model=CreateMultipartUploadResponse
-)
+@s3_router.post("/upload/multi-part/create", status_code=status.HTTP_200_OK)
 async def create_multi_part_upload(
     project_name: str,
     upload_request: CreateMultipartUploadRequest,
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> CreateMultipartUploadResponse:
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
@@ -228,15 +224,13 @@ async def create_multi_part_upload(
 
 
 # using POST as GET with body is not considered good practice
-@s3_router.post(
-    "/upload/multi-part/part-urls", status_code=status.HTTP_200_OK, response_model=list[PresignedUploadPartUrlResponse]
-)
+@s3_router.post("/upload/multi-part/part-urls", status_code=status.HTTP_200_OK)
 async def get_pre_signed_urls_parts(
     project_name: str,
     parts_request: GetPresignedPartUrlsRequest,
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[PresignedUploadPartUrlResponse]:
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
@@ -260,15 +254,13 @@ async def get_pre_signed_urls_parts(
     )
 
 
-@s3_router.post(
-    "/upload/multi-part/complete", status_code=status.HTTP_200_OK, response_model=CompleteMultipartUploadResponse
-)
+@s3_router.post("/upload/multi-part/complete", status_code=status.HTTP_200_OK)
 async def complete_multipart_upload(
     project_name: str,
     complete_request: CompleteMultipartUploadRequest,
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> CompleteMultipartUploadResponse:
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
@@ -282,15 +274,13 @@ async def complete_multipart_upload(
     )
 
 
-@s3_router.delete(
-    "/upload/multi-part/abort", status_code=status.HTTP_200_OK, response_model=AbortMultipartUploadResponse
-)
+@s3_router.delete("/upload/multi-part/abort", status_code=status.HTTP_200_OK)
 async def abort_multipart_upload(
     project_name: str,
     abort_request: AbortMultipartUploadRequest,
     s3_signer_service: Annotated[S3PreSignedService, Depends(get_pre_signed_service)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> AbortMultipartUploadResponse:
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY):
         raise AuthorizationError(UPLOAD_AUTHORIZATION_ERROR_MSG)
@@ -303,13 +293,13 @@ async def abort_multipart_upload(
     return AbortMultipartUploadResponse(name=abort_request.name, upload_id=abort_request.upload_id)
 
 
-@s3_router.post("/mkdir", status_code=status.HTTP_200_OK, response_model=MakeDirectoriesResponse)
+@s3_router.post("/mkdir", status_code=status.HTTP_200_OK)
 async def make_directory(
     project_name: str,
     dirs_request: MakeDirectoriesRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> MakeDirectoriesResponse:
     """
     Create directories in the projects store.
 
@@ -327,13 +317,13 @@ async def make_directory(
     )
 
 
-@s3_router.delete("/", status_code=status.HTTP_200_OK, response_model=list[str])
+@s3_router.delete("/", status_code=status.HTTP_200_OK)
 async def soft_delete_files(
     project_name: str,
     objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[str]:
     """
     Soft delete files in the projects store.
 
@@ -352,13 +342,13 @@ async def soft_delete_files(
     )
 
 
-@s3_router.post("/restore", status_code=status.HTTP_200_OK, response_model=RestoreObjectsResponse)
+@s3_router.post("/restore", status_code=status.HTTP_200_OK)
 async def restore_soft_deleted_files(
     project_name: str,
     objects: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> RestoreObjectsResponse:
     """
     Restore soft-deleted files from a project's store by removing the soft delete marker.
 
@@ -381,12 +371,12 @@ async def restore_soft_deleted_files(
 
 
 # using POST as GET with body is not considered good practice
-@s3_router.post("/checksums", status_code=status.HTTP_200_OK, response_model=list[FileChecksumResponse])
+@s3_router.post("/checksums", status_code=status.HTTP_200_OK)
 async def get_files_checksums(
     project_name: str,
     object_names: Annotated[list[str], Body(min_length=1, max_length=MAX_S3_API_BATCH_SIZE)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
-):
+) -> list[FileChecksumResponse]:
     """
     Given a list of potential file names in the bucket, return a list of those that exists and their checksums.
 

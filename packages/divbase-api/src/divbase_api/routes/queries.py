@@ -50,7 +50,6 @@ QUERY_AUTHORIZATION_ERROR_MSG = (
 @query_router.post(
     "/sample-metadata/projects/{project_name}",
     status_code=status.HTTP_200_OK,
-    response_model=SampleMetadataQueryTaskResult,
 )
 async def submit_sample_metadata_query_job_endpoint(
     sample_metadata_query_request: SampleMetadataQueryRequest,

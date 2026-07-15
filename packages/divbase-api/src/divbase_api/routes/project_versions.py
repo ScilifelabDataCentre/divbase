@@ -42,14 +42,14 @@ logger = structlog.get_logger(__name__)
 project_version_router = APIRouter()
 
 
-@project_version_router.patch("/add", status_code=status.HTTP_200_OK, response_model=AddVersionResponse)
+@project_version_router.patch("/add", status_code=status.HTTP_200_OK)
 async def add_version_endpoint(
     project_name: str,
     version_request: AddVersionRequest,
     s3_file_manager: Annotated[S3FileManager, Depends(get_s3_file_manager)],
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> AddVersionResponse:
     """
     Add a new entry to the project versioning db table.
 
@@ -73,13 +73,13 @@ async def add_version_endpoint(
     return new_version
 
 
-@project_version_router.get("/list", status_code=status.HTTP_200_OK, response_model=list[ProjectVersionInfo])
+@project_version_router.get("/list", status_code=status.HTTP_200_OK)
 async def list_versions_endpoint(
     project_name: str,
     include_deleted: bool = False,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[ProjectVersionInfo]:
     """
     List all project versions for the project.
     Returns basic info about each version (name, description, timestamp, is_deleted),
@@ -94,15 +94,13 @@ async def list_versions_endpoint(
     return await list_project_versions(db=db, project_id=project.id, include_deleted=include_deleted)
 
 
-@project_version_router.get(
-    "/version_details", status_code=status.HTTP_200_OK, response_model=ProjectVersionDetailResponse
-)
+@project_version_router.get("/version_details", status_code=status.HTTP_200_OK)
 async def project_version_details_endpoint(
     project_name: str,
     version_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> ProjectVersionDetailResponse:
     """
     List all files and their version IDs at a specific version of the project.
     """
@@ -117,13 +115,13 @@ async def project_version_details_endpoint(
     )
 
 
-@project_version_router.patch("/update", status_code=status.HTTP_200_OK, response_model=UpdateVersionResponse)
+@project_version_router.patch("/update", status_code=status.HTTP_200_OK)
 async def update_version_endpoint(
     project_name: str,
     update_request: UpdateVersionRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> UpdateVersionResponse:
     """
     Update the name and/or description of an existing project version entry.
 
@@ -144,13 +142,13 @@ async def update_version_endpoint(
     )
 
 
-@project_version_router.delete("/delete", status_code=status.HTTP_200_OK, response_model=DeleteVersionResponse)
+@project_version_router.delete("/delete", status_code=status.HTTP_200_OK)
 async def delete_version_endpoint(
     project_name: str,
     delete_version_request: DeleteVersionRequest,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
-):
+) -> DeleteVersionResponse:
     """
     Delete a version entry in the project versioning table.
     This does not delete the files themselves.

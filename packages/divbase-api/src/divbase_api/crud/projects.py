@@ -15,10 +15,10 @@ from divbase_api.exceptions import (
     UserNotFoundError,
 )
 from divbase_api.models.projects import ProjectDB, ProjectMembershipDB, ProjectRoles
-from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, UserProjectResponse
+from divbase_api.schemas.projects import ProjectCreate, ProjectMemberResponse, ProjectResponse, UserProjectResponse
 
 
-async def create_project(db: AsyncSession, proj_data: ProjectCreate) -> ProjectDB:
+async def create_project(db: AsyncSession, proj_data: ProjectCreate) -> ProjectResponse:
     """Create a new project"""
     await _validate_project_create(db=db, name=proj_data.name, bucket_name=proj_data.bucket_name)
 
@@ -26,7 +26,7 @@ async def create_project(db: AsyncSession, proj_data: ProjectCreate) -> ProjectD
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    return project
+    return ProjectResponse.model_validate(project)
 
 
 async def get_project_by_id(db: AsyncSession, id: int) -> ProjectDB | None:
