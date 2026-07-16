@@ -1,0 +1,39 @@
+sequenceDiagram
+    title divbase-cli task-history user
+    participant User
+    participant CLI
+    participant API
+    participant DB as PostgreSQL
+
+    User->>CLI: Run "divbase-cli task-history user [OPTIONS]"
+    Note over CLI: Options: --limit, --project, --config
+
+    CLI->>CLI: Load user config from config file
+    CLI->>CLI: Check if logged in (logged_in_url exists)
+
+    alt Not logged in
+        CLI->>User: Raise AuthenticationError
+    else Logged in
+        alt --project specified
+            CLI->>API: HTTP GET /api/v1/task-history/tasks/user/projects/{project}
+        else No project filter
+            CLI->>API: HTTP GET /api/v1/task-history/tasks/user
+        end
+
+        API->>DB: Query TaskHistoryDB joined with CeleryTaskMeta
+        Note over API: Filter by user_id (non-admin)<br/>or all tasks (admin)
+        DB-->>API: Return task history records
+
+        API->>API: Deserialize task metadata to TaskHistoryResult
+        API-->>CLI: Return list[TaskHistoryResult]
+
+        CLI->>CLI: TaskHistoryDisplayManager processes results
+        Note over CLI: Sort by created_at DESC<br/>Limit to display_limit (default 10)
+        CLI->>User: Display formatted task history table
+    end
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/task_history_user_sequence_diagram.mermaid \
+%%      -o docs/assets/diagrams/task_history_user_sequence_diagram.svg \
+%%      -t dark \
+%%      --backgroundColor "#22272e"

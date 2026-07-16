@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant User
+    participant CLI
+    participant API
+    participant DB as PostgreSQL
+    participant Celery App
+    participant Broker as RabbitMQ Broker
+    participant Celery Worker
+
+    User->>CLI: enters command<br>to submit task
+    CLI->>API: sends request
+    API->>DB: check user credentials
+    DB-->>API: returns user id, project id, project role
+    API->>API: checks if role has<br>required permissions
+    API-->>CLI: if no permission:<br>raise AuthorizationError
+    CLI-->>User: prints error in<br>user's terminal
+    API->>Celery App: calls <TASK_FUNCTION>.apply_async()
+    Celery App->>Broker: puts task in queue
+    Celery App-->>API: returns Celery task UUID
+
+    API->>DB: write task entry to TaskHistoryDB<br>(creates DivBase task ID for the Celery task UUID)
+    DB-->>API: returns DivBase task ID
+    API-->>CLI: returns DivBase task ID
+    CLI-->>User: prints DivBase task ID<br>to user's terminal
+    Broker->>Celery Worker: (idle worker) picks<br>up task from queue
+    Celery Worker-->>DB: writes task<br>started timestamp<br>in TaskStartedAtDB<br>(task_prerun signal handler)
+    Celery Worker->>Celery Worker: executes task
+    Celery Worker-->>DB: writes task metadata<br>to CeleryTaskMeta<br>(Celery results backend)
+
+%% Exported to dark theme SVG with:
+%% mmdc -i docs/assets/diagrams/celery_task_implementation_sequence_diagram.mermaid \
+%%     -o docs/assets/diagrams/celery_task_implementation_sequence_diagram_dark.svg \
+%%     -t dark \
+%%     --backgroundColor #22272e"
