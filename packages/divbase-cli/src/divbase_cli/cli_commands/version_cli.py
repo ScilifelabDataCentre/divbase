@@ -110,6 +110,7 @@ def list_versions(
     table = Table(title=f"Versions for {project_config.name}")
     table.add_column("Version", style="cyan", no_wrap=True)
     table.add_column("Created ", style="magenta")
+    table.add_column("Last Updated", style="blue")
     table.add_column("Description", style="green")
     if include_deleted:
         table.add_column("Soft Deleted", style="red")
@@ -118,11 +119,12 @@ def list_versions(
         name = version.name
         desc = version.description or "No description provided"
         created_at = format_datetime_for_cli(dt=version.created_at)
+        updated_at = format_datetime_for_cli(dt=version.updated_at)
         if include_deleted:
             soft_deleted = "Yes" if version.is_deleted else "No"
-            table.add_row(name, created_at, desc, soft_deleted)
+            table.add_row(name, created_at, updated_at, desc, soft_deleted)
         else:
-            table.add_row(name, created_at, desc)
+            table.add_row(name, created_at, updated_at, desc)
 
     if not format_output_as_tsv:
         print(table)
@@ -164,6 +166,7 @@ def get_version_info(
     if not format_output_as_tsv:
         print(f"Project version entry for project: '{project_config.name}' with name: '{version_details.name}'")
         print(f"Entry created at: {format_datetime_for_cli(dt=version_details.created_at)}")
+        print(f"Entry last updated at: {format_datetime_for_cli(dt=version_details.updated_at)}")
         if version_details.description:
             print(f"Description: {version_details.description}")
         if version_details.is_deleted:

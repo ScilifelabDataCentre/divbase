@@ -49,6 +49,7 @@ class ProjectVersionInfo(ProjectBasicInfo):
     """Basic information about a project version. You get a list of these when listing all versions in a project."""
 
     created_at: datetime = Field(..., description="When the version was created")
+    updated_at: datetime = Field(..., description="When the version was last updated")
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
 
 
@@ -65,6 +66,7 @@ class ProjectVersionDetailResponse(ProjectBasicInfo):
     """Full information about a single project version, including the files at that version."""
 
     created_at: datetime = Field(..., description="When the version was created")
+    updated_at: datetime = Field(..., description="When the version was last updated")
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
     files: dict[str, FileDetails] = Field(
         ..., description="Info about all files at this version, including: version IDs, etags and file sizes"

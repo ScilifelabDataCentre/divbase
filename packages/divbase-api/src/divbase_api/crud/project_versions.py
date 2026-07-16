@@ -102,6 +102,7 @@ async def list_project_versions(
         ProjectVersionDB.name,
         ProjectVersionDB.description,
         ProjectVersionDB.created_at,
+        ProjectVersionDB.updated_at,
         ProjectVersionDB.is_deleted,
     )
     stmt = stmt.where(ProjectVersionDB.project_id == project_id)
@@ -115,6 +116,7 @@ async def list_project_versions(
             name=row.name,
             description=row.description,
             created_at=row.created_at,
+            updated_at=row.updated_at,
             is_deleted=row.is_deleted,
         )
         for row in result
@@ -132,6 +134,7 @@ async def get_project_version_details(
         ProjectVersionDB.name,
         ProjectVersionDB.description,
         ProjectVersionDB.created_at,
+        ProjectVersionDB.updated_at,
         ProjectVersionDB.is_deleted,
         ProjectVersionDB.files,
     )
@@ -147,11 +150,12 @@ async def get_project_version_details(
             message=f"Version '{version_name}' was not found for this project. Check if you mistyped the version name or are looking at the wrong project."
         )
 
-    name, description, created_at, is_deleted, files = version_entry
+    name, description, created_at, updated_at, is_deleted, files = version_entry
     return ProjectVersionDetailResponse(
         name=name,
         description=description,
         created_at=created_at,
+        updated_at=updated_at,
         is_deleted=is_deleted,
         files=files,
     )
