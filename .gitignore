@@ -50,9 +50,10 @@ docker/logs/*
 #MacOS artifacts
 .DS_Store
 
-# mkdocs build cache
+# mkdocs/zensical build cache
 .cache/
-# mkdocs auto generated files
+site/
+# documentation site's auto generated files
 docs/cli/_auto_generated/*.md
 docs/releases/index.md
 
