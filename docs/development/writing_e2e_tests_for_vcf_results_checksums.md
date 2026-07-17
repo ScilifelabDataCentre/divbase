@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # e2e tests for VCF query results checksums
 
 In `tests/e2e_integration/cli_commands/test_query_cli.py`, the test `test_vcf_query_result_file_by_headerless_checksum()` is intended to check that the results files of DivBase VCF queries are correct by comparing a checksum of the results file with an expected value. This allows to easily extend the test to other VCF files by adding the query and the expected checksum to the test parameters.

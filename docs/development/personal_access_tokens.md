@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Personal Access Tokens (PATs)
 
 Personal Access Tokens (PATs) provide an alternative authentication mechanism to password and JSON web tokens (JWTs) for users who need to make use of DivBase programmatically. For example, from HPC job scripts or pipelines.

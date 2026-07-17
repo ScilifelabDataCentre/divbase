@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Logging
 
 DivBase API and worker use [structlog](https://www.structlog.org/en/stable/). divbase-lib and divbase-cli use the standard library logging module.

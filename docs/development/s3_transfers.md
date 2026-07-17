@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # S3 File Transfers
 
 Each DivBase project is assigned its own S3 bucket and divbase interacts with S3 object storage in two primary ways:

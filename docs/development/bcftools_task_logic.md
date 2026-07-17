@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Bcftools Celery Task Logic
 
 User submitted queries to check out VCF data from DivBase are run as Celery tasks as defined in `tasks.bcftools_query` in `worker/tasks.py`. This page contains an overview of how the logic is implemented.

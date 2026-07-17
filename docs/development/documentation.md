@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Documentation Generation
 
 Documentation for DivBase is generated using [MkDocs](https://www.mkdocs.org/) along with the [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) theme.

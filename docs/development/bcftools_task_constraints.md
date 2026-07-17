@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Bcftools Celery Task Constraints
 
 DivBase uses `bcftools` for several VCF parsing steps, including VCF dimensions caching and VCF queries. This document outlines the rules and constraints of different `bcftools` commands used in the DivBase backend. The main reference for this is the [`bcftools` manual](https://samtools.github.io/bcftools/bcftools.html). The commands were run using `bcftools` v1.21.

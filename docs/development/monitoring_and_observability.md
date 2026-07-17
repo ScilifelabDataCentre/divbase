@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Monitoring and Observability in DivBase
 
 Monitoring and observability are related concepts. To paraphrase this [this guide](https://www.ibm.com/think/topics/observability-vs-monitoring): monitoring tells you when something is wrong.

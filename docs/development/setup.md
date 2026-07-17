@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Developer Setup Guide
 
 ## Prerequisites

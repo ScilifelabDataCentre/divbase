@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Sending emails
 
 Emails sending for email verification and password resets is handled by the `email_sender.py` service.

@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Deployment of DivBase Server
 
 DivBase is deployed on a kubernetes cluster and its deployment is managed in our [private repository, argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase), see there for details.

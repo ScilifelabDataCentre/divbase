@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Celery task implementation in DivBase
 
 DivBase uses [Celery](https://docs.celeryq.dev/) as an asynchronous job management system. This document aims to describe how Celery tasks are implemented in the DivBase system architechture. The document can serve as a guide for maintaining and updating existing tasks, as well as implementing new tasks. It is intended to be a complement to the official Celery documentation, so please refer to them in addition to this.
