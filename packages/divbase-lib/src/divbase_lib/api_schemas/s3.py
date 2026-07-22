@@ -66,7 +66,7 @@ def validate_s3_object_prefix(prefix: str | None) -> str | None:
     if not prefix:
         return None
     if any(part in (".", "..") for part in prefix.split("/")):
-        raise ValueError("Prefix cannot contain '.' or '..' as a path segment.")
+        raise ValueError(f"Prefix '{prefix}' cannot contain '.' or '..' as a path segment.")
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
         if char in prefix:
             raise ValueError(f"Prefix contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}")

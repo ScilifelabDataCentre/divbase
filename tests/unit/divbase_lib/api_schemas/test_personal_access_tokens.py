@@ -9,10 +9,9 @@ from divbase_lib.api_schemas.personal_access_tokens import ALLOWED_PROJECT_ROLES
 
 def test_allowed_project_roles_matches_project_roles_enum():
     """This test is to ensure the two different possible role definitions stay in sync"""
-    lib_roles = set(ALLOWED_PROJECT_ROLES)
-    api_roles = {role.value for role in ProjectRoles}
-    assert lib_roles == api_roles, "Project role defintions from divbase-lib and divbase-api have drifted apart. "
-
+    assert lib_roles == api_roles, (
+        "Project role definitions from divbase-lib and divbase-api have drifted apart."
+    )
 
 def test_default_pat_is_restrictive_by_default():
     """A PATPermissions with no arguments should grant access to nothing."""

@@ -55,9 +55,8 @@ def test_upload_object_rejects_each_unsupported_character():
 
 
 @pytest.mark.parametrize("path_prefix", PATH_PREFIXES_WITH_DOT_SEGMENTS)
-def test_upload_object_rejects_double_dot_anywhere_in_the_path(path_prefix):
+def test_upload_object_rejects_dot_segments_anywhere_in_the_path(path_prefix):
     file_name = f"{path_prefix}1a.tsv"
-
     with pytest.raises(ValidationError, match=PREFIX_ERROR_MATCH_STR):
         UploadSinglePartObjectRequest(name=file_name, content_length=10, md5_hash=None)
     with pytest.raises(ValidationError, match=PREFIX_ERROR_MATCH_STR):
@@ -92,7 +91,7 @@ def test_make_directories_request_normalizes_leading_and_trailing_slashes():
 
 @pytest.mark.parametrize("bad_dir", ["", "/"])
 def test_make_directories_request_rejects_empty_or_root_path(bad_dir):
-    with pytest.raises(ValueError, match="cannot be empty or"):
+    with pytest.raises(ValidationError, match="cannot be empty or"):
         MakeDirectoriesRequest(directories=["good_dir/"] + [bad_dir])
 
 
@@ -103,7 +102,7 @@ def test_make_directories_request_rejects_each_unsupported_character():
 
 
 @pytest.mark.parametrize("path_prefix", PATH_PREFIXES_WITH_DOT_SEGMENTS)
-def test_make_directories_request_rejects_double_dot_anywhere_in_the_path(path_prefix):
+def test_make_directories_request_rejects_dot_segments_anywhere_in_the_path(path_prefix):
     with pytest.raises(ValidationError, match=PREFIX_ERROR_MATCH_STR):
         MakeDirectoriesRequest(directories=[path_prefix])
 
@@ -126,6 +125,6 @@ def test_list_objects_request_rejects_each_unsupported_character():
 
 
 @pytest.mark.parametrize("prefix", [".", "..", *PATH_PREFIXES_WITH_DOT_SEGMENTS])
-def test_list_objects_request_rejects_double_dot_anywhere_in_the_path(prefix):
+def test_list_objects_request_rejects_dot_segments_anywhere_in_the_path(prefix):
     with pytest.raises(ValidationError, match=PREFIX_ERROR_MATCH_STR):
         ListObjectsRequest(prefix=prefix, delimiter=None, next_token=None)
