@@ -22,11 +22,11 @@ omit = [
 [tool.coverage.paths]
 divbase_api = [
     "packages/divbase-api/src/divbase_api",
-    "/app/.venv/lib/python3.13/site-packages/divbase_api",
-    ".venv/lib/python3.13/site-packages/divbase_api",
+    "/app/.venv/lib/python3.14/site-packages/divbase_api",
+    ".venv/lib/python3.14/site-packages/divbase_api",
 ]
 divbase_lib = [
     "packages/divbase-lib/src/divbase_lib",
-    "/app/.venv/lib/python3.13/site-packages/divbase_lib",
-    ".venv/lib/python3.13/site-packages/divbase_lib",
+    "/app/.venv/lib/python3.14/site-packages/divbase_lib",
+    ".venv/lib/python3.14/site-packages/divbase_lib",
 ]
