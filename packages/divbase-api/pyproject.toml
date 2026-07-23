@@ -2,7 +2,7 @@
 name = "divbase-api"
 dynamic = ["version"]
 readme = "../../README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi[standard]==0.139.0",
     "uvicorn==0.51.0",

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":disableDependencyDashboard"],
+  "schedule": "* 9-12 * * *",
+  "ignorePaths": [
+    "docker/benchmarking.dockerfile",
+    "docker/monitoring_compose.yaml",
+    ".python-version"
+  ],
+  "docker-compose": {
+    "managerFilePatterns": ["/^docker/divbase_compose.*\\.yaml$/"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "groupName": "divbase minor/patch updates",
+    "schedule": ["* 9-12 * * *"]
+  },
+  "packageRules": [
+    {
+      "matchDatasources": ["pypi"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "groupName": "divbase minor/patch updates",
+      "labels": ["divbase minor/patch updates"],
+      "matchManagers": ["pep621"],
+      "matchFileNames": [
+        "pyproject.toml",
+        "packages/divbase-api/pyproject.toml",
+        "packages/divbase-cli/pyproject.toml",
+        "packages/divbase-lib/pyproject.toml"
+      ],
+      "matchUpdateTypes": ["minor", "patch", "pin", "lockFileMaintenance"]
+    },
+    {
+      "labels": ["divbase major update"],
+      "matchManagers": ["pep621"],
+      "matchFileNames": [
+        "pyproject.toml",
+        "packages/divbase-api/pyproject.toml",
+        "packages/divbase-cli/pyproject.toml",
+        "packages/divbase-lib/pyproject.toml"
+      ],
+      "matchUpdateTypes": ["major"]
+    },
+    {
+      "groupName": "divbase docker images",
+      "labels": ["divbase docker images"],
+      "matchManagers": ["dockerfile"],
+      "matchFileNames": ["docker/fastapi.dockerfile", "docker/worker.dockerfile"]
+    },
+    {
+      "groupName": "divbase compose dependencies",
+      "labels": ["divbase compose dependencies"],
+      "matchManagers": ["docker-compose"],
+      "matchFileNames": [
+        "docker/divbase_compose.yaml",
+        "docker/divbase_compose.tests.yaml",
+        "docker/divbase_compose.tests.ci.yaml",
+        "docker/divbase_compose.tests.coverage.yaml"
+      ]
+    },
+    {
+      "groupName": "GH actions",
+      "labels": ["GH actions"],
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/**"]
+    }
+  ]
+}
