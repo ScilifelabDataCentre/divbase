@@ -50,8 +50,7 @@ def validate_s3_directory_name(name: str) -> str:
     if not stripped:
         raise ValueError("Directory name cannot be empty or '/'.")
 
-    parts = [p for p in stripped.split("/")]  # (handle nested dirs)
-    if any(part in (".", "..") for part in parts):
+    if any(part in (".", "..") for part in name.split("/")):
         raise ValueError(f"Directory '{name}' cannot contain '.' or '..' as a folder path.")
 
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
@@ -66,8 +65,8 @@ def validate_s3_object_prefix(prefix: str | None) -> str | None:
     """Validate that the S3 object prefix does not contain unsupported characters."""
     if not prefix:
         return None
-    if prefix in (".", ".."):
-        raise ValueError(f"Prefix cannot be '{prefix}'.")
+    if any(part in (".", "..") for part in prefix.split("/")):
+        raise ValueError(f"Prefix '{prefix}' cannot contain '.' or '..' as a path segment.")
     for char in UNSUPPORTED_CHARACTERS_IN_FILENAMES:
         if char in prefix:
             raise ValueError(f"Prefix contains unsupported characters. Unsupported: {UNSUPPORTED_CHARACTERS_DISPLAY}")
