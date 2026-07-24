@@ -83,50 +83,54 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
-app = FastAPI(
-    lifespan=lifespan,
-    title="DivBase API",
-    docs_url="/api/v1/docs",
-    version=divbase_version,
-    summary="DivBase API is used by divbase-cli to interact with the DivBase. We do not recommend users to interact directly with the API.",
-    description="""
-    Users are strongly encouraged to use divbase-cli rather than calling the API endpoints directly
-    
-    divbase-cli offers several advantages over direct API usage, including:
-    - Handles authentication logic, including automatic token refresh
-    - Simplifies commands and workflows (e.g. file uploads/downloads require working with presigned URLs).
-    - Better error messages and user experience
+def create_app(lifespan=lifespan) -> FastAPI:
+    """Build the DivBase FastAPI app."""
+    app = FastAPI(
+        lifespan=lifespan,
+        title="DivBase API",
+        docs_url="/api/v1/docs",
+        version=divbase_version,
+        summary="DivBase API is used by divbase-cli to interact with the DivBase. We do not recommend users to interact directly with the API.",
+        description="""
+        Users are strongly encouraged to use divbase-cli rather than calling the API endpoints directly
 
-    If there is something you cannot do with divbase-cli that you think should be possible, please let us know.
+        divbase-cli offers several advantages over direct API usage, including:
+        - Handles authentication logic, including automatic token refresh
+        - Simplifies commands and workflows (e.g. file uploads/downloads require working with presigned URLs).
+        - Better error messages and user experience
 
-    Visit our docs site for more info on how to use divbase-cli: https://scilifelabdatacentre.github.io/divbase/
-    """,
-)
+        If there is something you cannot do with divbase-cli that you think should be possible, please let us know.
 
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(core_router, prefix="/api/v1/core", tags=["core"])
-app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
-app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
-app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
-app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
-app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
-if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
-    # not needed in deployed environments, so no need to expose it.
-    app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+        Visit our docs site for more info on how to use divbase-cli: https://scilifelabdatacentre.github.io/divbase/
+        """,
+    )
 
-app.include_router(fr_auth_router, prefix="", include_in_schema=False)
-app.include_router(fr_core_router, prefix="", include_in_schema=False)
-app.include_router(fr_pat_router, prefix="/pats", include_in_schema=False)
-app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
-app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
+    app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+    app.include_router(core_router, prefix="/api/v1/core", tags=["core"])
+    app.include_router(project_version_router, prefix="/api/v1/project-versions", tags=["project-versioning"])
+    app.include_router(query_router, prefix="/api/v1/query", tags=["query"])
+    app.include_router(s3_router, prefix="/api/v1/s3", tags=["s3"])
+    app.include_router(task_history_router, prefix="/api/v1/task-history", tags=["task-history"])
+    app.include_router(vcf_dimensions_router, prefix="/api/v1/vcf-dimensions", tags=["vcf-dimensions"])
+    if api_settings.general.environment in LOCAL_DEV_ENVIRONMENTS:
+        # not needed in deployed environments, so no need to expose it.
+        app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+
+    app.include_router(fr_auth_router, prefix="", include_in_schema=False)
+    app.include_router(fr_core_router, prefix="", include_in_schema=False)
+    app.include_router(fr_pat_router, prefix="/pats", include_in_schema=False)
+    app.include_router(fr_profile_router, prefix="/profile", include_in_schema=False)
+    app.include_router(fr_projects_router, prefix="/projects", include_in_schema=False)
+
+    register_exception_handlers(app)
+    register_admin_panel(app=app, engine=engine)
+    register_middleware(app=app)
+    static_dir_path = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
+    return app
 
 
-register_exception_handlers(app)
-register_admin_panel(app=app, engine=engine)
-register_middleware(app=app)
-
-static_dir_path = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
+app = create_app()
 
 
 def main():
