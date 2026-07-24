@@ -462,7 +462,7 @@ def test_upload_glob_patterns(
     command = f"files upload '{glob_pattern}' --project {clean_project}"
     result = runner.invoke(app, command)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     for file_name in expected_file_names:
         assert file_name in result.stdout
 
@@ -481,7 +481,7 @@ def test_upload_recursive_flag_matches_subdirectories(logged_in_query_user_with_
     command = f"files upload --recursive '{data_dir}/**' --project {clean_project}"
     result = runner.invoke(app, command)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert "top.tsv" in result.stdout
     assert "deep.tsv" in result.stdout
 
@@ -560,7 +560,7 @@ def test_upload_skip_existing_skips_already_uploaded_files(
     # with --skip-existing flag, new should be uploaded, old should be skipped
     command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
     result = runner.invoke(app, command)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert "skipped" in result.stdout.lower()
     assert "existing.tsv" in result.stdout
     assert "new.tsv" in result.stdout
@@ -569,7 +569,7 @@ def test_upload_skip_existing_skips_already_uploaded_files(
     # now run again with --skip-existing, should skip both as they are now both uploaded, but not fail
     command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
     result = runner.invoke(app, command)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert "skipped" in result.stdout.lower()
     assert "existing.tsv" in result.stdout
     assert "new.tsv" in result.stdout
@@ -587,7 +587,7 @@ def test_upload_dry_run_shows_files_without_uploading(logged_in_query_user_with_
 
     result = runner.invoke(app, f"files upload --dry-run {file1} {file2} --project {clean_project}")
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert "dry1.tsv" in result.stdout
     assert "dry2.tsv" in result.stdout
 
@@ -616,15 +616,16 @@ def test_upload_dry_run_with_skip_existing_shows_skipped_and_new(
         app, f"files upload --dry-run --skip-existing {existing} {new_file} --project {clean_project}"
     )
 
-    assert result.exit_code == 0, result.output
-    assert "already_there_dry.tsv" in result.stdout
-    assert "new_dry.tsv" in result.stdout
-    assert "skipped" in result.stdout.lower()
-    assert "would have been uploaded" in result.stdout.lower()
+    assert result.exit_code == 0
+    output = result.output.strip().replace("\n", "")
+    assert "already_there_dry.tsv" in output
+    assert "new_dry.tsv" in output
+    assert "skipped" in output.lower()
+    assert "would have been uploaded" in output.lower()
 
     # Confirm new file was not actually uploaded
     ls_result = runner.invoke(app, f"files ls --project {clean_project}")
-    assert "new_dry.tsv" not in ls_result.stdout
+    assert "new_dry.tsv" not in ls_result.output.strip().replace("\n", "")
 
 
 def test_reupload_same_file_fails(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
@@ -1213,7 +1214,7 @@ def test_download_all_flatten(logged_in_edit_user_with_existing_config, CONSTANT
     command = f"files download-all --flatten --project {clean_project} --download-dir {download_dir}"
     result = runner.invoke(app, command, input="y\n")
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert (download_dir / "root_flat.tsv").exists()
     assert (download_dir / "nested_flat.tsv").exists()
     assert not (download_dir / "subdir").exists()

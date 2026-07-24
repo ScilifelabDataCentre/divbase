@@ -12,33 +12,27 @@
 As we run tests for the frontend with playwright, you may need to install the browsers used by playwright for testing. You can do this by running:
 
 ```bash
-playwright install
+uv run playwright install
 ```
 
 ## To run all tests
 
 ```bash
-pytest -s
+uv run pytest
+# include slow tests (these currently only test pagination is handled properly)
+uv run pytest --run-slow
 ```
 
-!!! question "Why the `-s` flag?"
-    Some tests that rely on typer's CliRunner (which is essentially Click's CliRunner) will fail without the `-s` flag because they rely on the output of the CLI commands to be printed to a terminal. By default, pytest captures the output of tests and only shows it if a test fails. The `-s` flag tells pytest to not capture the output and instead print it directly to the terminal, which is necessary for these tests to work.
-
-    You can achieve the same effect as `-s` using:
-    ```bash
-    FORCE_TERMINAL=1 COLUMNS=1000 pytest --run-slow
-    ```
-
-To run only unit, e2e_integration or migration tests:
+To only run a subset of the 4 different groups of tests we have:
 
 ```bash
-pytest -s tests/unit
-pytest -s tests/e2e_integration
-pytest -s tests/migration
-pytest -s tests/api
+uv run pytest tests/unit
+uv run pytest tests/e2e_integration
+uv run pytest tests/migration
+uv run pytest tests/api
 ```
 
-**The e2e_integration tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker compose building steps.**
+**The `e2e_integration`, `migration` and `api` tests will be slower the first time you run them as the docker images will need to be downloaded and built. If you use "-s" you'll see the status of the docker building steps.**
 
 ## Tips
 
@@ -47,6 +41,20 @@ pytest -s tests/api
     If a divbase-cli command is expected to raise `typer.BadParameter`, (because the user provided invalid input or input combinations), the test should check for an exit code of 2 and that the output contains the usage message.
     Trying to check for specific substrings in the output message will likely fail in the GH actions runner. If you really want to test for the exact error message phrasing, consider a unit test instead.
     See existing tests in the codebase for how to do this.
+
+2. Checking for long blocks of text in `divbase-cli` command output.
+
+    If you want to check for a long block of text in the output of a `divbase-cli` command (e.g. for a test inside the `tests/e2e_integration/cli_commands`), you'll need to handle that the output can be split onto multiple lines by the `typer.testing.CliRunner`, and the exact split points depend on the width of the terminal.
+    This leads to flaky tests as (depending on the terminal width) the `assert` statement will break.
+
+    To handle this, you can cleanup the `result.output` (or `.stdout` or `.stderr`) first. For example:
+
+    ```python
+    result = runner.invoke(app, "my divbase command")
+    assert result.exit_code == 0
+    output = result.output.strip().replace("\n", "")
+    assert "my long block of text" in output
+    ```
 
 ## To run tests together with code coverage analysis
 
