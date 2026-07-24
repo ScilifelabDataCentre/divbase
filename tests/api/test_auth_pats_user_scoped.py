@@ -1,4 +1,4 @@
-"""Tests using Personal Access Tokens (PATs) for for user scoped operations to DivBase API."""
+"""Tests using Personal Access Tokens (PATs) for user scoped operations to DivBase API."""
 
 from datetime import datetime, timedelta, timezone
 

@@ -37,7 +37,7 @@ async def test_login_as_invalid_user_is_rejected(divbase_client, db_session):
     assert response.json()["detail"] == GENERIC_LOGIN_FAILED_ERROR_MSG
 
     # email_not_verified is a special case:
-    # if user gave correct password, we tell them they need to verfiy their email
+    # if user gave correct password, we tell them they need to verify their email
     # if wrong password, we give the generic error to avoid email enumeration
     response = await _send_login_request(divbase_client, email=email_not_verified_user.email)
     assert response.status_code == 401

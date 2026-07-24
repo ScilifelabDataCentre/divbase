@@ -101,6 +101,8 @@ async def test_refresh_token_belonging_to_an_invalid_user_is_rejected(divbase_cl
     email_not_verified_user_row = await get_user_by_id_or_raise(db=db_session, id=email_not_verified_user.id)
     email_not_verified_user_row.email_verified = False
 
+    await db_session.commit()
+
     for login_data in [deactivated_login_data, soft_deleted_login_data, email_not_verified_login_data]:
         response = await divbase_client.post(
             "/api/v1/auth/refresh",
