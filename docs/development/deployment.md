@@ -109,7 +109,7 @@ If something goes wrong with the GH action that automatically publishes to PyPI:
 
 ## Considerations for Kubernetes deployment
 
-TODO: add some lessons learned from the k8s deployment, e.g. on resources needed for the celery worker.
+Lessons learned from the Kubernetes deployment are documented in the private [argocd-divbase](https://github.com/ScilifelabDataCentre/argocd-divbase) repository.
 
 ### Closing and re-opening the Celery queue
 
