@@ -64,7 +64,7 @@ To ensure that user-defined metadata can be used in DivBase, we ask you follow t
 
 1. The user-defined columns can be **either** numeric **or** string type. A column is classified as numeric only if all values can be parsed as numbers ( including each element in list cells (e.g. `[1, 2, 3]`). See bullet 2 below.). If any value in a column is non-numeric, the entire column is treated as a string column. This means a column with values like `8`, `1a`, `5a` will be treated as string column even though some values look numeric. The DivBase backend uses [`Pandas`](https://pandas.pydata.org/) to automatically infer column type based on its data, so there is no need to specify in the TSV whether the values are numerical or string.
 2. Bracket array notation in TSV cells can be used to represent arrays of values. This allows users to have samples that can belong to multiple values in the same column. For instance belong to two different groups or categories. This works with both numerical and string data (e.g. `[2,4,21]` or `["North", "Northwest"]`). Note that this might make the process of writing queries more complex than if just a single value is used for each cell. The arrays are whitespace-insensitive: `[1,2]`, `[1, 2]`, and `[ 1 , 2 ]` all parse identically in the DivBase backend. We recommend that string elements are enclosed in quotes inside the array `["North", "Northwest"]` or `['North', 'Northwest']`, although it is not stricly necessary, it helps clarify the type to the user. It is also possible to use empty lists `[]` to representing "no values", if so desired.
-3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operator (see details in [Filtering on numerical columns](#23-filtering-on-numerical-columns)) and will raise warnings. For example, values like `1-2` or `1,2` will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use bracket array notation (e.g., `[1, 2]`). For decimals, use English decimal notation with a period (e.g., `3.14`) and not a comma.
+3. Special characters like hyphens (`-`) and commas (`,`) are allowed, but will cause the column to be treated as a string column. String columns cannot be filtered using numeric operator (see details in [Filtering on numerical columns](#24-filtering-on-numerical-columns)) and will raise warnings. For example, values like `1-2` or `1,2` will be interpreted as strings, not numeric ranges or multi-value fields. If you intend to store multiple numeric values in a cell, use bracket array notation (e.g., `[1, 2]`). For decimals, use English decimal notation with a period (e.g., `3.14`) and not a comma.
 4. The only characters with special structural meaning in DivBase sidecar metadata TSV files are `#` (for header comments), `[` and `]` (for multi-value cell separation), and `\t` (tab, for column separation). Other special characters are generally supported in data values, but be aware that Your Mileage May Vary. Some common cases that have been tested and are supported include diacritic unicode characters like `å`, `ä`, `ö`, and hyphens in strings (e.g., `North-West`).
 5. Leading and trailing whitespaces are removed by the DivBase backend in order to ensure robust filtering and pattern matching. Whitespaces inside strings will be preserved. For instance: `" Sample 1 "` will be processed as `"Sample 1"`.
 
@@ -152,7 +152,7 @@ This section describes how to query on the sample metadata file itself. The same
 The command for running the sidecar metadata queries is:
 
 ```bash
-divbase-cli query tsv
+divbase-cli query tsv "<TSV_FILTER>"
 ```
 
 !!! note
@@ -160,23 +160,50 @@ divbase-cli query tsv
 
     One consequence of this is that it is possible to have multiple sample metadata TSVs in the same DivBase project. We do not reccomend that you split the sample metadata across different files since only one TSV can be included in a query. For the most complete queries, please store all sample metadata in the same TSV.
 
-### 2.1. Overview: querys are applied as filters on columns in the TSV
+### 2.1. Quick reference: example queries
 
-Queries on the sidecar sample metadata TSV can be done with the `divbase-cli query tsv` command. The filters that the user wants to query on need to be entered as a string (i.e. enclosed in quotes, `""`).
+Below are examples that cover the most common filter patterns. For more details, see subsections 2.2-2.7.
 
-The TSV query syntax is `"Key1:Value1,Value2;Key2:Value3,Value4"`, where `Key1:`...`Key2:` are the column header names in the TSV, and `Value1`...`Value4` are the values. Multiple filter values for a key are separated by commas, and multiple keys are separated by semicolons. There can be any number keys and values to filter on, but it is up to the user to write queries that return useful results.
+```bash
+# Match rows where Area is North, South, or East
+divbase-cli query tsv "Area:North,South,East"
+
+# Exclude rows where Area is North
+divbase-cli query tsv "Area:!North"
+
+# Match rows where Weight is greater than 25
+divbase-cli query tsv "Weight:>25"
+
+# Match rows where Weight is between 20 and 40 (inclusive)
+divbase-cli query tsv "Weight:20-40"
+
+# Match rows where Weight is exactly 25, 30, or 35
+divbase-cli query tsv "Weight:25,30,35"
+
+# Filter directly on a specific Sample_ID
+divbase-cli query tsv "Sample_ID:S1"
+
+# Combine multiple keys and mix inclusive/exclusive filters in one query
+divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
+```
+
+### 2.2. Overview: queries are applied as filters on columns in the TSV
+
+Filters are passed to divbase-cli query tsv as a single string, enclosed in quotes ("").
+
+The TSV query syntax is `"Key1:Value1,Value2;Key2:Value3,Value4"`, where `Key1:`...`Key2:` are the column header names in the TSV, and `Value1`...`Value4` are the values. Multiple filter values for a key are separated by commas, and multiple keys are separated by semicolons. There can be any number keys and values to filter on, but it is up to you to write queries that return useful results.
 It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `"Key:!Value"`. When mixing inclusive and exclusive filters (e.g. `"Key1:Value1,Value2; Key2:!Value3"`), only the rows that match the positive filters and do not match any of the excluded values will be returned. This can be used to write complex queries.
 
 !!! note
-    Please note that semicolons (`;`) have special meaning in the query filter syntax: to separate key:value filter pairs (e.g. `"Area:North;Population:1"`). This means that if a TSV cell contains a literal semicolon, it cannot be matched via query filters because the query parser will consider it a delimiter and split the string on it. DivBase will return warnings to the user if the TSV contains semicolons.
+    Please note that semicolons (`;`) have special meaning in the query filter syntax: to separate key:value filter pairs (e.g. `"Area:North;Population:1"`). This means that if a TSV cell contains a literal semicolon, it cannot be matched via query filters because the query parser will consider it a delimiter and split the string on it. DivBase will return warnings if the TSV contains semicolons.
 
-For example, if the user wants to query the TSV on column `Area` for all samples that contain the value `North`:
+For example, if you want to query the TSV on column `Area` for all samples that contain the value `North`:
 
 ```bash
 divbase-cli query tsv "Area:North"
 ```
 
-If this this command is run on the TSV and VCF files used in the above [example](#113-example) the query would return the following results.
+If this command is run on the TSV and VCF files used in the above [example](#113-example) the query would return the following results.
 
 ```bash
 The results for the query (Area:North):
@@ -184,7 +211,7 @@ Unique Sample IDs: ['S1', 'S5']
 Unique filenames: ['file1.vcf.gz', 'file2.vcf.gz']
 ```
 
-This tells the user which samples that fullfil the query and which VCF files they need to use if they wanted to work with those two samples. The option ` --show-sample-results ` can be used to show the exact sample-to-VCF file mapping:
+This returns the samples that fulfil the query and which VCF files they need to use if they wanted to work with those two samples. The option ` --show-sample-results ` can be used to show the exact sample-to-VCF file mapping:
 
 ```bash
 divbase-cli query tsv "Area:North" --show-sample-results
@@ -209,7 +236,7 @@ Filtering is inclusive by default. This applies both for the filter values and t
 !!! note
     To reiterate what was written in the [User-defined columns](#112-user-defined-columns) section above: it is the user's responsibility to ensure that the spelling of column headers and values is consistent. When filtering on the sidecar metadata, the exact spelling must be used for the filters.
 
-### 2.2. Filtering on string columns
+### 2.3. Filtering on string columns
 
 Queries on string columns are straight-forward in the sense that each element in a cell (single-value or multi-value in a bracket array) in the TSV are treated as discrete values.
 
@@ -240,7 +267,7 @@ Note that when inclusive and exclusive are combined (e.g. `"Area:East,!South"`),
 
     Using double quotes for the outside is NOT supported `"Area:'North, South'"`.
 
-### 2.3. Filtering on numerical columns
+### 2.4. Filtering on numerical columns
 
 A TSV column is considered as numeric in DivBase only if all cell values — including each individual element within a bracketed array (e.g. `[1,3,5]`) — can be parsed as a number. For example:
 
@@ -279,9 +306,9 @@ The `!` (NOT) operator can really come to good use for numerical filters:
 !!! Tip
     Numeric operations such as inequalities like `>25`, and ranges like `20-40` are fully supported for multi-value cells in numeric columns as long as every element in the bracket array (`[1, 2]`) in every cell in the column is of numerical type. For instance: a `Population` column with values `1`, `[2,4]`, `[1,3,5]`; in this case a query like `divbase-cli query tsv "Population:>3"` will correctly match cells like `[2,4]` and `[1,3,5]`.
 
-### 2.4. Filtering on Sample names
+### 2.5. Filtering on Sample names
 
-The sidecar metadata filtering is designed to filter on metadata columns and return all samples that fulfil the queries. It is however possible to filter on the `Sample_ID` column directly. This column is a string column by design and thus follows the syntax described in the [Filtering on string columns](#22-filtering-on-string-columns) section.
+The sidecar metadata filtering is designed to filter on metadata columns and return all samples that fulfil the queries. It is however possible to filter on the `Sample_ID` column directly. This column is a string column by design and thus follows the syntax described in the [Filtering on string columns](#23-filtering-on-string-columns) section.
 
 For example, with the above [example](#113-example) metadata and data, this query:
 
@@ -297,7 +324,7 @@ Unique Sample IDs: ['S1']
 Unique filenames: ['file1.vcf.gz']
 ```
 
-### 2.5. Query Warnings: spotting potential issues with the TSV or the query filter
+### 2.6. Query Warnings: spotting potential issues with the TSV or the query filter
 
 When running a sample metadata query in DivBase, the system will check the TSV and the query filter for the constraints and considerations described throughout this guide. If errors are encountered, the query will not run and a message with details on what went wrong will be return to the user. Warnings, however, will not stop queries from running, but indicate that the user should carefully review the results.
 
@@ -317,7 +344,7 @@ If the filter references a column that does not exist in the TSV, DivBase will w
 - **No matching values**:
 If none of the filter values match any values in the column, DivBase print a warning. This can indicate a typo in the filter value, or just that the specific filter combination filtered away all samples..
 
-### 2.6. Examples of complex queries
+### 2.7. Examples of complex queries
 
 Assuming that the sidecar metadata TSV file looks like in the [Example](#113-example) above, a query like will:
 
