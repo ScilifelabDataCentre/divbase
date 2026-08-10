@@ -289,14 +289,16 @@ Failing to not escape the inner double quotes might lead to the string given by 
 
 1. CLI returns `Job submitted successfully with task id: <ID>` — this integer is the DivBase Task ID
 2. User monitors status via task-history commands `divbase-cli task-history`
-3. On job success, DivBase uploads a result VCF file to project's data storage. If the job fails, user can read the error message in the task-history.
-4. User can list/download result files from the project's data storage.
+3. On job completion (success or failure), DivBase uploads a log file (`result_of_job_<TASK_ID>.log`) to the project's data storage with details about the run. On success, a result VCF file is also uploaded; on failure, the error message can be read either in the task-history or in the log file.
+4. User can list/download result and log files from the project's data storage.
 
 Suggested commands:
 
 ```bash
 divbase-cli task-history id <TASK_ID>
 divbase-cli files ls --project <PROJECT_NAME> --include-results-files
+divbase-cli files download result_of_job_<TASK_ID>.log
+divbase-cli files stream result_of_job_<TASK_ID>.log
 ```
 
 See also the manual for `bcftools view` [bcftools manual](https://samtools.github.io/bcftools/bcftools.html#view).
