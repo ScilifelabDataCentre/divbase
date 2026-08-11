@@ -155,49 +155,49 @@ This will start Prometheus directly on `localhost:9090`.
 
 - [`scripts/benchmarking/run_mouse_vcf_job_in_docker_compose.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/run_mouse_vcf_job_in_docker_compose.py)
 
-End-to-end workflow script for the **local Docker Compose runs**. Creates the MinIO bucket and DivBase project if needed, downloads the mouse VCF from ENA, generates mock sample metadata using [`scripts/generate_mock_sample_metadata.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/generate_mock_sample_metadata.py), uploads both files via `divbase-cli files upload`, runs a dimensions update, and submits the query job. The script does not poll for the task to complete: the user has to check for task completion manually. The query took approximately 10 minutes on the laptop used for the local tests. Usage:
+    End-to-end workflow script for the **local Docker Compose runs**. Creates the MinIO bucket and DivBase project if needed, downloads the mouse VCF from ENA, generates mock sample metadata using [`scripts/generate_mock_sample_metadata.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/generate_mock_sample_metadata.py), uploads both files via `divbase-cli files upload`, runs a dimensions update, and submits the query job. The script does not poll for the task to complete: the user has to check for task completion manually. The query took approximately 10 minutes on the laptop used for the local tests. Usage:
 
-```bash
-docker compose -f docker/divbase_compose.yaml up -d
-python scripts/benchmarking/run_mouse_vcf_job_in_docker_compose.py
-```
+    ```bash
+    docker compose -f docker/divbase_compose.yaml up -d
+    python scripts/benchmarking/run_mouse_vcf_job_in_docker_compose.py
+    ```
 
-!!! Note
-    For the Kubernetes side of this experiment, all commands were run manually rather than to write a reproducible script. This was considered more convenient as the Kubernetes deployment was undergoing a lot of refactoring at the time.
+    !!! Note
+        For the Kubernetes side of this experiment, all commands were run manually rather than to write a reproducible script. This was considered more convenient as the Kubernetes deployment was undergoing a lot of refactoring at the time.
 
 - [`scripts/benchmarking/split_mouse_vcf_per_scaffold.sh`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/split_mouse_vcf_per_scaffold.sh)
 
-Script that downloads the mouse VCF from ENA (if not already present), creates a CSI index (required for the splitting), and splits the file by chromosome using `bcftools view -r`. For convenience, also outputs a file list (`split_scaffold_files.txt`) for use with `divbase-cli files upload`. Current state of the script requires that `bcftools` is installed locally. Usage:
+    Script that downloads the mouse VCF from ENA (if not already present), creates a CSI index (required for the splitting), and splits the file by chromosome using `bcftools view -r`. For convenience, also outputs a file list (`split_scaffold_files.txt`) for use with `divbase-cli files upload`. Current state of the script requires that `bcftools` is installed locally. Usage:
 
-```bash
-# Note that the mouse VCF URL is hardcoded.
-# This is not a general-purpose script to split VCFs by chromosomes (but it could be refactored to become one)
-bash scripts/benchmarking/split_mouse_vcf_per_scaffold.sh
-```
+    ```bash
+    # Note that the mouse VCF URL is hardcoded.
+    # This is not a general-purpose script to split VCFs by chromosomes (but it could be refactored to become one)
+    bash scripts/benchmarking/split_mouse_vcf_per_scaffold.sh
+    ```
 
 - [`scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py)
 
-Script that fetches the per-task metrics from the Prometheus data store for a list of completed job IDs and dates specified in a YAML file. Requires Prometheus to be reachable on localhost:9090: either via `docker/monitoring_compose.yaml` (Docker Compose) or via port-forwarding to the Kubernetes cluster.
+    Script that fetches the per-task metrics from the Prometheus data store for a list of completed job IDs and dates specified in a YAML file. Requires Prometheus to be reachable on localhost:9090: either via `docker/monitoring_compose.yaml` (Docker Compose) or via port-forwarding to the Kubernetes cluster.
 
-To make a task metrics lookup in the Prometheus database, the DivBase Task ID and the date the task was run is needed. To conveniently pull several entries from Prometheus at the same time, the script was designed to take a YAML file as input. Example of a input YAML file for this script:
+    To make a task metrics lookup in the Prometheus database, the DivBase Task ID and the date the task was run is needed. To conveniently pull several entries from Prometheus at the same time, the script was designed to take a YAML file as input. Example of a input YAML file for this script:
 
-```yaml
-jobs:
-  - job_id: 23
-    date: 2026-01-28
-    comment: "Optional, but will be saved to the output JSON if included"
-  - job_id: 28
-    date: 2026-01-29
-```
+    ```yaml
+    jobs:
+      - job_id: 23
+        date: 2026-01-28
+        comment: "Optional, but will be saved to the output JSON if included"
+      - job_id: 28
+        date: 2026-01-29
+    ```
 
-Assuming the tasks and dates are correct, the script will then fetch the metrics results from all jobs and write them to `scripts/benchmarking/results/fetched_metrics_<yaml_name>.json`.
+    Assuming the tasks and dates are correct, the script will then fetch the metrics results from all jobs and write them to `scripts/benchmarking/results/fetched_metrics_<yaml_name>.json`.
 
-Example command for an input YAML named `task_metrics_docker_local.yaml`:
+    Example command for an input YAML named `task_metrics_docker_local.yaml`:
 
-```bash
-python scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py \
-    --yaml scripts/benchmarking/task_metrics_docker_local.yaml
-```
+    ```bash
+    python scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py \
+        --yaml scripts/benchmarking/task_metrics_docker_local.yaml
+    ```
 
 ### 2.5. Results
 
