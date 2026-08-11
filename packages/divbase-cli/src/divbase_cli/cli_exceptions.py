@@ -2,10 +2,6 @@
 Custom exceptions for the divbase CLI.
 """
 
-from pathlib import Path
-
-from divbase_lib.divbase_constants import SUPPORTED_DIVBASE_FILE_TYPES, UNSUPPORTED_CHARACTERS_IN_FILENAMES
-
 
 class DivBaseCLIError(Exception):
     """Base exception for all divbase CLI errors."""
@@ -17,6 +13,20 @@ class AuthenticationError(DivBaseCLIError):
     """Raised for user authentication errors when using CLI tool."""
 
     def __init__(self, error_message: str = "Authentication required, make sure you're logged in."):
+        super().__init__(error_message)
+
+
+class PersonalAccessTokenAlreadyExistsError(DivBaseCLIError):
+    """Raised when a user tries to store a new personal access token while one is already stored."""
+
+    def __init__(self, error_message: str = "A personal access token is already stored on this device."):
+        super().__init__(error_message)
+
+
+class InvalidPersonalAccessTokenError(DivBaseCLIError):
+    """Raised when a personal access token provided by the user is invalid."""
+
+    def __init__(self, error_message: str = "The personal access token provided is invalid."):
         super().__init__(error_message)
 
 
@@ -44,21 +54,35 @@ class DivBaseAPIError(DivBaseCLIError):
         status_code: int = 500,
         http_method: str = "unknown",
         url: str = "unknown",
+        request_id: str = "unknown",
     ):
         self.status_code = status_code
         self.error_type = error_type
         self.error_details = error_details
         self.http_method = http_method
         self.url = url
+        self.request_id = request_id
         error_message = (
             f"DivBase Server returned an error response:\n"
             f"HTTP Status code: {status_code}\n"
             f"HTTP method: {http_method}\n"
             f"URL: {url}\n"
+            f"Request ID: {request_id}\n"
             f"Error type: {error_type}\n"
             f"Details: {error_details}\n"
         )
         self.error_message = error_message
+        super().__init__(error_message)
+
+
+class InvalidInputError(DivBaseCLIError):
+    """
+    Raised when invalid input is provided to a CLI command.
+
+    Use this when the issue in the input is only discovered in e.g. service layer, and therefore using typer.BadParameter is not recommended.
+    """
+
+    def __init__(self, error_message: str):
         super().__init__(error_message)
 
 
@@ -81,24 +105,45 @@ class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
         super().__init__(error_message)
 
 
-class FilesAlreadyInProjectError(DivBaseCLIError):
-    """
-    Raised when trying to upload file(s) that already exists in the project
-    and the user does not want to accidently create a new version of any file.
-    """
+class FileAlreadyUploadedError(DivBaseCLIError):
+    """Raised when one or more files being uploaded already exist in the project's store on DivBase."""
 
-    def __init__(self, existing_files: dict[Path, str], project_name: str):
-        files_list = "\n".join(
-            f"'{file_path}' (Checksum: {checksum})" for file_path, checksum in existing_files.items()
-        )
-        self.existing_files = existing_files
-        self.project_name = project_name
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
 
-        error_message = (
-            f"For the project: '{project_name}'\n"
-            "The exact version of the following file(s) that you're trying to upload already exist inside the project:\n"
-            f"{files_list}."
-        )
+
+class NotEmptyDirectoryError(DivBaseCLIError):
+    """Raised when trying to remove a directory from the project's store that still contains files."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class NoFilesSpecifiedError(DivBaseCLIError):
+    """Raised when no files were specified or resolved for a command that requires at least one."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class UnsupportedCharactersError(DivBaseCLIError):
+    """Raised when a user-provided file or directory name contains characters that DivBase does not support."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class ShellExpandedGlobError(DivBaseCLIError):
+    """Raised when --recursive is passed but the shell has already expanded the glob pattern into file paths."""
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+
+
+class DuplicateFileNamesError(DivBaseCLIError):
+    """Raised when two or more files would resolve to the same destination name."""
+
+    def __init__(self, error_message: str):
         super().__init__(error_message)
 
 
@@ -126,47 +171,25 @@ class ProjectNotInConfigError(DivBaseCLIError):
     But info about the project could not be obtained from the user config file.
     """
 
-    def __init__(self, config_path: Path, project_name: str):
-        self.config_path = config_path
+    def __init__(self, project_name: str):
         self.project_name = project_name
         error_message = (
             f"Couldn't get information about the project named: '{project_name}' \n"
-            f"Please check the project is included in '{config_path.resolve()}'.\n"
-            f"you can run 'divbase-cli config show' to view the contents of your config file.\n"
+            f"Use the command 'divbase-cli config add <project_name>' to add the project to your config.\n"
+            f"You can run 'divbase-cli config show' to view the contents of your config file.\n"
         )
         super().__init__(error_message)
 
 
-class UnsupportedFileTypeError(DivBaseCLIError):
-    """Raised when one or more files to be uploaded are not supported by DivBase (based on file extension)."""
+class PolledTaskNotFinalError(DivBaseCLIError):
+    """Raised when a polled DivBase task is not in a final state."""
 
-    def __init__(self, unsupported_files: list[Path], supported_types: tuple[str, ...] = SUPPORTED_DIVBASE_FILE_TYPES):
-        self.unsupported_files = unsupported_files
-        self.supported_types = supported_types
-        message = (
-            f"The following file(s) have types that are not supported by DivBase and therefore cannot be uploaded: \n"
-            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
-            f"DivBase currently supports the following file types: {', '.join(SUPPORTED_DIVBASE_FILE_TYPES)}\n"
-            "If you want us to support another file type, please let us know."
-        )
-        super().__init__(message)
+    def __init__(self, error_message: str = "The polled task is still running."):
+        super().__init__(error_message)
 
 
-class UnsupportedFileNameError(DivBaseCLIError):
-    """Raised when one or more files to be uploaded have unsupported characters in their filenames."""
+class QueryTaskFailedError(DivBaseCLIError):
+    """Raised when a submitted query task did not complete successfully."""
 
-    def __init__(self, unsupported_files: list[Path]):
-        self.unsupported_files = unsupported_files
-        message = (
-            f"The following file(s) have unsupported characters in their filenames and therefore cannot be uploaded: \n"
-            f"{'\n'.join(str(file) for file in unsupported_files)}\n"
-            f"Filenames cannot contain any of the following characters: {', '.join(UNSUPPORTED_CHARACTERS_IN_FILENAMES)}\n"
-            "Please rename the files and try again."
-        )
-        super().__init__(message)
-
-
-class PolledTaskNotFinalError(Exception):
-    """Raised when a polled celerytask is not in a final state."""
-
-    pass
+    def __init__(self, error_message: str = "The query task failed."):
+        super().__init__(error_message)

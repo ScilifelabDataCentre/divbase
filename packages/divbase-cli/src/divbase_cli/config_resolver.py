@@ -10,25 +10,37 @@ from pathlib import Path
 
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecifiedError
+from divbase_cli.user_auth import get_pat_for_authentication
 from divbase_cli.user_config import ProjectConfig, load_user_config
 
 
-def ensure_logged_in(desired_url: str | None = None) -> str:
+def resolve_and_authenticate_project(project_name: str | None) -> ProjectConfig:
     """
-    Ensure the user is logged in by checking the logged_in_url value in the user config.
+    Helper function that resolves the project to use for a CLI command and ensures
+    the user is logged in to the correct DivBase API URL for that project.
 
-    Optionally checks the logged_in_url matches the desired_url (e.g. for project-specific commands) if provided.
+    Returns the ProjectConfig object for the resolved project, will raise errors otherwise.
     """
-    config = load_user_config()
-    if config.logged_in_url:
-        if desired_url and config.logged_in_url != desired_url:
+    user_config = load_user_config()
+    if not project_name:
+        project_name = user_config.default_project
+    if not project_name:
+        raise ProjectNameNotSpecifiedError()
+
+    project_config = user_config.project_info(project_name)
+
+    if user_config.logged_in_url:
+        if project_config.divbase_url != user_config.logged_in_url:
             raise AuthenticationError(
-                f"You are not logged in to the correct DivBase URL: {desired_url}. Please log in again."
+                f"You are trying to run a command for the project '{project_name}' which has the DivBase URL: {project_config.divbase_url} \n"
+                f"You are however logged in to this URL: {user_config.logged_in_url} \n"
+                "Please log in again."
             )
-        return config.logged_in_url
+        return project_config
 
-    if cli_settings.DIVBASE_API_PAT:
-        return desired_url or cli_settings.DIVBASE_API_URL
+    if get_pat_for_authentication():
+        # if a user has a PAT, we will assume the PAT is for the correct URL
+        return project_config
 
     raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
 
@@ -47,27 +59,10 @@ def resolve_url_for_non_project_specific_commands() -> str:
     if config.logged_in_url:
         return config.logged_in_url
 
-    # No active session — fall back to PAT if available.
-    if cli_settings.DIVBASE_API_PAT:
+    if get_pat_for_authentication():
         return cli_settings.DIVBASE_API_URL
 
     raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
-
-
-def resolve_project(project_name: str | None) -> ProjectConfig:
-    """
-    Helper function to resolve the project to use for a CLI command.
-    Falls back to the default project set in the user config if not explicitly provided.
-
-    Once the project is resolved a ProjectConfig object is returned,
-    which contains the name and API URL of the project.
-    """
-    config = load_user_config()
-    if not project_name:
-        project_name = config.default_project
-    if not project_name:
-        raise ProjectNameNotSpecifiedError()
-    return config.project_info(project_name)
 
 
 def resolve_download_dir(download_dir: str | None) -> Path:
@@ -82,5 +77,5 @@ def resolve_download_dir(download_dir: str | None) -> Path:
         download_dir = config.default_download_dir
 
     if download_dir and download_dir != ".":
-        return Path(download_dir)
+        return Path(download_dir).expanduser()
     return Path.cwd()

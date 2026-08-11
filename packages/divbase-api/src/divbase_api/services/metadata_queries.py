@@ -1,10 +1,10 @@
-import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import structlog
 
 from divbase_api.services.vcf_queries import SampleFileMapping
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData
@@ -18,7 +18,7 @@ from divbase_lib.exceptions import (
 )
 from divbase_lib.metadata_validator import SharedMetadataValidator, ValidationCategory
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 ###

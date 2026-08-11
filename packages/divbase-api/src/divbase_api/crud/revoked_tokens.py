@@ -2,8 +2,7 @@
 CRUD operations for working with revoked JWTs.
 """
 
-import logging
-
+import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.security import TokenType
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def token_is_revoked(db: AsyncSession, token_jti: str) -> bool:

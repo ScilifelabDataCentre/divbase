@@ -6,10 +6,10 @@ Certain operations like "list files" etc... instead performed directly by the ba
 Pre-signed url approach not used when the request to s3 can be done in the (user to API) request-response cycle.
 """
 
-import logging
 from math import ceil
 
 import boto3
+import structlog
 from botocore.config import Config
 from fastapi import HTTPException, status
 
@@ -30,7 +30,7 @@ from divbase_lib.divbase_constants import (
     SINGLE_PART_UPLOAD_URL_EXPIRATION_SECONDS,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class S3PreSignedService:

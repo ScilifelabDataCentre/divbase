@@ -15,12 +15,16 @@ from dataclasses import dataclass, field
 
 from pydantic import SecretStr
 
+from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
+
 
 @dataclass
 class WorkerGeneralSettings:
     """General configuration settings for the worker."""
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
+    log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     sync_url: SecretStr = SecretStr(os.getenv("SYNC_DATABASE_URL", "NOT_SET"))
     broker_url: SecretStr = SecretStr(os.getenv("CELERY_BROKER_URL", "NOT_SET"))
     result_backend: SecretStr = SecretStr(os.getenv("CELERY_RESULT_BACKEND", "NOT_SET"))
@@ -43,7 +47,7 @@ class WorkerMetricsSettings:
     # ENABLE_WORKER_METRICS controls whether the Prometheus metrics server is started (system metrics, etc.)
     enabled: bool = os.getenv("ENABLE_WORKER_METRICS", "1") == "1"
     # ENABLE_WORKER_METRICS_PER_TASK controls whether per-task metrics (task/bcftools/VCF download) are collected and exposed
-    enabled_per_task: bool = os.getenv("ENABLE_WORKER_METRICS_PER_TASK", "1") == "1"
+    enabled_per_task: bool = os.getenv("ENABLE_WORKER_METRICS_PER_TASK", "0") == "1"
     # Prometheus scrapes every 15 seconds in DivBase setup. A TTL of 5 min means it is available for 20 scrapes.
     # Once Prometheus has scraped it, it will store the data in its own volume for its retention time (default 15d).
     cache_ttl_minutes: int = int(os.getenv("TASK_METRICS_CACHE_TTL_MINUTES", "5"))
@@ -59,7 +63,9 @@ class WorkerCronSettings:
     stuck_pending_hours: int = int(os.getenv("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
     stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
+    log_retention_days: int = int(os.getenv("LOG_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
+    non_email_confirmed_user_retention_days: int = int(os.getenv("NON_EMAIL_CONFIRMED_USER_RETENTION_DAYS", "7"))
     soft_deleted_project_version_retention_days: int = int(
         os.getenv("SOFT_DELETED_PROJECT_VERSION_RETENTION_DAYS", "30")
     )
@@ -93,7 +99,7 @@ class WorkerSettings:
                 if setting.get_secret_value() == "NOT_SET":
                     raise ValueError(f"A required environment variable was not set: {setting_name=}")
                 if (
-                    self.general.environment not in ["local_dev", "test"]
+                    self.general.environment not in LOCAL_DEV_ENVIRONMENTS
                     and setting.get_secret_value() == "badpassword"
                 ):
                     raise ValueError(

@@ -411,8 +411,18 @@ body {
   background-color: var(--scilife-grape);
   color: white;
 }
+/* other scilife colors give too low contrast */
+.scilife-role-badge-query {
+  background-color: darkblue;
+  color: white;
+}
 .scilife-role-badge-read {
   background-color: var(--scilife-dark-grey);
+  color: white;
+}
+
+.scilife-role-badge-active {
+  background-color: var(--scilife-grape);
   color: white;
 }
 .scilife-role-badge-inactive {

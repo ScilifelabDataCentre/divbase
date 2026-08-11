@@ -1,4 +1,3 @@
-import logging
 import os
 import socket
 import threading
@@ -9,11 +8,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import psutil
+import structlog
 from prometheus_client import Gauge, Info, start_http_server
 
 from divbase_api.worker.worker_config import worker_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 WORKER_NAME = socket.gethostname()
 

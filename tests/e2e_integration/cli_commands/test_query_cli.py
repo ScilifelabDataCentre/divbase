@@ -9,7 +9,6 @@ A project (CONSTANTS["QUERY_PROJECT"]) is made available with input files for th
 import csv
 import gzip
 import io
-import logging
 import re
 import time
 from pathlib import Path
@@ -23,8 +22,8 @@ from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.s3_checksums import MD5CheckSumFormat, calculate_md5_checksum
 from tests.conftest import REGRESSION_GUARD_PREFIX
+from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
-logging.basicConfig(level=logging.DEBUG)
 runner = CliRunner()
 
 _TASK_TERMINAL_STATES = {"SUCCESS", "FAILURE"}
@@ -158,6 +157,16 @@ def _checksum_vcf_skip_double_hash_headers(vcf_gz_file: Path, tmp_path: Path) ->
     )
 
 
+def test_read_user_query_permissions(logged_in_read_user_with_existing_config, CONSTANTS):
+    """Read role cannot submit VCF queries."""
+    project = CONSTANTS["QUERY_PROJECT"]
+    result = runner.invoke(app, f"query vcf --all-samples --command 'view -r 21:15000000-25000000' --project {project}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"query tsv 'Area:West of Ireland,Northern Portugal;Sex:F' --project {project}")
+    assert_divbase_403_permissions_error(result)
+
+
 class TestQueryTSVSuccess:
     """Successful query tsv CLI test cases."""
 
@@ -220,14 +229,20 @@ class TestQueryTSVSuccess:
 class TestQueryVCFSuccess:
     """Successful query vcf CLI test cases."""
 
-    def test_bcftools_pipe_query(
+    @pytest.mark.parametrize("should_succeed", [True, False])
+    def test_basic_bcftools_pipe_query_success_and_failure(
         self,
         CONSTANTS,
         logged_in_edit_user_with_existing_config,
         run_update_dimensions,
         project_map,
+        should_succeed,
     ):
-        """Test running a bcftools pipe query using the CLI."""
+        """
+        Test running a bcftools pipe query using the CLI.
+        We test one case where the job should succeed and one where the job should fail mid run.
+        In both cases we should get back a log file and in the success case we should also get back the results file.
+        """
         project_name = CONSTANTS["QUERY_PROJECT"]
         project_id = project_map[project_name]
         bucket_name = CONSTANTS["PROJECT_TO_BUCKET_MAP"][project_name]
@@ -236,8 +251,12 @@ class TestQueryVCFSuccess:
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
         tsv_filter = "Area:West of Ireland,Northern Portugal;"
-        arg_command = "view -r 21:15000000-25000000"
+        if should_succeed:
+            arg_command = "view -r 21:15000000-25000000"
+        else:
+            arg_command = "view -r 100000:15000000-25000000"  # range that does not exist.
 
+        # both cases should be able to submit the job
         command = f"query vcf --tsv-filter '{tsv_filter}' --command '{arg_command}' --project {project_name} "
         result = runner.invoke(app, command)
         assert result.exit_code == 0
@@ -245,15 +264,35 @@ class TestQueryVCFSuccess:
 
         user_task_id = result.stdout.strip().split()[-1]
         task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
-        assert task_state == "SUCCESS", f"Task failed. task-history output:\n{task_stdout}"
+        if should_succeed:
+            assert task_state == "SUCCESS"
+        else:
+            assert task_state == "FAILURE"
 
+        # both should have log file
         command = f"files ls --project {project_name} --include-results-files"
         result = runner.invoke(app, command)
-
         assert result.exit_code == 0
-        assert any(QUERY_RESULTS_FILE_PREFIX in line for line in result.stdout.splitlines()), (
-            f"No {QUERY_RESULTS_FILE_PREFIX} VCF file found in output.\nfiles ls output:\n{result.stdout}"
-        )
+        log_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.log"
+        assert log_file in result.stdout
+
+        if should_succeed:
+            assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" in result.stdout
+        else:
+            assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" not in result.stdout
+
+        command = f"files download {log_file} --project {project_name}"
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0
+        assert Path(log_file).exists()
+        log_contents = Path(log_file).read_text()
+
+        if should_succeed:
+            assert "Job Status: SUCCESS" in log_contents
+        else:
+            assert "Job Status: FAILURE" in log_contents
+            assert "TaskUserError" in log_contents
+            assert "no vcf files in the project that fulfill the query" in log_contents.lower()
 
     @pytest.mark.parametrize(
         "files_to_upload, metadata_tsv_name, sample_selection_args, bcftools_view_command, expected_checksum",
@@ -587,11 +626,10 @@ class TestQueryVCFSubmissionValidation:
 
         command = f"query vcf --command 'view -r 21:15000000-25000000' --project {project_name} "
         result = runner.invoke(app, command)
-
-        assert result.exit_code == 2  # Typer exits with code 2 for argument validation errors
-        assert isinstance(result.exception, SystemExit)
-        output = result.stdout + (str(result.exception) if result.exception else "")
-        assert "Job submitted successfully with task id:" not in output
+        # raises typer.BadParameter
+        assert result.exit_code == 2
+        assert "usage:" in result.output.lower()
+        assert "root query vcf" in result.output.lower()
 
     def test_bcftools_pipe_fails_on_project_not_in_config(self, CONSTANTS, logged_in_edit_user_with_existing_config):
         project_name = "non_existent_project"
@@ -1022,3 +1060,132 @@ def test_regression_query_fails_for_vcf_with_partly_overlapping_sample_sets(
         f"{REGRESSION_GUARD_PREFIX} expected descriptive 'Sample sets that are partly overlapping' message "
         f"in task-history. task-history output:\n{task_stdout}"
     )
+
+
+@pytest.mark.parametrize(
+    "sample_mode,tsv_sample_filter,bcftools_command",
+    [
+        ("all-samples", None, "view -r 1,4,6,21,24"),
+        ("metadata-filter", "Area:West of Ireland;Sex:F", "view -r 1,4,6,21,24"),
+        (
+            "sample-list",
+            "8_HOM-E78,1a_HOM-G34,5a_HOM-I13,5a_HOM-I20,1b_HOM-G55,1b_HOM-G58,1b_HOM-G83,5b_HOM-H17",
+            "view -r 1,4,6,21,24",
+        ),
+    ],
+)
+def test_folder_project_vcf_query_equivalence(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+    sample_mode,
+    tsv_sample_filter,
+    bcftools_command,
+    tmp_path,
+):
+    """
+    Run identical VCF queries on the split-scaffold-project and folder-project with different sample modes.
+    Both projects contain the same VCF files and sample metadata but are organized in different folder structures.
+
+    Verify we get the same result for all 3 sample selection modes.
+    """
+    split_project = "split-scaffold-project"
+    folder_project = "folder-project"
+    user_id = 1
+
+    split_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][split_project]
+    folder_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][folder_project]
+
+    split_id = project_map[split_project]
+    folder_id = project_map[folder_project]
+
+    split_project_metadata = "sample_metadata_HOM_chr_split_version.tsv"
+    folder_project_metadata = "metadata/sample_metadata_HOM_chr_split_version.tsv"
+
+    # Ensure dimensions up to date for both projects
+    run_update_dimensions(bucket_name=split_bucket, project_id=split_id, project_name=split_project, user_id=user_id)
+    run_update_dimensions(bucket_name=folder_bucket, project_id=folder_id, project_name=folder_project, user_id=user_id)
+
+    # Build query commands based on sample mode
+    if sample_mode == "all-samples":
+        command_split = f"query vcf --all-samples --command '{bcftools_command}' --project {split_project}"
+        command_folder = f"query vcf --all-samples --command '{bcftools_command}' --project {folder_project}"
+    elif sample_mode == "metadata-filter":
+        command_split = f"query vcf --tsv-filter '{tsv_sample_filter}' --command '{bcftools_command}' --project {split_project} --metadata-tsv-name {split_project_metadata}"
+        command_folder = f"query vcf --tsv-filter '{tsv_sample_filter}' --command '{bcftools_command}' --project {folder_project} --metadata-tsv-name {folder_project_metadata}"
+    else:
+        command_split = (
+            f"query vcf --samples '{tsv_sample_filter}' --command '{bcftools_command}' --project {split_project}"
+        )
+        command_folder = (
+            f"query vcf --samples '{tsv_sample_filter}' --command '{bcftools_command}' --project {folder_project}"
+        )
+
+    # Submit and wait for both queries
+    result_split = runner.invoke(app, command_split)
+    result_folder = runner.invoke(app, command_folder)
+    assert result_split.exit_code == 0
+    assert result_folder.exit_code == 0
+
+    task_id_split = result_split.stdout.strip().split()[-1]
+    task_id_folder = result_folder.stdout.strip().split()[-1]
+    state_split, _ = wait_for_task_terminal_state_using_CLI(user_task_id=task_id_split)
+    state_folder, _ = wait_for_task_terminal_state_using_CLI(user_task_id=task_id_folder)
+    assert state_split == "SUCCESS"
+    assert state_folder == "SUCCESS"
+
+    # Download and compare results
+    output_file_split = f"{QUERY_RESULTS_FILE_PREFIX}{task_id_split}.vcf.gz"
+    output_file_folder = f"{QUERY_RESULTS_FILE_PREFIX}{task_id_folder}.vcf.gz"
+
+    result = runner.invoke(
+        app, f"files download {output_file_split} --download-dir {tmp_path} --project {split_project}"
+    )
+    assert result.exit_code == 0
+    result = runner.invoke(
+        app, f"files download {output_file_folder} --download-dir {tmp_path} --project {folder_project}"
+    )
+    assert result.exit_code == 0
+
+    # Compare checksums (excluding variable ## headers)
+    checksum_split = _checksum_vcf_skip_double_hash_headers(vcf_gz_file=tmp_path / output_file_split, tmp_path=tmp_path)
+    checksum_folder = _checksum_vcf_skip_double_hash_headers(
+        vcf_gz_file=tmp_path / output_file_folder, tmp_path=tmp_path
+    )
+    assert checksum_split == checksum_folder
+
+
+def test_folder_project_sample_metadata_query_equivalence(
+    CONSTANTS,
+    logged_in_edit_user_with_existing_config,
+    run_update_dimensions,
+    project_map,
+):
+    """Test sample metadata (TSV) queries produce same results on split-scaffold-project and folder-project."""
+    split_project = "split-scaffold-project"
+    folder_project = "folder-project"
+    user_id = 1
+
+    split_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][split_project]
+    folder_bucket = CONSTANTS["PROJECT_TO_BUCKET_MAP"][folder_project]
+    split_id = project_map[split_project]
+    folder_id = project_map[folder_project]
+
+    run_update_dimensions(bucket_name=split_bucket, project_id=split_id, project_name=split_project, user_id=user_id)
+    run_update_dimensions(bucket_name=folder_bucket, project_id=folder_id, project_name=folder_project, user_id=user_id)
+
+    query_string = "Area:West of Ireland;Sex:F"
+    result_split = runner.invoke(
+        app,
+        f"query tsv '{query_string}' --project {split_project} --metadata-tsv-name sample_metadata_HOM_chr_split_version.tsv",
+    )
+    result_folder = runner.invoke(
+        app,
+        f"query tsv '{query_string}' --project {folder_project} --metadata-tsv-name metadata/sample_metadata_HOM_chr_split_version.tsv",
+    )
+
+    assert result_split.exit_code == 0
+    assert result_folder.exit_code == 0
+    assert query_string in result_split.stdout
+    assert query_string in result_folder.stdout

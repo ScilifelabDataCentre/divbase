@@ -5,26 +5,28 @@ Hard deletion of soft deleted files is handled by a separate script: cleanup_exp
 This includes both results files and soft deleted files
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from celery.schedules import crontab
 from sqlalchemy import delete, select, text, update
 
+from divbase_api.logging_config import LOG_FILES_DIR
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
+from divbase_api.models.users import UserDB
 from divbase_api.worker.tasks import _create_s3_file_manager, app
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @app.task(name="cron_tasks.cleanup_old_task_history")
-def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days):
+def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.task_retention_days) -> dict:
     """
     Periodic task to clean up old task history entries from both TaskHistoryDB and CeleryTaskMeta.
     Runs daily to remove entries older than retention_days.
@@ -78,7 +80,7 @@ def cleanup_old_task_history_task(retention_days: int = worker_settings.cron.tas
 def cleanup_stuck_tasks_task(
     stuck_pending_hours: int = worker_settings.cron.stuck_pending_hours,
     stuck_started_hours: int = worker_settings.cron.stuck_started_hours,
-):
+) -> dict:
     """
     Periodic task to clean up tasks stuck in PENDING or STARTED status from
     TaskHistoryDB and CeleryTaskMeta.
@@ -153,7 +155,9 @@ def cleanup_stuck_tasks_task(
 
 
 @app.task(name="cron_tasks.cleanup_old_jwts_and_pats")
-def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron.revoked_token_retention_days):
+def cleanup_old_revoked_jwts_and_pats(
+    retention_days: int = worker_settings.cron.revoked_token_retention_days,
+) -> dict:
     """
     Periodic task to clean up old revoked token entries.
 
@@ -183,10 +187,40 @@ def cleanup_old_revoked_jwts_and_pats(retention_days: int = worker_settings.cron
     }
 
 
+@app.task(name="cron_tasks.cleanup_non_email_confirmed_users")
+def cleanup_non_email_confirmed_users(
+    retention_days: int = worker_settings.cron.non_email_confirmed_user_retention_days,
+) -> dict:
+    """
+    Periodic task to cleanup new sign ups that don't confirm their email within the retention period.
+
+    This task is primarily for handling bot accounts signing up currently easy to identify as they never confirm their email.
+
+    To only catch new sign ups in this cleanup, we compare the created_at and updated_at timestamps.
+    It is possible to manually set email_verified=False in the admin panel.
+    """
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    stmt = delete(UserDB)
+    stmt = stmt.where(UserDB.email_verified.is_(False))
+    stmt = stmt.where(UserDB.created_at < cutoff_date)
+    stmt = stmt.where(UserDB.updated_at - UserDB.created_at < timedelta(seconds=5))
+
+    with SyncSessionLocal() as db:
+        deleted_count = db.execute(stmt).rowcount
+        db.commit()
+
+    return {
+        "status": "completed",
+        "number_of_non_confirmed_users_deleted": deleted_count,
+        "cutoff_date": cutoff_date.isoformat(),
+        "non_confirmed_user_retention_period_days": retention_days,
+    }
+
+
 @app.task(name="cron_tasks.cleanup_soft_deleted_project_versions")
 def cleanup_soft_deleted_project_versions(
     retention_days: int = worker_settings.cron.soft_deleted_project_version_retention_days,
-):
+) -> dict:
     """
     Periodic task to hard delete any soft-deleted project versions older than the retention period.
     """
@@ -207,7 +241,7 @@ def cleanup_soft_deleted_project_versions(
 
 
 @app.task(name="cron_tasks.update_storage_usage_metrics")
-def update_storage_usage_metrics():
+def update_storage_usage_metrics() -> dict:
     """
     Periodic task to update storage usage metrics for all projects.
 
@@ -233,28 +267,73 @@ def update_storage_usage_metrics():
     }
 
 
+@app.task(name="cron_tasks.remove_old_log_files")
+def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_retention_days) -> dict:
+    """
+    If a deployed enviroment is writing logs to files, this task will clean up outdated log files to prevent disk clutter.
+    NOTE: If loki/grafana alloy is setup, then this task can be removed.
+
+    Runs daily and deletes the log files based on when they were last modified.
+    """
+    if not LOG_FILES_DIR.exists():
+        logger.info(f"Log files directory does not exist, skipping cleanup: {LOG_FILES_DIR}")
+        return {
+            "status": "completed",
+            "number_of_log_files_deleted": "N/A - log directory does not exist",
+            "retention_days": log_retention_days,
+        }
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=log_retention_days)
+
+    numb_deleted = 0
+    for log_file in LOG_FILES_DIR.glob("*.log*"):
+        if not log_file.is_file():
+            continue
+
+        last_modified = datetime.fromtimestamp(log_file.stat().st_mtime, tz=timezone.utc)
+        if last_modified < cutoff_date:
+            log_file.unlink(missing_ok=True)
+            numb_deleted += 1
+
+    logger.info(f"Deleted {numb_deleted} log files older than {log_retention_days} days from {LOG_FILES_DIR}")
+
+    return {
+        "status": "completed",
+        "number_of_log_files_deleted": numb_deleted,
+        "retention_days": log_retention_days,
+    }
+
+
 # NOTE! If you add a new task here, make sure it starts with "cron_tasks"
 # Don't set to 2 AM or 3 AM due to daylight saving.
 # Timezone for job schedule is CET (defined in app in tasks.py).
 app.conf.beat_schedule = {
-    "cleanup-old-tasks-daily": {
+    "cleanup-old-task-history-daily": {
         "task": "cron_tasks.cleanup_old_task_history",
-        "schedule": crontab(hour=5, minute=0),  # Run daily at 5 AM CET
+        "schedule": crontab(hour=4, minute=0),
     },
     "cleanup-stuck-tasks-daily": {
         "task": "cron_tasks.cleanup_stuck_tasks",
-        "schedule": crontab(hour=5, minute=15),  # Run daily at 5:15 AM CET
+        "schedule": crontab(hour=4, minute=15),
     },
-    "cleanup-old-revoked-daily": {
+    "cleanup-old-jwts-and-pats-daily": {
         "task": "cron_tasks.cleanup_old_jwts_and_pats",
-        "schedule": crontab(hour=5, minute=20),  # Run daily at 5:20 AM CET
+        "schedule": crontab(hour=4, minute=30),
+    },
+    "cleanup-non-email-confirmed-users-daily": {
+        "task": "cron_tasks.cleanup_non_email_confirmed_users",
+        "schedule": crontab(hour=4, minute=45),
     },
     "cleanup-soft-deleted-project-versions-daily": {
         "task": "cron_tasks.cleanup_soft_deleted_project_versions",
-        "schedule": crontab(hour=5, minute=25),  # Run daily at 5:25 AM CET
+        "schedule": crontab(hour=5, minute=0),
     },
     "update-storage-usage-metrics-daily": {
         "task": "cron_tasks.update_storage_usage_metrics",
-        "schedule": crontab(hour=5, minute=30),  # Run daily at 5:30 AM CET
+        "schedule": crontab(hour=5, minute=15),
+    },
+    "remove-old-log-files-daily": {
+        "task": "cron_tasks.remove_old_log_files",
+        "schedule": crontab(hour=5, minute=30),
     },
 }

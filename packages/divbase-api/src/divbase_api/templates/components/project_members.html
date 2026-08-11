@@ -57,10 +57,8 @@
                                 {% if project.user_role == 'manage' %}
                                 <td class="text-center">
                                     {% if member.user_id == current_user.id %}
-                                    <!-- Manager can't edit their own role -->
-                                    <span class="text-muted small">
-                                        <i class="bi bi-shield-check me-1"></i>Owner
-                                    </span>
+                                    <!-- can't modify your own role -->
+                                    <span class="text-muted small">N/A</span>
                                     {% else %}
                                     <!-- Edit dropdown for other members -->
                                     <div class="dropdown">
@@ -80,6 +78,16 @@
                                                             {% if member.role == 'read' %}disabled{% endif %}>
                                                         <i class="bi bi-eye me-2"></i>Read
                                                         {% if member.role == 'read' %}<i class="bi bi-check-lg ms-auto text-success"></i>{% endif %}
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li>
+                                                <form method="post" action="/projects/{{ project.id }}/members/{{ member.user_id }}/role" style="display: inline;">
+                                                    <input type="hidden" name="role" value="query">
+                                                    <button class="dropdown-item" type="submit" 
+                                                            {% if member.role == 'query' %}disabled{% endif %}>
+                                                        <i class="bi bi-search me-2"></i>Query
+                                                        {% if member.role == 'query' %}<i class="bi bi-check-lg ms-auto text-success"></i>{% endif %}
                                                     </button>
                                                 </form>
                                             </li>

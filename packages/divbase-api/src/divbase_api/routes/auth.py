@@ -5,14 +5,14 @@ This is for CLI/API clients to login and get tokens for authenticated requests.
 Frontend routes are located in frontend_routes/auth.py
 """
 
-import logging
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.crud.auth import authenticate_user, verify_user_from_refresh_token
+from divbase_api.crud.auth import authenticate_user, generate_altcha_challenge, verify_user_from_refresh_token
 from divbase_api.crud.revoked_tokens import revoke_token_on_logout
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user
@@ -28,13 +28,15 @@ from divbase_lib.api_schemas.auth import (
 )
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 auth_router = APIRouter()
 
 
-@auth_router.post("/login", response_model=CLILoginResponse, status_code=status.HTTP_200_OK)
-async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+@auth_router.post("/login", status_code=status.HTTP_200_OK)
+async def login_endpoint(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+) -> CLILoginResponse:
     """
     Login endpoint to authenticate a user and give them an access + refresh token.
 
@@ -57,8 +59,10 @@ async def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: A
     )
 
 
-@auth_router.post("/refresh", response_model=RefreshTokenResponse, status_code=status.HTTP_200_OK)
-async def refresh_token_endpoint(refresh_token: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+@auth_router.post("/refresh", status_code=status.HTTP_200_OK)
+async def refresh_token_endpoint(
+    refresh_token: RefreshTokenRequest, db: AsyncSession = Depends(get_db)
+) -> RefreshTokenResponse:
     """
     Refresh token endpoint.
 
@@ -84,12 +88,23 @@ async def logout_endpoint(logout_request: LogoutRequest, db: AsyncSession = Depe
         logger.warning(f"Logout attempted with invalid/expired refresh token {logout_request.refresh_token}. Ignoring.")
 
 
-@auth_router.get("/whoami", status_code=status.HTTP_200_OK, response_model=UserResponse)
+@auth_router.get("/whoami", status_code=status.HTTP_200_OK)
 async def whoami_endpoint(
     current_user_and_scopes: Annotated[tuple[UserDB, PATPermissions], Depends(get_current_user)],
-):
+) -> UserResponse:
     """Endpoint to return current logged in user's details."""
     # NOTE: this endpoint is not scoped on purpose,
     # so it works as long as user authenticated either via JWT or (any) PAT
     current_user, _ = current_user_and_scopes
     return UserResponse.model_validate(current_user)
+
+
+@auth_router.get("/altcha", status_code=status.HTTP_200_OK, include_in_schema=False)
+async def get_altcha_challenge() -> dict:
+    """
+    Endpoint for Altcha widget to hit to get a fresh challenge.
+
+    Used in frontend registration and password reset forms to prevent/reduce automated bot submissions.
+    (We hide this endpoint from the docs as it is only used by Altcha widget)
+    """
+    return generate_altcha_challenge()

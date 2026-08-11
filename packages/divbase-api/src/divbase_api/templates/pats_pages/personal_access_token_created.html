@@ -20,17 +20,6 @@
                 </p>
             </div>
 
-            {# Token display with copy button #}
-            <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-key me-2"></i>{{ pat.name }}</h5>
-                </div>
-                <div class="card-body">
-                    {% set to_copy = raw_token %}
-                    {% include "components/copy_to_clipboard.html" %}
-                </div>
-            </div>
-
             {# Token summary #}
             <div class="card shadow-sm mb-4">
                 <div class="card-header">
@@ -82,10 +71,30 @@
                     <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Using your token</h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted small mb-2">Set the <code>DIVBASE_API_PAT</code> environment variable to be your token value and <code>divbase-cli</code> will use your token automatically — no login required.</p>
+                    <p class="fw-semibold mb-1">Recommended: Let divbase-cli store your token</p>
+                    <p class="text-muted small mb-2">
+                        The token will be stored securely on the device using your operating system's keyring. 
+                        divbase-cli will use it automatically on every command when you are not logged in. 
+                    </p>
+                    {% if expires_at_unix %}
+                    {% set to_copy = 'divbase-cli auth add-pat "' ~ pat.name ~ '" --expires ' ~ expires_at_unix %}
+                    {% else %}
+                    {% set to_copy = 'divbase-cli auth add-pat "' ~ pat.name ~ '"' %}
+                    {% endif %}
+                    {% include "components/copy_to_clipboard.html" %}
+                    
+                    <p class="text-muted small mb-2">You'll be prompted to paste in your token:</p>
+                    {% set to_copy = raw_token %}
+                    {% include "components/copy_to_clipboard.html" %}
+                    
+                    <hr class="my-3">
+                    <p class="fw-semibold mb-1">Alternative: environment variable</p>
+                    <p class="text-muted small mb-2">
+                        Set <code>DIVBASE_API_PAT</code> to your token value. 
+                        You may find this preferable for HPC job scripts and pipelines where per-job token control is needed. If both are set, the environment variable will take precedence.</p>
                     {% set to_copy = 'export DIVBASE_API_PAT=' ~ raw_token %}
                     {% include "components/copy_to_clipboard.html" %}
-                    <a href="{{ mkdocs_site_url }}/user-guides/using-divbase-programmatically/#use-personal-access-tokens-to-authenticate-programmatically" target="_blank">
+                    <a class="d-block mt-3" href="{{ mkdocs_site_url }}/user-guides/using-divbase-programmatically/#use-personal-access-tokens-to-authenticate-programmatically" target="_blank">
                         See the full usage guide on our documentation site.<i class="bi bi-box-arrow-up-right ms-1"></i>
                     </a>
                 </div>

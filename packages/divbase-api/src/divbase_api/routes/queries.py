@@ -2,15 +2,12 @@
 API routes for query operations.
 """
 
-import logging
-import sys
-
 import celery
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from divbase_api.api_config import api_settings
 from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry, update_task_history_entry_with_celery_task_id
@@ -41,19 +38,18 @@ from divbase_lib.exceptions import (
     TaskUserError,
 )
 
-logging.basicConfig(level=api_settings.general.log_level, handlers=[logging.StreamHandler(sys.stderr)])
-
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 query_router = APIRouter()
 
-# TODO harmonize function names
+QUERY_AUTHORIZATION_ERROR_MSG = (
+    "You don't have permission to query this project. You need at least 'QUERY' level permissions."
+)
 
 
 @query_router.post(
     "/sample-metadata/projects/{project_name}",
     status_code=status.HTTP_200_OK,
-    response_model=SampleMetadataQueryTaskResult,
 )
 async def submit_sample_metadata_query_job_endpoint(
     sample_metadata_query_request: SampleMetadataQueryRequest,
@@ -66,8 +62,8 @@ async def submit_sample_metadata_query_job_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to query this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(QUERY_AUTHORIZATION_ERROR_MSG)
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     task_kwargs = SampleMetadataQueryKwargs(
@@ -130,8 +126,8 @@ async def submit_vcf_query_job_endpoint(
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to query this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(QUERY_AUTHORIZATION_ERROR_MSG)
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
 
     if bcftools_query_request.samples is not None:

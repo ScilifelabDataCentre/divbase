@@ -328,21 +328,12 @@ def test_read_user_cannot_see_task_history(CONSTANTS, logged_in_read_user_with_e
     """
     Integration test that read user cannot access the task history, since they cannot submit tasks.
     """
-
-    # Without --project flag, error is about being an only-Read user
-    result_history = runner.invoke(app, "task-history user")
-    assert result_history.exit_code == 1
-    assert "authorization_error" in str(result_history.exception)
-    assert "You do not have access view to task history" in str(result_history.exception)
-
-    # With --project flag, error is about access to this particular project
     project_name = CONSTANTS["QUERY_PROJECT"]
     result_history = runner.invoke(app, f"task-history user --project {project_name}")
     assert result_history.exit_code == 1
-    assert "authorization_error" in str(result_history.exception)
-    assert "Project not found or you don't have permission to view task history from this project" in str(
-        result_history.exception
-    )
+    assert "AuthorizationError" in str(result_history.exception)
+    assert "You don't have permission to view task history for this project" in str(result_history.exception)
+    assert "You need at least 'QUERY' level permissions for this" in str(result_history.exception)
 
 
 def test_edit_user_cannot_see_task_history_for_project_not_member_of(
@@ -353,7 +344,7 @@ def test_edit_user_cannot_see_task_history_for_project_not_member_of(
 
     result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
     assert result_history.exit_code == 1
-    assert "project_not_found_error" in str(result_history.exception)
+    assert "ProjectNotFoundError" in str(result_history.exception)
 
 
 def test_task_history_id_tsv_can_lookup_submitted_query_task(
@@ -435,7 +426,7 @@ def test_manage_user_query_project_only_can_see_all_task_history_for_their_proje
     # Test that user cannot see tasks for a project they do not belong to
     result_history = runner.invoke(app, f"task-history project {non_member_project_name}")
     assert result_history.exit_code == 1
-    assert "project_not_found_error" in str(result_history.exception)
+    assert "ProjectNotFoundError" in str(result_history.exception)
 
 
 def test_manage_user_can_get_task_id_from_project_even_when_they_did_not_submit_task(
@@ -490,7 +481,7 @@ def test_edit_user_can_only_get_task_ids_they_submitted(
 
     result_history = runner.invoke(app, f"task-history id {manage_user_task_id}")
     assert result_history.exit_code == 1
-    assert "authorization_error\nDetails" in str(result_history.exception)
+    assert "AuthorizationError" in str(result_history.exception)
     assert "Task ID not found or you don't have permission to view the history for this task ID." in str(
         result_history.exception
     )

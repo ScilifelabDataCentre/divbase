@@ -2,13 +2,12 @@
 API routes for task history operations.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
 
-from divbase_api.crud.projects import check_if_user_is_not_only_read_user_in_all_their_projects, has_required_role
+from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.task_history import get_tasks_pg
 from divbase_api.db import get_db
 from divbase_api.deps import get_project_member, require_task_history_scope
@@ -20,59 +19,43 @@ from divbase_api.services.task_history import (
 )
 from divbase_lib.api_schemas.task_history import TaskHistoryResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 task_history_router = APIRouter()
 
-READ_USER_ERROR_MSG = "You do not have access view to task history from any projects. You need to have at least one project where you have an EDIT role or higher."
 
-
-@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult])
+@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(require_task_history_scope)],
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for the current user. Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
+    Get the task history for the current user.
+    Admin users can view all tasks (even if not member of the projects), non-admin users can only view their own tasks.
     """
-
     serialized_tasks = await get_tasks_pg(
         db=db,
         user_id=current_user.id,
         is_admin=current_user.is_admin,
     )
-    result = deserialize_tasks_to_result(serialized_tasks)
-
-    if not result:
-        user_has_at_least_one_edit_role = await check_if_user_is_not_only_read_user_in_all_their_projects(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        if not user_has_at_least_one_edit_role:
-            raise AuthorizationError(READ_USER_ERROR_MSG)
-
-    # result.user_email = current_user.email
-    return result
+    return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user_and_project(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for the current user and project. Admin users can view all tasks of the project (even if not member of the projects), non-admin users can only view their own tasks of the project.
+    Get the task history for the current user and project.
+    Admin users can view all tasks of the project, non-admin users can only view their own tasks of the project.
+    Requires project membership, even for admins.
     """
-
     project, current_user, role = project_and_user_and_role
-
-    if not has_required_role(role, ProjectRoles.EDIT):
+    if not has_required_role(role, ProjectRoles.QUERY) and not current_user.is_admin:
         raise AuthorizationError(
-            "Project not found or you don't have permission to view task history from this project."
+            "You don't have permission to view task history for this project. You need at least 'QUERY' level permissions for this."
         )
 
     serialized_tasks = await get_tasks_pg(
@@ -81,37 +64,30 @@ async def get_all_tasks_for_user_and_project(
         project_id=project.id,
         is_admin=current_user.is_admin,
     )
-    result = deserialize_tasks_to_result(serialized_tasks)
-    # result.user_email = current_user.email
-    return result
+    return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_project_tasks(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for a project. Requires MANAGE role or higher. Admin users can view all tasks of the project (even if not member of the projects).
+    Get the task history for a project. Requires MANAGE role for non-admin users.
+    Requires project membership, even for admins.
     """
-
     project, current_user, role = project_and_user_and_role
-
     if not has_required_role(role, ProjectRoles.MANAGE) and not current_user.is_admin:
         raise AuthorizationError(
-            "Project not found or you don't have permission to view task history for this whole project."
+            "You don't have permission to view all task history for this project. You need 'MANAGE' level permissions for this."
         )
 
     serialized_tasks = await get_tasks_pg(db=db, project_id=project.id)
     return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/tasks/{user_task_id}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/tasks/{user_task_id}", status_code=status.HTTP_200_OK)
 async def get_task_by_id(
     user_task_id: int,
     current_user: Annotated[UserDB, Depends(require_task_history_scope)],
@@ -124,7 +100,6 @@ async def get_task_by_id(
 
     Since the request body does not include project ID, permissions checks are made in get_tasks_pg.
     """
-
     serialized_task = await get_tasks_pg(
         db=db,
         user_task_id=user_task_id,
@@ -136,5 +111,4 @@ async def get_task_by_id(
     if not serialized_task:
         raise AuthorizationError("Task ID not found or you don't have permission to view the history for this task ID.")
 
-    result = deserialize_tasks_to_result(serialized_task)
-    return result
+    return deserialize_tasks_to_result(serialized_task)

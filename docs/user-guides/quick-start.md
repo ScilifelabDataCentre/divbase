@@ -46,6 +46,13 @@ Install `divbase-cli` using uv, a fast Python package manager:
 
 Refer to the [Installation Guide](installation.md) for more detailed instructions and other ways to install divbase-cli.
 
+!!! info "Add autocomplete for divbase-cli commands"
+    If you want to add autocomplete for divbase-cli commands, run the following command after installing divbase-cli:
+
+    ```bash
+    divbase-cli --install-completion
+    ```
+
 ## Step 4: Add your project(s) to your divbase-cli config
 
 Add your project(s) to the configuration file:
@@ -72,20 +79,30 @@ divbase-cli auth login EMAIL_ADDRESS
 Upload your VCF files to your project:
 
 ```bash
-# Upload a single VCF file
-divbase-cli files upload path/to/your/file.vcf.gz
-
-# Upload multiple files
+# Upload VCF files one by one (space separated)
 divbase-cli files upload path/to/file1.vcf.gz path/to/file2.vcf.gz
 
 # Upload all VCF files in a directory
-divbase-cli files upload --upload-dir /path/to/directory/
+divbase-cli files upload path/to/directory/*.vcf.gz
+
+# Upload all VCF files into a remote folder called 'vcfs/'
+divbase-cli files upload "*.vcf.gz" --to vcfs/
+
+# Upload all files recursively, preserving subdirectory structure
+divbase-cli files upload --recursive "path/to/directory/**"
+
+# run 'divbase-cli files upload -h' for more examples
 ```
+
+!!! note
+    By default, only the file name is used when storing the file — e.g. `path/to/data/sample.vcf.gz` becomes `sample.vcf.gz`. Use `--to` to place files inside a remote folder, or `--recursive` with a `**` glob to preserve subdirectory structure.
 
 Check your uploaded files:
 
 ```bash
-divbase-cli files ls
+divbase-cli files ls [PREFIX] -l # filter by prefix and show detailed view
+# or
+divbase-cli files tree # show all files in a directory tree view
 ```
 
 ## Step 7: Dimensions update

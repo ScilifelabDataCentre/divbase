@@ -90,10 +90,24 @@ PROJECTS = [
     },
     {
         "name": "local-project-2",
-        "description": "Second test project for local development",
+        "description": "Second test project for local development, with files in nested folders",
         "bucket_name": "divbase-local-2",
         "storage_quota_bytes": 10737418240,
-        "files": ["sample_metadata.tsv"],
+        "files": [
+            "HOM_20ind_17SNPs.1.vcf.gz",
+            "HOM_20ind_17SNPs.4.vcf.gz",
+            "work_data/HOM_20ind_17SNPs.5.vcf.gz",
+            "batch234/experiment1/HOM_20ind_17SNPs.6.vcf.gz",
+            "work_data2/HOM_20ind_17SNPs.7.vcf.gz",
+            "work_data/HOM_20ind_17SNPs.8.vcf.gz",
+            "data/HOM_20ind_17SNPs.13.vcf.gz",
+            "data/HOM_20ind_17SNPs.18.vcf.gz",
+            "data/split/nested/HOM_20ind_17SNPs.20.vcf.gz",
+            "data/split/nested/HOM_20ind_17SNPs.21.vcf.gz",
+            "batch1/HOM_20ind_17SNPs.22.vcf.gz",
+            "batch1/HOM_20ind_17SNPs.24.vcf.gz",
+            "metadata/sample_metadata_HOM_chr_split_version.tsv",
+        ],
     },
     {
         "name": "local-project-3",
@@ -317,10 +331,22 @@ def upload_files_to_buckets():
     for project in PROJECTS:
         project_name = project["name"]
         files = project["files"]
-        file_list = [str(FIXTURES_DIR / file) for file in files]
-        files_to_upload = " ".join(file_list)
-        command = shlex.split(f"divbase-cli files upload --project {project_name} {files_to_upload}")
-        subprocess.run(command, check=True, env=LOCAL_ENV)
+
+        for file_path in files:
+            filename = file_path.split("/")[-1]
+            fixture_path = str(FIXTURES_DIR / filename)
+
+            if "/" in file_path:
+                # like in setup_test_data.py, we need to upload the file to the correct folder in the bucket
+                # all fixtures are stored in the fixtures dir, but for some projects we want to have files in subfolders.
+                folder = "/".join(file_path.split("/")[:-1])
+                command = shlex.split(
+                    f"divbase-cli files upload --project {project_name} --to {folder}/ {fixture_path}"
+                )
+            else:
+                command = shlex.split(f"divbase-cli files upload --project {project_name} {fixture_path}")
+
+            subprocess.run(command, check=True, env=LOCAL_ENV)
 
 
 def create_first_project_version():

@@ -9,6 +9,14 @@ Almost all API endpoints are scoped based on project level permissions which is 
 get_project_member in deps.py. Other more special cases like auth whoami and task-history user have their logic.
 
 So below we cover a representative cmd for project scope (files ls) and then the special cases.
+
+### Why mostly just env var tests
+A user can provide a PAT via an env var or from storing it with the add-pat command.
+
+Logic to validate those cli cmds is in test_auth_cli.py.
+
+We have 1 e2e test here that covers using the PAT stored by the add-pat command, otherwise we use the env var approach for convenience.
+These tests primarily focus on PATs being scoped correctly etc...
 """
 
 from datetime import datetime, timedelta, timezone
@@ -29,6 +37,7 @@ from divbase_cli.divbase_cli import app
 runner = CliRunner()
 
 READ_USER_EMAIL = "read@divbase.se"
+QUERY_USER_EMAIL = "query@divbase.se"
 EDIT_USER_EMAIL = "edit@divbase.se"
 MANAGE_USER_EMAIL = "manage@divbase.se"
 
@@ -56,7 +65,7 @@ def assert_401_error(result):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "401" in str(result.exception)
-    assert "authentication_error" in str(result.exception)
+    assert "AuthenticationError" in str(result.exception)
 
 
 def assert_403_error(result):
@@ -64,7 +73,7 @@ def assert_403_error(result):
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "403" in str(result.exception)
-    assert "authorization_error" in str(result.exception)
+    assert "AuthorizationError" in str(result.exception)
 
 
 @pytest.fixture
@@ -216,7 +225,7 @@ def test_project_scoped_task_history_excluded_project_rejected(
 def test_read_role_pat_rejects_edit_level_action(
     CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch
 ):
-    """A PAT capped at read role cannot submit a query (requires edit)."""
+    """A PAT capped at read role cannot submit a query (requires query role or higher)."""
     project = CONSTANTS["DEFAULT_PROJECT"]
     permissions = {
         "all_projects": False,
@@ -264,11 +273,68 @@ def test_expired_pat_rejected(CONSTANTS, logged_out_user_with_existing_config, p
     assert_401_error(result)
 
 
-def test_pat_does_not_work_on_frontend_endpoints(
-    CONSTANTS, logged_out_user_with_existing_config, pat_factory, monkeypatch
+def test_pat_stored_via_add_pat_cmd_works(CONSTANTS, logged_out_user_with_existing_config, pat_factory):
+    """Validate that a PAT stored via the add-pat cmd works for authentication and respects scopes."""
+    raw_token: SecretStr = pat_factory(user_email=EDIT_USER_EMAIL, permissions=NO_SCOPE_PERMISSIONS)
+    try:
+        result = runner.invoke(
+            app=app,
+            args="auth add-pat my-pat",
+            input=f"{raw_token.get_secret_value()}\n",
+        )
+        assert result.exit_code == 0
+
+        result = runner.invoke(app, "auth whoami")
+        assert result.exit_code == 0
+        assert EDIT_USER_EMAIL in result.output
+
+        result = runner.invoke(app, f"files ls --project {CONSTANTS['DEFAULT_PROJECT']}")
+        assert_403_error(result)
+    finally:
+        # clean up the stored PAT so it doesn't interfere with other tests, even if above fails
+        result = runner.invoke(app=app, args="auth rm-pat")
+        assert result.exit_code == 0
+
+
+def test_read_role_pat_rejects_upload(
+    CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch, tmp_path
 ):
+    """A PAT capped at read role cannot upload files (requires query role or higher)."""
+    project = CONSTANTS["DEFAULT_PROJECT"]
+    permissions = {
+        "all_projects": False,
+        "projects": {str(project_map[project]): "read"},
+        "task_history": False,
+    }
+    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
+
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+    result = runner.invoke(app, f"files upload {test_file} --project {project}")
+    assert_403_error(result)
+
+
+def test_query_role_pat_rejects_file_delete(
+    CONSTANTS, logged_out_user_with_existing_config, pat_factory, project_map, monkeypatch
+):
+    """A PAT capped at query role cannot delete files (requires edit role or higher)."""
+    project = CONSTANTS["DEFAULT_PROJECT"]
+    permissions = {
+        "all_projects": False,
+        "projects": {str(project_map[project]): "query"},
+        "task_history": False,
+    }
+    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=permissions)
+    monkeypatch.setattr(cli_settings, "DIVBASE_API_PAT", raw_token)
+
+    result = runner.invoke(app, f"files rm file1.tsv --project {project}")
+    assert_403_error(result)
+
+
+def test_pat_does_not_work_on_frontend_endpoints(CONSTANTS, logged_out_user_with_existing_config, pat_factory):
     """PATs should not work on frontend endpoints"""
-    raw_token = pat_factory(user_email=EDIT_USER_EMAIL, permissions=FULL_ACCESS_PAT_PERMISSIONS)
+    raw_token: SecretStr = pat_factory(user_email=EDIT_USER_EMAIL, permissions=FULL_ACCESS_PAT_PERMISSIONS)
 
     home_url = "http://localhost:8001/"
     # technically don't need the token here

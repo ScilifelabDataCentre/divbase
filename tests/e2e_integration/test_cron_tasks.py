@@ -5,11 +5,13 @@ Tests the actual cleanup logic by creating database entries with backdated times
 and verifying that the cleanup tasks correctly delete old entries.
 """
 
+import os
 import random
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -21,12 +23,15 @@ from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
 from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
+from divbase_api.models.users import UserDB
 from divbase_api.security import TokenType, generate_personal_access_token, hash_personal_access_token
 from divbase_api.worker.cron_tasks import (
+    cleanup_non_email_confirmed_users,
     cleanup_old_revoked_jwts_and_pats,
     cleanup_old_task_history_task,
     cleanup_soft_deleted_project_versions,
     cleanup_stuck_tasks_task,
+    remove_old_log_files,
     update_storage_usage_metrics,
 )
 
@@ -458,6 +463,72 @@ def test_cleanup_old_jwts_and_pats_with_no_old_entries(db_session_sync, create_r
 
 
 @pytest.fixture
+def create_user(db_session_sync):
+    """Create user db entries with backdated created_at (and matching updated_at) timestamps."""
+
+    def _create_user(days_old: int, email_verified: bool = False, is_active: bool = True, touched: bool = False) -> int:
+        created_at = datetime.now(timezone.utc) - timedelta(days=days_old)
+        # A "touched" user simulates a row modified after creation (e.g. an admin edit),
+        # which should make it ineligible for cleanup regardless of email_verified/created_at.
+        updated_at = created_at + timedelta(days=1) if touched else created_at
+        unique_id = uuid.uuid4().hex[:8]
+        user = UserDB(
+            name=f"test-user-{unique_id}",
+            email=f"test-user-{unique_id}@example.com",
+            hashed_password="not-a-real-hash",
+            organisation="test-org",
+            organisation_role="test-role",
+            email_verified=email_verified,
+            is_active=is_active,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        db_session_sync.add(user)
+        db_session_sync.commit()
+        db_session_sync.refresh(user)
+        return user.id
+
+    return _create_user
+
+
+def test_cleanup_non_email_confirmed_users_deletes_only_old_non_confirmed_users(db_session_sync, create_user):
+    """Test that cleanup_non_email_confirmed_users only deletes untouched non email confirmed users"""
+    test_retention_days = 5
+
+    # should delete
+    old_user_not_confirmed = create_user(days_old=test_retention_days + 1, email_verified=False)
+    old_user2_not_confirmed = create_user(days_old=test_retention_days + 2, email_verified=False)
+    delete_users = [old_user_not_confirmed, old_user2_not_confirmed]
+    # should keep
+    old_user_confirmed = create_user(days_old=test_retention_days + 3, email_verified=True)
+    old_inactive_confirmed = create_user(days_old=test_retention_days + 3, email_verified=True, is_active=False)
+    old_touched_not_confirmed = create_user(days_old=test_retention_days + 4, email_verified=False, touched=True)
+    recent_user_not_confirmed = create_user(days_old=test_retention_days - 1, email_verified=False)
+    recent_user_confirmed = create_user(days_old=test_retention_days - 2, email_verified=True)
+    keep_users = [
+        old_user_confirmed,
+        old_inactive_confirmed,
+        recent_user_not_confirmed,
+        recent_user_confirmed,
+        old_touched_not_confirmed,
+    ]
+
+    result = cleanup_non_email_confirmed_users(retention_days=test_retention_days)
+
+    assert result["status"] == "completed"
+    assert result["number_of_non_confirmed_users_deleted"] == len(delete_users)
+    assert result["non_confirmed_user_retention_period_days"] == test_retention_days
+
+    for user_id in delete_users:
+        user = db_session_sync.execute(select(UserDB).where(UserDB.id == user_id)).scalar_one_or_none()
+        assert user is None
+
+    for user_id in keep_users:
+        user = db_session_sync.execute(select(UserDB).where(UserDB.id == user_id)).scalar_one_or_none()
+        assert user is not None
+
+
+@pytest.fixture
 def create_soft_deleted_project_version(db_session_sync):
     """
     Fixture to create soft-deleted project version entries with backdated timestamps.
@@ -586,3 +657,55 @@ def test_update_storage_usage_metrics(db_session_sync: Session, CONSTANTS: dict)
             assert project.storage_used_bytes == 0
         if project.name in ["project1", "project2"]:
             assert project.storage_used_bytes > 0
+
+
+def test_remove_old_log_files_deletes_only_expired_log_files(tmp_path: Path):
+    """
+    Test that only log files older than retention period are deleted.
+
+    os.utime used to set the last modified time of the files to simulate old and recently modified files.
+    """
+    retention_days = 30
+    now = datetime.now(timezone.utc)
+
+    old_log_files = ["divbase_api-old.log", "divbase_api-old.log.1", "divbase_api-old.log.2"]
+    for i, log_file in enumerate(old_log_files):
+        file_path = tmp_path / log_file
+        file_path.write_text(f"old log {i}")
+        old_timestamp = (now - timedelta(days=retention_days + 5 + i)).timestamp()
+        os.utime(path=file_path, times=(old_timestamp, old_timestamp))
+
+    recent_logs_files = ["divbase_api-recent.log", "divbase_api-recent.log.1", "divbase_api-recent.log.2"]
+    for i, log_file in enumerate(recent_logs_files):
+        file_path = tmp_path / log_file
+        file_path.write_text(f"recent log {i}")
+        recent_timestamp = (now - timedelta(days=retention_days - 5 - i)).timestamp()
+        os.utime(path=file_path, times=(recent_timestamp, recent_timestamp))
+
+    not_a_log_file = tmp_path / "notes.txt"
+    not_a_log_file.write_text("should be ignored even if old")
+    ignored_timestamp = (now - timedelta(days=retention_days + 10)).timestamp()
+    os.utime(path=not_a_log_file, times=(ignored_timestamp, ignored_timestamp))
+
+    with patch("divbase_api.worker.cron_tasks.LOG_FILES_DIR", tmp_path):
+        result = remove_old_log_files(log_retention_days=retention_days)
+
+    assert result["status"] == "completed"
+    assert result["number_of_log_files_deleted"] == 3
+    assert result["retention_days"] == retention_days
+    for log_file in old_log_files:
+        assert not (tmp_path / log_file).exists(), f"{log_file} should have been deleted"
+    for log_file in recent_logs_files:
+        assert (tmp_path / log_file).exists(), f"{log_file} should not have been deleted"
+    assert (tmp_path / not_a_log_file).exists()
+
+
+def test_remove_old_log_files_handles_missing_directory():
+    """Test that if no logs dir exists (because writing to logs is optional), then exits gracefully without error."""
+    missing_dir = Path("does-not-exist")
+
+    with patch("divbase_api.worker.cron_tasks.LOG_FILES_DIR", missing_dir):
+        result = remove_old_log_files()
+
+    assert result["status"] == "completed"
+    assert result["number_of_log_files_deleted"] == "N/A - log directory does not exist"

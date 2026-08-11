@@ -6,15 +6,16 @@ There are separate VCF dimensions CRUD functions for the Celery workers in
 packages/divbase-api/src/divbase_api/worker/crud_dimensions.py
 """
 
-import logging
-
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from divbase_api.exceptions import DimensionsUpdateAlreadyInProcessError
+from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -> dict:
@@ -53,8 +54,8 @@ async def get_vcf_metadata_by_project_async(db: AsyncSession, project_id: int) -
                 "variant_count": entry.variant_count,
                 "sample_count": entry.sample_count,
                 "file_size_bytes": entry.file_size_bytes,
-                "created_at": entry.created_at.isoformat(),
-                "updated_at": entry.updated_at.isoformat(),
+                "created_at": entry.created_at,
+                "updated_at": entry.updated_at,
             }
             for entry in entries
         ],
@@ -127,3 +128,36 @@ async def get_unique_vcf_files_by_project_async(db: AsyncSession, project_id: in
     for file_name, version_id in rows:
         unique_vcf_files.append({"vcf_file_s3_key": file_name, "s3_version_id": version_id})
     return unique_vcf_files
+
+
+async def check_no_dimensions_update_task_already_in_progress(
+    db: AsyncSession, project_id: int, project_name: str
+) -> None:
+    """
+    Check that there is not already a dimensions update job in process for the given project and raise if so.
+    This check includes jobs that are both queued and running.
+
+    There only needs to be one dimensions update job run at a time per project, otherwise it is just wasted compute + bandwidth.
+    """
+    ongoing_dimensions_tasks_subq = (
+        select(CeleryTaskMeta.task_id)
+        .where(CeleryTaskMeta.status.in_(["PENDING", "STARTED", "RETRY"]))
+        .where(CeleryTaskMeta.name == "tasks.update_vcf_dimensions_task")
+        .subquery()
+    )
+
+    # the .id is the user facing id (aka rolling int) and not the celery internal uuid which is .task_id
+    stmt = (
+        select(TaskHistoryDB.id)
+        .join(ongoing_dimensions_tasks_subq, TaskHistoryDB.task_id == ongoing_dimensions_tasks_subq.c.task_id)
+        .where(TaskHistoryDB.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    # NOTE: don't use one_or_none() here since we can't guarantee there is only one ongoing task.
+    ongoing_task_id = result.first()
+
+    if ongoing_task_id is not None:
+        raise DimensionsUpdateAlreadyInProcessError(
+            project_name=project_name,
+            ongoing_task_id=ongoing_task_id[0],
+        )

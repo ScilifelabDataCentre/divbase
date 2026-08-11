@@ -1,17 +1,25 @@
 """
-Manage the starlette-admin interface for the DivBase API.
+Manages the starlette-admin interface for the DivBase API.
 
-The views created for each model rely on overriding some of the default behavior provided by starlette-admin.
-These overrides are on methods inside BaseModelView (parent of ModelView, which each custom class is inheriting from).
+### Inheritance structure of the views:
+- The views created for each model rely on overriding some of the default behavior provided by starlette-admin.
+- We have a DivBaseModelView class that all concrete models inherit from with some default behaviours and settings.
+- DivBaseModelView in turn inherits from (starlette-admin's) ModelView which in turn inherits from BaseModelView.
+
+### Datetime/timezone handling:
+- We use the TimezoneConfig from starlette-admin to control datetime fields in the admin panel.
+- All datetime fields are displayed in the admin panel in Europe/Stockholm timezone (CET/CEST).
+- All datetime fields are stored in the database in UTC timezone (starlette-admin handles the conversion for us).
+- To make clear to admins that the datetimes they are looking at are in Europe/Stockholm timezone,
+we add a label to all datetime fields in the admin panel to indicate this.
 """
 
 import json
-import logging
 import pickle
 from datetime import datetime, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
+import structlog
 from fastapi import FastAPI, Response
 from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
@@ -19,15 +27,18 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
 from starlette_admin import (
     BaseAdmin,
+    BaseField,
     BooleanField,
     DateTimeField,
     EmailField,
     EnumField,
+    HasMany,
     HasOne,
     IntegerField,
     JSONField,
     StringField,
     TextAreaField,
+    TimezoneConfig,
 )
 from starlette_admin._types import RequestAction
 from starlette_admin.auth import AdminUser, AuthProvider
@@ -46,29 +57,71 @@ from divbase_api.models.revoked_tokens import RevokedTokenDB, TokenRevokeReason
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB, TaskStartedAtDB
 from divbase_api.models.users import UserDB
 from divbase_api.security import TokenType, get_password_hash
+from divbase_lib.divbase_constants import DIVBASE_SERVER_TIMEZONE
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
-PAGINATION_DEFAULTS = [5, 10, 25, -1]  # (for number of items per page toggle)
-
-
-def _format_cet_datetime(value: Any, field: Any, field_names: list[str]) -> str | None:
-    """
-    Helper function that can be called by overiding 'async def serialize_field_value()'
-    for views that display datetimes.
-    To change timezone, use patterns like this:
-    dt = value.astimezone(timezone.utc) - displays UTC
-    OR
-    from zoneinfo import ZoneInfo
-    dt = value.astimezone(ZoneInfo("Europe/Stockholm")) - displays CET
-    """
-    if isinstance(value, datetime) and field.name in field_names:
-        dt = value.astimezone(ZoneInfo("Europe/Stockholm"))
-        return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-    return None
+# We add this label to all DateTimeField instances to make it clear to the admin what timezone they are working in.
+DATETIME_TIMEZONE_LABEL = f"({DIVBASE_SERVER_TIMEZONE} time)"
 
 
-class UserView(ModelView):
+def _basedb_model_fields() -> list[BaseField]:
+    """Helper fn to append the common BaseDBModel fields to a ModelView's field list."""
+    id = IntegerField("id", label="ID", disabled=True)
+    created_at = DateTimeField(
+        "created_at",
+        label=f"Created At {DATETIME_TIMEZONE_LABEL}",
+        help_text="Timestamp when the entry was created. Value determined by system.",
+        disabled=True,
+    )
+    updated_at = DateTimeField(
+        "updated_at",
+        label=f"Updated At {DATETIME_TIMEZONE_LABEL}",
+        help_text="Timestamp when the entry was last updated. Value determined by system.",
+        disabled=True,
+    )
+    return [id, created_at, updated_at]
+
+
+def _is_deleted_date_deleted_fields() -> list[BaseField]:
+    """Helper fn to append 'is_deleted' and 'date_deleted' fields to a ModelView's field list."""
+    is_deleted = BooleanField(
+        "is_deleted", required=True, label="Is Deleted", help_text="Mark the entry as soft deleted or not."
+    )
+    date_deleted = DateTimeField(
+        "date_deleted",
+        label=f"Date Deleted {DATETIME_TIMEZONE_LABEL}",
+        help_text="Timestamp when the entry was soft deleted (else None). Value determined by system, cannot be edited.",
+        disabled=True,
+    )
+    return [is_deleted, date_deleted]
+
+
+class DivBaseModelView(ModelView):
+    """Shared admin view for all DivBase DB models."""
+
+    page_size_options = [5, 10, 25, -1]  # (for number of items per page toggle)
+    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+
+    exclude_fields_from_list = ["created_at", "updated_at"]
+    exclude_fields_from_create = ["id", "created_at", "updated_at"]
+    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
+    exclude_fields_from_detail = []
+
+    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
+        """
+        Override the edit method to keep is_deleted and date_deleted in sync when editing is_deleted.
+        Models without "is_deleted"/"date_deleted" fields are not impacted.
+        """
+        if "is_deleted" in data:
+            if data["is_deleted"]:
+                data["date_deleted"] = datetime.now(tz=timezone.utc)
+            else:
+                data["date_deleted"] = None
+        return await super().edit(request=request, pk=pk, data=data)
+
+
+class UserView(DivBaseModelView):
     """
     Custom admin panel View for the UserDB model.
 
@@ -79,44 +132,33 @@ class UserView(ModelView):
     - Changing password for existing user is not supported: Users should use the email password reset flow instead.
     """
 
-    page_size_options = PAGINATION_DEFAULTS
-    fields = [
-        "id",
-        StringField("name", required=True, help_text="Full name of the user."),
-        EmailField("email", required=True, help_text="Email address of the user."),
-        StringField("organisation", required=True, help_text="Organisation of the user."),
-        StringField("organisation_role", required=True, help_text="Role of the user within their organisation."),
-        StringField("password", required=True, help_text="Password for the user."),
-        StringField(
-            "hashed_password",
-            required=False,
-            disabled=True,
-            help_text="Hashed password is auto created by the system from password, cannot be edited.",
-        ),
-        BooleanField("is_admin", help_text="Is the user an admin?"),
-        BooleanField("is_active", help_text="Is the user active?"),
-        BooleanField("is_deleted", help_text="Is the user deleted?"),
-        BooleanField("email_verified", help_text="Has the user verified their email address?"),
-        DateTimeField(
-            "last_password_change",
-            help_text="Timestamp when the user last changed their password.",
-            disabled=True,
-        ),
-        DateTimeField(
-            "date_deleted",
-            help_text="Timestamp when the user was soft deleted (else None). Value determined by system, cannot be edited.",
-            disabled=True,
-        ),
-        "project_memberships",
-        DateTimeField(
-            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
-        ),
-        DateTimeField(
-            "updated_at",
-            help_text="Timestamp when the entry was last updated. Value determined by system.",
-            disabled=True,
-        ),
-    ]
+    fields = (
+        [
+            StringField("name", required=True, help_text="Full name of the user."),
+            EmailField("email", required=True, help_text="Email address of the user."),
+            StringField("organisation", required=True, help_text="Organisation of the user."),
+            StringField("organisation_role", required=True, help_text="Role of the user within their organisation."),
+            StringField("password", required=True, help_text="Password for the user."),
+            StringField(
+                "hashed_password",
+                required=False,
+                disabled=True,
+                help_text="Hashed password is auto created by the system from password, cannot be edited.",
+            ),
+            BooleanField("is_admin", help_text="Is the user an admin?"),
+            BooleanField("is_active", help_text="Is the user active?"),
+            BooleanField("email_verified", help_text="Has the user verified their email address?"),
+            DateTimeField(
+                "last_password_change",
+                label=f"Last Password Change {DATETIME_TIMEZONE_LABEL}",
+                help_text="Timestamp when the user last changed their password.",
+                disabled=True,
+            ),
+            HasMany("project_memberships", identity="memberships", label="Project Memberships"),
+        ]
+        + _is_deleted_date_deleted_fields()
+        + _basedb_model_fields()
+    )
 
     exclude_fields_from_list = [
         "hashed_password",
@@ -149,6 +191,7 @@ class UserView(ModelView):
     exclude_fields_from_detail = ["hashed_password", "password"]
 
     def can_delete(self, request: Request) -> bool:
+        """Can only soft delete users"""
         return False
 
     async def create(self, request: Request, data: dict) -> Any:
@@ -162,19 +205,6 @@ class UserView(ModelView):
 
         return await super().create(request=request, data=data)
 
-    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
-        """
-        Override the default edit method to ensure that the `date_deleted` field is updated
-        when/if a users soft deletion status is changed.
-        """
-        if "is_deleted" in data:
-            if data["is_deleted"]:
-                data["date_deleted"] = datetime.now(tz=timezone.utc)
-            else:
-                data["date_deleted"] = None
-
-        return await super().edit(request=request, pk=pk, data=data)
-
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a user cannot be both active and deleted at the same time."""
 
@@ -184,7 +214,7 @@ class UserView(ModelView):
             return await super().validate(request=request, data=data)
 
         if data["is_active"] and data["is_deleted"]:
-            raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
+            raise FormValidationError(errors={"is_active": "Cannot set a user as both active and deleted."})
         return await super().validate(request=request, data=data)
 
     def handle_exception(self, exc: Exception) -> None:
@@ -197,78 +227,48 @@ class UserView(ModelView):
             raise FormValidationError(errors={"email": "A user with this email already exists"})
         return super().handle_exception(exc)
 
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        formatted = _format_cet_datetime(value, field, ["last_password_change", "date_deleted"])
-        if formatted is not None:
-            return formatted
-        return await super().serialize_field_value(value, field, action, request)
 
-
-class ProjectView(ModelView):
+class ProjectView(DivBaseModelView):
     """
     Custom admin panel View for the ProjectDB model.
 
     Project memberships are managed in the ProjectMembership view.
     """
 
-    page_size_options = PAGINATION_DEFAULTS
-    fields = [
-        "id",
-        StringField(
-            "name", required=True, label="Project Name", help_text="Unique name for the project, no spaces allowed."
-        ),
-        TextAreaField("description", required=False, label="Description"),
-        StringField(
-            "bucket_name", required=True, label="Bucket Name", help_text="Unique S3 bucket name for the project."
-        ),
-        IntegerField(
-            "storage_quota_bytes",
-            required=True,
-            label="Storage Quota (Bytes)",
-            help_text="Maximum storage allowed for this project in bytes.",
-        ),
-        IntegerField(
-            "storage_used_bytes",
-            required=False,
-            disabled=True,
-            label="Storage Used (Bytes)",
-            help_text="Current storage usage for this project in bytes.",
-        ),
-        BooleanField("is_active", required=True, label="Is Active", help_text="Mark the project as active or not."),
-        BooleanField(
-            "is_deleted", required=True, label="Is Deleted", help_text="Mark the project as soft deleted or not."
-        ),
-        DateTimeField(
-            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
-        ),
-        DateTimeField(
-            "updated_at",
-            help_text="Timestamp when the entry was last updated. Value determined by system.",
-            disabled=True,
-        ),
-    ]
+    fields = (
+        [
+            StringField(
+                "name", required=True, label="Project Name", help_text="Unique name for the project, no spaces allowed."
+            ),
+            TextAreaField("description", required=False, label="Description"),
+            StringField(
+                "bucket_name", required=True, label="Bucket Name", help_text="Unique S3 bucket name for the project."
+            ),
+            IntegerField(
+                "storage_quota_bytes",
+                required=True,
+                label="Storage Quota (Bytes)",
+                help_text="Maximum storage allowed for this project in bytes.",
+            ),
+            IntegerField(
+                "storage_used_bytes",
+                required=False,
+                disabled=True,
+                label="Storage Used (Bytes)",
+                help_text="Current storage usage for this project in bytes.",
+            ),
+            BooleanField("is_active", required=True, label="Is Active", help_text="Mark the project as active or not."),
+        ]
+        + _is_deleted_date_deleted_fields()
+        + _basedb_model_fields()
+    )
 
-    exclude_fields_from_list = ["description", "storage_used_bytes"]
+    exclude_fields_from_list = ["created_at", "updated_at", "description", "storage_used_bytes"]
     exclude_fields_from_create = ["id", "created_at", "updated_at", "storage_used_bytes", "is_active", "is_deleted"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "storage_used_bytes"]
-    exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
-        """Disable deletion of projects. Projects can be soft deleted instead."""
         return False
-
-    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
-        """
-        Override the default edit method to ensure that the `date_deleted` field is updated
-        when/if a version's soft deletion status is changed.
-        """
-        if "is_deleted" in data:
-            if data["is_deleted"]:
-                data["date_deleted"] = datetime.now(tz=timezone.utc)
-            else:
-                data["date_deleted"] = None
-
-        return await super().edit(request=request, pk=pk, data=data)
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a project name cannot have spaces and bucket name follows S3 bucket name rules."""
@@ -287,9 +287,7 @@ class ProjectView(ModelView):
             return await super().validate(request=request, data=data)
 
         if data["is_active"] and data["is_deleted"]:
-            raise FormValidationError(errors={"is_active": "Cannot set a user to active that is also set as deleted."})
-        return await super().validate(request=request, data=data)
-
+            raise FormValidationError(errors={"is_active": "Cannot set a project as both active and deleted."})
         return await super().validate(request=request, data=data)
 
     def handle_exception(self, exc: Exception) -> None:
@@ -312,7 +310,7 @@ class ProjectView(ModelView):
         return super().handle_exception(exc)
 
 
-class ProjectMembershipView(ModelView):
+class ProjectMembershipView(DivBaseModelView):
     """
     Custom admin panel View for the ProjectMembershipDB model.
 
@@ -320,20 +318,14 @@ class ProjectMembershipView(ModelView):
     and (re)define their roles within the project.
     """
 
-    page_size_options = PAGINATION_DEFAULTS
     fields = [
-        IntegerField("id", label="ID", disabled=True),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         EnumField("role", label="Role", required=True, enum=ProjectRoles),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("updated_at", label="Updated At", disabled=True),
-    ]
+    ] + _basedb_model_fields()
 
     exclude_fields_from_list = []
-    exclude_fields_from_create = ["id", "created_at", "updated_at"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "project_id"]
-    exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
         """
@@ -352,49 +344,28 @@ class ProjectMembershipView(ModelView):
 
         return super().handle_exception(exc)
 
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
-        if formatted is not None:
-            return formatted
-        return await super().serialize_field_value(value, field, action, request)
 
+class ProjectVersionsView(DivBaseModelView):
+    """Custom admin panel View for the ProjectVersionDB model."""
 
-class ProjectVersionsView(ModelView):
-    """
-    Custom admin panel View for the ProjectVersionDB model.
-    """
+    fields = (
+        [
+            StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
+            TextAreaField("description", required=False, label="Description"),
+            HasOne("project", identity="project", label="Project"),
+            IntegerField(
+                "user_id", label="User ID"
+            ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
+            JSONField(
+                "files", required=True, label="Files", help_text="Mapping of file names to version IDs.", disabled=True
+            ),
+        ]
+        + _is_deleted_date_deleted_fields()
+        + _basedb_model_fields()
+    )
 
-    fields = [
-        "id",
-        StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
-        TextAreaField("description", required=False, label="Description"),
-        HasOne("project", identity="project", label="Project"),
-        IntegerField(
-            "user_id", label="User ID"
-        ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
-        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the version as deleted or not."),
-        DateTimeField(
-            "date_deleted",
-            help_text="Timestamp when the version was soft deleted (else None). Value determined by system, cannot be edited.",
-            disabled=True,
-        ),
-        JSONField(
-            "files", required=True, label="Files", help_text="Mapping of file names to version IDs.", disabled=True
-        ),
-        DateTimeField(
-            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
-        ),
-        DateTimeField(
-            "updated_at",
-            help_text="Timestamp when the entry was last updated. Value determined by system.",
-            disabled=True,
-        ),
-    ]
-
-    page_size_options = PAGINATION_DEFAULTS
     exclude_fields_from_list = ["files"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "files", "project", "user_id"]
-    exclude_fields_from_detail = []
 
     def can_delete(self, request: Request) -> bool:
         """Disable deletion of project versions. Project versions can be soft deleted instead."""
@@ -404,42 +375,22 @@ class ProjectVersionsView(ModelView):
         """Disable creation of project versions. This is something users can create instead."""
         return False
 
-    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
-        """
-        Override the default edit method to ensure that the `date_deleted` field is updated
-        when/if a version's soft deletion status is changed.
-        """
-        if "is_deleted" in data:
-            if data["is_deleted"]:
-                data["date_deleted"] = datetime.now(tz=timezone.utc)
-            else:
-                data["date_deleted"] = None
 
-        return await super().edit(request=request, pk=pk, data=data)
+class RevokedTokenView(DivBaseModelView):
+    """Custom admin panel View for the RevokedTokenDB model."""
 
-
-class RevokedTokenView(ModelView):
-    """
-    Custom admin panel View for the RevokedTokenDB model.
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
     fields = [
-        IntegerField("id", label="ID", disabled=True),
         StringField("token_jti", label="Token JTI", required=True),
         EnumField("token_type", label="Token Type", required=True, enum=TokenType),
-        DateTimeField("revoked_at", label="Revoked At", disabled=True),
+        DateTimeField("revoked_at", label=f"Revoked At {DATETIME_TIMEZONE_LABEL}", disabled=True),
         EnumField("revoked_reason", label="Revoke Reason", required=True, enum=TokenRevokeReason),
         IntegerField("user_id", label="User ID", required=False),
         HasOne("user", identity="user", label="User"),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("updated_at", label="Updated At", disabled=True),
-    ]
+    ] + _basedb_model_fields()
 
     exclude_fields_from_list = ["user_id"]
     exclude_fields_from_create = ["id", "created_at", "updated_at", "user_id", "revoked_at"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "revoked_at", "revoked_reason"]
-    exclude_fields_from_detail = []
 
     def handle_exception(self, exc: Exception) -> None:
         """
@@ -462,60 +413,37 @@ class RevokedTokenView(ModelView):
 
         return super().handle_exception(exc)
 
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at"])
-        if formatted is not None:
-            return formatted
-        return await super().serialize_field_value(value, field, action, request)
 
-
-class TaskHistoryView(ModelView):
-    page_size_options = PAGINATION_DEFAULTS
-
+class TaskHistoryView(DivBaseModelView):
     fields = [
-        IntegerField("id", label="ID", disabled=True),
         StringField("task_id"),
         HasOne("user", identity="user", label="User"),
         HasOne("project", identity="project", label="Project"),
         HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
-        DateTimeField("created_at"),
-    ]
+    ] + _basedb_model_fields()
 
-    fields_default_sort = [("id", True)]  # False = descending, True = ascending
-
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        """
-        Override to format how values are displayed in the view.
-        """
-        if isinstance(value, datetime) and field.name in ["created_at"]:
-            formatted = _format_cet_datetime(value, field, ["created_at"])
-            if formatted is not None:
-                return formatted
-        return await super().serialize_field_value(value, field, action, request)
+    exclude_fields_from_list = ["id", "updated_at"]
 
     def can_create(self, request: Request) -> bool:
-        """Disable manual creation of task history entries."""
+        """task history entries should be immutable"""
         return False
 
     def can_edit(self, request: Request) -> bool:
-        """Optionally disable editing if task history should be read-only."""
+        """task history entries should be immutable"""
         return False
 
     def can_delete(self, request: Request) -> bool:
-        """Optionally disable deletion if task history should be immutable."""
+        """task history entries should be immutable"""
         return False
 
 
-class CeleryTaskMetaView(ModelView):
+class CeleryTaskMetaView(DivBaseModelView):
     """
     Custom admin panel View for CeleryTaskMeta (Celery's results backend table).
 
     Needs to be defined in order to display the entries in the admin panel, but is
     intended to only be viewed as a child of TaskHistoryView
     """
-
-    page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
 
     fields = [
         IntegerField("id", label="ID", disabled=True),
@@ -525,25 +453,16 @@ class CeleryTaskMetaView(ModelView):
         StringField("worker", label="Worker", disabled=True),
         StringField("queue", label="Queue", disabled=True),
         IntegerField("retries", label="Retries", disabled=True),
-        DateTimeField("date_done", label="Date Done", disabled=True),
+        DateTimeField("date_done", label=f"Date Done {DATETIME_TIMEZONE_LABEL}", disabled=True),
         TextAreaField("args", label="Args", disabled=True),
         TextAreaField("kwargs", label="Kwargs", disabled=True),
         TextAreaField("result", label="Result", disabled=True),
         TextAreaField("traceback", label="Traceback", disabled=True),
     ]
-    fields_default_sort = [("id", True)]  # False = descending, True = ascending
+    exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
 
     async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        """
-        Override to deserialize Celery's binary fields for display.
-
-        NOTE! serialize_field_value is a function in starlette-admin, so for the override to work, it cannot be renamed
-        """
-        if isinstance(value, datetime) and field.name == "date_done":
-            formatted = _format_cet_datetime(value, field, ["date_done"])
-            if formatted is not None:
-                return formatted
-
+        """Override to deserialize Celery's binary fields for display."""
         # For non-bytes values or fields we don't need to deserialize, use default behavior
         if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
             return await super().serialize_field_value(value, field, action, request)
@@ -573,99 +492,61 @@ class CeleryTaskMetaView(ModelView):
             return f"<Binary data: {len(value)} bytes>"
 
     def can_create(self, request: Request) -> bool:
-        """Disable manual creation."""
+        """Celery managed table, no edits or creation allowed."""
         return False
 
     def can_edit(self, request: Request) -> bool:
-        """Disable editing."""
+        """Celery managed table, no edits or creation allowed."""
         return False
 
     def can_delete(self, request: Request) -> bool:
-        """Disable deletion."""
+        """Celery managed table, no edits or creation allowed."""
         return False
 
 
-class TaskStartedAtView(ModelView):
-    """
-    Custom admin panel View for TaskStartedAtDB.
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
-    exclude_fields_from_list = ["created_at", "updated_at"]
+class TaskStartedAtView(DivBaseModelView):
+    """Custom admin panel View for TaskStartedAtDB."""
 
     fields = [
-        IntegerField("id", label="ID", disabled=True),
         StringField("task_id"),
-        DateTimeField("started_at"),
-    ]
-
-    fields_default_sort = [("id", True)]  # False = descending, True = ascending
-
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        """
-        Override to format how values are displayed in the view.
-        """
-        if isinstance(value, datetime) and field.name in ["started_at"]:
-            formatted = _format_cet_datetime(value, field, ["started_at"])
-            if formatted is not None:
-                return formatted
-        return await super().serialize_field_value(value, field, action, request)
+        DateTimeField("started_at", label=f"Started At {DATETIME_TIMEZONE_LABEL}", disabled=True),
+    ] + _basedb_model_fields()
 
     def can_create(self, request: Request) -> bool:
-        """Disable manual creation of task history entries."""
+        """System managed table, no edits or creation allowed."""
         return False
 
     def can_edit(self, request: Request) -> bool:
-        """Optionally disable editing if task history should be read-only."""
+        """System managed table, no edits or creation allowed."""
         return False
 
     def can_delete(self, request: Request) -> bool:
-        """Optionally disable deletion if task history should be immutable."""
+        """System managed table, no edits or creation allowed."""
         return False
 
 
-class AnnouncementView(ModelView):
-    """
-    Custom admin panel View for the AnnouncementDB model.
-    """
+class AnnouncementView(DivBaseModelView):
+    """Custom admin panel View for the AnnouncementDB model."""
 
-    page_size_options = PAGINATION_DEFAULTS
     fields = [
-        IntegerField("id", label="ID", disabled=True),
         StringField("heading", label="Heading", required=True),
         TextAreaField("message", label="Message", required=False),
         EnumField("target", label="Target", required=True, enum=AnnouncementTarget),
         EnumField("level", label="Level", required=True, enum=AnnouncementLevel),
         DateTimeField(
             "auto_expire_at",
+            label=f"Auto Expire At {DATETIME_TIMEZONE_LABEL}",
             help_text="Optional timestamp when the announcement will auto expire. After this timestamp the announcement will no longer be displayed on the frontend or CLI. Value can be left empty.",
         ),
-        DateTimeField(
-            "created_at", help_text="Timestamp when the entry was created. Value determined by system.", disabled=True
-        ),
-        DateTimeField(
-            "updated_at",
-            help_text="Timestamp when the entry was last updated. Value determined by system.",
-            disabled=True,
-        ),
-    ]
+    ] + _basedb_model_fields()
 
     exclude_fields_from_list = ["message"]
-    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
-    exclude_fields_from_detail = []
 
 
-class QueueStatusView(ModelView):
-    """
-    Custom admin panel View for the QueueStatusDB model.
+class QueueStatusView(DivBaseModelView):
+    """Custom admin panel View for the QueueStatusDB model."""
 
-    This is a singleton table (only 1 row allowed).
-    Deletion and creation are disabled - only editing the existing row is allowed.
-    """
-
-    page_size_options = PAGINATION_DEFAULTS
     fields = [
-        IntegerField("id", disabled=True),
         BooleanField(
             "is_closed",
             help_text=(
@@ -676,9 +557,9 @@ class QueueStatusView(ModelView):
         ),
         DateTimeField(
             "scheduled_start",
-            label="Scheduled closure start time (UTC time)",
+            label=f"Scheduled closure start time {DATETIME_TIMEZONE_LABEL}",
             help_text=(
-                "(THIS IS UTC TIME) Optional: When should the queue closure set above take effect? "
+                "Optional: When should the queue closure set above take effect? "
                 "Leave empty for queue to be closed immediatialy "
                 "If the queue is open and you set this field, it will do nothing."
             ),
@@ -691,45 +572,24 @@ class QueueStatusView(ModelView):
                 "The queuing system is currently closed for new tasks due to planned upcoming maintenance. Please try again later."
             ),
         ),
-        DateTimeField(
-            "created_at",
-            label="Created At (UTC time)",
-            help_text="Timestamp when the entry was created. Value determined by system.",
-            disabled=True,
-        ),
-        DateTimeField(
-            "updated_at",
-            label="Updated At (UTC time)",
-            help_text="Timestamp when the entry was last updated. Value determined by system.",
-            disabled=True,
-        ),
-    ]
-
-    exclude_fields_from_list = []
-    exclude_fields_from_edit = ["id", "created_at", "updated_at"]
-    exclude_fields_from_detail = []
+    ] + _basedb_model_fields()
 
     def can_delete(self, request: Request) -> bool:
-        """Disable deletion - this is a singleton table."""
+        """Disable deletion - this is a singleton table with only 1 row."""
         return False
 
     def can_create(self, request: Request) -> bool:
-        """Disable creation - this is a singleton table with only 1 row."""
-        # 1st row created by the alembic migration
+        """Disable creation - this is a singleton table with only 1 row (the row is created by the alembic migration)"""
         return False
 
     async def edit(self, request: Request, pk: Any, data: dict) -> Any:
-        """
-        Override the default edit method to ensure that the `scheduled_start` field is set to None
-        if `is_closed` is set to False.
-        """
+        """keep `scheduled_start` field in sync with `is_closed` is set to False."""
         if not data.get("is_closed"):
             data["scheduled_start"] = None
-
         return await super().edit(request=request, pk=pk, data=data)
 
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
-        errors: dict[str, str] = {}
+        errors: dict[str | int, Any] = {}
 
         if data.get("scheduled_start") and not data.get("is_closed"):
             errors["scheduled_start"] = "Cannot have a scheduled start time without the queue being closed."
@@ -737,87 +597,59 @@ class QueueStatusView(ModelView):
         reason = data.get("reason_for_users") or ""
         if data.get("is_closed") and not reason.strip():
             errors["reason_for_users"] = "Reason for users is required when the queue is closed."
-
         if len(reason) > 500:
             errors["reason_for_users"] = "Message must be 500 characters or less."
 
         if errors:
             raise FormValidationError(errors=errors)
-
         return await super().validate(request=request, data=data)
 
-    # NOTE, no serialize_field_value/_format_cet_datetime override on purpose here
-    # as does not work well when modifying the timestamp in edit view, easier to just display as UTC
 
-
-class PersonalAccessTokenView(ModelView):
+class PersonalAccessTokenView(DivBaseModelView):
     """
     Custom admin panel View for the PersonalAccessTokenDB model.
     As with passwords, the hashed_token is never displayed in the admin panel on purpose.
     """
 
-    page_size_options = PAGINATION_DEFAULTS
-    fields = [
-        IntegerField("id", label="ID", disabled=True),
-        StringField("name", label="Name", required=True),
-        TextAreaField("description", required=False, label="Description"),
-        JSONField(
-            "permissions",
-            required=False,
-            label="Permissions",
-            help_text="Permissions associated with the PAT.",
-            disabled=True,
-        ),
-        DateTimeField(
-            "expires_at",
-            help_text="Timestamp when the PAT expires. Value can be left empty for no expiration. Value determined by system, cannot be edited.",
-            required=False,
-            disabled=True,
-        ),
-        DateTimeField(
-            "last_used_at",
-            help_text="Timestamp when the PAT was last used. Value empty if not yet used. Value determined by system, cannot be edited.",
-            required=False,
-            disabled=True,
-        ),
-        BooleanField("is_deleted", required=True, label="Is Deleted", help_text="Mark the PAT as deleted or not."),
-        DateTimeField(
-            "date_deleted",
-            help_text="Timestamp when the PAT was soft deleted (else None). Value determined by system, cannot be edited.",
-            disabled=True,
-        ),
-        IntegerField("user_id", label="User ID", required=False),
-        HasOne("user", identity="user", label="User"),
-        DateTimeField("created_at", label="Created At", disabled=True),
-        DateTimeField("updated_at", label="Updated At", disabled=True),
-    ]
+    fields = (
+        [
+            StringField("name", label="Name", required=True),
+            TextAreaField("description", required=False, label="Description"),
+            JSONField(
+                "permissions",
+                required=False,
+                label="Permissions",
+                help_text="Permissions associated with the PAT.",
+                disabled=True,
+            ),
+            DateTimeField(
+                "expires_at",
+                label=f"Expires At {DATETIME_TIMEZONE_LABEL}",
+                help_text="Timestamp when the PAT expires. Value can be left empty for no expiration. Value determined by system, cannot be edited.",
+                required=False,
+                disabled=True,
+            ),
+            DateTimeField(
+                "last_used_at",
+                label=f"Last Used At {DATETIME_TIMEZONE_LABEL}",
+                help_text="Timestamp when the PAT was last used. Value empty if not yet used. Value determined by system, cannot be edited.",
+                required=False,
+                disabled=True,
+            ),
+            IntegerField("user_id", label="User ID", required=False),
+            HasOne("user", identity="user", label="User"),
+        ]
+        + _is_deleted_date_deleted_fields()
+        + _basedb_model_fields()
+    )
 
-    exclude_fields_from_list = ["hashed_token", "permissions", "user_id"]
+    exclude_fields_from_list = ["hashed_token", "permissions", "user_id", "id", "created_at", "updated_at"]
     exclude_fields_from_edit = ["hashed_token", "id", "created_at", "updated_at", "user_id", "user", "permissions"]
     exclude_fields_from_detail = ["hashed_token", "user_id"]
 
     def can_create(self, request: Request) -> bool:
-        """Disable manual creation of PATs."""
+        """Should create these in the frontend UI instead"""
         return False
-
-    async def edit(self, request: Request, pk: Any, data: dict) -> Any:
-        """
-        Override the default edit method to ensure that the `date_deleted` field is updated
-        when/if a users soft deletion status is changed.
-        """
-        if "is_deleted" in data:
-            if data["is_deleted"]:
-                data["date_deleted"] = datetime.now(tz=timezone.utc)
-            else:
-                data["date_deleted"] = None
-
-        return await super().edit(request=request, pk=pk, data=data)
-
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
-        formatted = _format_cet_datetime(value, field, ["created_at", "updated_at", "expires_at", "last_used_at"])
-        if formatted is not None:
-            return formatted
-        return await super().serialize_field_value(value, field, action, request)
 
 
 class DivBaseAuthProvider(AuthProvider):
@@ -851,6 +683,7 @@ class DivBaseAuthProvider(AuthProvider):
         if not access_token and not refresh_token:
             return False
 
+        authenticated = False
         try:
             # Starlette does not support dependency injection like FastAPI,
             # so we need to manually obtain the database session here.
@@ -862,14 +695,13 @@ class DivBaseAuthProvider(AuthProvider):
                 if user and user.is_admin and user.is_active:
                     # Store user info in the request state so it can be accessed by e.g. get_admin_user
                     request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
-                    return True
+                    authenticated = True
         except Exception as e:
             logger.warning(
                 f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
             )
             return False
-
-        return False
+        return authenticated
 
     def get_admin_user(self, request: Request) -> AdminUser | None:
         """
@@ -885,14 +717,26 @@ class DivBaseAuthProvider(AuthProvider):
 
 
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
-    """
-    Create and register an admin panel for the FastAPI app.
-    """
-    admin = Admin(engine=engine, title="DivBase Admin", auth_provider=DivBaseAuthProvider())
+    """Create and register an admin panel for the FastAPI app."""
+    timezone_config = TimezoneConfig(
+        default_timezone=DIVBASE_SERVER_TIMEZONE,
+        database_timezone="UTC",
+        timezone_cookie_name=None,
+    )
+    admin = Admin(
+        engine=engine,
+        title="DivBase Admin",
+        auth_provider=DivBaseAuthProvider(),
+        timezone_config=timezone_config,
+    )
 
     admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
     admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
-    admin.add_view(ProjectMembershipView(ProjectMembershipDB, icon="fas fa-link", label="Project Memberships"))
+    admin.add_view(
+        ProjectMembershipView(
+            ProjectMembershipDB, icon="fas fa-link", label="Project Memberships", identity="memberships"
+        )
+    )
     admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
     admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
     admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))

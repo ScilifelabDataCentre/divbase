@@ -8,9 +8,9 @@ version IDs (hashes) at that point in time.
 Version entries are created and managed via the API.
 """
 
-import logging
 from datetime import datetime, timezone
 
+import structlog
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -29,12 +29,14 @@ from divbase_api.services.s3_client import S3FileManager
 from divbase_lib.api_schemas.project_versions import (
     AddVersionResponse,
     DeleteVersionResponse,
+    FileDetails,
     ProjectVersionDetailResponse,
     ProjectVersionInfo,
     UpdateVersionResponse,
 )
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def add_project_version(
@@ -46,11 +48,18 @@ async def add_project_version(
     s3_file_manager: S3FileManager,
 ) -> AddVersionResponse:
     """Add a new project version entry into the database."""
-    files = await run_in_threadpool(
+    all_s3_files = await run_in_threadpool(
         s3_file_manager.state_of_latest_version_of_all_files, bucket_name=project.bucket_name
     )
 
-    if not files:
+    version_files: dict[str, FileDetails] = {}
+    for file, object_details in all_s3_files.items():
+        if file.endswith("/") or file.startswith(QUERY_RESULTS_FILE_PREFIX):
+            # skip directory placeholder objects and query results files
+            continue
+        version_files[file] = object_details
+
+    if not version_files:
         raise ProjectVersionCreationError(
             message="Cannot create version entry for an empty project. No files uploaded to the project yet.",
         )
@@ -58,7 +67,7 @@ async def add_project_version(
     new_version = ProjectVersionDB(
         name=name,
         description=description,
-        files=files,
+        files=version_files,
         project_id=project.id,
         user_id=user_id,
     )
@@ -79,7 +88,7 @@ async def add_project_version(
 
     await db.refresh(new_version)
     return AddVersionResponse(
-        name=new_version.name, description=new_version.description, created_at=new_version.created_at.isoformat()
+        name=new_version.name, description=new_version.description, created_at=new_version.created_at
     )
 
 
@@ -93,6 +102,7 @@ async def list_project_versions(
         ProjectVersionDB.name,
         ProjectVersionDB.description,
         ProjectVersionDB.created_at,
+        ProjectVersionDB.updated_at,
         ProjectVersionDB.is_deleted,
     )
     stmt = stmt.where(ProjectVersionDB.project_id == project_id)
@@ -105,7 +115,8 @@ async def list_project_versions(
         ProjectVersionInfo(
             name=row.name,
             description=row.description,
-            created_at=row.created_at.isoformat(),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
             is_deleted=row.is_deleted,
         )
         for row in result
@@ -123,6 +134,7 @@ async def get_project_version_details(
         ProjectVersionDB.name,
         ProjectVersionDB.description,
         ProjectVersionDB.created_at,
+        ProjectVersionDB.updated_at,
         ProjectVersionDB.is_deleted,
         ProjectVersionDB.files,
     )
@@ -138,11 +150,12 @@ async def get_project_version_details(
             message=f"Version '{version_name}' was not found for this project. Check if you mistyped the version name or are looking at the wrong project."
         )
 
-    name, description, created_at, is_deleted, files = version_entry
+    name, description, created_at, updated_at, is_deleted, files = version_entry
     return ProjectVersionDetailResponse(
         name=name,
         description=description,
-        created_at=created_at.isoformat(),
+        created_at=created_at,
+        updated_at=updated_at,
         is_deleted=is_deleted,
         files=files,
     )
@@ -204,7 +217,7 @@ async def update_project_version(
     return UpdateVersionResponse(
         name=version_entry.name,
         description=version_entry.description,
-        created_at=version_entry.created_at.isoformat(),
+        created_at=version_entry.created_at,
     )
 
 
@@ -232,7 +245,7 @@ async def soft_delete_version(
         return DeleteVersionResponse(
             name=version_name,
             already_deleted=True,
-            date_deleted=version_entry.date_deleted.isoformat(),
+            date_deleted=version_entry.date_deleted,
         )
 
     version_entry.is_deleted = True
@@ -242,5 +255,5 @@ async def soft_delete_version(
     return DeleteVersionResponse(
         name=version_name,
         already_deleted=False,
-        date_deleted=version_entry.date_deleted.isoformat(),
+        date_deleted=version_entry.date_deleted,
     )

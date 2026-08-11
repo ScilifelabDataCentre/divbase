@@ -15,12 +15,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from divbase_cli.cli_commands.file_cli import NO_FILES_SPECIFIED_MSG
 from divbase_cli.cli_exceptions import (
     DivBaseAPIError,
-    FilesAlreadyInProjectError,
-    UnsupportedFileNameError,
-    UnsupportedFileTypeError,
+    DuplicateFileNamesError,
+    FileAlreadyUploadedError,
+    NoFilesSpecifiedError,
+    NotEmptyDirectoryError,
+    UnsupportedCharactersError,
 )
 from divbase_cli.divbase_cli import app
 from divbase_lib.divbase_constants import (
@@ -28,6 +29,7 @@ from divbase_lib.divbase_constants import (
     S3_MULTIPART_UPLOAD_THRESHOLD,
 )
 from divbase_lib.s3_checksums import calculate_composite_md5_s3_etag
+from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
 runner = CliRunner()
 
@@ -85,25 +87,37 @@ def test_files_commands_fail_without_files(logged_in_edit_user_with_existing_con
     """Test that different files subcommands that require file inputs fail when none are provided."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
     full_command = f"files {command} --project {clean_project}"
-
     result = runner.invoke(app, full_command)
-    assert result.exit_code == 1
-    assert NO_FILES_SPECIFIED_MSG in result.stdout
+
+    if command == "upload":
+        assert isinstance(result.exception, NoFilesSpecifiedError)
+    else:
+        # will raise typer.BadParameter and print usage message
+        assert result.exit_code == 2
+        assert "usage:" in result.output.lower()
+        assert f"root files {command}" in result.output.lower()
 
 
 def test_list_files(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """Test basic usage of files ls command."""
+    """Test basic usage of files ls command, with and without detailed output."""
+    default_project = CONSTANTS["DEFAULT_PROJECT"]
+
     command = "files ls"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
+    for file in CONSTANTS["PROJECT_CONTENTS"][default_project]:
+        assert file in result.stdout
 
-    default_project = CONSTANTS["DEFAULT_PROJECT"]
+    command = "files ls --detailed"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
 
     for file in CONSTANTS["PROJECT_CONTENTS"][default_project]:
         assert file in result.stdout
 
-    column_names = ["Name", "File size", "Upload date (CET)", "MD5 checksum"]
-    assert all(header in result.stdout for header in column_names)
+    for line in result.stdout.splitlines():
+        numb_parts = line.split()
+        assert len(numb_parts) == 6  # [file name] [size] [size units] [date] [time] [timezone]
 
 
 def test_list_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS):
@@ -123,26 +137,7 @@ def test_list_files_empty_project(logged_in_edit_user_with_existing_config, CONS
     command = f"files ls --project {CONSTANTS['EMPTY_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
-    assert "No files found" in result.stdout
-
-
-def test_list_files_with_prefix_filter(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
-    """Test that the --prefix flag correctly filters the file list."""
-    clean_project = CONSTANTS["CLEANED_PROJECT"]
-    (tmp_path / "prefix_a_1.tsv").write_text("a1")
-    (tmp_path / "prefix_a_2.tsv").write_text("a2")
-    (tmp_path / "prefix_b_1.tsv").write_text("b1")
-
-    upload_command = f"files upload {tmp_path / 'prefix_a_1.tsv'} {tmp_path / 'prefix_a_2.tsv'} {tmp_path / 'prefix_b_1.tsv'} --project {clean_project}"
-    upload_result = runner.invoke(app, upload_command)
-    assert upload_result.exit_code == 0
-
-    list_command = f"files ls --project {clean_project} --prefix prefix_a"
-    list_result = runner.invoke(app, list_command)
-    assert list_result.exit_code == 0
-    assert "prefix_a_1.tsv" in list_result.stdout
-    assert "prefix_a_2.tsv" in list_result.stdout
-    assert "prefix_b_1.tsv" not in list_result.stdout
+    assert "No files or folders found" in result.stdout
 
 
 def test_list_files_hides_results_files_by_default(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -170,6 +165,25 @@ def test_list_files_hides_results_files_by_default(logged_in_edit_user_with_exis
     assert f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz" in list_result_include.stdout
 
 
+def test_list_files_with_prefix_filter(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that the --prefix flag correctly filters the file list."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    (tmp_path / "prefix_a_1.tsv").write_text("a1")
+    (tmp_path / "prefix_a_2.tsv").write_text("a2")
+    (tmp_path / "prefix_b_1.tsv").write_text("b1")
+
+    upload_command = f"files upload {tmp_path / 'prefix_a_1.tsv'} {tmp_path / 'prefix_a_2.tsv'} {tmp_path / 'prefix_b_1.tsv'} --project {clean_project}"
+    upload_result = runner.invoke(app, upload_command)
+    assert upload_result.exit_code == 0
+
+    list_command = f"files ls  prefix_a --project {clean_project}"
+    list_result = runner.invoke(app, list_command)
+    assert list_result.exit_code == 0
+    assert "prefix_a_1.tsv" in list_result.stdout
+    assert "prefix_a_2.tsv" in list_result.stdout
+    assert "prefix_b_1.tsv" not in list_result.stdout
+
+
 def test_list_soft_deleted_files(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
     """
     Test that the 'files ls --show-deleted-files' command lists soft-deleted files.
@@ -192,6 +206,12 @@ def test_list_soft_deleted_files(logged_in_edit_user_with_existing_config, CONST
     assert test_file.name in result.stdout
     assert test_results_file.name in result.stdout
 
+    # now filter by prefix and confirm only the results file is shown
+    result = runner.invoke(app, f"files ls {QUERY_RESULTS_FILE_PREFIX} --project {clean_project} --show-deleted-files")
+    assert result.exit_code == 0
+    assert test_file.name not in result.stdout
+    assert test_results_file.name in result.stdout
+
 
 def test_list_soft_deleted_files_empty_project(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test that 'files ls --show-deleted-files' shows no files in an empty project."""
@@ -202,15 +222,71 @@ def test_list_soft_deleted_files_empty_project(logged_in_edit_user_with_existing
     assert "no soft deleted files found" in result.stdout.lower()
 
 
-def test_list_soft_deleted_does_not_accept_other_flags(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """Test that 'files ls --show-deleted-files' cannot be used with other flags like --prefix or --include-results-files."""
+def test_list_soft_deleted_does_not_allow_certain_option_combos(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that files ls cannot have certain option combinations"""
+    result = runner.invoke(app, "files ls --show-deleted-files --include-results-files")
+    assert result.exit_code == 2
+    # usage message means it was from bad parameter raise
+    assert "usage:" in result.output.lower()
+    assert "root files ls" in result.output.lower()
+
+    result = runner.invoke(app, "files ls --detailed --tsv")
+    assert result.exit_code == 2
+    assert "usage:" in result.output.lower()
+    assert "root files ls" in result.output.lower()
+
+
+def test_list_files_with_prefix_filtering(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that ls with a folder prefix shows only the files inside that folder."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
 
-    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files --include-results-files")
-    assert result.exit_code == 1
+    inside1 = tmp_path / "inside1.tsv"
+    inside2 = tmp_path / "inside2.tsv"
+    outside = tmp_path / "outside.tsv"
+    inside1.write_text("inside 1")
+    inside2.write_text("inside 2")
+    outside.write_text("outside")
 
-    result = runner.invoke(app, f"files ls --project {clean_project} --show-deleted-files --prefix some_prefix")
-    assert result.exit_code == 1
+    result = runner.invoke(app, f"files upload {inside1} {inside2} --to vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files upload {outside} --project {clean_project}")
+    assert result.exit_code == 0
+
+    ls_result = runner.invoke(app, f"files ls vcfs/ --project {clean_project}")
+    assert ls_result.exit_code == 0
+    assert "inside1.tsv" in ls_result.stdout
+    assert "inside2.tsv" in ls_result.stdout
+    assert "outside.tsv" not in ls_result.stdout
+
+
+def test_ls_detailed_with_folders_present(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that ls --detailed succeeds and lists folders when the project contains both files and folders."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    dir_name = "mydir/"
+    file_in_dir = tmp_path / "file_in_dir.tsv"
+    file_in_root = tmp_path / "file_in_root.tsv"
+    file_in_dir.write_text("content")
+    file_in_root.write_text("content")
+
+    result = runner.invoke(app, f"files upload {file_in_dir} --to {dir_name} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files upload {file_in_root} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # ls at root, should show the folder but not the file inside it
+    result = runner.invoke(app, f"files ls --detailed --project {clean_project}")
+    assert result.exit_code == 0
+    assert file_in_root.name in result.stdout
+    assert f"{dir_name}" in result.stdout
+    assert "inside_folder.tsv" not in result.stdout
+
+    # ls for the folder, should show the file inside it
+    result = runner.invoke(app, f"files ls {dir_name} --detailed --project {clean_project}")
+    assert result.exit_code == 0
+    assert file_in_dir.name in result.stdout
+    assert f"{dir_name}" not in result.stdout
+    assert file_in_root.name not in result.stdout
 
 
 def test_file_info_single_version(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -268,14 +344,21 @@ def test_file_info_multiple_versions(logged_in_edit_user_with_existing_config, C
     assert calculate_numb_table_rows_printed(result.stdout) == 3
 
 
-def test_file_info_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
-    """Test 'files info' for a file that does not exist."""
+def test_file_info_on_non_existent_file_or_folder(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test 'files info' for a file that does not exist and for a folder (which should not be allowed)."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
     result = runner.invoke(app, f"files info nonexistent.tsv --project {clean_project}")
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
     assert "404" in str(result.exception)
     assert "does not exist" in str(result.exception)
+
+    # that it is a folder is determined by CLI, so does not need to exist for test to work
+    # will raise typer.BadParameter
+    result = runner.invoke(app, f"files info somefolder/ --project {clean_project}")
+    assert result.exit_code == 2
+    assert "usage:" in result.output.lower()
+    assert "root files info" in result.output.lower()
 
 
 def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -299,7 +382,7 @@ def test_file_info_after_reupload(logged_in_edit_user_with_existing_config, CONS
     assert calculate_numb_table_rows_printed(result.stdout) == 2
 
 
-def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_1_file(logged_in_query_user_with_existing_config, tmp_path):
     """Test upload 1 file to the project."""
     test_file = tmp_path / "fake_test_file.tsv"
     test_file.write_text("testing, testing 1 2 3...")
@@ -311,7 +394,7 @@ def test_upload_1_file(logged_in_edit_user_with_existing_config, tmp_path):
     assert test_file.name in result.stdout
 
 
-def test_upload_1_file_to_non_default_project(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_upload_1_file_to_non_default_project(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Specify a project when uploading a file."""
     test_file = (fixtures_dir / CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]).resolve()
 
@@ -333,11 +416,11 @@ def test_upload_multiple_files_at_once(logged_in_edit_user_with_existing_config,
         assert f"{str(file)}" in result.stdout
 
 
-def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
-    """Test upload all files in a directory."""
+def test_upload_dir_contents(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
+    """Test upload all files in a directory using a glob pattern."""
     files = [x for x in fixtures_dir.glob("*") if x.is_file()]  # does not get subdirs
 
-    command = f"files upload --upload-dir {fixtures_dir.resolve()} --project {CONSTANTS['CLEANED_PROJECT']}"
+    command = f"files upload {fixtures_dir.resolve()}/* --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
 
     assert result.exit_code == 0
@@ -346,7 +429,206 @@ def test_upload_dir_contents(logged_in_edit_user_with_existing_config, CONSTANTS
         assert str(file.resolve()) in clean_stdout
 
 
-def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+@pytest.mark.parametrize(
+    "glob_pattern_template, expected_file_names",
+    [
+        # All .vcf.gz files in a flat directory
+        ("{data_dir}/*.vcf.gz", ["a.vcf.gz", "b.vcf.gz"]),
+        # All .tsv files in current directory
+        ("{data_dir}/*.tsv", ["meta.tsv", "another_metadata.tsv", "one_more.tsv"]),
+        # Nested:
+        ("{data_dir}/*/sub/*.vcf.gz", ["nested.vcf.gz"]),
+    ],
+)
+def test_upload_glob_patterns(
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path, glob_pattern_template, expected_file_names
+):
+    """Test that glob patterns are correctly expanded when specifying files to upload."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    # Create the temp directory structure expected by each pattern
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "a.vcf.gz").write_bytes(b"vcf content a")
+    (data_dir / "b.vcf.gz").write_bytes(b"vcf content b")
+    (data_dir / "meta.tsv").write_text("col1\tcol2\n")
+    (data_dir / "another_metadata.tsv").write_text("col1\tcol2\n")
+    (data_dir / "one_more.tsv").write_text("col1\tcol2\n")
+    nested_dir = data_dir / "group" / "sub"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "nested.vcf.gz").write_bytes(b"nested vcf content")
+
+    glob_pattern = glob_pattern_template.format(data_dir=data_dir)
+    command = f"files upload '{glob_pattern}' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    for file_name in expected_file_names:
+        assert file_name in result.stdout
+
+
+def test_upload_recursive_flag_matches_subdirectories(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --recursive expands ** patterns into subdirectories."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "top.tsv").write_text("top level")
+    sub_dir = data_dir / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "deep.tsv").write_text("nested")
+
+    command = f"files upload --recursive '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert "top.tsv" in result.stdout
+    assert "deep.tsv" in result.stdout
+
+
+def test_upload_without_recursive_does_not_match_subdirectories(
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that without --recursive, ** patterns do not descend into subdirectories."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sub_dir = data_dir / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "only_nested.tsv").write_text("nested only")
+
+    command = f"files upload '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+    assert isinstance(result.exception, NoFilesSpecifiedError)
+
+
+def test_upload_duplicate_file_names_rejected(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that uploading two files with the same name from different directories raises an error."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    (dir_a / "data.tsv").write_text("version a")
+    (dir_b / "data.tsv").write_text("version b")
+
+    command = f"files upload {dir_a / 'data.tsv'} {dir_b / 'data.tsv'} --project {clean_project}"
+    result = runner.invoke(app, command)
+    assert isinstance(result.exception, DuplicateFileNamesError)
+
+
+def test_upload_recursive_preserves_subdir_paths(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --recursive upload with same-named files in different subdirs succeeds because they get distinct keys."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    data_dir = tmp_path / "data"
+    (data_dir / "group_a").mkdir(parents=True)
+    (data_dir / "group_b").mkdir(parents=True)
+    (data_dir / "group_a" / "samples.tsv").write_text("group a samples")
+    (data_dir / "group_b" / "samples.tsv").write_text("group b samples")
+
+    command = f"files upload --recursive '{data_dir}/**' --project {clean_project}"
+    result = runner.invoke(app, command)
+
+    # Same filename in different subdirs is NOT a duplicate — keys are group_a/samples.tsv and group_b/samples.tsv
+    assert result.exit_code == 0
+    assert "group_a/samples.tsv" in result.stdout
+    assert "group_b/samples.tsv" in result.stdout
+
+
+def test_upload_skip_existing_skips_already_uploaded_files(
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that --skip-existing skips files already in the project and uploads only new ones."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    existing_file = tmp_path / "existing.tsv"
+    new_file = tmp_path / "new.tsv"
+    existing_file.write_text("already uploaded content")
+    new_file.write_text("new content")
+
+    # Upload the existing file first
+    result = runner.invoke(app, f"files upload {existing_file} --project {clean_project}")
+    assert result.exit_code == 0
+
+    # should fail as no --skip-existing flag
+    result = runner.invoke(app, f"files upload {existing_file} {new_file}  --project {clean_project}")
+    assert isinstance(result.exception, FileAlreadyUploadedError)
+
+    # with --skip-existing flag, new should be uploaded, old should be skipped
+    command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert "skipped" in result.stdout.lower()
+    assert "existing.tsv" in result.stdout
+    assert "new.tsv" in result.stdout
+    assert "successfully uploaded" in result.stdout.lower()
+
+    # now run again with --skip-existing, should skip both as they are now both uploaded, but not fail
+    command = f"files upload --skip-existing {existing_file} {new_file} --project {clean_project}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert "skipped" in result.stdout.lower()
+    assert "existing.tsv" in result.stdout
+    assert "new.tsv" in result.stdout
+    assert "no files were uploaded" in result.stdout.lower()
+
+
+def test_upload_dry_run_shows_files_without_uploading(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that --dry-run shows which files would be uploaded but does not actually upload them."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    file1 = tmp_path / "dry1.tsv"
+    file2 = tmp_path / "dry2.tsv"
+    file1.write_text("dry run content 1")
+    file2.write_text("dry run content 2")
+
+    result = runner.invoke(app, f"files upload --dry-run {file1} {file2} --project {clean_project}")
+
+    assert result.exit_code == 0
+    assert "dry1.tsv" in result.stdout
+    assert "dry2.tsv" in result.stdout
+
+    # Confirm nothing was actually uploaded
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert ls_result.exit_code == 0
+    assert "dry1.tsv" not in ls_result.stdout
+    assert "dry2.tsv" not in ls_result.stdout
+
+
+def test_upload_dry_run_with_skip_existing_shows_skipped_and_new(
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that --dry-run --skip-existing shows which files would be skipped vs uploaded."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    existing = tmp_path / "already_there_dry.tsv"
+    new_file = tmp_path / "new_dry.tsv"
+    existing.write_text("already uploaded content")
+    new_file.write_text("brand new content")
+
+    result = runner.invoke(app, f"files upload {existing} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(
+        app, f"files upload --dry-run --skip-existing {existing} {new_file} --project {clean_project}"
+    )
+
+    assert result.exit_code == 0
+    output = result.output.strip().replace("\n", "")
+    assert "already_there_dry.tsv" in output
+    assert "new_dry.tsv" in output
+    assert "skipped" in output.lower()
+    assert "would have been uploaded" in output.lower()
+
+    # Confirm new file was not actually uploaded
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert "new_dry.tsv" not in ls_result.output.strip().replace("\n", "")
+
+
+def test_reupload_same_file_fails(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test upload with safe mode on (default) works the first time, but fails on subsequent attempts."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
     file_path = f"{fixtures_dir}/{file_name}"
@@ -356,12 +638,11 @@ def test_reupload_same_file_fails(logged_in_edit_user_with_existing_config, CONS
     assert result.exit_code == 0
 
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
 
 def test_reupload_of_same_file_with_safe_mode_off_works(
-    logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir
+    logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir
 ):
     """Test upload with safe mode off works for reuploading the same file."""
     file_name = CONSTANTS["FILES_TO_UPLOAD_DOWNLOAD"][0]
@@ -375,7 +656,7 @@ def test_reupload_of_same_file_with_safe_mode_off_works(
     assert result.exit_code == 0
 
 
-def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
+def test_no_file_uploaded_if_some_duplicated(logged_in_query_user_with_existing_config, CONSTANTS, fixtures_dir):
     """
     Test that no files are uploaded with safe mode on (which is the default)
     if at least 1 of the files trying to be uploaded already exists in the project's bucket.
@@ -390,41 +671,64 @@ def test_no_file_uploaded_if_some_duplicated(logged_in_edit_user_with_existing_c
     # none should be uploaded as the first one already exists
     command = f"files upload {' '.join(map(str, test_files))} --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
     command = f"files ls --project {CONSTANTS['CLEANED_PROJECT']}"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     assert test_files[0].name in result.stdout
     for file in test_files[1:]:
-        assert file.name not in result.stdout, f"File {file.name} was uploaded when it shouldn't have been."
+        assert file.name not in result.stdout
 
 
-def test_upload_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_upload_nonexistent_files(logged_in_query_user_with_existing_config, tmp_path):
+    """
+    Test that uploading nonexistent files fails with helpful error msg about which files do not exist
+    """
+    real_file = tmp_path / "new.tsv"
+    real_file.write_text("I exist! :)")
+    real_file_str = str(real_file.resolve())
+
     command = "files upload nonexistent_file.tsv"
     result = runner.invoke(app, command)
+    assert isinstance(result.exception, NoFilesSpecifiedError)
 
-    assert result.exit_code != 0
-    assert isinstance(result.exception, FileNotFoundError)
+    # only those that don't exist should be in the error message.
+    command = f"files upload nonexistent_file.tsv another_nonexistent_file.vcf.gz {real_file_str}"
+    result = runner.invoke(app, command)
+    assert isinstance(result.exception, NoFilesSpecifiedError)
+    message = str(result.exception)
+    assert "nonexistent_file.tsv" in message
+    assert "another_nonexistent_file.vcf.gz" in message
+    assert real_file_str not in message
+
+    # same idea as above but using globs
+    real_file_glob = real_file_str[:-4] + "*"
+    command = f"files upload 'nonexistent*' 'another*.vcf.gz' {real_file_glob}"
+    result = runner.invoke(app, command)
+    assert isinstance(result.exception, NoFilesSpecifiedError)
+    message = str(result.exception)
+    assert "nonexistent*" in message
+    assert "another*.vcf.gz" in message
+    assert real_file_glob not in message
 
 
 @pytest.mark.parametrize(
-    "file_names, expected_exception",
+    "file_names, expected_error",
     [
-        (["data.tsv", "variants.vcf.gz", "index.csi", "index.tbi"], None),
-        (["unsupported.txt"], UnsupportedFileTypeError),
-        (["archive.zip"], UnsupportedFileTypeError),
+        (["data.tsv", "variants.vcf.gz", "index.csi", "index.tbi", "README.md", "supported.txt"], None),
+        (["unsupported.rst"], "file_type"),
+        (["archive.zip"], "file_type"),
         (["data.tsv", "variants.mine.vcf.gz"], None),
-        (["data.tsv", "unsupported.txt", "unsupported2.txt"], UnsupportedFileTypeError),
+        (["data.tsv", "supported.txt", "unsupported1.vcf", "unsupported2.gzip"], "file_type"),
         (["variants.vcf.gz", "variants2.vcf.gz", "index.tbi", "index.csi"], None),
-        (["unsupported.txt", "another_unsupported.zip", "supported.vcf.gz"], UnsupportedFileTypeError),
-        (["dat:a.tsv"], UnsupportedFileNameError),
-        (["variants2.vcf.gz", "invalid:file.tsv"], UnsupportedFileNameError),
+        (["unsupported.rst", "another_unsupported.zip", "supported.vcf.gz"], "file_type"),
+        (["dat:a.tsv"], "file_chars"),
+        (["variants2.vcf.gz", "invalid:file.tsv"], "file_chars"),
     ],
 )
 def test_upload_non_supported_files(
-    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_exception
+    logged_in_query_user_with_existing_config, CONSTANTS, tmp_path, file_names, expected_error
 ):
     """
     Tests that the upload command correctly handles
@@ -440,15 +744,15 @@ def test_upload_non_supported_files(
     command = f"files upload {' '.join(test_files)} --project {clean_project}"
     result = runner.invoke(app, command)
 
-    if expected_exception is None:
+    if expected_error is None:
         assert result.exit_code == 0
         assert "successfully uploaded" in result.stdout.lower()
-    elif expected_exception == UnsupportedFileTypeError:
+    elif expected_error == "file_type":
         assert result.exit_code != 0
-        assert isinstance(result.exception, UnsupportedFileTypeError)
-    elif expected_exception == UnsupportedFileNameError:
+        assert "types are not supported" in result.stdout.lower()
+    elif expected_error == "file_chars":
         assert result.exit_code != 0
-        assert isinstance(result.exception, UnsupportedFileNameError)
+        assert "unsupported characters" in result.stdout.lower()
 
 
 def test_safe_mode_fails_with_large_file_duplicate(
@@ -467,9 +771,7 @@ def test_safe_mode_fails_with_large_file_duplicate(
     assert result.exit_code == 0
 
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
-    assert large_file_path.name in str(result.exception)
+    assert isinstance(result.exception, FileAlreadyUploadedError)
 
     # validate turning off safe mode allows re-upload
     command = f"files upload {large_file_path} --project {CONSTANTS['CLEANED_PROJECT']} --disable-safe-mode"
@@ -538,16 +840,53 @@ def test_download_using_file_list(logged_in_edit_user_with_existing_config, CONS
         assert (download_dir / file_name).exists()
 
 
-def test_download_nonexistent_file(logged_in_edit_user_with_existing_config, tmp_path):
+def test_download_mix_of_files_and_folders(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Folder prefix and explicit files can be downloaded in one command."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
 
-    command = f"files download nonexistent_file.tsv --download-dir {download_dir}"
+    file_0_deep = tmp_path / "file_0_deep.tsv"
+    file_1_deep = tmp_path / "level_1" / "level_1_file.tsv"
+    file_2_deep = tmp_path / "level_1" / "level_2" / "level_2_file.tsv"
+    file_2_deep.parent.mkdir(parents=True, exist_ok=True)
+
+    file_0_deep.write_text("0")
+    file_1_deep.write_text("1")
+    file_2_deep.write_text("2")
+
+    # upload the files to the project bucket, preserve the directory structure by using the recursive flag and a glob pattern
+    result = runner.invoke(app, f"files upload '{tmp_path}/**/*.tsv' --project {clean_project} --recursive")
+    assert result.exit_code == 0
+
+    # download all files via specifying the root file and the level_1 folder
+    download_cmd = f"files download {file_0_deep.name} level_1/ --download-dir {download_dir} --project {clean_project}"
+    result = runner.invoke(app, download_cmd)
+    assert result.exit_code == 0, result.stdout
+    assert (download_dir / file_0_deep.name).exists()
+    assert (download_dir / "level_1" / file_1_deep.name).exists()
+    assert (download_dir / "level_1" / "level_2" / file_2_deep.name).exists()
+
+    # when run with flatten the files should now all end up in the same directory
+    result = runner.invoke(app, download_cmd + " --flatten")
+    assert result.exit_code == 0, result.stdout
+    assert (download_dir / file_1_deep.name).exists()
+    assert (download_dir / file_2_deep.name).exists()
+
+
+def test_download_nonexistent_file_and_folder(logged_in_edit_user_with_existing_config, tmp_path):
+    """Test that downloading a nonexistent file or contents of nonexistent folder fails with a helpful error message."""
+    non_existent_file = "nonexistent_file.tsv"
+    non_existent_folder = "nonexistent_folder/"
+    command = f"files download {non_existent_file} "
     result = runner.invoke(app, command)
 
     assert result.exit_code != 0
-    assert "ERROR: Failed to download the following files:" in result.stdout
-    assert "nonexistent_file.tsv" in result.stdout
+    assert "failed to download the following files:" in result.stdout.lower()
+    assert non_existent_file in result.stdout
+
+    result = runner.invoke(app, f"files download {non_existent_folder}")
+    assert isinstance(result.exception, NoFilesSpecifiedError)
 
 
 def test_download_specific_file_versions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
@@ -858,6 +1197,49 @@ def test_download_all_user_aborts(logged_in_edit_user_with_existing_config, CONS
     assert not (download_dir / file_name).exists()
 
 
+def test_download_all_flatten(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that download-all --flatten places all files directly in the download dir, ignoring subfolders."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    download_dir = tmp_path / "flat_dl"
+    download_dir.mkdir()
+
+    root_file = tmp_path / "root_flat.tsv"
+    nested_file = tmp_path / "nested_flat.tsv"
+    root_file.write_text("at root")
+    nested_file.write_text("nested content")
+
+    runner.invoke(app, f"files upload {root_file} --project {clean_project}")
+    runner.invoke(app, f"files upload {nested_file} --to subdir/ --project {clean_project}")
+
+    command = f"files download-all --flatten --project {clean_project} --download-dir {download_dir}"
+    result = runner.invoke(app, command, input="y\n")
+
+    assert result.exit_code == 0
+    assert (download_dir / "root_flat.tsv").exists()
+    assert (download_dir / "nested_flat.tsv").exists()
+    assert not (download_dir / "subdir").exists()
+
+
+def test_download_and_download_all_with_flatten_collision_rejected(
+    logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path
+):
+    """Test that both download and download-all with --flatten errors when the project contains files that share same filename"""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    shared_name = tmp_path / "data.tsv"
+    shared_name.write_text("content")
+
+    result = runner.invoke(app, f"files upload {shared_name} --to vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files upload {shared_name} --to samples/ --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files download vcfs/data.tsv samples/data.tsv --flatten --project {clean_project}")
+    assert isinstance(result.exception, DuplicateFileNamesError)
+
+    result = runner.invoke(app, f"files download-all --flatten --project {clean_project}")
+    assert isinstance(result.exception, DuplicateFileNamesError)
+
+
 def test_stream_file(logged_in_edit_user_with_existing_config, CONSTANTS, fixtures_dir):
     """Test streaming a simple text file."""
     query_project = CONSTANTS["QUERY_PROJECT"]
@@ -975,14 +1357,51 @@ def test_restore_already_live_file(logged_in_edit_user_with_existing_config, CON
     assert "successfully downloaded" in result.stdout.lower()
 
 
+def test_upload_remove_restore_using_file_list(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test uploading, removing, and restoring soft-deleted files using --file-list option."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    file1 = tmp_path / "a.tsv"
+    file2 = tmp_path / "b.tsv"
+    file1.write_text("a")
+    file2.write_text("b")
+
+    # needs full path for upload, but just the name for rm/restore
+    upload_list = tmp_path / "file_list.txt"
+    upload_list.write_text(f"{file1}\n{file2}")
+    rm_restore_list = tmp_path / "rm_restore_list.txt"
+    rm_restore_list.write_text(f"{file1.name}\n{file2.name}")
+
+    result = runner.invoke(app, f"files upload --file-list {upload_list} --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files rm --file-list {rm_restore_list} --project {clean_project}")
+    assert result.exit_code == 0
+
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert result.exit_code == 0
+    assert "a.tsv" not in ls_result.stdout
+    assert "b.tsv" not in ls_result.stdout
+
+    result = runner.invoke(app, f"files restore --file-list {rm_restore_list} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "a.tsv" in result.stdout
+    assert "b.tsv" in result.stdout
+
+    # Confirm files are live again
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert result.exit_code == 0
+    assert "a.tsv" in ls_result.stdout
+    assert "b.tsv" in ls_result.stdout
+
+
 def test_restore_non_existent_file(logged_in_edit_user_with_existing_config, CONSTANTS):
     """Test that attempting to restore a non-existent file reports it as 'not found'."""
     clean_project = CONSTANTS["CLEANED_PROJECT"]
     non_existent_file = "i_do_not_exist.tsv"
 
     result = runner.invoke(app, f"files restore {non_existent_file} --project {clean_project}")
-    assert result.exit_code == 0
-    assert "warning: some files could not be restored" in result.stdout.lower()
+    assert result.exit_code != 0
+    assert "some files could not be restored" in result.stdout.lower()
     assert non_existent_file in result.stdout
 
 
@@ -1025,6 +1444,204 @@ def test_restore_file_with_exact_key_match_among_similar_prefixes(
     assert "404" in result.stdout
 
 
+def test_mkdir_command(logged_in_query_user_with_existing_config, CONSTANTS):
+    """Test basic mkdir functionality and that it can be run multiple times in a row."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    folders = ["vcfs", "samples", "metadata"]
+    result = runner.invoke(app, f"files mkdir {' '.join(folders)} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "successfully created" in result.stdout.lower()
+
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert ls_result.exit_code == 0
+    for folder in folders:
+        assert folder in ls_result.stdout
+
+    # (cmd is idempotent)
+    result = runner.invoke(app, f"files mkdir {' '.join(folders)} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "successfully created" in result.stdout.lower()
+
+
+def test_mkdir_normalizes_directory_names(logged_in_query_user_with_existing_config, CONSTANTS):
+    """Test that mkdir adds a trailing slash if missing, and strips a leading slash."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    # "vcfs" becomes "vcfs/"
+    result = runner.invoke(app, f"files mkdir vcfs --project {clean_project}")
+    assert result.exit_code == 0
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert "vcfs/" in ls_result.stdout
+
+    # "/data/" becomes creates "data/"
+    result = runner.invoke(app, f"files mkdir /data/ --project {clean_project}")
+    assert result.exit_code == 0
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert "data/" in ls_result.stdout
+    assert "/data/" not in ls_result.stdout
+
+
+def test_mkdir_unsupported_characters_rejected(logged_in_query_user_with_existing_config, CONSTANTS):
+    """Test that mkdir rejects directory names containing unsupported characters."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files mkdir 'invalid:dir' --project {clean_project}")
+    assert isinstance(result.exception, UnsupportedCharactersError)
+
+
+def test_rmdir_removes_empty_directory(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that rmdir removes an empty directory and it no longer appears in ls."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files mkdir vcfs --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files rmdir vcfs --project {clean_project}")
+    assert result.exit_code == 0
+    assert "deleted" in result.stdout.lower()
+
+    ls_result = runner.invoke(app, f"files ls --project {clean_project}")
+    assert ls_result.exit_code == 0
+    assert "vcfs" not in ls_result.stdout
+
+
+def test_rmdir_fails_on_non_empty_directory(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that rmdir fails when the directory still contains files."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    test_file = tmp_path / "data.tsv"
+    test_file.write_text("some content")
+    result = runner.invoke(app, f"files upload {test_file} --to data/ --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files rmdir data --project {clean_project}")
+    assert result.exit_code != 0
+    assert isinstance(result.exception, NotEmptyDirectoryError)
+
+
+def test_rmdir_nonexistent_directory_succeeds(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test that rmdir on a non-existent directory exits successfully (idempotent)."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    result = runner.invoke(app, f"files rmdir i_do_not_exist --project {clean_project}")
+    assert result.exit_code == 0
+
+
+def test_files_tree_cmd(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that 'files tree' command can handle folders and dirs and do prefix filtering"""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    root_file = tmp_path / "root.tsv"
+    root_file.write_text("root")
+    nested_file = tmp_path / "nested.tsv"
+    nested_file.write_text("nested")
+    very_nested_file = tmp_path / "very_nested.tsv"
+    very_nested_file.write_text("very nested")
+
+    result = runner.invoke(app, f"files upload {root_file} --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(app, f"files upload {nested_file} --to vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    result = runner.invoke(
+        app, f"files upload {very_nested_file} --to vcfs/subdir/subsubdir/ --project {clean_project}"
+    )
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files mkdir empty_dir --project {clean_project}")
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, f"files tree --project {clean_project}")
+    assert result.exit_code == 0
+    assert "vcfs" in result.stdout
+    assert "subdir" in result.stdout
+    assert "subsubdir" in result.stdout
+    assert "empty_dir" in result.stdout
+    assert "root.tsv" in result.stdout
+    assert "nested.tsv" in result.stdout
+    assert "very_nested.tsv" in result.stdout
+
+    # prefix to just vcfs/ and check that only those files/folders are shown
+    result = runner.invoke(app, f"files tree vcfs/ --project {clean_project}")
+    assert result.exit_code == 0
+    assert "vcfs" in result.stdout
+    assert "subdir" in result.stdout
+    assert "subsubdir" in result.stdout
+    assert "nested.tsv" in result.stdout
+    assert "very_nested.tsv" in result.stdout
+
+    assert "empty_dir" not in result.stdout
+    assert "root.tsv" not in result.stdout
+
+
+def test_tree_hides_results_files_by_default(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Test that 'files tree' hides DivBase query results files by default."""
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+    results_file = tmp_path / f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz"
+    normal_file = tmp_path / "data.tsv"
+    results_file.write_text("results")
+    normal_file.write_text("data")
+
+    runner.invoke(app, f"files upload {results_file} {normal_file} --project {clean_project}")
+
+    result = runner.invoke(app, f"files tree --project {clean_project}")
+    assert result.exit_code == 0
+    assert "data.tsv" in result.stdout
+    assert results_file.name not in result.stdout
+
+    result = runner.invoke(app, f"files tree --include-results-files --project {clean_project}")
+    assert result.exit_code == 0
+    assert results_file.name in result.stdout
+
+
+### Permissions tests for different files commands.
+def test_read_user_file_permissions(logged_in_read_user_with_existing_config, CONSTANTS, tmp_path):
+    """Read role cannot upload or delete files or make dirs."""
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"files mkdir vcfs --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+
+def test_query_user_file_permissions(logged_in_query_user_with_existing_config, CONSTANTS, tmp_path):
+    """Query role can upload files and create dirs but cannot delete files or dirs."""
+    test_file = tmp_path / "test.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+
+    result = runner.invoke(app, f"files upload {test_file} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert result.exit_code == 0
+    assert "successfully uploaded" in result.stdout.lower()
+
+    result = runner.invoke(app, f"files mkdir test_dir --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert result.exit_code == 0
+    assert "successfully created" in result.stdout.lower()
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+    result = runner.invoke(app, f"files rmdir test_dir --project {CONSTANTS['CLEANED_PROJECT']}")
+    assert_divbase_403_permissions_error(result)
+
+
+def test_edit_user_file_permissions(logged_in_edit_user_with_existing_config, CONSTANTS, tmp_path):
+    """Edit role can upload and delete files."""
+    test_file = tmp_path / "test_edit_perms.tsv"
+    test_file.write_text("col1\tcol2\nval1\tval2")
+    clean_project = CONSTANTS["CLEANED_PROJECT"]
+
+    result = runner.invoke(app, f"files upload {test_file} --project {clean_project}")
+    assert result.exit_code == 0
+    assert "successfully uploaded" in result.stdout.lower()
+
+    result = runner.invoke(app, f"files rm {test_file.name} --project {clean_project}")
+    assert result.exit_code == 0
+
+
 #### Slow tests designed to test pagination/batching logic in all relevant files cli commands. ####
 # These will only be run when you do pytest --run-slow
 
@@ -1055,13 +1672,13 @@ def pagination_files_uploaded(
         file_path.write_text(f"content_{name}")
 
     # Check if files are already uploaded to avoid re-running
-    list_command = f"files ls --project {pagination_project}"
+    list_command = f"files ls --project {pagination_project} --tsv"
     list_result = runner.invoke(app, list_command)
     assert list_result.exit_code == 0
     already_uploaded = all(name in list_result.stdout for name in file_names)
 
     if not already_uploaded:
-        upload_command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
+        upload_command = f"files upload '{upload_dir}/*' --project {pagination_project} --skip-existing"
         upload_result = runner.invoke(app, upload_command)
         assert upload_result.exit_code == 0
 
@@ -1083,7 +1700,6 @@ def test_list_files_handles_pagination(logged_in_edit_user_with_existing_config,
 
     for name in file_names:
         assert name in list_result.stdout
-    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
 
 
 @pytest.mark.skipif("not config.getoption('--run-slow')", reason="Only run when --run-slow is given")
@@ -1161,7 +1777,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     logged_in_edit_user_with_existing_config, CONSTANTS, pagination_files_uploaded, tmp_path
 ):
     """
-    Tests that safe mode correctly identifies a duplicate file and raises FilesAlreadyInProjectError,
+    Tests that safe mode correctly identifies a duplicate file and raises an error to prevent upload,
     even when the check involves more than S3_PAGINATION_LIMIT files.
 
     The duplicated file would not be in the 1st batch of files to be uploaded as well, but should prevent any file being uploaded.
@@ -1179,14 +1795,12 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
     for idx, file_name in enumerate(safe_mode_files):
         (upload_dir / file_name).write_text(f"content_{idx}")
 
-    # Add the duplicate file (already in bucket) to upload dir
+    # Add the duplicate file (already in bucket) to upload dir, so fails
     duplicate_file = files_in_bucket[S3_PAGINATION_LIMIT + 1]
     shutil.copy(src=duplicate_file, dst=upload_dir)
-
-    command = f"files upload --upload-dir {upload_dir} --project {pagination_project}"
+    command = f"files upload '{upload_dir}/*' --project {pagination_project}"
     result = runner.invoke(app, command)
-    assert result.exit_code != 0
-    assert isinstance(result.exception, FilesAlreadyInProjectError)
+    assert isinstance(result.exception, FileAlreadyUploadedError)
     assert duplicate_file.name in str(result.exception)
 
     # Verify that none of the files were uploaded.
@@ -1197,7 +1811,7 @@ def test_upload_safe_mode_fails_with_pagination_if_one_exists(
         assert file_name not in result.stdout
 
     # Now run the upload again without safe_mode, should work
-    command = f"files upload --upload-dir {upload_dir} --project {pagination_project} --disable-safe-mode"
+    command = f"files upload '{upload_dir}/*' --project {pagination_project} --disable-safe-mode"
     result = runner.invoke(app, command)
     assert result.exit_code == 0
     for file_name in safe_mode_files:
@@ -1230,7 +1844,7 @@ def test_remove_and_restore_files_handles_pagination(
         assert name in result.stdout
 
     list_result = runner.invoke(app, f"files ls --project {pagination_project}")
-    assert "no files found" in list_result.stdout.lower()
+    assert "no files or folders found" in list_result.stdout.lower()
 
     restore_command = f"files restore {' '.join(file_names)} --project {pagination_project}"
     result = runner.invoke(app, restore_command)
@@ -1241,4 +1855,5 @@ def test_remove_and_restore_files_handles_pagination(
         assert name in result.stdout
 
     list_result = runner.invoke(app, f"files ls --project {pagination_project}")
-    assert calculate_numb_table_rows_printed(list_result.stdout) == len(file_names)
+    for name in file_names:
+        assert name in list_result.stdout

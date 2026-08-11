@@ -9,10 +9,9 @@ For these routes you'll likely want to use one of the following dependencies:
     (You need to validate their role is sufficient for what they're trying to do though).
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.crud.projects import (
@@ -33,17 +32,17 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.schemas.projects import UserProjectResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 fr_projects_router = APIRouter()
 
 
-@fr_projects_router.get("/", response_class=HTMLResponse)
+@fr_projects_router.get("/")
 async def get_user_projects_endpoint(
     request: Request,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Render the user's projects page showing all projects they're a member of."""
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
     projects = create_user_project_responses(user_projects)
@@ -59,13 +58,13 @@ async def get_user_projects_endpoint(
     )
 
 
-@fr_projects_router.get("/{project_id}", response_class=HTMLResponse)
+@fr_projects_router.get("/{project_id}")
 async def get_project_detail_endpoint(
     project_id: int,
     request: Request,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Render the project detail page."""
     project, current_user, role = project_and_user_and_role
 
@@ -98,7 +97,7 @@ async def get_project_detail_endpoint(
     )
 
 
-@fr_projects_router.post("/{project_id}/members/add", response_class=HTMLResponse)
+@fr_projects_router.post("/{project_id}/members/add")
 async def add_project_member_endpoint(
     request: Request,
     project_id: int,
@@ -106,7 +105,7 @@ async def add_project_member_endpoint(
     role: str = Form(...),
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     """Add a member to the project via frontend form."""
     project, current_user, user_role = project_and_user_and_role
 
@@ -151,14 +150,14 @@ async def add_project_member_endpoint(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@fr_projects_router.post("/{project_id}/members/{user_id}/role", response_class=HTMLResponse)
+@fr_projects_router.post("/{project_id}/members/{user_id}/role")
 async def update_member_role_endpoint(
     project_id: int,
     user_id: int,
     role: str = Form(...),
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> RedirectResponse:
     """Update a member's role via frontend form."""
     project, current_user, user_role = project_and_user_and_role
 
@@ -172,13 +171,13 @@ async def update_member_role_endpoint(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@fr_projects_router.post("/{project_id}/members/{user_id}/remove", response_class=HTMLResponse)
+@fr_projects_router.post("/{project_id}/members/{user_id}/remove")
 async def remove_member_endpoint(
     project_id: int,
     user_id: int,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> RedirectResponse:
     """Remove a member from the project via frontend form."""
     project, current_user, user_role = project_and_user_and_role
 

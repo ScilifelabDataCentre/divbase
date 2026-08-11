@@ -2,8 +2,7 @@
 API routes for VCF dimensions (technical metadata) operations.
 """
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +10,7 @@ from divbase_api.crud.projects import has_required_role
 from divbase_api.crud.queue_status import check_queue_closed_for_new_tasks
 from divbase_api.crud.task_history import create_task_history_entry
 from divbase_api.crud.vcf_dimensions import (
+    check_no_dimensions_update_task_already_in_progress,
     get_skipped_vcfs_by_project_async,
     get_unique_samples_by_project_async,
     get_unique_scaffolds_by_project_async,
@@ -31,14 +31,12 @@ from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionUpdateKwargs,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 vcf_dimensions_router = APIRouter()
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=DimensionsShowResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def list_vcf_metadata_by_project_name_user_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -88,13 +86,17 @@ async def update_vcf_dimensions_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> int:
     """
-    Update the VCF dimensions files for the specified project
+    Update the VCF dimensions files for the specified project.
+    If an existing dimensions update task is already in process or queued for the project, you will be prevented from submitting another update task.
     """
     project, current_user, role = project_and_user_and_role
 
-    if not has_required_role(role, ProjectRoles.EDIT):
-        raise AuthorizationError("You don't have permission to update VCF dimensions for this project.")
+    if not has_required_role(role, ProjectRoles.QUERY):
+        raise AuthorizationError(
+            "You don't have permission to update VCF dimensions, you need at least 'QUERY' level permissions."
+        )
     await check_queue_closed_for_new_tasks(db=db, is_admin=current_user.is_admin)
+    await check_no_dimensions_update_task_already_in_progress(db=db, project_id=project.id, project_name=project.name)
 
     task_kwargs = DimensionUpdateKwargs(
         bucket_name=project.bucket_name,
@@ -115,9 +117,7 @@ async def update_vcf_dimensions_endpoint(
     return job_id
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/samples", status_code=status.HTTP_200_OK, response_model=DimensionsSamplesResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/samples", status_code=status.HTTP_200_OK)
 async def list_unique_samples_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -135,9 +135,7 @@ async def list_unique_samples_endpoint(
     return DimensionsSamplesResult(unique_samples=result)
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/scaffolds", status_code=status.HTTP_200_OK, response_model=DimensionsScaffoldsResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/scaffolds", status_code=status.HTTP_200_OK)
 async def list_unique_scaffolds_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -155,9 +153,7 @@ async def list_unique_scaffolds_endpoint(
     return DimensionsScaffoldsResult(unique_scaffolds=result)
 
 
-@vcf_dimensions_router.get(
-    "/projects/{project_name}/vcf-files", status_code=status.HTTP_200_OK, response_model=DimensionsVCFFilesResult
-)
+@vcf_dimensions_router.get("/projects/{project_name}/vcf-files", status_code=status.HTTP_200_OK)
 async def list_unique_vcf_files_endpoint(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),

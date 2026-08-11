@@ -17,6 +17,7 @@ from divbase_api.security import (
     verify_password,
     verify_token,
 )
+from divbase_lib.divbase_constants import PAT_TOKEN_PREFIX
 
 USER_ID = 1
 
@@ -121,7 +122,7 @@ def test_password_hashing():
 
 def test_personal_access_token_hashing():
     """Test that hashing a personal access token produces a consistent hash."""
-    raw_token = SecretStr("divbase_pat_abc123")
+    raw_token = SecretStr(f"{PAT_TOKEN_PREFIX}_abc123")
     hashed_token_1 = hash_personal_access_token(raw_token)
     hashed_token_2 = hash_personal_access_token(raw_token)
     assert hashed_token_1 == hashed_token_2

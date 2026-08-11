@@ -71,12 +71,14 @@ services:
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
+    volumes:
+      - ./logs:/logs
     # NOTE: celery beat runs here ("-B"), in production it is run as a separate service
     # NOTE: Worker quick takes any non-specified tasks (with -Q "celery" being the default queue), 
     command: ["-Q", "quick,celery", "--hostname=worker-quick@%h", "--concurrency=1", "-B"]
@@ -90,6 +92,8 @@ services:
     depends_on: *worker-api-depends
     environment: *worker-env
     develop: *watch-celery-src
+    volumes:
+      - ./logs:/logs
     command: ["-Q", "long", "--hostname=worker-long@%h", "--concurrency=1"]
     networks: *internal-network
     ports:
@@ -155,25 +159,27 @@ services:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations:ro
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini:ro
   fastapi:
+    hostname: divbase-api
     build:
       context: ..
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
-    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"] 
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/.venv/lib/python3.14/site-packages/divbase_api/divbase_api.py"] 
     develop: # rebuild only on changes to deps. 
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
     volumes:
       - ../packages/divbase-api/src/divbase_api/migrations:/app/migrations # this is to get the migration scripts which are generated inside the container 
       - ../packages/divbase-api/src/divbase_api/alembic.ini:/app/alembic.ini
+      - ./logs:/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/core/health"]
       interval: 5s
@@ -189,6 +195,7 @@ services:
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+    - ALTCHA_HMAC_SECRET=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
     - S3_ENDPOINT_URL=http://host.docker.internal:9000
@@ -213,10 +220,13 @@ services:
       db-migrator:
         condition: service_completed_successfully
     environment:
+      - DIVBASE_ENV=local_dev
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY=s3-cron-service-account
       - S3_CRON_SERVICE_ACCOUNT_SECRET_KEY=badpassword
+    volumes:
+      - ./logs:/logs
     networks:
       - internal
   postgres:

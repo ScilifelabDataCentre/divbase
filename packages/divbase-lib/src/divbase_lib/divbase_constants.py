@@ -32,12 +32,13 @@ LARGEST_FILE_UPLOADABLE_TO_DIVBASE_BYTES = 10_000 * S3_MULTIPART_CHUNK_SIZE
 # File types that DivBase supports
 # Whilst we can't realistically limit what file types a user actually uploads,
 # this is here to say what we know should work in DivBase.
-SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi")
-
+SUPPORTED_DIVBASE_FILE_TYPES = (".tsv", ".vcf.gz", ".csi", ".tbi", ".txt", ".md")
+SUPPORTED_DIVBASE_FILE_TYPES_DISPLAY = ", ".join(f"'{ext}'" for ext in SUPPORTED_DIVBASE_FILE_TYPES)
 # Characters that are not allowed in file names uploaded to DivBase
 # This is to prevent issues when users try to filter/query files on DivBase using these characters
 # or when downloading files (e.g. ":" is used to specify file versions when downloading files
-UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\")
+UNSUPPORTED_CHARACTERS_IN_FILENAMES = (":", "*", "?", "<", ">", "|", "\\", "//", "@", "~")
+UNSUPPORTED_CHARACTERS_DISPLAY = ", ".join(f"'{c}'" for c in UNSUPPORTED_CHARACTERS_IN_FILENAMES)
 
 # This prefix is used for all *.vcf.gz results files from a query job/task.
 # After the prefix comes the job id which is a rolling integer.
@@ -54,3 +55,12 @@ CLI_VERSION_HEADER_KEY = "X-CLI-Version"
 
 # Personal Access Tokens (PATs) are used for passwordless auth with DivBase API
 PAT_TOKEN_PREFIX = "divbase_pat_"
+
+# Both divbase-api and divbase-worker(s) configs want to know if we are in a deployed environment or not
+LOCAL_DEV_ENVIRONMENTS = ["local_dev", "test"]
+
+# The default timezone and formats used for display (e.g. in the frontend, admin panel and in emails).
+DIVBASE_SERVER_TIMEZONE = "Europe/Stockholm"
+DEFAULT_DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
+# divbase-cli uses user's local timezone for display
+DEFAULT_CLI_DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M %Z"

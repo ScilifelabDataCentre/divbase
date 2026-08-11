@@ -2,9 +2,9 @@
 CRUD operations for Personal Access Tokens (PATs).
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,7 @@ from divbase_api.security import generate_personal_access_token, hash_personal_a
 
 PAT_MAX_ACTIVE_TOKENS = 5
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def create_personal_access_token(

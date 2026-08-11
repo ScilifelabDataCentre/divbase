@@ -11,12 +11,14 @@ import typer
 from rich import print
 
 from divbase_cli.cli_exceptions import (
+    FileAlreadyUploadedError,
     FileDoesNotExistInSpecifiedVersionError,
-    FilesAlreadyInProjectError,
+    InvalidInputError,
 )
 from divbase_cli.services.pre_signed_urls import (
     DownloadOutcome,
     FailedUpload,
+    SkippedUpload,
     SuccessfulUpload,
     UploadOutcome,
     download_multiple_pre_signed_urls,
@@ -27,8 +29,11 @@ from divbase_cli.services.project_versions import get_version_details_command
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_lib.api_schemas.s3 import (
     FileChecksumResponse,
+    ListDeletedObjectsRequest,
     ListObjectsRequest,
     ListObjectsResponse,
+    MakeDirectoriesRequest,
+    MakeDirectoriesResponse,
     ObjectDetails,
     ObjectInfoResponse,
     PreSignedDownloadResponse,
@@ -57,31 +62,51 @@ class ToDownload:
     2. From a user defined project version (getting the files from the version details)"
     """
 
-    name: str
+    s3_key: str
     etag: str
     size_bytes: int
     version_id: str | None = None  # latest version if None
 
 
+@dataclass
+class ToUpload:
+    """
+    Represents a file to be uploaded in the files upload command.
+    """
+
+    file_path: Path
+    destination_key: str  # what the file will be called in the project store. Can include "/"s to represent "folder" paths e.g. "some/subdirs/file.tsv"
+    checksum_local: str | None = None  # None if not uploaded with "safe-mode"
+
+    @property
+    def file_name(self) -> str:
+        return self.file_path.name
+
+    @property
+    def file_size(self) -> int:
+        return self.file_path.stat().st_size
+
+
 def list_files_command(
     divbase_base_url: str,
     project_name: str,
-    prefix_filter: str | None = None,
+    prefix: str | None = None,
     include_results_files: bool = False,
-) -> list[ObjectDetails]:
+    file_system_view: bool = True,
+) -> tuple[list[ObjectDetails], list[str]]:
     """
-    List all files in a project optionally filtered by a prefix.
-    We page through results if there are more than can be returned in a single API call.
+    List files and (optionally) folders in a project.
 
-    NOTE: The current implementation is not very efficient as we page through all results before returning any.
-    Keeping simple for now as we don't expect projects to have huge numbers of files.
-    But could be revisted later if performance becomes an issue.
+    file_system_view = true will return both files and folders at the current prefix level, simulating a file system view.
+    Otherwise all files are returned in a flat list
     """
+    if file_system_view:
+        delimiter = "/"
+    else:
+        delimiter = None
+
     api_route = f"v1/s3/list?project_name={project_name}"
-    initial_request = ListObjectsRequest(
-        prefix=prefix_filter,
-        next_token=None,
-    )
+    initial_request = ListObjectsRequest(prefix=prefix, delimiter=delimiter, next_token=None)
 
     response = make_authenticated_request(
         method="POST",
@@ -90,38 +115,39 @@ def list_files_command(
         json=initial_request.model_dump(),
     )
     response_data = ListObjectsResponse(**response.json())
-    all_matches = response_data.objects
+    folders, files = list(response_data.folders), list(response_data.files)
 
-    # page through any remaining results
     while response_data.next_token:
-        next_request = ListObjectsRequest(prefix=prefix_filter, next_token=response_data.next_token)
+        next_request = ListObjectsRequest(prefix=prefix, delimiter=delimiter, next_token=response_data.next_token)
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=api_route,
             json=next_request.model_dump(),
         )
-        next_page_data = ListObjectsResponse(**response.json())
+        response_data = ListObjectsResponse(**response.json())
+        folders.extend(response_data.folders)
+        files.extend(response_data.files)
 
-        all_matches.extend(next_page_data.objects)
-        response_data.next_token = next_page_data.next_token
-
-    # To enable us to both search by prefix and optionally hide/include query results files,
-    # we hide DivBase query results/job files now instead of via S3.
-    # so the prefix param can be used for the optional filter the user wants.
+    # Hide DivBase query results files unless explicitly requested.
+    # we do this here instead of in the api query so we can use the prefix filter to filter on other things
     if not include_results_files:
-        all_matches = [obj for obj in all_matches if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
+        files = [obj for obj in files if not obj.name.startswith(QUERY_RESULTS_FILE_PREFIX)]
 
-    return all_matches
+    return files, folders
 
 
-def list_soft_deleted_files_command(divbase_base_url: str, project_name: str) -> list[SoftDeletedObjectDetails]:
-    """List all soft-deleted files in a project."""
+def list_soft_deleted_files_command(
+    divbase_base_url: str, project_name: str, prefix: str | None = None
+) -> list[SoftDeletedObjectDetails]:
+    """List all soft-deleted files in a project, with optional prefix filtering."""
     api_route = f"v1/s3/list/soft-deleted?project_name={project_name}"
+
     response = make_authenticated_request(
-        method="GET",
+        method="POST",
         divbase_base_url=divbase_base_url,
         api_route=api_route,
+        json=ListDeletedObjectsRequest(prefix=prefix).model_dump(),
     )
     return [SoftDeletedObjectDetails(**obj) for obj in response.json()]
 
@@ -134,6 +160,23 @@ def get_file_info_command(divbase_base_url: str, project_name: str, object_name:
         api_route=f"v1/s3/info?project_name={project_name}&object_name={object_name}",
     )
     return ObjectInfoResponse(**response.json())
+
+
+def make_directories_command(
+    divbase_base_url: str, project_name: str, directories: list[str]
+) -> MakeDirectoriesResponse:
+    """
+    Create directories in the project's store.
+    Pagination not supported here, so up to MAX_S3_API_BATCH_SIZE directories can be created at once.
+    """
+    cleaned_directories = MakeDirectoriesRequest(directories=directories)
+    response = make_authenticated_request(
+        method="POST",
+        divbase_base_url=divbase_base_url,
+        api_route=f"v1/s3/mkdir?project_name={project_name}",
+        json=cleaned_directories.model_dump(),
+    )
+    return MakeDirectoriesResponse(**response.json())
 
 
 def soft_delete_objects_command(divbase_base_url: str, project_name: str, all_files: list[str]) -> list[str]:
@@ -181,6 +224,7 @@ def download_files_command(
     project_name: str,
     raw_files_input: list[str],
     download_dir: Path,
+    flatten: bool,
     verify_checksums: bool,
     dry_run: bool,
     project_version: str | None = None,
@@ -193,19 +237,16 @@ def download_files_command(
             f"The specified download directory '{download_dir}' is not a directory. Please create it or specify a valid directory before continuing."
         )
 
-    if project_version is not None:
+    if project_version:
         offending_files = [file for file in raw_files_input if ":" in file]
         if offending_files:
-            print(
-                "[red] ERROR: bad Input: If you provide a global project version (using --project-version) "
-                "you cannot also specify specific versions of individual files to download. \n"
-                "offending files in your input: \n"
-                f"{'\n'.join(offending_files)} \n"
-                "Exiting..."
+            raise InvalidInputError(
+                "If you provide a global project version (using --project-version) "
+                "you cannot also specify specific versions of individual files to download.\n"
+                "Offending files in your input:\n"
+                f"{'\n'.join(offending_files)}"
             )
-            raise typer.Exit(1)
 
-    if project_version:
         project_version_details = get_version_details_command(
             project_name=project_name, divbase_base_url=divbase_base_url, version_name=project_version
         )
@@ -226,7 +267,7 @@ def download_files_command(
     else:
         # parse raw file inputs to see if any specific version ids were provided using format:
         # file_name:version_id (not possible when using project_version)
-        json_data = []
+        json_data: list[dict[str, str | None]] = []
         for file_input in raw_files_input:
             if ":" in file_input:
                 name, version_id = file_input.split(sep=":", maxsplit=1)
@@ -258,6 +299,7 @@ def download_files_command(
         batch_download_success, batch_download_failed = download_multiple_pre_signed_urls(
             pre_signed_urls=pre_signed_urls,
             download_dir=download_dir,
+            flatten=flatten,
             verify_checksums=verify_checksums,
         )
         successful_downloads.extend(batch_download_success)
@@ -291,34 +333,86 @@ def stream_file_command(
 
 
 def upload_files_command(
-    project_name: str, divbase_base_url: str, all_files: list[Path], safe_mode: bool
+    project_name: str,
+    divbase_base_url: str,
+    all_files: list[ToUpload],
+    safe_mode: bool,
+    skip_existing: bool = False,
+    dry_run: bool = False,
 ) -> UploadOutcome:
     """
     Upload files to the project's S3 bucket.
-    Returns an UploadOutcome object containing details of which files were successfully uploaded and which failed.
+    Returns an UploadOutcome object containing details about how uploading went for each file.
 
     - Safe mode:
         1. checks if any of the files that are to be uploaded already exist in the bucket (by comparing checksums)
         2. Adds checksum to upload request to allow server to verify upload.
     """
+    all_successful_uploads: list[SuccessfulUpload] = []
+    all_failed_uploads: list[FailedUpload] = []
+    all_skipped_uploads: list[SkippedUpload] = []
+
     if safe_mode:
-        print("[green]Preparing to upload files, first calculating the checksums of all files to upload...[/green]")
-        # mapping of file name to hex-encoded checksum
-        file_checksums_hex = compare_local_to_s3_checksums(
+        if dry_run:
+            print(
+                "[green]Dry run enabled, calculating the checksums of all files to upload to determine which would be uploaded vs skipped...[/green]"
+            )
+        else:
+            print("[green]Preparing to upload files, calculating the checksums of all files to upload...[/green]")
+
+        to_upload, already_uploaded = filter_already_uploaded_files(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
             all_files=all_files,
         )
 
-    files_below_threshold, files_above_threshold = [], []
-    for file in all_files:
-        if file.stat().st_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
+        if already_uploaded:
+            # skip_existing means we just skip uploading those files that are already there
+            if not skip_existing:
+                files_str = "\n".join(f"'{f.file_path}' (Checksum: '{f.checksum_local}')" for f in already_uploaded)
+                message = (
+                    f"For the project: '{project_name}'\n"
+                    "The exact version of the following files that you're trying to upload already exist inside the project:\n"
+                    f"{files_str}\n\n"
+                    "[bold green]Tip: if you want to skip re-uploading these files and continue uploading the other files, "
+                    "re-run this command with the '--skip-existing' flag.[/bold green]"
+                )
+                if dry_run:
+                    message = "The following upload attempt would have failed due to the below error:\n" + message
+                raise FileAlreadyUploadedError(message)
+            else:
+                for file in already_uploaded:
+                    all_skipped_uploads.append(
+                        SkippedUpload(
+                            object_name=file.destination_key,
+                            file_path=file.file_path,
+                            reason=f"The file with checksum {file.checksum_local} already exists in the project",
+                        )
+                    )
+    else:
+        # we don't provide checksums to server
+        to_upload = all_files
+
+    if dry_run:
+        if to_upload:
+            print("\n[green bold]The following files would have been uploaded:[/green bold]")
+            for file in to_upload:
+                print(f"- '{file.file_path}' -> would be stored as: '{file.destination_key}' in the project")
+        if all_skipped_uploads:
+            print("\n[yellow bold]The following files would have been skipped from upload:[/yellow bold]")
+            for file in all_skipped_uploads:
+                print(f"- [yellow]'{file.file_path}' Reason: {file.reason}[/yellow]")
+
+        raise typer.Exit(0)
+
+    # Split files into those that need single vs multipart upload
+    files_below_threshold: list[ToUpload] = []
+    files_above_threshold: list[ToUpload] = []
+    for file in to_upload:
+        if file.file_size <= S3_MULTIPART_UPLOAD_THRESHOLD:
             files_below_threshold.append(file)
         else:
             files_above_threshold.append(file)
-
-    all_successful_uploads: list[SuccessfulUpload] = []
-    all_failed_uploads: list[FailedUpload] = []
 
     # P1. Process all single-part uploads in batches of max size allowed by divbase server.
     for i in range(0, len(files_below_threshold), MAX_S3_API_BATCH_SIZE):
@@ -326,12 +420,12 @@ def upload_files_command(
         batch_of_objects_to_upload = []
         for file in batch_files:
             upload_object = {
-                "name": file.name,
-                "content_length": file.stat().st_size,
+                "name": file.destination_key,
+                "content_length": file.file_size,
             }
-            if safe_mode:
-                hex_checksum = file_checksums_hex[file.name]
-                upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum)
+            if safe_mode and file.checksum_local:
+                # server expects base64 encoded checksum when provided
+                upload_object["md5_hash"] = convert_checksum_hex_to_base64(hex_checksum=file.checksum_local)
             batch_of_objects_to_upload.append(upload_object)
 
         response = make_authenticated_request(
@@ -341,19 +435,22 @@ def upload_files_command(
             json=batch_of_objects_to_upload,
         )
         pre_signed_urls = [PreSignedSinglePartUploadResponse(**item) for item in response.json()]
-        single_part_upload_outcome = upload_multiple_singlepart_pre_signed_urls(
-            pre_signed_urls=pre_signed_urls, all_files=batch_files
+        dest_key_to_path = {f.destination_key: f.file_path for f in batch_files}
+
+        successful_uploads, failed_uploads = upload_multiple_singlepart_pre_signed_urls(
+            pre_signed_urls=pre_signed_urls, dest_key_to_path=dest_key_to_path
         )
-        all_successful_uploads.extend(single_part_upload_outcome.successful)
-        all_failed_uploads.extend(single_part_upload_outcome.failed)
+        all_successful_uploads.extend(successful_uploads)
+        all_failed_uploads.extend(failed_uploads)
 
     # P2. process all multipart uploads.
-    for file_path in files_above_threshold:
+    for file in files_above_threshold:
         outcome = perform_multipart_upload(
             project_name=project_name,
             divbase_base_url=divbase_base_url,
-            file_path=file_path,
+            file_path=file.file_path,
             safe_mode=safe_mode,
+            destination_name=file.destination_key,
         )
 
         if isinstance(outcome, SuccessfulUpload):
@@ -361,52 +458,59 @@ def upload_files_command(
         else:
             all_failed_uploads.append(outcome)
 
-    return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads)
+    return UploadOutcome(successful=all_successful_uploads, failed=all_failed_uploads, skipped=all_skipped_uploads)
 
 
-def compare_local_to_s3_checksums(project_name: str, divbase_base_url: str, all_files: list[Path]) -> dict[str, str]:
+def filter_already_uploaded_files(
+    project_name: str,
+    divbase_base_url: str,
+    all_files: list[ToUpload],
+) -> tuple[list[ToUpload], list[ToUpload]]:
     """
-    Calculate the checksums of all local files (to be uploaded) and compares them to the checksums of all files in the project's S3 bucket.
-    Raises error if any files already exist in the project's S3 bucket with identical checksums.
+    Separate files into whether they are already in the projects bucket or not.
+    (1st list to be uploaded, 2nd list is files already in projects bucket)
 
-    Here, we are catching an attempt to upload an identical file twice.
+    For a file to be considered already in the project,
+    there must be an object with the same key and checksum in the project's S3 bucket.
+
     This is only ran if 'safe_mode' is enabled for uploads.
-    We do not catch an attempt to upload an identical object if it has a different name.
-
-    Return a dict of file names with hex-encoded checksums for all files to be uploaded (including those that are not in S3).
     These checksums are later used when uploading to the server so the server can verify the upload.
     """
-    already_uploaded_files: dict[Path, str] = {}  # files that already exist in S3 with identical checksum
-    local_checksums: dict[str, str] = {}  # all local files checksums
+    already_uploaded: list[ToUpload] = []
+    to_be_uploaded: list[ToUpload] = []
 
     # have to batch requests if above max number allowed by divbase server
     for i in range(0, len(all_files), MAX_S3_API_BATCH_SIZE):
         batch_files = all_files[i : i + MAX_S3_API_BATCH_SIZE]
-        batch_files_names = [file.name for file in batch_files]
+        batch_object_keys = [file.destination_key for file in batch_files]
 
         response = make_authenticated_request(
             method="POST",
             divbase_base_url=divbase_base_url,
             api_route=f"v1/s3/checksums?project_name={project_name}",
-            json=batch_files_names,
+            json=batch_object_keys,
         )
         server_checksum_responses = [FileChecksumResponse(**item) for item in response.json()]
         server_checksums = {item.object_name: item.md5_checksum for item in server_checksum_responses}
 
         for file in batch_files:
-            local_checksums[file.name] = _calc_local_checksum(file_path=file)
-            if server_checksums.get(file.name) and server_checksums[file.name] == local_checksums[file.name]:
-                already_uploaded_files[file] = local_checksums[file.name]
-            print(f"MD5 Checksum calculated for file: '{file.name}'")
+            local_checksum = _calc_local_checksum(file_path=file.file_path)
+            file_to_upload = ToUpload(
+                file_path=file.file_path, destination_key=file.destination_key, checksum_local=local_checksum
+            )
 
-    if already_uploaded_files:
-        raise FilesAlreadyInProjectError(existing_files=already_uploaded_files, project_name=project_name)
+            if server_checksums.get(file.destination_key) and server_checksums[file.destination_key] == local_checksum:
+                already_uploaded.append(file_to_upload)
+            else:
+                to_be_uploaded.append(file_to_upload)
 
-    return local_checksums
+            print(f"MD5 Checksum calculated for file: '{file.file_path}'")
+
+    return to_be_uploaded, already_uploaded
 
 
 def filter_out_already_downloaded_files(
-    all_files: list[ToDownload], download_dir: Path
+    all_files: list[ToDownload], download_dir: Path, flatten: bool = False
 ) -> tuple[list[ToDownload], list[ToDownload]]:
     """
     Filter out files that already exist in a local directory with the same checksum.
@@ -418,7 +522,8 @@ def filter_out_already_downloaded_files(
     files_to_download, files_to_overwrite = [], []
 
     for s3_file in all_files:
-        local_file_path = download_dir / s3_file.name
+        local_name = Path(s3_file.s3_key).name if flatten else s3_file.s3_key
+        local_file_path = download_dir / local_name
 
         if not local_file_path.exists():
             files_to_download.append(s3_file)

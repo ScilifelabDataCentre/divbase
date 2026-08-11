@@ -12,10 +12,12 @@ import logging
 
 import keyring
 import pytest
+from click.testing import Result
 from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
 from divbase_cli.cli_config import cli_settings
+from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
 
 runner = CliRunner()
@@ -77,6 +79,12 @@ def logged_in_read_user_with_existing_config(CONSTANTS):
 
 
 @pytest.fixture
+def logged_in_query_user_with_existing_config(CONSTANTS):
+    """Fixture to provide a logged in query user with existing config."""
+    yield from _create_logged_in_user_fixture("query user")(CONSTANTS)
+
+
+@pytest.fixture
 def logged_in_manage_user_with_existing_config(CONSTANTS):
     """Fixture to provide a logged in manage user with existing config."""
     yield from _create_logged_in_user_fixture("manage user")(CONSTANTS)
@@ -110,8 +118,15 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
         with contextlib.suppress(KeyringError):
-            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+            )
+        cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+        with contextlib.suppress(KeyringError):
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME
+            )
+        cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
         # running any cmd that requires the config file will create it
         for project in CONSTANTS["PROJECT_TO_BUCKET_MAP"]:
@@ -139,7 +154,21 @@ def _create_logged_in_user_fixture(user_type: str):
         cli_settings.CONFIG_PATH.unlink(missing_ok=True)
         # tokens can either be stored in device keyring (or in a fallback file if e.g. keyring not available - likely for CI or disabled for a test)
         with contextlib.suppress(KeyringError):
-            keyring.delete_password(service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_USERNAME)
-        cli_settings.TOKENS_PATH.unlink(missing_ok=True)
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_TOKENS_USERNAME
+            )
+        cli_settings.TOKENS_FALLBACK_PATH.unlink(missing_ok=True)
+        with contextlib.suppress(KeyringError):
+            keyring.delete_password(
+                service_name=cli_settings.KEYRING_SERVICE, username=cli_settings.KEYRING_PATS_USERNAME
+            )
+        cli_settings.PATS_FALLBACK_PATH.unlink(missing_ok=True)
 
     return factory
+
+
+def assert_divbase_403_permissions_error(result: Result) -> None:
+    """Helper function to assert a cli cmd result is a DivBaseAPIError with a 403 permissions error."""
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "403" in str(result.exception)

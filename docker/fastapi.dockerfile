@@ -1,5 +1,5 @@
 ## Stage 1: Build 
-FROM ghcr.io/astral-sh/uv:python3.13-alpine3.23 AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-alpine3.23 AS builder
 
 
 # UV_COMPILE_BYTECODE=1 Compile to bytecode during install so faster startup time
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package divbase-api
 
 ## Stage 2: Final image (without uv installed)
-FROM python:3.13-alpine3.23
+FROM python:3.14-alpine3.23
 
 WORKDIR /app
 
@@ -47,5 +47,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 USER appuser
 
-CMD ["fastapi", "run", "--host", "0.0.0.0", "/app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"]
+CMD ["fastapi", "run", "--host", "0.0.0.0", "/app/.venv/lib/python3.14/site-packages/divbase_api/divbase_api.py"]
 
