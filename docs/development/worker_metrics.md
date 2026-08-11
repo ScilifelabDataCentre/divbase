@@ -95,7 +95,7 @@ The worker metrics capturing (general and per-task) is implemented in three laye
 
 - **Accessing the data from Prometheus time-series database**
 
-    The data persisted in the Prometheus database can be fetched with Prometheus Query Language (PromQL) queries. This can be done in the in the Prometheus UI, programmatically through the Prometheus API, or through the custom Grafana dashboards set up for DivBase. There is also a script developed for a historical benchmarking experiment to facilitate programmatical results fetching  at [`scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py).
+    The data persisted in the Prometheus database can be fetched with Prometheus Query Language (PromQL) queries. This can be done in the Prometheus UI, programmatically through the Prometheus API, or through the custom Grafana dashboards set up for DivBase. There is also a script developed for a historical benchmarking experiment to facilitate programmatical results fetching  at [`scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py`](https://github.com/ScilifelabDataCentre/divbase/blob/main/scripts/benchmarking/fetch_per_task_metrics_from_prometheus.py).
 
 ### 2.1 The Celery workers and their `/metrics` endpoint
 
@@ -231,7 +231,7 @@ docker network create divbase-observability
 With the network in place, start the main app stack as usual,
 
 ```bash
-docker compose -f docker/monitoring_compose.yaml up
+docker compose -f docker/divbase_compose.yaml up -d
 ```
 
 and then start the monitoring stack separately:
