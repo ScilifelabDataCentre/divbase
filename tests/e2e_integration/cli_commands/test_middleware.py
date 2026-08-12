@@ -48,7 +48,7 @@ def test_cli_version_middleware_rejects_outdated_cli_header():
     """
     outdated_response = httpx.get(HEALTH_URL, headers={CLI_VERSION_HEADER_KEY: "0.0.0"}, timeout=10)
     assert outdated_response.status_code == 400
-    assert outdated_response.json()["type"] == "cli_version_outdated_error"
+    assert outdated_response.json()["type"] == "CLIVersionOutdatedError"
     outdated_request_id = outdated_response.headers["X-Request-ID"]
     _assert_valid_request_id(outdated_request_id)
 
@@ -77,7 +77,7 @@ def test_cli_version_header_is_optional():
         HEALTH_URL, headers={CLI_VERSION_HEADER_KEY: "not.a.valid.version"}, timeout=10
     )
     assert malformed_header_response.status_code == 400
-    assert malformed_header_response.json()["type"] == "cli_version_outdated_error"
+    assert malformed_header_response.json()["type"] == "CLIVersionOutdatedError"
     malformed_request_id = malformed_header_response.headers["X-Request-ID"]
     _assert_valid_request_id(malformed_request_id)
 

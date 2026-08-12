@@ -20,6 +20,7 @@ from divbase_api.exceptions import DownloadedFileChecksumMismatchError, ObjectDo
 from divbase_lib.api_schemas.project_versions import FileDetails
 from divbase_lib.api_schemas.s3 import (
     ListObjectsResponse,
+    MakeDirectoriesResponse,
     ObjectDetails,
     ObjectInfoResponse,
     ObjectVersionInfo,
@@ -82,16 +83,21 @@ class S3FileManager:
                 files.append(obj["Key"])
         return files
 
-    def list_files_detailed(
-        self, bucket_name: str, prefix: str | None = None, next_token: str | None = None
+    def list_objects(
+        self,
+        bucket_name: str,
+        prefix: str | None = None,
+        next_token: str | None = None,
+        delimiter: str | None = None,
     ) -> ListObjectsResponse:
         """
-        Return a list of up to S3_BATCH_SIZE files in the S3 bucket with detailed info about each file.
-        This is used by CLI users via the API.
+        Return up to S3_BATCH_SIZE objects in the bucket with file details.
 
-        Pagination is supported via the next_token parameter, so a client may need to make multiple calls to get all files.
+        Pass delimiter='/' for a file-system-like view: files contains only objects at the current
+        level and folders contains common prefixes (simulated directories).
+        Omit delimiter for a flat recursive listing (folders will always be empty).
         """
-        request_args = {
+        request_args: dict = {
             "Bucket": bucket_name,
             "MaxKeys": S3_BATCH_SIZE,
         }
@@ -99,12 +105,14 @@ class S3FileManager:
             request_args["Prefix"] = prefix
         if next_token:
             request_args["ContinuationToken"] = next_token
+        if delimiter:
+            request_args["Delimiter"] = delimiter
 
         response = self.s3_client.list_objects_v2(**request_args)
 
-        items = []
+        files = []
         for obj in response.get("Contents", []):
-            items.append(
+            files.append(
                 ObjectDetails(
                     name=obj["Key"],
                     size=obj["Size"],
@@ -112,22 +120,26 @@ class S3FileManager:
                     etag=obj["ETag"].strip('"'),
                 )
             )
-
+        folders = [cp["Prefix"] for cp in response.get("CommonPrefixes", [])]
         new_next_token: str | None = response.get("NextContinuationToken")
-        return ListObjectsResponse(objects=items, next_token=new_next_token)
 
-    def list_soft_deleted_files(self, bucket_name: str) -> list[SoftDeletedObjectDetails]:
+        return ListObjectsResponse(files=files, folders=folders, next_token=new_next_token)
+
+    def list_soft_deleted_files(self, bucket_name: str, prefix: str | None = None) -> list[SoftDeletedObjectDetails]:
         """
         list all soft-deleted filesobjects in a bucket.
         A soft-deleted object is one whose latest S3 object version is a delete marker.
 
         NOTE: As we expect the number of soft-deleted files to be low, we can just paginate here,
-        rather than have the client make multiple calls with next tokens like in 'list_files_detailed'.
+        rather than have the client make multiple calls with next tokens like in 'list_objects'.
         """
         paginator = self.s3_client.get_paginator("list_object_versions")
-        soft_deleted_files = []
+        operation_parameters = {"Bucket": bucket_name}
+        if prefix:
+            operation_parameters["Prefix"] = prefix
 
-        for page in paginator.paginate(Bucket=bucket_name):
+        soft_deleted_files = []
+        for page in paginator.paginate(**operation_parameters):
             for marker in page.get("DeleteMarkers", []):
                 if marker.get("IsLatest"):
                     soft_deleted_files.append(
@@ -224,6 +236,24 @@ class S3FileManager:
             uploaded_files[key] = source.resolve()
 
         return uploaded_files
+
+    def make_directories(self, directories: list[str], bucket_name: str) -> MakeDirectoriesResponse:
+        """
+        Create directories in the S3 bucket by uploading empty objects with a trailing '/' in their key.
+        NOTE: That if the directory object already exists, this will add a new empty object (version) on top of it.
+
+        Returns a MakeDirectoriesResponse containing the created and failed directory paths.
+        """
+        created_directories, failed_directories = [], []
+        for dir_key in directories:
+            try:
+                self.s3_client.put_object(Bucket=bucket_name, Key=dir_key)
+            except ClientError as err:
+                logger.error(f"Failed to create directory '{dir_key}' in bucket '{bucket_name}': {err}")
+                failed_directories.append(dir_key)
+                continue
+            created_directories.append(dir_key)
+        return MakeDirectoriesResponse(created=created_directories, failed=failed_directories)
 
     def soft_delete_objects(self, objects: list[str], bucket_name: str) -> list[str]:
         """

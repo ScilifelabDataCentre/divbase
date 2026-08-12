@@ -24,7 +24,7 @@ logger = structlog.get_logger(__name__)
 task_history_router = APIRouter()
 
 
-@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult])
+@task_history_router.get("/tasks/user", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user(
     current_user: Annotated[UserDB, Depends(require_task_history_scope)],
     db: AsyncSession = Depends(get_db),
@@ -41,9 +41,7 @@ async def get_all_tasks_for_user(
     return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/tasks/user/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_all_tasks_for_user_and_project(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
@@ -51,7 +49,8 @@ async def get_all_tasks_for_user_and_project(
 ) -> list[TaskHistoryResult]:
     """
     Get the task history for the current user and project.
-    Admin users can view all tasks of the project (even if not member of the projects), non-admin users can only view their own tasks of the project.
+    Admin users can view all tasks of the project, non-admin users can only view their own tasks of the project.
+    Requires project membership, even for admins.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY) and not current_user.is_admin:
@@ -68,17 +67,15 @@ async def get_all_tasks_for_user_and_project(
     return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/projects/{project_name}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/projects/{project_name}", status_code=status.HTTP_200_OK)
 async def get_project_tasks(
     project_name: str,
     project_and_user_and_role: tuple[ProjectDB, UserDB, ProjectRoles] = Depends(get_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for a project. Requires MANAGE role or higher.
-    Admin users can view all tasks of the project (even if not member of the projects).
+    Get the task history for a project. Requires MANAGE role for non-admin users.
+    Requires project membership, even for admins.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.MANAGE) and not current_user.is_admin:
@@ -90,9 +87,7 @@ async def get_project_tasks(
     return deserialize_tasks_to_result(serialized_tasks)
 
 
-@task_history_router.get(
-    "/tasks/{user_task_id}", status_code=status.HTTP_200_OK, response_model=list[TaskHistoryResult]
-)
+@task_history_router.get("/tasks/{user_task_id}", status_code=status.HTTP_200_OK)
 async def get_task_by_id(
     user_task_id: int,
     current_user: Annotated[UserDB, Depends(require_task_history_scope)],

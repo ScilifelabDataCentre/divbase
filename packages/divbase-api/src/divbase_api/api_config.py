@@ -29,12 +29,19 @@ class GeneralSettings:
     log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "NOT_SET")
     first_admin_password: SecretStr = SecretStr(os.getenv("FIRST_ADMIN_PASSWORD", "NOT_SET"))
+    altcha_hmac_secret: SecretStr = SecretStr(os.getenv("ALTCHA_HMAC_SECRET", "NOT_SET"))
 
     # versions before this are denied access to the API, until the user has upgraded
     minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.0")
     # Used in deciding if to give the user an announcement on login that a new version of the CLI is available.
     # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
     latest_cli_version: str = lib_version
+
+    def __post_init__(self):
+        if self.frontend_base_url.endswith("/"):
+            self.frontend_base_url = self.frontend_base_url[:-1]
+        if self.mkdocs_site_url.endswith("/"):
+            self.mkdocs_site_url = self.mkdocs_site_url[:-1]
 
 
 @dataclass
@@ -148,6 +155,7 @@ class APISettings:
             "FRONTEND_BASE_URL": self.general.frontend_base_url,
             "MKDOCS_SITE_URL": self.general.mkdocs_site_url,
             "USER_SUPPORT_EMAIL": self.general.user_support_email,
+            "ALTCHA_HMAC_SECRET": self.general.altcha_hmac_secret,
             "ASYNC_DATABASE_URL": self.database.url,
             "SYNC_DATABASE_URL": self.database.sync_url,
             "JWT_SECRET_KEY": self.jwt.secret_key,
@@ -158,6 +166,9 @@ class APISettings:
             "S3_SERVICE_ACCOUNT_SECRET_KEY": self.s3.secret_key,
         }
         for setting_name, setting in required_fields.items():
+            if setting_name == "ALTCHA_HMAC_SECRET" and self.general.environment == "test":
+                # we do not run Captcha checks with ALTCHA in e2e tests.
+                continue
             if isinstance(setting, str) and setting == "NOT_SET":
                 raise ValueError(f"A required environment variable was not set: {setting_name=}")
             if isinstance(setting, SecretStr):

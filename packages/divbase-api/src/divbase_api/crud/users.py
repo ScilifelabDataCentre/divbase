@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from divbase_api.exceptions import UserRegistrationError
 from divbase_api.models.users import UserDB
-from divbase_api.schemas.users import UserCreate, UserUpdate
+from divbase_api.schemas.users import UserCreate, UserResponse, UserUpdate
 from divbase_api.security import get_password_hash
 
 
@@ -44,7 +44,7 @@ async def get_all_users(db: AsyncSession, limit: int = 1000, admins_only: bool =
 
 async def create_user(
     db: AsyncSession, user_data: UserCreate, is_admin: bool = False, email_verified: bool = False
-) -> UserDB:
+) -> UserResponse:
     """Create a new user"""
     proposed_email = user_data.email.lower()
     current_user = await get_user_by_email(db=db, email=proposed_email)
@@ -60,7 +60,7 @@ async def create_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    return user
+    return UserResponse.model_validate(user)
 
 
 async def update_user_profile(db: AsyncSession, user_data: UserUpdate, user_id: int) -> UserDB:

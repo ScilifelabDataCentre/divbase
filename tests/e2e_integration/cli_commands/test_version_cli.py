@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
+from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
 from tests.e2e_integration.cli_commands.conftest import assert_divbase_403_permissions_error
 
 runner = CliRunner()
@@ -86,8 +87,49 @@ def test_attempt_add_version_that_already_exists_fails(logged_in_query_user_with
     result = runner.invoke(app, command)
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_already_exists_error"
+    assert result.exception.error_type == "ProjectVersionAlreadyExistsError"
     assert result.exception.status_code == 400
+
+
+def test_add_version_does_not_include_folders_or_query_results_files(
+    logged_in_query_user_with_existing_config, cleaned_project_bucket, CONSTANTS, tmp_path
+):
+    """
+    These should not be added to the project version entry, even if they exist in the project bucket.
+
+    This tests requires a bit more setup than the other tests, and we used the cleaned_project_bucket fixture to ensure no leakage to other tests.
+    """
+    project = CONSTANTS["CLEANED_PROJECT"]
+    # 1 tsv, 1 vcf.gz, 1 query results file, 1 folder placeholder
+    file_names = [
+        "file1.tsv",
+        "file2.vcf.gz",
+        f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz",
+    ]
+    for file_name in file_names:
+        f = tmp_path / file_name
+        f.write_text("test content")
+    arg = " ".join(str(tmp_path / f) for f in file_names)
+    upload_cmd = f"files upload {arg} --project {project}"
+    result = runner.invoke(app, upload_cmd)
+    assert result.exit_code == 0
+
+    # have to mkdir for the folder placeholder to be created in s3
+    mkdir_cmd = f"files mkdir test_folder --project {project}"
+    result = runner.invoke(app, mkdir_cmd)
+    assert result.exit_code == 0
+
+    command = f"version add v1.0.0 --project {project}"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    command = f"version info v1.0.0 --project {project} --tsv"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+    assert "file1.tsv" in result.stdout
+    assert "file2.vcf.gz" in result.stdout
+    assert f"{QUERY_RESULTS_FILE_PREFIX}1.vcf.gz" not in result.stdout
+    assert "test_folder" not in result.stdout
 
 
 def test_list_versions(logged_in_query_user_with_existing_config):
@@ -192,14 +234,14 @@ def test_update_version_short_flags(logged_in_edit_user_with_existing_config):
 
 
 def test_update_version_no_options_provided(logged_in_edit_user_with_existing_config):
-    """Test that running update without any options exits without error as just does no operation."""
+    """Test that running update without any options exits with an error"""
     runner.invoke(app, f"version add {VERSION_1_NAME}")
 
     result = runner.invoke(app, f"version update {VERSION_1_NAME}")
-
-    assert result.exit_code == 0
-    assert "--new-name" in result.stdout
-    assert "--new-description" in result.stdout
+    # raises typer.BadParameter error, which exits with code 2
+    assert result.exit_code == 2
+    assert "usage:" in result.output.lower()
+    assert "root version update" in result.output.lower()
 
 
 def test_update_version_that_does_not_exist(logged_in_edit_user_with_existing_config):
@@ -207,7 +249,7 @@ def test_update_version_that_does_not_exist(logged_in_edit_user_with_existing_co
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 
@@ -220,7 +262,7 @@ def test_update_version_name_to_already_existing_name_fails(logged_in_edit_user_
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_already_exists_error"
+    assert result.exception.error_type == "ProjectVersionAlreadyExistsError"
     assert result.exception.status_code == 400
 
 
@@ -246,7 +288,7 @@ def test_update_soft_deleted_version_fails(logged_in_edit_user_with_existing_con
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_soft_deleted_error"
+    assert result.exception.error_type == "ProjectVersionSoftDeletedError"
     assert result.exception.status_code == 400
 
 
@@ -273,7 +315,7 @@ def test_delete_nonexistent_version(logged_in_edit_user_with_existing_config):
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 
@@ -318,7 +360,7 @@ def test_get_version_info_for_version_that_does_not_exist(logged_in_edit_user_wi
 
     assert result.exit_code != 0
     assert isinstance(result.exception, DivBaseAPIError)
-    assert result.exception.error_type == "project_version_not_found_error"
+    assert result.exception.error_type == "ProjectVersionNotFoundError"
     assert result.exception.status_code == 404
 
 

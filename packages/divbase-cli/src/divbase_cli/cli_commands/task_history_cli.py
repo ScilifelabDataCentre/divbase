@@ -10,7 +10,10 @@ import logging
 import typer
 
 from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION
-from divbase_cli.config_resolver import ensure_logged_in, resolve_project, resolve_url_for_non_project_specific_commands
+from divbase_cli.config_resolver import (
+    resolve_and_authenticate_project,
+    resolve_url_for_non_project_specific_commands,
+)
 from divbase_cli.display_task_history import TaskHistoryDisplayManager
 from divbase_cli.user_auth import make_authenticated_request
 from divbase_cli.user_config import load_user_config
@@ -104,15 +107,13 @@ def list_task_history_for_project(
     Check status of all tasks submitted for a project. Requires a manager role in the project. Displays the latest 10 tasks by default, unless --limit is specified.
     """
     # TODO add option to sort ASC/DESC by task timestamp
-    project_config = resolve_project(project_name=project)
-    logged_in_url = ensure_logged_in(desired_url=project_config.divbase_url)
+    project_config = resolve_and_authenticate_project(project_name=project)
 
     task_history_response = make_authenticated_request(
         method="GET",
-        divbase_base_url=logged_in_url,
+        divbase_base_url=project_config.divbase_url,
         api_route=f"v1/task-history/projects/{project_config.name}",
     )
-
     task_history_data = [TaskHistoryResult(**item) for item in task_history_response.json()]
 
     TaskHistoryDisplayManager(

@@ -2,7 +2,7 @@
 Schemas for query routes.
 """
 
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -172,7 +172,7 @@ class SampleFileMappingResult(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def map_legacy_task_history_keys(cls, data):
+    def map_legacy_task_history_keys(cls, data: Any) -> Any:
         """
         Support historical task-history payloads that stored uppercase keys.
         """

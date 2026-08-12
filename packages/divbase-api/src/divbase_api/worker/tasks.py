@@ -23,6 +23,7 @@ from celery.signals import (
     worker_process_init,
 )
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from divbase_api import __version__ as divbase_version
 from divbase_api.crud.s3 import validate_s3_service_account
@@ -66,7 +67,7 @@ from divbase_api.worker.metrics import (
 from divbase_api.worker.worker_config import worker_settings
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
-from divbase_lib.divbase_constants import QUERY_RESULTS_FILE_PREFIX
+from divbase_lib.divbase_constants import DIVBASE_SERVER_TIMEZONE, QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
 
 logger = structlog.get_logger(__name__)
@@ -126,7 +127,7 @@ app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     result_extended=True,
-    timezone="Europe/Stockholm",  # for internal scheduling, e.g. celery beat
+    timezone=DIVBASE_SERVER_TIMEZONE,  # for internal scheduling, e.g. celery beat
     worker_cancel_long_running_tasks_on_connection_loss=True,  # silence warning as will become default in celery 6
     control_queue_durable=True,
     event_queue_durable=True,
@@ -339,7 +340,7 @@ def bcftools_pipe_task(
     job_id: int,
     samples: list[str] | None = None,
     all_samples: bool = False,
-):
+) -> dict:
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
@@ -362,7 +363,7 @@ def bcftools_pipe_task(
     divbase_lib_logger.addHandler(log_handler)
 
     # assigned here so even if early exit from error the finally block will be able to clean them up.
-    vcf_paths: list[Path] = []
+    s3_key_to_path: dict[str, Path] = {}
     metadata_path: Path | None = None
     output_file: Path | None = None
     task_succeeded = False
@@ -441,13 +442,11 @@ def bcftools_pipe_task(
             download_start = time.time()
 
         logger.info("Started downloading VCF files from S3 to worker")
-
-        vcf_paths = _download_vcf_files(
+        s3_key_to_path = _download_vcf_files(
             files_to_download=files_to_download,
             bucket_name=bucket_name,
             s3_file_manager=s3_file_manager,
         )
-
         logger.info("Finished downloading VCF files from S3 to worker")
 
         if worker_settings.metrics.enabled_per_task:
@@ -463,16 +462,23 @@ def bcftools_pipe_task(
                 f"VCF download from S3 to worker took (walltime): {download_walltime:.2f}s, CPU: {download_cpu_used:.2f}s"
             )
 
+        # S3 keys can use "/" as folder separators, but local downloaded VCF files convert these to "@@"
+        # So we can preserve full s3 path in the file_name and avoid collisions when files with the same name exist in different folders.
+        # Convert filenames in sample_and_filename_subset to match local naming so the per-file
+        # sample lookup in BcftoolsQueryManager.run_current_command() succeeds for folder-based projects.
+        sample_and_filename_subset_mapped = [
+            SampleFileMapping(sample_id=entry.sample_id, filename=_convert_s3_key_to_local_filename(entry.filename))
+            for entry in sample_and_filename_subset
+        ]
         bcftools_inputs = BCFToolsInput(
-            sample_and_filename_subset=sample_and_filename_subset,
+            sample_and_filename_subset=sample_and_filename_subset_mapped,
             sampleIDs=resolved_sample_mode_results.unique_sample_ids,
-            filenames=[path.name for path in vcf_paths],
+            filenames=[path.name for path in s3_key_to_path.values()],
             # In all-samples mode there is no need to auto-inject "-s", and doing so can create very large command lines.
             auto_sample_injection=sample_selection_mode != VCFQuerySampleSelectionMode.ALL_SAMPLES,
         )
 
         logger.info("Started bcftools subprocesses")
-
         # Execute bcftools and get true subprocess metrics
         # Let validation exceptions (BcftoolsPipeEmptyCommandError, BcftoolsPipeUnsupportedCommandError,
         # SidecarInvalidFilterError) propagate to mark task as FAILURE. Otherwise the tasks will incorrectly be marked as SUCCESS.
@@ -518,13 +524,16 @@ def bcftools_pipe_task(
                 f"User inputted bcftools command used: '{command}'\n"
                 f"Task ID: {job_id}\n"
                 f"DivBase internal task ID: {task_id}\n"
+                "Note: VCF files are downloaded to the worker with folder separators '/' replaced by '@@' to preserve the full path.\n"
+                "For example, a file stored at 'my_folder/my_subfolder/my_file.vcf.gz' in the project store will appear as 'my_folder@@my_subfolder@@my_file.vcf.gz' in log messages below.\n"
+                "This is expected and not an error.\n"
                 "=================\n\n"
             )
             _upload_log_file(log_file=log_file, header=header, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         except Exception as e:
             logger.error(f"Failed to upload user log file for job {job_id} to S3: {str(e)}", exc_info=True)
         _delete_job_files_from_worker(
-            vcf_paths=vcf_paths,
+            vcf_paths=list(s3_key_to_path.values()),
             metadata_path=metadata_path,
             output_file=output_file,
             log_file=log_file,
@@ -590,7 +599,7 @@ def update_vcf_dimensions_task(
             db=db,
         )
 
-    # Early exit if there are no VCF files left in the bucket after updating the dimensions index. If there were no VCF files to begin with, raise exception
+    # Early exit if there are no VCF files left in the bucket after updating the dimensions cache. If there were no VCF files to begin with, raise exception
     if not vcf_files:
         if vcfs_deleted_from_bucket_since_last_indexing:
             result = DimensionUpdateTaskResult(
@@ -638,7 +647,7 @@ def update_vcf_dimensions_task(
         )
     ]
 
-    vcf_paths = _download_vcf_files(
+    s3_key_to_path = _download_vcf_files(
         files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
     )
 
@@ -648,8 +657,7 @@ def update_vcf_dimensions_task(
 
     # Use a single session for all DB writes and post-run reads
     with SyncSessionLocal() as db:
-        for vcf_path in vcf_paths:
-            s3_key = vcf_path.name
+        for s3_key, vcf_path in s3_key_to_path.items():
             try:
                 vcf_dims = calculator.calculate_dimensions(vcf_path)
 
@@ -681,12 +689,12 @@ def update_vcf_dimensions_task(
 
             except Exception as e:
                 logger.error(f"Error indexing {s3_key}: {str(e)}")
-                _delete_job_files_from_worker(vcf_paths=vcf_paths)
+                _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
                 return {"status": "error", "error": str(e), "task_id": task_id}
 
-        _delete_job_files_from_worker(vcf_paths=vcf_paths)
+        _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
 
-        # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions index accordingly before returning result.
+        # End-of-task concurrency edge case handling: check for any changes in the bucket during the job run and update dimensions cache accordingly before returning result.
         # Dropping stale DB entries is a cheap operation, so this edge case can be covered here.
         # Updating dimensions, however, is a more expensive operation, so if a version or new VCF has been added, the job will need to be resubmitted to the queue.
 
@@ -764,21 +772,34 @@ def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_
     )[0]
 
 
-def _download_vcf_files(files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager) -> list[Path]:
+def _download_vcf_files(
+    files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager
+) -> dict[str, Path]:
     """
-    Fetch input VCF files for bcftools run from the s3 bucket.
+    Fetch input VCF files from the project's s3 bucket.
+    Returns a mapping of S3 keys (keys) to their downloaded local file path (values).
     """
     logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
 
-    objects = {file_name: None for file_name in files_to_download}
-    downloaded_files = s3_file_manager.download_files(
-        objects=objects,
-        download_dir=Path.cwd(),
-        bucket_name=bucket_name,
-    )
+    download_dir = Path.cwd()
+    s3_key_to_path: dict[str, Path] = {}
 
-    logger.info(f"Downloaded VCF files: {[f.name for f in downloaded_files]}")
-    return downloaded_files
+    for s3_key in files_to_download:
+        target_path = download_dir / _convert_s3_key_to_local_filename(s3_key)
+        s3_file_manager._download_single_file(key=s3_key, dest=target_path, bucket_name=bucket_name, version_id=None)
+        s3_key_to_path[s3_key] = target_path
+
+    logger.info(f"Downloaded VCF files: {list(s3_key_to_path.keys())}")
+    return s3_key_to_path
+
+
+def _convert_s3_key_to_local_filename(s3_key: str) -> str:
+    """
+    Convert an S3 key to a local filename by replacing '/' with '@@'.
+    This avoids collisions when files with the same name exist in different folders.
+    Users cannot upload files to s3 with "@@" in the filename as in UNSUPPORTED_CHARACTERS_IN_FILENAMES
+    """
+    return s3_key.replace("/", "@@")
 
 
 @functools.lru_cache()
@@ -838,7 +859,7 @@ def _remove_stale_dimensions_db_entries(
     skipped_vcf_keys: set[str],
     current_vcf_files_in_bucket: set[str],
     project_id: int,
-    db,
+    db: Session,
 ) -> list[str]:
     """
     Delete VCF dimensions DB entries (both indexed and skipped) for VCF files that are no longer present
@@ -966,7 +987,7 @@ def _resolve_inputs_for_cli_samples_mode(
 
     if missing_samples:
         raise TaskUserError(
-            f"The following sample IDs were not found in the project's dimensions index: {', '.join(missing_samples)}."
+            f"The following sample IDs were not found in the project's dimensions cache: {', '.join(missing_samples)}."
         )
 
     matched_sample_ids = []
@@ -1118,11 +1139,11 @@ def _check_if_samples_can_be_combined_with_bcftools(
     file_to_samples = {}
     for file in files_to_download:
         if file not in vcf_lookup:
-            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions cache.")
 
         sample_names = vcf_lookup[file].samples
         if not sample_names:
-            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions index.")
+            raise TaskUserError(f"Sample names not found for file '{file}' in dimensions cache.")
 
         file_to_samples[file] = sample_names
 
@@ -1193,7 +1214,7 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     project_id: int,
 ) -> None:
     """
-    Check that all VCF files in the bucket are tracked in the dimensions index and
+    Check that all VCF files in the bucket are tracked in the dimensions cache and
     that tracked files have matching version IDs.
 
     Skipped VCF files (DivBase-generated result files) are considered tracked.

@@ -4,6 +4,7 @@ Schemas for project versioning routes.
 Project versions are the state of all files in a project's storage bucket at a given time point.
 """
 
+from datetime import datetime
 from typing import TypedDict
 
 from pydantic import BaseModel, Field
@@ -35,19 +36,20 @@ class ProjectBasicInfo(BaseModel):
     """Base model for describing a single project version, not for direct use in an endpoint."""
 
     name: str = Field(..., description="Version name")
-    description: str | None = Field(..., description="Version description")
+    description: str | None = Field(None, description="Version description")
 
 
 class AddVersionResponse(ProjectBasicInfo):
     """Response model for adding a version."""
 
-    created_at: str = Field(..., description="ISO timestamp when version was created")
+    created_at: datetime = Field(..., description="When the version was created")
 
 
 class ProjectVersionInfo(ProjectBasicInfo):
     """Basic information about a project version. You get a list of these when listing all versions in a project."""
 
-    created_at: str = Field(..., description="ISO timestamp when version was created")
+    created_at: datetime = Field(..., description="When the version was created")
+    updated_at: datetime = Field(..., description="When the version was last updated")
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
 
 
@@ -63,7 +65,8 @@ class FileDetails(TypedDict):
 class ProjectVersionDetailResponse(ProjectBasicInfo):
     """Full information about a single project version, including the files at that version."""
 
-    created_at: str = Field(..., description="ISO timestamp when version was created")
+    created_at: datetime = Field(..., description="When the version was created")
+    updated_at: datetime = Field(..., description="When the version was last updated")
     is_deleted: bool = Field(..., description="Whether this version has been soft-deleted")
     files: dict[str, FileDetails] = Field(
         ..., description="Info about all files at this version, including: version IDs, etags and file sizes"
@@ -78,10 +81,10 @@ class DeleteVersionResponse(BaseModel):
         False,
         description="Whether the version was already soft-deleted before this request",
     )
-    date_deleted: str = Field(..., description="ISO timestamp of when the version was soft-deleted")
+    date_deleted: datetime = Field(..., description="When the version was soft-deleted")
 
 
 class UpdateVersionResponse(ProjectBasicInfo):
     """Response model for updating a version."""
 
-    created_at: str = Field(..., description="ISO timestamp when version was created")
+    created_at: datetime = Field(..., description="When the version was created")

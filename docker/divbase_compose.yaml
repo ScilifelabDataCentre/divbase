@@ -71,10 +71,10 @@ services:
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
     volumes:
@@ -165,15 +165,15 @@ services:
       dockerfile: docker/fastapi.dockerfile
     ports:
       - 8000:8000
-    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/.venv/lib/python3.13/site-packages/divbase_api/divbase_api.py"] 
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "/app/.venv/lib/python3.14/site-packages/divbase_api/divbase_api.py"] 
     develop: # rebuild only on changes to deps. 
       watch:
         - action: sync+restart
           path: ../packages/divbase-api/src/divbase_api/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_api/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_api/
         - action: sync+restart
           path: ../packages/divbase-lib/src/divbase_lib/
-          target: /app/.venv/lib/python3.13/site-packages/divbase_lib/
+          target: /app/.venv/lib/python3.14/site-packages/divbase_lib/
         - action: rebuild
           path: ../uv.lock
     volumes:
@@ -195,6 +195,7 @@ services:
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
+    - ALTCHA_HMAC_SECRET=a-string-secret-at-least-256-bits-long
     - FIRST_ADMIN_EMAIL=admin@divbase.com
     - FIRST_ADMIN_PASSWORD=badpassword
     - S3_ENDPOINT_URL=http://host.docker.internal:9000

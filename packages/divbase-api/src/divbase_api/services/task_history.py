@@ -1,6 +1,6 @@
 import json
 import pickle
-from datetime import datetime, timezone
+from datetime import datetime
 
 import structlog
 
@@ -14,6 +14,7 @@ from divbase_lib.api_schemas.task_history import (
     TaskHistoryResult,
 )
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateKwargs, DimensionUpdateTaskResult
+from divbase_lib.utils import set_default_timezone
 
 logger = structlog.get_logger(__name__)
 
@@ -74,7 +75,7 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to decode JSON result for task {task.get('task_id')}: {e}")
 
-    task_name = task.get("name")
+    task_name = task.get("name") or "Unknown"
 
     is_error_result = isinstance(result_data, dict) and (
         "exc_type" in result_data or "exc_message" in result_data or result_data.get("status") == "error"
@@ -109,28 +110,28 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
         runtime = (completed_at - started_at).total_seconds()
 
     return TaskHistoryResult(
-        id=task.get("user_task_id"),
-        submitter_email=task.get("submitter_email"),
+        id=task["user_task_id"],
+        submitter_email=task.get("submitter_email") or "Unknown",
         status=task.get("status"),
         result=parsed_result,
-        date_done=task.get("date_done").isoformat() if task.get("date_done") else None,
+        date_done=_format_celery_datetime(task.get("date_done")),
         name=task_name,
         args=args_as_str,
         kwargs=parsed_kwargs,
         worker=task.get("worker"),
-        created_at=_format_timestamp(task.get("created_at")),
-        started_at=_format_timestamp(started_at),
-        completed_at=_format_timestamp(completed_at),
+        created_at=task["created_at"],  # NOTE: This comes from TaskHistoryDB, so not a "celery" datetime
+        started_at=_format_celery_datetime(started_at),
+        completed_at=_format_celery_datetime(completed_at),
         runtime=runtime,
     )
 
 
-def _format_timestamp(timestamp: datetime) -> str | None:
+def _format_celery_datetime(dt: datetime | None) -> datetime | None:
     """
-    Format datetime to string with timezone. Celery uses UTC by default.
+    Standardize Celery datetime objects to be consistent with rest of API.
+    This handles that Celery task entries can be None (e.g. date_done for a task in progress) and
+    some Celery datetime entries are "naive" (no timezone info attached), we can safely assume those are UTC.
     """
-    if timestamp is None:
+    if dt is None:
         return None
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    return timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")
+    return set_default_timezone(dt)

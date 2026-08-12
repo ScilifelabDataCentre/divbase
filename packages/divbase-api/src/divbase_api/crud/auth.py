@@ -1,13 +1,28 @@
 """
 Authentication-related CRUD operations.
+
+Covers:
+- email+password validation
+- JWT access and refresh token creation and validation
+- various user validation helpers (e.g. is user account valid).
+- Altcha captcha generation and verification
+
+NOTE: For Altcha captcha generation and verification, we are using the V1 API,
+consistent with the Django implementation https://github.com/aboutcode-org/django-altcha/
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import structlog
+from altcha import (
+    ChallengeOptionsV1,  # pyright: ignore[reportPrivateImportUsage]
+    create_challenge_v1,  # pyright: ignore[reportPrivateImportUsage]
+    verify_solution_v1,  # pyright: ignore[reportPrivateImportUsage]
+)
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from divbase_api.api_config import api_settings
 from divbase_api.crud.revoked_tokens import token_is_revoked
 from divbase_api.crud.users import get_user_by_email, get_user_by_id, get_user_by_id_or_raise
 from divbase_api.exceptions import AuthenticationError
@@ -16,6 +31,9 @@ from divbase_api.schemas.users import UserPasswordUpdate
 from divbase_api.security import TokenType, get_password_hash, verify_password, verify_token
 
 logger = structlog.get_logger(__name__)
+
+# Altcha (Captcha for e.g. registration + password reset) is disabled in test environments
+ALTCHA_ENABLED = api_settings.general.environment != "test"
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserDB:
@@ -38,8 +56,9 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
         raise AuthenticationError(message=generic_error_msg)
 
     if not user.email_verified:
+        verify_url = f"{api_settings.general.frontend_base_url}/resend-email-verification"
         raise AuthenticationError(
-            message="Email address not verified, check your inbox or visit the DivBase website to resend a new verification email."
+            message=f"Email address not verified, check your inbox or visit {verify_url} to get a new verification email."
         )
 
     return user
@@ -130,3 +149,39 @@ def delete_auth_cookies(response: Response) -> Response:
     response.delete_cookie(TokenType.ACCESS.value)
     response.delete_cookie(TokenType.REFRESH.value)
     return response
+
+
+def generate_altcha_challenge() -> dict:
+    """Generate a new Altcha captcha challenge."""
+    expires = datetime.now(tz=timezone.utc) + timedelta(minutes=1)
+    options = ChallengeOptionsV1(
+        algorithm="SHA-256",
+        hmac_key=api_settings.general.altcha_hmac_secret.get_secret_value(),
+        expires=expires,
+    )
+    challenge = create_challenge_v1(options)
+    return challenge.to_dict()
+
+
+def verify_altcha_solution(altcha: str | None, email: str) -> bool:
+    """
+    Verify the Altcha captcha solution. Returns True for a valid solution.
+    Validation skipped if in test environment (to avoid having to deal with Altcha in e2e playwright tests).
+    """
+    if not ALTCHA_ENABLED:
+        logger.info("Skipping Altcha verification as in test mode.")
+        return True
+
+    if not altcha:
+        logger.warning("Altcha verification failed: no solution provided.")
+        return False
+
+    verified, error = verify_solution_v1(
+        payload=altcha,
+        hmac_key=api_settings.general.altcha_hmac_secret.get_secret_value(),
+        check_expires=True,
+    )
+    if not verified:
+        logger.warning(f"Altcha verification failed for email {email} with error message: {error}")
+        return False
+    return True

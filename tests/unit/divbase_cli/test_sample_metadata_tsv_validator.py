@@ -297,7 +297,7 @@ class TestDimensionMatching:
         validator = ClientSideMetadataTSVValidator(valid_list_tsv, project_samples)
         stats, errors, warnings = validator.validate()
         assert any(
-            "following samples in the TSV were not found in the DivBase project's dimensions index" in e for e in errors
+            "following samples in the TSV were not found in the DivBase project's dimensions cache" in e for e in errors
         )
 
     def test_samples_not_in_tsv(self, valid_list_tsv):
@@ -305,7 +305,7 @@ class TestDimensionMatching:
         validator = ClientSideMetadataTSVValidator(valid_list_tsv, project_samples)
         stats, errors, warnings = validator.validate()
         assert any(
-            "following samples in the DivBase project's dimensions index were not found in the TSV" in w and "S10" in w
+            "following samples in the DivBase project's dimensions cache were not found in the TSV" in w and "S10" in w
             for w in warnings
         )
 

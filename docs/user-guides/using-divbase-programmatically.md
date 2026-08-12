@@ -59,7 +59,7 @@ You may prefer this if you want explicit per-job control of which token is used.
 
 ## Parse divbase-cli files ls/info output programmatically
 
-1. You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands in TSV format for easier parsing. Use the `--tsv` flag:
+You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands be TSV formated for easier parsing. Use the `--tsv` flag:
 
     ```bash
     divbase-cli files ls --tsv
@@ -73,18 +73,22 @@ You may prefer this if you want explicit per-job control of which token is used.
     divbase-cli version info VERSION_NAME --tsv
     ```
 
-2. Rather than first downloading a file, you can stream a file from the command line and pipe it into other tools for processing directly without saving it to disk.
+## Stream files from the command line
+
+Rather than first downloading a file, you can stream a file from the command line and pipe it into other tools for processing directly without saving it to disk.
 
     ```bash
     divbase-cli files stream my_file.vcf.gz | zcat | less
     ```
 
-    !!! Info
-        BCFTools accepts stdin as input, so you can also pipe a VCF file directly into BCFTools without saving it first:
+!!! info "BCFTools accepts stdin as input"
+    You can pipe a VCF file directly into BCFTools without downloading it first:
 
-        ```bash
-        divbase-cli files stream my_file.vcf.gz | bcftools view -h -
-        ```
+    ```bash
+    divbase-cli files stream my_file.vcf.gz | bcftools view -h -
+    ```
+
+    Especially useful if you just want to view the header of a VCF file without having to download the entire file.
 
 ## Running VCF queries programmatically
 
@@ -94,7 +98,7 @@ Example bash script for submitting a VCF query with desired `<parameters>`, poll
 
 ```bash
 
-# Submit a VCF query with the desired <parameters> and extract the task ID from the terminal output upon successful submission
+# Submit a VCF query with the desired <parameters> and extract the DivBase Task ID from the terminal output upon successful submission
 TASK_ID=$(divbase-cli query vcf <parameters> | sed -n 's/.*task id: \([0-9]*\)\..*/\1/p')
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "Error: failed to submit VCF query job. See output above for details." >&2
@@ -108,9 +112,9 @@ if [ $EXIT_CODE -eq 0 ]; then
 elif [ $EXIT_CODE -eq 1 ]; then
     # task failed with Celery task status FAILURE
 elif [ $EXIT_CODE -eq 2 ]; then
-    # task ID does not belong to a VCF query task
+    # Task ID does not belong to a VCF query task
 fi
 ```
 
 !!! Note
-    It is also possible to check for the status of a submitted task with `divbase-cli task-history id <task_id>`, but that command does not have built in polling (and downloading) like `divbase-cli query get-vcf-results` does.
+    It is also possible to check for the status of a submitted task with `divbase-cli task-history id <TASK_ID>`, but that command does not have built-in polling (and downloading) like `divbase-cli query get-vcf-results` does.

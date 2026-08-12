@@ -5,7 +5,6 @@ All routes here should rely on get_current_user_from_cookie dependency to ensure
 """
 
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
@@ -26,6 +25,7 @@ from divbase_api.models.projects import ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.email_sender import send_pat_created_email, send_pat_revoked_email
 from divbase_lib.api_schemas.personal_access_tokens import PATPermissions
+from divbase_lib.utils import format_datetime, to_unix_timestamp
 
 fr_pat_router = APIRouter()
 
@@ -41,14 +41,14 @@ PAT_EXPIRE_OPTIONS = {
 }
 
 
-@fr_pat_router.get("/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@fr_pat_router.get("/", status_code=status.HTTP_200_OK)
 async def list_pats_endpoint(
     request: Request,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
     success: str | None = None,
     error: str | None = None,
-):
+) -> HTMLResponse:
     """Render the user's personal access tokens list page."""
     pats = await get_users_personal_access_tokens(db=db, user_id=current_user.id)
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
@@ -67,12 +67,12 @@ async def list_pats_endpoint(
     )
 
 
-@fr_pat_router.get("/new", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@fr_pat_router.get("/new", status_code=status.HTTP_200_OK)
 async def new_pat_form_endpoint(
     request: Request,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """Render the new PAT creation form."""
     user_projects = await get_user_projects_with_roles(db=db, user_id=current_user.id)
     projects = create_user_project_responses(user_projects)
@@ -87,13 +87,13 @@ async def new_pat_form_endpoint(
     )
 
 
-@fr_pat_router.post("/new", response_class=HTMLResponse)
+@fr_pat_router.post("/new")
 async def create_pat_endpoint(
     request: Request,
     background_tasks: BackgroundTasks,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     """
     Handle new PAT form submission.
 
@@ -117,7 +117,7 @@ async def create_pat_endpoint(
         if role:
             form_projects[str(project.id)] = role
 
-    def form_error(message: str):
+    def form_error(message: str) -> HTMLResponse:
         return templates.TemplateResponse(
             request=request,
             name="pats_pages/new_personal_access_token.html",
@@ -189,9 +189,8 @@ async def create_pat_endpoint(
         return form_error(e.message)
 
     if expires_at_dt:
-        dt = expires_at_dt.astimezone(ZoneInfo("Europe/Stockholm"))
-        expires_at_cet = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        expires_at_unix = int(expires_at_dt.timestamp())
+        expires_at_unix = to_unix_timestamp(expires_at_dt)
+        expires_at_cet = format_datetime(expires_at_dt)
     else:
         expires_at_cet = None
         expires_at_unix = None
@@ -214,14 +213,14 @@ async def create_pat_endpoint(
     )
 
 
-@fr_pat_router.post("/{pat_id}/revoke", response_class=HTMLResponse)
+@fr_pat_router.post("/{pat_id}/revoke")
 async def revoke_pat_endpoint(
     pat_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
     current_user: UserDB = Depends(get_current_user_from_cookie),
     db: AsyncSession = Depends(get_db),
-):
+) -> RedirectResponse:
     """Revoke (soft-delete) one of the current user's personal access tokens."""
     revoked_pat_name = await soft_delete_personal_access_token(db=db, pat_id=pat_id, user_id=current_user.id)
     if not revoked_pat_name:

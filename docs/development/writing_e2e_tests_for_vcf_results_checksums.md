@@ -99,11 +99,11 @@ exit
 uv run python - <<'PY'
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from tests.e2e_integration.cli_commands.test_query_cli import _checksum_vcf_stream_skip_double_hash_headers
+from tests.e2e_integration.cli_commands.test_query_cli import _checksum_vcf_skip_double_hash_headers
 
 with TemporaryDirectory() as tmp:
- results_vcf_file="tests/fixtures/result_of_job.vcf.gz"
- print(_checksum_vcf_stream_skip_double_hash_headers(Path(results_vcf_file).read_bytes(), Path(tmp)))
+    results_vcf_file = "tests/fixtures/result_of_job.vcf.gz"
+    print(_checksum_vcf_skip_double_hash_headers(Path(results_vcf_file), Path(tmp)))
 PY
 
 # Spin down the testing stack

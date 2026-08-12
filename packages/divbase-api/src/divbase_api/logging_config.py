@@ -14,6 +14,7 @@ import socket
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 import structlog
 from structlog.types import EventDict
@@ -147,7 +148,7 @@ def create_user_task_log_handler(log_file: Path) -> logging.Handler:
     return handler
 
 
-def _simplify_user_log_events(_logger, _method, event_dict: EventDict) -> EventDict:
+def _simplify_user_log_events(_logger: Any, _method: str, event_dict: EventDict) -> EventDict:
     """
     Remove what would be a lot of noise from user-facing task log files.
     It's same task_id + name throughout a user's log file and timestarted is shown in the log header.
@@ -160,7 +161,7 @@ def _simplify_user_log_events(_logger, _method, event_dict: EventDict) -> EventD
     return event_dict
 
 
-def _strip_exc_info(_logger, _method, event_dict: EventDict) -> EventDict:
+def _strip_exc_info(_logger: Any, _method: str, event_dict: EventDict) -> EventDict:
     """Strip traceback info from user-facing log lines — show the error message only."""
     event_dict.pop("exc_info", None)
     event_dict.pop("exception", None)

@@ -8,9 +8,9 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "typer==0.24.1",
-    "keyring>=25.7.0",
-    "divbase-lib==0.1.0a5",
+    "typer==0.26.8",
+    "keyring==25.7.0",
+    "divbase-lib==0.1.0a14",
 ]
 dynamic = ["version"]
 

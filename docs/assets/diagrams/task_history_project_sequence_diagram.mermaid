@@ -5,8 +5,8 @@ sequenceDiagram
     participant API
     participant DB as PostgreSQL
 
-    User->>CLI: Run "divbase-cli task-history project PROJECT [OPTIONS]"
-    Note over CLI: PROJECT is required argument<br/>Options: --limit, --config
+    User->>CLI: Run "divbase-cli task-history project [PROJECT] [OPTIONS]"
+    Note over CLI: PROJECT is optional<br/>(defaults to project in config file)<br/>Options: --limit, --tsv
 
     CLI->>CLI: Load user config from config file
     CLI->>CLI: Check if logged in (logged_in_url exists)

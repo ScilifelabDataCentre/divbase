@@ -1,8 +1,16 @@
 """Unit test for the utils module in the divbase_cli package."""
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 import pytest
 
-from divbase_lib.utils import format_file_size, split_semicolon_bcftools_command_segments
+from divbase_lib.utils import (
+    format_datetime,
+    format_file_size,
+    split_semicolon_bcftools_command_segments,
+    to_unix_timestamp,
+)
 
 
 @pytest.mark.parametrize(
@@ -31,6 +39,33 @@ def test_format_file_size(size_bytes, expected_output):
     Test that format_file_size correctly converts byte sizes to human-readable strings.
     """
     assert format_file_size(size_bytes) == expected_output
+
+
+@pytest.mark.parametrize(
+    "dt, expected_unix_timestamp",
+    [
+        (datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc), 1767225600),
+        (datetime(2026, 1, 1, 1, 0, 0, tzinfo=ZoneInfo("Europe/Stockholm")), 1767225600),
+        (datetime(2026, 1, 1, 0, 0, 0), 1767225600),  # naive datetimes should be assumed to be UTC
+    ],
+)
+def test_to_unix_timestamp(dt, expected_unix_timestamp):
+    """Test that to_unix_timestamp converts a datetime to the correct unix timestamp."""
+    assert to_unix_timestamp(dt) == expected_unix_timestamp
+
+
+def test_format_datetime():
+    """Test that format_datetime displays Europe/Stockholm time by default."""
+    dt = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    naive_dt = datetime(2026, 1, 1, 0, 0, 0)  # should be treated as UTC if not specified.
+    expected_dt = "2026-01-01 01:00:00 CET"
+
+    assert format_datetime(dt) == expected_dt
+    assert format_datetime(naive_dt) == expected_dt
+
+
+# NOTE, we don't test format_datetime_for_cli or format_unix_timestamp_for_cli as they are
+# simple wrappers and we would need to handle local timezones diffs in the test, so not worth the hassle.
 
 
 @pytest.mark.parametrize(

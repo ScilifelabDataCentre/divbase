@@ -27,26 +27,26 @@ logger = structlog.get_logger(__name__)
 admin_router = APIRouter()
 
 
-@admin_router.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/users/", status_code=status.HTTP_201_CREATED)
 async def create_user_endpoint(
     user_data: UserCreate,
     is_admin: bool = Query(False, description="Set to true to create an admin user"),
     email_verified: bool = Query(False, description="Set to true to skip the email verification process"),
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> UserResponse:
     """Create a new regular or admin user."""
     new_user = await create_user(db=db, user_data=user_data, is_admin=is_admin, email_verified=email_verified)
     logger.info(f"Admin user: {current_admin.email} created a new user: {new_user.email}")
     return new_user
 
 
-@admin_router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/projects", status_code=status.HTTP_201_CREATED)
 async def create_project_endpoint(
     proj_data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> ProjectResponse:
     new_project = await create_project(db=db, proj_data=proj_data)
     logger.info(f"Admin user: {current_admin.email} created a new project: {new_project.name}")
     return new_project
@@ -54,7 +54,6 @@ async def create_project_endpoint(
 
 @admin_router.post(
     "/projects/{project_id}/members/{user_email}",
-    response_model=ProjectMembershipResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def add_project_member_endpoint(
@@ -63,7 +62,7 @@ async def add_project_member_endpoint(
     role: ProjectRoles,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> ProjectMembershipResponse:
     membership = await add_project_member(db=db, project_id=project_id, user_email=user_email.lower(), role=role)
     logger.info(
         f"Admin user: {current_admin.email} added user with email: {user_email} to project with id: {project_id} with role: {role}"
@@ -83,7 +82,7 @@ async def test_email_endpoint(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_admin: UserDB = Depends(get_current_admin_user),
-):
+) -> dict[str, str]:
     """Send a test email"""
     background_tasks.add_task(send_test_email, email_to=email_to)
     return {"message": f"Test email sent to {email_to} in the background."}

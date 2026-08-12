@@ -5,6 +5,7 @@ For these routes you will likely want to use the 'get_current_user_from_cookie_o
 to get the current user if they are logged in, but not require it.
 """
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from divbase_api import __version__ as divbase_version
 from divbase_api.api_config import api_settings
 from divbase_api.crud.announcements import get_active_announcements
+from divbase_api.crud.auth import ALTCHA_ENABLED
 from divbase_api.db import get_db
 from divbase_api.deps import get_current_user_from_cookie_optional
 from divbase_api.models.announcements import AnnouncementTarget
@@ -27,14 +29,15 @@ templates = Jinja2Templates(directory=templates_dir.resolve())
 templates.env.globals["mkdocs_site_url"] = api_settings.general.mkdocs_site_url
 templates.env.globals["divbase_version"] = divbase_version
 templates.env.globals["support_email"] = api_settings.general.user_support_email
+templates.env.globals["altcha_enabled"] = ALTCHA_ENABLED
 
 
-@fr_core_router.get("/", response_class=HTMLResponse)
+@fr_core_router.get("/")
 async def get_home_page(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-):
+) -> HTMLResponse:
     """Render the home page."""
     announcements = await get_active_announcements(db=db, target=AnnouncementTarget.WEB)
     return templates.TemplateResponse(
@@ -44,13 +47,13 @@ async def get_home_page(
     )
 
 
-def _simple_page(name: str, template: str):
+def _simple_page(name: str, template: str) -> Callable[..., Awaitable[HTMLResponse]]:
     """Return a simple route handler that renders a basic static template for all core pages that don't require any extra context."""
 
     async def handler(
         request: Request,
         current_user: UserDB | None = Depends(get_current_user_from_cookie_optional),
-    ):
+    ) -> HTMLResponse:
         return templates.TemplateResponse(
             request=request,
             name=template,
@@ -61,10 +64,10 @@ def _simple_page(name: str, template: str):
     return handler
 
 
-fr_core_router.get("/about", response_class=HTMLResponse)(_simple_page("get_about", "core_pages/about.html"))
-fr_core_router.get("/about/sv", response_class=HTMLResponse)(_simple_page("get_about_sv", "core_pages/about_sv.html"))
-fr_core_router.get("/citation", response_class=HTMLResponse)(_simple_page("get_citation", "core_pages/citation.html"))
-fr_core_router.get("/contact", response_class=HTMLResponse)(_simple_page("get_contact", "core_pages/contact.html"))
-fr_core_router.get("/faqs", response_class=HTMLResponse)(_simple_page("get_faqs", "core_pages/faqs.html"))
-fr_core_router.get("/terms", response_class=HTMLResponse)(_simple_page("get_terms", "core_pages/terms.html"))
-fr_core_router.get("/privacy", response_class=HTMLResponse)(_simple_page("get_privacy", "core_pages/privacy.html"))
+fr_core_router.get("/about")(_simple_page("get_about", "core_pages/about.html"))
+fr_core_router.get("/about/sv")(_simple_page("get_about_sv", "core_pages/about_sv.html"))
+fr_core_router.get("/citation")(_simple_page("get_citation", "core_pages/citation.html"))
+fr_core_router.get("/contact")(_simple_page("get_contact", "core_pages/contact.html"))
+fr_core_router.get("/faqs")(_simple_page("get_faqs", "core_pages/faqs.html"))
+fr_core_router.get("/terms")(_simple_page("get_terms", "core_pages/terms.html"))
+fr_core_router.get("/privacy")(_simple_page("get_privacy", "core_pages/privacy.html"))

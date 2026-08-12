@@ -9,18 +9,21 @@ The subcommand `divbase-cli files` provides you with a set of commands to intera
     - When you view/download/stream files, you are always working with the latest version of that file by default, but you can also specify older versions if needed.
     - Every file uploaded to your project gets a unique `Version ID`. These IDs are used internally by DivBase to keep track of files and their versions, but you can also use them to access specific versions of files if needed
 
-!!! warning "Your Project's file store is not the same as a traditional file system"
-    - All files are stored in a flat structure (there is no concept of directories) and are accessed by their file name (and optionally version ID).
-    - If you upload a file from a path that includes directories the full path will NOT be included in the file name in DivBase. For example, `divbase-cli files upload path/to/data/sample_metadata.tsv`, becomes `sample_metadata.tsv` in the project file store.
+!!! info "Folders in your project's file store"
+    - Your project's file store supports folders, allowing you to better organise your files.
+    - When uploading, files are stored by their file name only (e.g. `divbase-cli files upload path/to/data/sample_metadata.tsv` becomes `sample_metadata.tsv`). Use the `--to` flag or the `--recursive` flag to preserve or create folder structure — see the [upload section](#uploading-files) for details.
 
 ## Quick links to each `divbase-cli files` subcommand
 
-- [`ls`](#listing-files): List files in your project
+- [`ls`](#listing-files): List files and folders in your project
+- [`tree`](#view-all-project-files-as-a-directory-tree): Display the file store as a directory tree
 - [`info`](#getting-file-information): Get detailed info about a specific file (and every version of the file) in the project
 - [`download`](#downloading-files): Download files
 - [`download-all`](#downloading-all-files): Download all files in the project
 - [`stream`](#streaming-files): Stream a file's content to standard out
 - [`upload`](#uploading-files): Upload files
+- [`mkdir`](#creating-directories): Create a directory
+- [`rmdir`](#removing-directories): Remove an empty directory
 - [`rm`](#deleting-files): Soft delete files
 - [`restore`](#restoring-files): Restore soft deleted files
 
@@ -44,6 +47,7 @@ If you run any of the following commands, you will automatically use/see the lat
 
 ```bash
 divbase-cli files ls
+divbase-cli files tree
 divbase-cli files download sample_metadata.tsv
 divbase-cli files stream sample_metadata.tsv
 ```
@@ -86,22 +90,50 @@ In this section, we provide more information on how to use each command related 
 
 ### Listing files
 
-To see all the files currently in your project's store, run:
+To see all the files and folders currently in your project's store, run:
 
 ```bash
 divbase-cli files ls
 ```
 
-This will display a table with the file name, size, upload date, and MD5 checksum for each file.
+This displays folders (highlighted in blue) followed by files. To also see file sizes and upload dates, use `--detailed` (or `-l`):
 
-- You can filter the list by a prefix using the `--prefix` (or `-pre`) flag:
+```bash
+divbase-cli files ls -l # or --detailed
+```
+
+!!! tip "You can filter the file listing by providing a prefix as a positional argument:"
 
     ```bash
-    divbase-cli files ls --prefix my-data-
+    # List all files and folders whose name starts with 'sample'
+    divbase-cli files ls sample
+
+    # List the contents of the 'vcfs/' folder (include the trailing '/')
+    divbase-cli files ls vcfs/
     ```
 
+Other options:
+
 - By default, files generated from DivBase queries are hidden. To include them, use `--include-results-files` (or `-r`).
-- You can set the output format to be TSV with `--tsv` (or `-t`).
+- Use `--tsv` (or `-t`) to output the detailed view in TSV format.
+
+### View all project files as a directory tree
+
+To see all files in your project displayed as a directory tree, use the `tree` command:
+
+```bash
+divbase-cli files tree
+```
+
+You can scope the tree to a specific folder by passing its prefix as a positional argument:
+
+```bash
+divbase-cli files tree vcfs/
+```
+
+Other options:
+
+- By default, DivBase query results files are hidden. To include them, use `--include-results-files` (or `-r`).
 
 ### Getting file information
 
@@ -127,14 +159,22 @@ divbase-cli files upload "*.vcf.gz"
 # Upload all files in a directory using a glob
 divbase-cli files upload "/path/to/data/*"
 
-# Upload all files in a directory and its subdirectories
-# Note that the folders in each file's path will be removed on upload.
-# for example: /path/to/data/sample_metadata.tsv will be uploaded as sample_metadata.tsv
+# Upload all files into a remote folder called 'experiment1/' using the --to flag
+divbase-cli files upload "*.vcf.gz" --to experiment1/
+
+# Upload all files in a directory and its subdirectories, preserving the subdirectory structure
 divbase-cli files upload --recursive "/path/to/data/**"
+
+# Upload recursively into a remote folder
+divbase-cli files upload --recursive "/path/to/data/**" --to experiment1/
 
 # Upload from a text file list (one file path per line)
 divbase-cli files upload --file-list files_to_upload.txt
 ```
+
+Use `--to` (or `-t`) to place uploaded files inside a remote folder. The folder does not need to exist beforehand — it will be created automatically. For example, `--to vcfs/batch1/` uploads all specified files into `vcfs/batch1/` in the project store.
+
+When using `--recursive` with a `**` glob, the subdirectory structure relative to the glob root is preserved. For example, `divbase-cli files upload --recursive "data/**"` uploads `data/subdir/file.vcf.gz` as `subdir/file.vcf.gz`. Without a `**`, only the file name is used.
 
 !!! warning "Safe Mode"
     By default, the `upload` command is performed in "safe mode". This mode calculates the MD5 checksum of your local files before uploading to:
@@ -154,8 +194,15 @@ divbase-cli files download file1.txt file2.csv --download-dir /path/to/save
 divbase-cli files download --file-list files_to_download.txt --download-dir /path/to/save
 ```
 
-- If `--download-dir` is not specified, files will be downloaded to the default download directory set in your user config, or the current directory as a fallback.
+You can also download an entire folder by passing its name with a trailing `/`:
 
+```bash
+# Download all files inside the 'vcfs/' folder, preserving the folder structure locally
+divbase-cli files download vcfs/ --download-dir /path/to/save
+```
+
+- If `--download-dir` is not specified, files will be downloaded to the default download directory set in your user config, or the current directory as a fallback.
+- By default, any folder structure in the project store is preserved locally. Use `--flatten` (or `-f`) to download all files directly into the download directory, ignoring any folder paths.
 - If you download a file that already exists in the target download directory, DivBase will overwrite the existing file.
 
 #### Downloading specific file versions
@@ -196,8 +243,9 @@ This will download all current files in your project except for DivBase query re
 Other flags:
 
 - Specify the download directory with `--download-dir`.
+- Use `--flatten` (or `-f`) to download all files into a single flat directory, ignoring any folder paths from the project store.
 - Use `--dry-run` to see what would have been downloaded.
-- skip checksum validation with `--disable-verify-checksums` strongly discouraged. Downloading the actual files takes much longer than this step too.
+- Skip checksum validation with `--disable-verify-checksums` — strongly discouraged. Downloading the actual files takes much longer than this step too.
 
 #### Downloading all files from a project version
 
@@ -231,6 +279,34 @@ divbase-cli files stream my_file.vcf.gz | bcftools view -h -
     divbase-cli files stream my_file.vcf.gz | tee sample_metadata.tsv | less
     ```
 
+### Creating directories
+
+To create one or more directories in your project store, use the `mkdir` command:
+
+```bash
+# Create a single directory
+divbase-cli files mkdir vcfs/
+
+# Create a single nested directory (parent directories do not need to exist beforehand)
+divbase-cli files mkdir vcfs/batch1/metadata/
+
+# Create multiple directories at once
+divbase-cli files mkdir vcfs/ metadata/ results/
+```
+
+!!! info "Directories are created implicitly when uploading into them"
+    Directories don't need to be created before uploading into them — uploading with `--to vcfs/` will create the folder automatically if it doesn't exist.
+
+### Removing directories
+
+To remove an empty directory from your project store, use the `rmdir` command:
+
+```bash
+divbase-cli files rmdir vcfs/
+```
+
+The directory must be empty before it can be removed. Use `divbase-cli files rm` to delete any files inside it first. If the directory does not exist, the command will exit without an error.
+
 ### Deleting files
 
 To soft-delete files from your project's store, use the `rm` command:
@@ -253,7 +329,7 @@ divbase-cli files restore file1.txt file2.csv
 
 As with the other commands, you can provide a list of files to restore with a text file using `--file-list` flag.
 
-To see which files can are currently soft deleted and can be restored you can do:
+To see which files are currently soft deleted and can be restored you can do:
 
 ```bash
 divbase-cli files ls --show-deleted-files

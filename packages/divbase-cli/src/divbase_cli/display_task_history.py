@@ -1,6 +1,4 @@
 import logging
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from rich.console import Console
 from rich.table import Table
@@ -12,6 +10,7 @@ from divbase_lib.api_schemas.task_history import (
     SampleMetadataQueryTaskResult,
     TaskHistoryResult,
 )
+from divbase_lib.utils import format_datetime_for_cli
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ class TaskHistoryDisplayManager:
     def print_task_history(self) -> None:
         """Display the task history fetched from the results backend in a formatted table."""
 
-        sorted_tasks = sorted(self.task_items, key=lambda x: x.created_at or "", reverse=True)
+        sorted_tasks = sorted(self.task_items, key=lambda x: x.created_at, reverse=True)
         display_limit = self.display_limit
         limited_tasks = sorted_tasks[:display_limit]
 
@@ -72,16 +71,16 @@ class TaskHistoryDisplayManager:
                 colour = self.STATE_COLOURS.get(state, "white")
                 state_with_colour = f"[{colour}]{state}[/{colour}]"
 
-            submitter = task.submitter_email or "Unknown"
+            submitter = task.submitter_email
             result = self._format_result(task, state)
 
             table.add_row(
                 submitter,
                 str(task.id),
                 state_with_colour,
-                self._to_cet(task.created_at),
-                self._to_cet(task.started_at),
-                str(task.runtime if task.runtime is not None else "N/A"),
+                format_datetime_for_cli(task.created_at),
+                format_datetime_for_cli(task.started_at) if task.started_at else "N/A",
+                f"{task.runtime:.2f}" if task.runtime is not None else "N/A",
                 result,
             )
 
@@ -91,7 +90,7 @@ class TaskHistoryDisplayManager:
             console = Console()
             console.print(table)
 
-    def _create_task_history_table(self):
+    def _create_task_history_table(self) -> Table:
         """
         Use the Rich library to initiate a table for displaying task history.
         """
@@ -119,7 +118,7 @@ class TaskHistoryDisplayManager:
         table.add_column("Result", style="white", width=35, overflow="fold")
         return table
 
-    def _format_result(self, task, state):
+    def _format_result(self, task: TaskHistoryResult, state: str) -> str:
         """
         Format the result message based on the task state and type.
         """
@@ -156,7 +155,7 @@ class TaskHistoryDisplayManager:
 
         elif isinstance(task.result, DimensionUpdateTaskResult):
             result_message = (
-                f"VCF file dimensions index added or updated:\n  {task.result.VCF_files_added}\n"
+                f"VCF file dimensions cache added or updated:\n  {task.result.VCF_files_added}\n"
                 f"VCF files skipped by this job (previous DivBase-generated result VCFs):\n  {task.result.VCF_files_skipped}\n"
                 f"VCF files that have been deleted from the project and now are dropped from the index:\n  {task.result.VCF_files_deleted}"
             )
@@ -182,16 +181,3 @@ class TaskHistoryDisplayManager:
         if self.format_output_as_tsv:
             return text
         return f"[{colour}]{text}[/{colour}]"
-
-    def _to_cet(self, timestamp_str):
-        """
-        Convert a UTC timestamp string in '%Y-%m-%d %H:%M:%S UTC' format to CET.
-        """
-        if not timestamp_str or timestamp_str == "N/A":
-            return "N/A"
-        try:
-            dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S %Z")
-            cet_dt = dt.astimezone(ZoneInfo("Europe/Stockholm"))
-            return cet_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        except Exception:
-            return timestamp_str

@@ -6,6 +6,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Generator
 
 import psutil
 import structlog
@@ -612,7 +613,7 @@ class BcftoolsQueryManager:
         return output_file, metrics
 
     @contextlib.contextmanager
-    def temp_file_management(self):
+    def temp_file_management(self) -> Generator["BcftoolsQueryManager", None, None]:
         """Context manager to handle temporary file cleanup, even if processing fails/exits."""
         self.temp_files = []
         try:
@@ -1088,7 +1089,7 @@ class BcftoolsQueryManager:
         except Exception as e:
             logger.warning(f"Could not write {header_filename}: {e}")
 
-    def _log_file_size(self, file_path: str):
+    def _log_file_size(self, file_path: str) -> None:
         """
         Log the size of a given file in a human-readable format.
         # TODO consider changing to logger debug later in the dev process
