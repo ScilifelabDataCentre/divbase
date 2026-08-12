@@ -138,9 +138,9 @@ def test_query_exits_when_dimensions_are_outdated(
     cleanup_file,
 ):
     """
-    Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions index is not up-to-date. Test for these cases:
+    Test that verifies DimensionsNotUpToDateWithBucketError is raised when the dimensions cache is not up-to-date. Test for these cases:
     1. version_outdated: uploads a new version of an existing VCF file after dimensions update
-    2. unindexed: uploads a new VCF file that is not present in the dimensions index
+    2. unindexed: uploads a new VCF file that is not present in the dimensions cache
     """
     project_name = CONSTANTS["SPLIT_SCAFFOLD_PROJECT"]
     project_id = project_map[project_name]
@@ -211,7 +211,7 @@ def test_query_exits_when_dimensions_are_outdated(
             False,
             ["Starting bcftools_pipe_task"],
             [
-                "The VCF dimensions index in project 'split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
+                "The VCF dimensions cache in project 'split-scaffold-project' is missing or empty. Please ensure that there are VCF files in the project and run:'divbase-cli dimensions update --project <project_name>'"
             ],
         ),
         # Case 1: expected to be sucessful, should lead to concat
