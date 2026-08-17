@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Monitoring: Custom metrics collection for Celery worker
 
 This document explains how resource usage metrics are tracked and reported for the Celery Workers in DivBase. Using a custom [`prometheus-client`](https://github.com/prometheus/client_python) metrics server, wall time, CPU time, and memory usage can be collected on a **per-task basis**. The metrics are collected with custom code written for DivBase, and this document collects the definition and rationale behind the units and calculations used to capture the metrics. Note that this document specifically describes the per-task metrics. It is possible to set up system/cluster wide resource monitoring in addition to this (e.g. `cAdvisor`, `node-exporter` etc.), but that is not covered in this page.

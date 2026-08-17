@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Tests
 
 - Tests are written using Pytest. Tests are split at the top folder level into `unit`, `api`, `e2e_integration` and `migration` tests (alongside some shared fixtures).

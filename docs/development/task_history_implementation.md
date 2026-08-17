@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Task History Implementation
 
 DivBase users can view the history of their submitted tasks using the `divbase-cli task-history` CLI command. This document describes how the task history implementation works. As long as a task has been implemented as decribed in [Celery Task Implementation](celery_task_implementation.md), there is no need to make any alterations to the Task History code.

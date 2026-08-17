@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # DivBase API
 
 !!! attention "For End Users: Use divbase-cli instead"

@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Benchmarking scripts
 
 In addition to the [`pytest` testing suite](testing.md), load testing experiments have also been performed using scripts. This document describes the historical use-cases of those scripts. Please bear in mind that the code in these scripts reflect the state of the codebase at the time these experiments were performed, and that the scripts will most likely not work with the latest version of DivBase. They are presented here as a piece of history that might inform and inspire future implementation of load testing methods.

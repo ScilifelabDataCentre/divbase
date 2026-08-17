@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Sidecar sample metadata TSV queries
 
 The query engine for filtering on user-defined sidecar TSVs is centralised around the class `SharedMetadataValidator` in the `divbase-lib` package. This class validated that a sidecar TSV is compatible with DivBase, and is called by the client-side validator and by the server-side query engine (`SidecarQueryManager`). Important to understand is that the `SharedMetadataValidator` was designed to not raise errors or reports warnings: it only collects them. Then the CLI and query engine each acts on the information.

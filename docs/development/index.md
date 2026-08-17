@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Developer Overview
 
 ## Folders overview

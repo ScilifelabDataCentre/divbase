@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Bcftools Celery Task Logic
 
 User submitted queries to check out VCF data from DivBase are run as Celery tasks. This page given an overview of how the `bcftools` orchestration logic is designed for DivBase.

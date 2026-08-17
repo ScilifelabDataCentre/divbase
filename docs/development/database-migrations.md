@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Database Migrations with Alembic
 
 The directory `packages/divbase-api/src/divbase_api/migrations` contains database migrations for the DivBase postgres db instance. We use [Alembic](https://alembic.sqlalchemy.org/) to manage database schema changes.
