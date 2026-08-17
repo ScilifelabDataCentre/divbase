@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "typer==0.26.8",
     "keyring==25.7.0",
-    "divbase-lib==0.1.0a14",
+    "divbase-lib==0.1.0a15",
 ]
 dynamic = ["version"]
 
