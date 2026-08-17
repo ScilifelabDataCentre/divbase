@@ -2,6 +2,8 @@
 Top-level pytest configuration for DivBase
 """
 
+import pytest
+import structlog
 from structlog.typing import EventDict
 
 REGRESSION_GUARD_PREFIX = "Regression guard failed:"
@@ -31,3 +33,17 @@ def _text_in_logs(text: str, logs: list[EventDict]) -> bool:
     Used in both e2e and unit tests, hence why it is here.
     """
     return any(text in log.get("event", "") for log in logs)
+
+
+@pytest.fixture(autouse=True)
+def turn_off_structlog_caching():
+    """
+    Disable structlog's logger caching during tests.
+
+    - configure_logging() with cache_logger_on_first_use=True is called multiple times when running the test suite.
+    - If the caching isn't turned off, then already cached loggers use the original processors list, so the outcome of calling:
+    with capture_logs() as cap_logs:
+        [code we want to capture logs from]
+    will be empty cap_logs.
+    """
+    structlog.configure(cache_logger_on_first_use=False)

@@ -17,7 +17,8 @@ dev = [
     "pytest-playwright>=0.7.2",
     "pytest-alembic>=0.12.1",
     "pytest-mock-resources[docker]>=2.12.4",
-    "pymdown-extensions>=10.19.1",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.1",
     "zensical>=0.0.50",
 ]
 benchmarking = [

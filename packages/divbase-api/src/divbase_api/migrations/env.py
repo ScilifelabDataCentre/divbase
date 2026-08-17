@@ -21,11 +21,12 @@ config = context.config
 # Import your models' metadata
 target_metadata = Base.metadata
 
-# Set sqlalchemy.url
-# Using the sync URL over async for simplicity (and no performance impact for something like this).
-database_url = os.getenv("SYNC_DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# Set sqlalchemy.url, using the SYNC_DATABASE_URL over async for simplicity (and no performance impact for something like this).
+# config.get_main_option is set directly by some tests
+if not config.get_main_option("sqlalchemy.url"):
+    database_url = os.getenv("SYNC_DATABASE_URL")
+    if database_url:
+        config.set_main_option("sqlalchemy.url", database_url)
 
 
 def include_object(object, name, type_, reflected, compare_to) -> bool:

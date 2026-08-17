@@ -49,7 +49,8 @@ async def get_all_tasks_for_user_and_project(
 ) -> list[TaskHistoryResult]:
     """
     Get the task history for the current user and project.
-    Admin users can view all tasks of the project (even if not member of the projects), non-admin users can only view their own tasks of the project.
+    Admin users can view all tasks of the project, non-admin users can only view their own tasks of the project.
+    Requires project membership, even for admins.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.QUERY) and not current_user.is_admin:
@@ -73,8 +74,8 @@ async def get_project_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskHistoryResult]:
     """
-    Get the task history for a project. Requires MANAGE role or higher.
-    Admin users can view all tasks of the project (even if not member of the projects).
+    Get the task history for a project. Requires MANAGE role for non-admin users.
+    Requires project membership, even for admins.
     """
     project, current_user, role = project_and_user_and_role
     if not has_required_role(role, ProjectRoles.MANAGE) and not current_user.is_admin:
