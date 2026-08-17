@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Key design decisions related to VCF files
 
 This document outlines the key underlying design choices of how DivBase handles VCF files. Some, but not all of these decisions might also be covered in the  architecture decision records (ADRs) folder (`adr/`) of the GitHub repository.
