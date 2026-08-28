@@ -675,7 +675,7 @@ requires-dist = [
     { name = "pwdlib", extras = ["argon2"], specifier = "==0.3.0" },
     { name = "pyjwt", specifier = "==2.13.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
-    { name = "starlette-admin", specifier = "==0.17.0" },
+    { name = "starlette-admin", specifier = "==1.0.1" },
     { name = "structlog", specifier = "==26.1.0" },
     { name = "uvicorn", specifier = "==0.51.0" },
 ]
@@ -1035,6 +1035,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
+]
+
+[[package]]
+name = "itsdangerous"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
 ]
 
 [[package]]
@@ -2230,16 +2239,17 @@ wheels = [
 
 [[package]]
 name = "starlette-admin"
-version = "0.17.0"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "itsdangerous" },
     { name = "jinja2" },
     { name = "python-multipart" },
     { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/8b/fd9fb6165f280105fc2cba6582143f88e2ffd10546cda9b33b42be44819b/starlette_admin-0.17.0.tar.gz", hash = "sha256:ccc8229a8224d3da3b3cb4ef410c264eaedccc05d4d2f1ae5281374208110456", size = 2106612, upload-time = "2026-07-12T00:07:48.237Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/d5/c17af70c83c252195e5daa3e33a6884533c62a1cd4069c511da98c02225f/starlette_admin-1.0.1.tar.gz", hash = "sha256:0a818db92cbf5a2e24b3f1640028d6468d905228b20b8f6621d0ce97841122f8", size = 1260648, upload-time = "2026-08-25T02:59:17.282Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/ac/9d4141d12cef26c37143c7e4975f4d60383c1883adaa590b7dbdf163c33a/starlette_admin-0.17.0-py3-none-any.whl", hash = "sha256:fe3d29dfc4073ba6e5a3eb68110aa87a7ce18f735a9e8df8bd9663907b153f03", size = 2183316, upload-time = "2026-07-12T00:07:49.973Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/cf/fec1c43aaaa6e5a328f2f13b5eb049c393ea7c6d6f19c6aa772d2f11b364/starlette_admin-1.0.1-py3-none-any.whl", hash = "sha256:846b97e7a08b6bc453a91ce4ea64d1fe241de3b4555a0207c39c520874dd2ae7", size = 1388032, upload-time = "2026-08-25T02:59:15.951Z" },
 ]
 
 [[package]]
