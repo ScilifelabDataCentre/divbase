@@ -11,7 +11,7 @@ networks:
     driver: bridge
 services:
   rabbitmq:
-    image: "rabbitmq:4.3.0-management-alpine@sha256:1a43764bdcf116542e7c8c794adc67c79461727da16d474e9e21483fe7f716d3"
+    image: "rabbitmq:4.3.5-management-alpine@sha256:ac1201d1dc227779d93c607f976e7f9156fd5b551ee5ff7946cab6c242091bf3"
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 5s
@@ -99,7 +99,7 @@ services:
     ports:
       - "8102:8101" # for prometheus metrics scraping; need to have unique port per worker to build compose stack, but can then scrape based on the service name and port 8001
   minio:
-    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5@sha256:6dabb4a2088c9a79908de3bc05f4586c23ad2182c8908e7e3acbf61c1467fb20
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -121,7 +121,7 @@ services:
       - external-s3
   minio-setup: # Create the 2 service accounts 
     # 1 for api + worker and 1 for cronjob for hard deletion of expired objects 
-    image: bitnamilegacy/minio-client:2025.7.21-debian-12-r3
+    image: bitnamilegacy/minio-client:2025.7.21-debian-12-r3@sha256:73bd39f7899a0cef12b8dd5df13aa93a3ed1aaa44236542442e9ac76819ac158
     depends_on:
       minio:
         condition: service_healthy
@@ -230,7 +230,7 @@ services:
     networks:
       - internal
   postgres:
-    image: "postgres:17.9-alpine@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609"
+    image: "postgres:17.11-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73"
     ports:
       - "5432:5432"
     restart: always
@@ -249,7 +249,7 @@ services:
       - POSTGRES_PASSWORD=badpassword
     networks: *internal-network
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:v1.31@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
     ports:
       - "1025:1025"  # SMTP port
       - "8025:8025"  # Web UI 
