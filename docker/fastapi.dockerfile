@@ -1,5 +1,5 @@
 ## Stage 1: Build 
-FROM ghcr.io/astral-sh/uv:python3.14-alpine3.23 AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-alpine3.23@sha256:7c677471cd3fd0434c6149645b943faf03863b8e3e9dc28e88fcb3d5c88ceea7 AS builder
 
 
 # UV_COMPILE_BYTECODE=1 Compile to bytecode during install so faster startup time
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package divbase-api
 
 ## Stage 2: Final image (without uv installed)
-FROM python:3.14-alpine3.23
+FROM python:3.14-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5
 
 WORKDIR /app
 
