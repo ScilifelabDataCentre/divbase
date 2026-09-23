@@ -25,8 +25,8 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.requests import Request
+from starlette.templating import Jinja2Templates
 from starlette_admin import (
-    BaseAdmin,
     BaseField,
     BooleanField,
     DateTimeField,
@@ -40,11 +40,11 @@ from starlette_admin import (
     TextAreaField,
     TimezoneConfig,
 )
-from starlette_admin._types import RequestAction
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError
 
+from divbase_api.api_config import api_settings
 from divbase_api.db import get_db
 from divbase_api.deps import _authenticate_frontend_user_from_tokens
 from divbase_api.frontend_routes.auth import get_login, post_logout
@@ -154,7 +154,7 @@ class UserView(DivBaseModelView):
                 help_text="Timestamp when the user last changed their password.",
                 disabled=True,
             ),
-            HasMany("project_memberships", identity="memberships", label="Project Memberships"),
+            HasMany("project_memberships", key="memberships", label="Project Memberships"),
         ]
         + _is_deleted_date_deleted_fields()
         + _basedb_model_fields()
@@ -194,6 +194,10 @@ class UserView(DivBaseModelView):
         """Can only soft delete users"""
         return False
 
+    async def repr(self, obj: Any, request: Request) -> str:
+        """Override default string representation of the model"""
+        return f"{obj.name} ({obj.email})"
+
     async def create(self, request: Request, data: dict) -> Any:
         """
         We override the default create method so we can take a password from the frontend form
@@ -217,7 +221,7 @@ class UserView(DivBaseModelView):
             raise FormValidationError(errors={"is_active": "Cannot set a user as both active and deleted."})
         return await super().validate(request=request, data=data)
 
-    def handle_exception(self, exc: Exception) -> None:
+    async def handle_exception(self, request: Request, exc: Exception) -> None:
         """
         If an admin tries to create a user with an email that already exists, sqlalchemy will raise an IntegrityError.
 
@@ -225,7 +229,7 @@ class UserView(DivBaseModelView):
         """
         if isinstance(exc, IntegrityError):
             raise FormValidationError(errors={"email": "A user with this email already exists"})
-        return super().handle_exception(exc)
+        return await super().handle_exception(request=request, exc=exc)
 
 
 class ProjectView(DivBaseModelView):
@@ -270,6 +274,10 @@ class ProjectView(DivBaseModelView):
     def can_delete(self, request: Request) -> bool:
         return False
 
+    async def repr(self, obj: Any, request: Request) -> str:
+        """Override the default string representation of the model."""
+        return obj.name
+
     async def validate(self, request: Request, data: dict[str, Any]) -> None:
         """Custom validation to ensure a project name cannot have spaces and bucket name follows S3 bucket name rules."""
 
@@ -290,7 +298,7 @@ class ProjectView(DivBaseModelView):
             raise FormValidationError(errors={"is_active": "Cannot set a project as both active and deleted."})
         return await super().validate(request=request, data=data)
 
-    def handle_exception(self, exc: Exception) -> None:
+    async def handle_exception(self, request: Request, exc: Exception) -> None:
         """
         sqlalchemy will raise an IntegrityError if an admin tries to create/edit a project to have either a
          (1) project name that already exists or
@@ -307,7 +315,7 @@ class ProjectView(DivBaseModelView):
             if "name" in orig_message:
                 raise FormValidationError(errors={"name": "A project with this name already exists."})
 
-        return super().handle_exception(exc)
+        return await super().handle_exception(request=request, exc=exc)
 
 
 class ProjectMembershipView(DivBaseModelView):
@@ -319,15 +327,19 @@ class ProjectMembershipView(DivBaseModelView):
     """
 
     fields = [
-        HasOne("user", identity="user", label="User"),
-        HasOne("project", identity="project", label="Project"),
+        HasOne("user", key="user", label="User"),
+        HasOne("project", key="project", label="Project"),
         EnumField("role", label="Role", required=True, enum=ProjectRoles),
     ] + _basedb_model_fields()
 
     exclude_fields_from_list = []
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "project_id"]
 
-    def handle_exception(self, exc: Exception) -> None:
+    async def repr(self, obj: Any, request: Request) -> str:
+        """Override the default string representation of the model."""
+        return f"Project #{obj.project_id} ({obj.role})"
+
+    async def handle_exception(self, request: Request, exc: Exception) -> None:
         """
         sqlalchemy will raise an IntegrityError if an admin tries to create a new projectmembership if one already exists
         for the given user id + project id combo.
@@ -337,12 +349,12 @@ class ProjectMembershipView(DivBaseModelView):
         if isinstance(exc, IntegrityError):
             raise FormValidationError(
                 errors={
-                    "role": """A project membership table entry with this user id + project id already exists. 
+                    "role": """A project membership table entry with this user id + project id already exists.
                     Edit that entry instead or delete the entry first."""
                 }
             )
 
-        return super().handle_exception(exc)
+        return await super().handle_exception(request=request, exc=exc)
 
 
 class ProjectVersionsView(DivBaseModelView):
@@ -352,7 +364,7 @@ class ProjectVersionsView(DivBaseModelView):
         [
             StringField("name", required=True, label="Version Name", help_text="Unique name for the version."),
             TextAreaField("description", required=False, label="Description"),
-            HasOne("project", identity="project", label="Project"),
+            HasOne("project", key="project", label="Project"),
             IntegerField(
                 "user_id", label="User ID"
             ),  # No relationship created for this field in db model as this is for auditing only (can be null if user deleted)
@@ -385,14 +397,14 @@ class RevokedTokenView(DivBaseModelView):
         DateTimeField("revoked_at", label=f"Revoked At {DATETIME_TIMEZONE_LABEL}", disabled=True),
         EnumField("revoked_reason", label="Revoke Reason", required=True, enum=TokenRevokeReason),
         IntegerField("user_id", label="User ID", required=False),
-        HasOne("user", identity="user", label="User"),
+        HasOne("user", key="user", label="User"),
     ] + _basedb_model_fields()
 
     exclude_fields_from_list = ["user_id"]
     exclude_fields_from_create = ["id", "created_at", "updated_at", "user_id", "revoked_at"]
     exclude_fields_from_edit = ["id", "created_at", "updated_at", "user_id", "revoked_at", "revoked_reason"]
 
-    def handle_exception(self, exc: Exception) -> None:
+    async def handle_exception(self, request: Request, exc: Exception) -> None:
         """
         Handles gracefully attempts to create/edit a revoked token entry that would otherwise become a 500 error:
             - A token_type that is not allowed (only refresh and password reset tokens can be revoked).
@@ -411,15 +423,15 @@ class RevokedTokenView(DivBaseModelView):
                     errors={"token_jti": f"Unexpected integrity error: {orig_message} " + orig_message}
                 )
 
-        return super().handle_exception(exc)
+        return await super().handle_exception(request=request, exc=exc)
 
 
 class TaskHistoryView(DivBaseModelView):
     fields = [
         StringField("task_id"),
-        HasOne("user", identity="user", label="User"),
-        HasOne("project", identity="project", label="Project"),
-        HasOne("celery_meta", identity="celery-meta", label="Celery Task Details"),
+        HasOne("user", key="user", label="User"),
+        HasOne("project", key="project", label="Project"),
+        HasOne("celery_meta", key="celery-meta", label="Celery Task Details"),
     ] + _basedb_model_fields()
 
     exclude_fields_from_list = ["id", "updated_at"]
@@ -461,11 +473,15 @@ class CeleryTaskMetaView(DivBaseModelView):
     ]
     exclude_fields_from_list = ["args", "kwargs", "result", "traceback"]
 
-    async def serialize_field_value(self, value: Any, field: Any, action: RequestAction, request: Request) -> Any:
+    async def repr(self, obj: Any, request: Request) -> str:
+        """Override default string representation of the model"""
+        return f"{obj.name} ({obj.status})"
+
+    async def serialize_field_value(self, value: Any, field: BaseField, request: Request) -> Any:
         """Override to deserialize Celery's binary fields for display."""
         # For non-bytes values or fields we don't need to deserialize, use default behavior
         if not isinstance(value, bytes) or field.name not in ["args", "kwargs", "result"]:
-            return await super().serialize_field_value(value, field, action, request)
+            return await super().serialize_field_value(value, field, request)
 
         # NOTE: This is somewhat duplicated logic (also found in '_deserialize_celery_task_metadata' function from the task_history service layer).
         # It cannot be reused here as pydantic will raise validation errors as this function works on a per "cell" basis.
@@ -637,7 +653,7 @@ class PersonalAccessTokenView(DivBaseModelView):
                 disabled=True,
             ),
             IntegerField("user_id", label="User ID", required=False),
-            HasOne("user", identity="user", label="User"),
+            HasOne("user", key="user", label="User"),
         ]
         + _is_deleted_date_deleted_fields()
         + _basedb_model_fields()
@@ -659,18 +675,18 @@ class DivBaseAuthProvider(AuthProvider):
     The methods below are overriding several existing methods in the AuthProvider class (and its parent BaseAuthProvider).
     """
 
-    async def render_login(self, request: Request, admin: BaseAdmin) -> Response:
+    async def render_login(self, request: Request, templates: Jinja2Templates) -> Response:
         """Override the default starlette-admin login method to use our frontend get_login route/page."""
         return await get_login(request)
 
-    async def render_logout(self, request: Request, admin: BaseAdmin) -> Response:
+    async def render_logout(self, request: Request) -> Response:
         """Override the default starlette-admin logout to use our frontend post_logout function/route."""
         # can't rely on dependency injection here like in FastAPI, so we manually obtain a db session
         async for db in get_db():
             logout_response = await post_logout(request, db)
         return logout_response
 
-    async def is_authenticated(self, request: Request) -> bool:
+    async def authenticate(self, request: Request) -> AdminUser | None:
         """
         Overrides the default implementation to use our pre-existing DivBase auth system.
 
@@ -681,9 +697,8 @@ class DivBaseAuthProvider(AuthProvider):
         access_token = request.cookies.get("access_token")
         refresh_token = request.cookies.get("refresh_token")
         if not access_token and not refresh_token:
-            return False
+            return None
 
-        authenticated = False
         try:
             # Starlette does not support dependency injection like FastAPI,
             # so we need to manually obtain the database session here.
@@ -693,27 +708,10 @@ class DivBaseAuthProvider(AuthProvider):
                 )
 
                 if user and user.is_admin and user.is_active:
-                    # Store user info in the request state so it can be accessed by e.g. get_admin_user
-                    request.state.user = {"id": user.id, "name": user.name, "is_admin": user.is_admin}
-                    authenticated = True
+                    return AdminUser(username=user.name, photo_url=None)
         except Exception as e:
-            logger.warning(
-                f"An error occurred while attempting to authenticate a user on the starlette-admin panel, details: {e}"
-            )
-            return False
-        return authenticated
-
-    def get_admin_user(self, request: Request) -> AdminUser | None:
-        """
-        Retrieve the current (admin) user for display on the admin panel.
-
-        This controls the display of the user info in the top right of the admin panel and makes having a logout button possible.
-        """
-        user = request.state.user
-        if not user:
-            return None
-
-        return AdminUser(username=user["name"], photo_url=None)
+            logger.warning(f"Error occurred authenticating user on the starlette-admin panel, details: {e}")
+        return None
 
 
 def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
@@ -724,35 +722,35 @@ def register_admin_panel(app: FastAPI, engine: AsyncEngine) -> None:
         timezone_cookie_name=None,
     )
     admin = Admin(
-        engine=engine,
+        session_provider=engine,
         title="DivBase Admin",
         auth_provider=DivBaseAuthProvider(),
         timezone_config=timezone_config,
+        secret_key=api_settings.general.admin_panel_secret.get_secret_value(),
     )
 
-    admin.add_view(UserView(UserDB, icon="fas fa-user", label="Users", identity="user"))
-    admin.add_view(ProjectView(ProjectDB, icon="fas fa-folder", label="Projects", identity="project"))
-    admin.add_view(
-        ProjectMembershipView(
-            ProjectMembershipDB, icon="fas fa-link", label="Project Memberships", identity="memberships"
-        )
-    )
-    admin.add_view(ProjectVersionsView(ProjectVersionDB, icon="fas fa-history", label="Project Versions"))
-    admin.add_view(RevokedTokenView(RevokedTokenDB, icon="fas fa-ban", label="Revoked Tokens"))
-    admin.add_view(TaskHistoryView(TaskHistoryDB, icon="fas fa-history", label="Task History"))
-    admin.add_view(
-        CeleryTaskMetaView(CeleryTaskMeta, icon="fas fa-tasks", label="Celery Task Meta", identity="celery-meta")
-    )
-    admin.add_view(TaskStartedAtView(TaskStartedAtDB, icon="fas fa-clock", label="Task Started At"))
-    admin.add_view(
-        AnnouncementView(AnnouncementDB, icon="fas fa-bullhorn", label="Announcements", identity="announcement")
-    )
-    admin.add_view(
-        QueueStatusView(QueueStatusDB, icon="fas fa-power-off", label="Queue Status", identity="queue-status")
-    )
-    admin.add_view(
-        PersonalAccessTokenView(
-            PersonalAccessTokenDB, icon="fas fa-key", label="Personal Access Tokens", identity="personal-access-token"
-        )
-    )
+    # Each DBModel we want to display in the admin panel is defined here.
+    # The dict value is a tuple containing (View class, DB model, icon, menu label) used to register it.
+    # The dict key defines the url path for the view
+    model_views: dict[str, tuple] = {
+        "user": (UserView, UserDB, "fas fa-user", "Users"),
+        "project": (ProjectView, ProjectDB, "fas fa-folder", "Projects"),
+        "memberships": (ProjectMembershipView, ProjectMembershipDB, "fas fa-link", "Project Memberships"),
+        "project-versions": (ProjectVersionsView, ProjectVersionDB, "fas fa-history", "Project Versions"),
+        "revoked-tokens": (RevokedTokenView, RevokedTokenDB, "fas fa-ban", "Revoked Tokens"),
+        "task-history": (TaskHistoryView, TaskHistoryDB, "fas fa-history", "Task History"),
+        "celery-meta": (CeleryTaskMetaView, CeleryTaskMeta, "fas fa-tasks", "Celery Task Meta"),
+        "task-started-at": (TaskStartedAtView, TaskStartedAtDB, "fas fa-clock", "Task Started At"),
+        "announcement": (AnnouncementView, AnnouncementDB, "fas fa-bullhorn", "Announcements"),
+        "queue-status": (QueueStatusView, QueueStatusDB, "fas fa-power-off", "Queue Status"),
+        "personal-access-token": (
+            PersonalAccessTokenView,
+            PersonalAccessTokenDB,
+            "fas fa-key",
+            "Personal Access Tokens (PATs)",
+        ),
+    }
+    for key, (view_cls, model, icon, menu_label) in model_views.items():
+        admin.add_view(view_cls(model, icon=icon, menu_label=menu_label, key=key))
+
     admin.mount_to(app)
