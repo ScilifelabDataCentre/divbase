@@ -7,14 +7,14 @@
 DivBase is a service built and maintained by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata. The service provides a secure platform for managing genomic variants and metadata files for non-human and non-sensitive data.
 
 > [!NOTE]
-> DivBase is currently in pre-release for a limited number of users. We are actively seeking feedback to help shape the service. If you would like to be involved in testing or have suggestions, please reach out at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+> DivBase is currently in pre-release for a limited number of users. We are actively seeking feedback to help shape the service. If you would like to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
 
 ---
 
 ## Want to try out DivBase?
 
 - **Join an existing project:** Create an account at the [DivBase web interface](https://divbase.scilifelab-2-prod.sys.kth.se) and ask your project manager to add you.
-- **Start your own project:** Reach out to us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
+- **Start your own project:** Reach out to us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se).
 
 ## Key Features
 
@@ -87,7 +87,7 @@ This will submit a job to DivBase and once the job is complete, a new vcf.gz fil
 
 ## Get Support
 
-- **Need help?** Contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+- **Need help?** Contact us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
 - **Found a bug?** Please report it on our [GitHub Issues page](https://github.com/ScilifelabDataCentre/divbase/issues).
 
 ---

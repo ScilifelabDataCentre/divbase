@@ -2,7 +2,7 @@
 
 This page collects issues that users might encounter when using DivBase.
 
-Please feel free to contact us at <dsn-eb@scilifelab.se> if you're struggling!
+Please feel free to contact us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) if you're struggling!
 
 ## User accounts and login
 

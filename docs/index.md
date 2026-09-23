@@ -1,6 +1,6 @@
 # DivBase
 
-!!! warning "DivBase is in pre-release stage and under active development. Expect changes to features, commands, and documentation before the official release. If you want to be involved in testing or have suggestions, please reach out at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues)."
+!!! warning "DivBase is in pre-release stage and under active development. Expect changes to features, commands, and documentation before the official release. If you want to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues)."
 
 ---
 
@@ -9,7 +9,7 @@ DivBase is a service built and maintained by [SciLifeLab Data Centre](https://ww
 ## Want to access DivBase?
 
 - **Join an existing project:** Create an account at the [DivBase web interface](https://divbase.scilifelab-2-prod.sys.kth.se){:target="_blank"} and ask the project manager to add you (tell them the email you used to sign up with).
-- **Start your own project:** contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se).
+- **Start your own project:** contact us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se).
 
 ## Key Features
 
@@ -44,5 +44,5 @@ See our [Quick Start Guide](user-guides/quick-start.md) to get up and running in
 
 ## Getting Support
 
-- **Need help?** Contact us at [dsn-eb@scilifelab.se](mailto:dsn-eb@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+- **Need help?** Contact us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
 - **Found a bug?** Please report it on our [GitHub Issues page](https://github.com/ScilifelabDataCentre/divbase/issues).
