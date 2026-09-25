@@ -109,11 +109,11 @@ def list_versions(
 
     table = Table(title=f"Versions for {project_config.name}")
     table.add_column("Version", style="cyan", no_wrap=True)
-    table.add_column("Created ", style="magenta")
-    table.add_column("Last Updated", style="blue")
-    table.add_column("Description", style="green")
+    table.add_column("Created ", style="magenta", no_wrap=False)
+    table.add_column("Last Updated", style="blue", no_wrap=False)
+    table.add_column("Description", style="green", no_wrap=False)
     if include_deleted:
-        table.add_column("Soft Deleted", style="red")
+        table.add_column("Soft Deleted", style="red", no_wrap=True)
 
     for version in versions_info:
         name = version.name
@@ -150,9 +150,9 @@ def get_version_info(
 
     table = Table(title=f"Project version files for {project_config.name}")
     table.add_column("Name", style="cyan", no_wrap=True)
-    table.add_column("Version ID", style="magenta")
-    table.add_column("MD5 Checksum", style="green")
-    table.add_column("Size", style="yellow")
+    table.add_column("Version ID", style="magenta", no_wrap=True)
+    table.add_column("MD5 Checksum", style="green", no_wrap=True)
+    table.add_column("Size", style="yellow", no_wrap=False)
     for object_name, file_details in version_details.files.items():
         file_size = format_file_size(file_details["size"])
 

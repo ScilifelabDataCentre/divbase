@@ -272,10 +272,10 @@ def file_info(
         title=f"Available Versions for '[bold]{file_info.object_name}[/bold]'",
         caption="Versions shown are ordered with the latest/current version first/at the top",
     )
-    table.add_column("File size", justify="left", style="magenta", no_wrap=True)
-    table.add_column("Upload date", justify="left", style="green", no_wrap=True)
-    table.add_column("MD5 checksum", justify="left", style="yellow")
-    table.add_column("Version ID", justify="left", style="cyan")
+    table.add_column("File size", justify="left", style="magenta", no_wrap=False)
+    table.add_column("Upload date", justify="left", style="green", no_wrap=False)
+    table.add_column("MD5 checksum", justify="left", style="yellow", no_wrap=True)
+    table.add_column("Version ID", justify="left", style="cyan", no_wrap=True)
 
     for version in file_info.versions:
         upload_date = format_datetime_for_cli(dt=version.last_modified)

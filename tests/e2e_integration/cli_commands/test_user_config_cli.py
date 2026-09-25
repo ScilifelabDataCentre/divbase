@@ -172,3 +172,22 @@ def test_show_user_config_with_no_projects_command():
 
     assert result.exit_code == 0
     assert "No projects" in result.output
+
+
+def test_show_user_config_as_tsv_command(logged_out_user_with_existing_config, CONSTANTS):
+    command = "config show --tsv"
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0
+
+    lines = result.stdout.splitlines()
+    assert lines[0].split("\t") == ["Project Name", "DivBase URL", "Is default"]
+    project_names = [line.split("\t")[0] for line in lines[1:]]
+    assert sorted(project_names) == sorted(CONSTANTS["PROJECT_CONTENTS"])
+
+
+def test_show_user_config_as_tsv_with_no_projects_command():
+    command = "config show --tsv"
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 0
+    assert result.stdout == "Project Name\tDivBase URL\tIs default\n"

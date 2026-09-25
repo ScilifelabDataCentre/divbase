@@ -9,10 +9,12 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 
+from divbase_cli.cli_commands.shared_args_options import FORMAT_AS_TSV_OPTION
 from divbase_cli.cli_config import cli_settings
 from divbase_cli.user_config import (
     load_user_config,
 )
+from divbase_cli.utils import print_rich_table_as_tsv
 
 config_app = typer.Typer(help="Manage your user configuration file for the DivBase CLI.", no_args_is_help=True)
 
@@ -112,9 +114,22 @@ def set_default_dload_dir_command(
 
 
 @config_app.command("show")
-def show_user_config():
+def show_user_config(format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION):
     """Pretty print the contents of your current config file."""
     config = load_user_config()
+    table = Table(title="\nProjects in your DivBase CLI user config file")
+    table.add_column("Project Name", style="cyan", no_wrap=False)
+    table.add_column("DivBase URL", style="green", no_wrap=True)
+    table.add_column("Is default", style="yellow", no_wrap=False)
+
+    for project in config.projects:
+        is_default = "Yes" if project.name == config.default_project else ""
+        table.add_row(project.name, project.divbase_url, is_default)
+
+    if format_output_as_tsv:
+        print_rich_table_as_tsv(table=table)
+        return
+
     console = Console()
 
     console.print(
@@ -139,14 +154,5 @@ def show_user_config():
         console.print("[bold]No projects defined in your user config file.[/bold]")
         console.print("You can add a project using the command: 'divbase-cli config add <project_name>'")
         return
-
-    table = Table(title="\nProjects in your DivBase CLI user config file")
-    table.add_column("Project Name", style="cyan")
-    table.add_column("DivBase URL", style="green")
-    table.add_column("Is default", style="yellow")
-
-    for project in config.projects:
-        is_default = "Yes" if project.name == config.default_project else ""
-        table.add_row(project.name, project.divbase_url, is_default)
 
     console.print(table)
