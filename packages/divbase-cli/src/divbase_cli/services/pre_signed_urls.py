@@ -322,13 +322,19 @@ def _upload_one_singlepart_pre_signed_url(
     headers: dict[str, str],
 ) -> SuccessfulUpload | FailedUpload:
     """Upload one singlepart file to S3 using a pre-signed PUT URL."""
-    with open(file_path, "rb") as file:
-        try:
-            response = httpx_client.put(pre_signed_url, content=file, headers=headers)
-            response.raise_for_status()
-        except httpx.HTTPError as err:
-            logger.info(f"Failed to upload object '{object_name}' to pre-signed URL., Error: {err}")
-            return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
+    try:
+        for attempt in stamina.retry_context(on=retry_only_on_retryable_http_errors, attempts=3):
+            with attempt, open(file_path, "rb") as file:
+                response = httpx_client.put(
+                    pre_signed_url,
+                    content=file,
+                    headers=headers,
+                    timeout=httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=None),
+                )
+                response.raise_for_status()
+    except httpx.HTTPError as err:
+        logger.info(f"Failed to upload object '{object_name}' via single part upload, Error: {err}")
+        return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
 
     return SuccessfulUpload(file_path=file_path, object_name=object_name)
 
