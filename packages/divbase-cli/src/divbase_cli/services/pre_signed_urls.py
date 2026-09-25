@@ -14,6 +14,7 @@ Retry logic here uses the stamina library.
 For files uploaded/downloaded in parts/chunks, we print a dot for each part to show progress for the user.
 """
 
+import io
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -313,7 +314,6 @@ def upload_multiple_singlepart_pre_signed_urls(
     return successful_uploads, failed_uploads
 
 
-@stamina.retry(on=retry_only_on_retryable_http_errors, attempts=3)
 def _upload_one_singlepart_pre_signed_url(
     httpx_client: httpx.Client,
     pre_signed_url: str,
@@ -322,13 +322,19 @@ def _upload_one_singlepart_pre_signed_url(
     headers: dict[str, str],
 ) -> SuccessfulUpload | FailedUpload:
     """Upload one singlepart file to S3 using a pre-signed PUT URL."""
-    with open(file_path, "rb") as file:
-        try:
-            response = httpx_client.put(pre_signed_url, content=file, headers=headers)
-            response.raise_for_status()
-        except httpx.HTTPError as err:
-            logger.info(f"Failed to upload object '{object_name}' to pre-signed URL., Error: {err}")
-            return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
+    try:
+        for attempt in stamina.retry_context(on=retry_only_on_retryable_http_errors, attempts=3):
+            with attempt, open(file_path, "rb") as file:
+                response = httpx_client.put(
+                    pre_signed_url,
+                    content=file,
+                    headers=headers,
+                    timeout=httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=None),
+                )
+                response.raise_for_status()
+    except httpx.HTTPError as err:
+        logger.info(f"Failed to upload object '{object_name}' via single part upload, Error: {err}")
+        return FailedUpload(object_name=object_name, file_path=file_path, exception=err)
 
     return SuccessfulUpload(file_path=file_path, object_name=object_name)
 
@@ -482,10 +488,11 @@ def _upload_chunk(part: PresignedUploadPartUrlResponse, file_path: Path) -> tupl
     with httpx.Client() as client:
         response = client.put(
             part.pre_signed_url,
-            content=data_to_upload,
+            # By passing each part as a file-like object (wrap in io.BytesIO), httpx sends chunk in 64 KiB parts.
+            # Otherwise it sends the whole part (32 MiB) in one go (which can fail on slower connections even with a high write timeout).
+            content=io.BytesIO(data_to_upload),
             headers=part.headers,
-            # generous here as don't want to fail a big upload if temporarily bad internet
-            timeout=httpx.Timeout(connect=10.0, read=10.0, write=120.0, pool=None),
+            timeout=httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=None),
         )
         response.raise_for_status()
         # ETag is returned with quotes, which must be stripped prior to comparison
