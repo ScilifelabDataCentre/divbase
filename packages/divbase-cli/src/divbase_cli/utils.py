@@ -15,7 +15,7 @@ def print_rich_table_as_tsv(table: Table) -> None:
 
     NOTE: This function expects all table rows to be of same length (you can have None values in cells).
     """
-    writer = csv.writer(sys.stdout, delimiter="\t")
+    writer = csv.writer(sys.stdout, delimiter="\t", lineterminator="\n")
 
     headers = [str(col.header) for col in table.columns]
     writer.writerow(headers)
