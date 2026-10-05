@@ -13,6 +13,12 @@ from divbase_cli.cli_exceptions import AuthenticationError, ProjectNameNotSpecif
 from divbase_cli.user_auth import get_pat_for_authentication
 from divbase_cli.user_config import ProjectConfig, load_user_config
 
+AUTH_ERROR_MSG = (
+    "You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'. \n"
+    "Alternatively, you can use a personal access token (PAT) to authenticate yourself. \n"
+    f"See our guide here: {cli_settings.DIVBASE_DOCS_URL}/user-guides/account-management/#personal-access-tokens"
+)
+
 
 def resolve_and_authenticate_project(project_name: str | None) -> ProjectConfig:
     """
@@ -42,7 +48,7 @@ def resolve_and_authenticate_project(project_name: str | None) -> ProjectConfig:
         # if a user has a PAT, we will assume the PAT is for the correct URL
         return project_config
 
-    raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    raise AuthenticationError(AUTH_ERROR_MSG)
 
 
 def resolve_url_for_non_project_specific_commands() -> str:
@@ -62,7 +68,7 @@ def resolve_url_for_non_project_specific_commands() -> str:
     if get_pat_for_authentication():
         return cli_settings.DIVBASE_API_URL
 
-    raise AuthenticationError("You are not logged in. Please log in with 'divbase-cli auth login [EMAIL]'.")
+    raise AuthenticationError(AUTH_ERROR_MSG)
 
 
 def resolve_download_dir(download_dir: str | None) -> Path:

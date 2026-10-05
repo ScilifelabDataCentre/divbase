@@ -148,7 +148,10 @@ def show_user_config(format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION):
         console.print(f"[bold]You're logged into a DivBase server at URL:[/bold] '{config.logged_in_url}'")
         console.print(f"[bold]Logged in with email:[/bold] '{config.logged_in_email}'")
     else:
-        console.print("[bold]You're not logged into any DivBase server.[/bold]")
+        console.print(
+            "[bold]No login session.[/bold] If you've set up a personal access token, that will be used instead. "
+            f"See: {cli_settings.DIVBASE_DOCS_URL}/user-guides/account-management/#personal-access-tokens"
+        )
 
     if not config.projects:
         console.print("[bold]No projects defined in your user config file.[/bold]")
