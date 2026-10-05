@@ -92,7 +92,7 @@ class CLIVersionMiddleware(BaseHTTPMiddleware):
                 "Your install of divbase is too outdated and no longer compatible with DivBase Server. "
                 "You must first update your install of divbase in order to run any more commands. "
                 "If you're not sure how to do that, you can find instructions on how to upgrade here: "
-                f"{api_settings.general.mkdocs_site_url}/user-guides/installation"
+                f"{api_settings.general.docs_site_url}/user-guides/installation"
             )
             body = {"detail": message, "type": "CLIVersionOutdatedError"}
             return JSONResponse(content=body, status_code=status.HTTP_400_BAD_REQUEST)

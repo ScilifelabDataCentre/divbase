@@ -26,7 +26,7 @@ fr_core_router = APIRouter()
 
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir.resolve())
-templates.env.globals["mkdocs_site_url"] = api_settings.general.mkdocs_site_url
+templates.env.globals["docs_site_url"] = api_settings.general.docs_site_url
 templates.env.globals["divbase_version"] = divbase_version
 templates.env.globals["support_email"] = api_settings.general.user_support_email
 templates.env.globals["altcha_enabled"] = ALTCHA_ENABLED

@@ -50,7 +50,7 @@ def new_cli_version_announcement(user_cli_version: str) -> AnnouncementResponse 
             f"You are using an outdated version of the DivBase CLI '{user_cli_version}'. "
             f"Please consider upgrading to the latest version '{api_settings.general.latest_cli_version}' for new features, bug fixes, and improved security.\n"
             "If you're not sure how to do that, you can find instructions on how to upgrade here: "
-            f"{api_settings.general.mkdocs_site_url}/user-guides/installation"
+            f"{api_settings.general.docs_site_url}/user-guides/installation"
         ),
         level="info",
     )
