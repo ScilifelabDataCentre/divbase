@@ -348,6 +348,46 @@ def test_cleanup_stuck_tasks_deletes_from_both_tables(db_session_sync, create_ta
     assert celery_meta_after is None
 
 
+def test_cleanup_stuck_tasks_removes_queued_task_without_celery_meta(db_session_sync, project_map):
+    """
+    A task still in the queue has no CeleryTaskMeta entry (Celery only writes one when a worker picks it up),
+    so it should still be treated as a stuck PENDING task and removed.
+    """
+    stuck_pending_hours = 24
+    stuck_started_hours = 48
+
+    stuck_task_id = f"task-queued-{uuid.uuid4()}"
+    recent_task_id = f"task-queued-{uuid.uuid4()}"
+    project_id = list(project_map.values())[0]
+    for task_id, hours_old in [(stuck_task_id, 30), (recent_task_id, 10)]:
+        db_session_sync.add(
+            TaskHistoryDB(
+                task_id=task_id,
+                user_id=1,
+                project_id=project_id,
+                created_at=datetime.now(timezone.utc) - timedelta(hours=hours_old),
+            )
+        )
+    db_session_sync.commit()
+
+    result = cleanup_stuck_tasks_task(
+        stuck_pending_hours=stuck_pending_hours,
+        stuck_started_hours=stuck_started_hours,
+    )
+
+    assert result["status"] == "completed"
+    assert result["number_of_stuck_pending_deleted"] == 1
+
+    stuck_task = db_session_sync.execute(
+        select(TaskHistoryDB).where(TaskHistoryDB.task_id == stuck_task_id)
+    ).scalar_one_or_none()
+    recent_task = db_session_sync.execute(
+        select(TaskHistoryDB).where(TaskHistoryDB.task_id == recent_task_id)
+    ).scalar_one_or_none()
+    assert stuck_task is None
+    assert recent_task is not None
+
+
 @pytest.fixture
 def create_revoked_jwt(db_session_sync):
     """

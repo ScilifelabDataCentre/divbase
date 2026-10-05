@@ -24,6 +24,7 @@ class TaskHistoryDisplayManager:
         "SUCCESS": "green",
         "FAILURE": "red",
         "PENDING": "yellow",
+        "QUEUING": "yellow",
         "STARTED": "blue",
         "RETRY": "blue",
         "REVOKED": "magenta",
@@ -121,6 +122,9 @@ class TaskHistoryDisplayManager:
         Format the result message based on the task state and type.
         """
         colour = self.STATE_COLOURS.get(state, "white")
+
+        if state == "QUEUING":
+            return self._colourize_if_enabled("Waiting for job to start", colour)
 
         if state == "FAILURE":
             if isinstance(task.result, dict):
