@@ -19,6 +19,7 @@ from divbase_cli.cli_exceptions import (
     DivBaseAPIError,
     DuplicateFileNamesError,
     FileAlreadyUploadedError,
+    FileNotFoundInProjectError,
     NoFilesSpecifiedError,
     NotEmptyDirectoryError,
     UnsupportedCharactersError,
@@ -1262,6 +1263,18 @@ def test_stream_gzipped_file(logged_in_edit_user_with_existing_config, CONSTANTS
     result = runner.invoke(app, f"files stream {file_to_stream} --project {query_project}")
     assert result.exit_code == 0
     assert result.stdout_bytes == expected_content
+
+
+def test_stream_non_existent_file_raises_error(logged_in_edit_user_with_existing_config, CONSTANTS):
+    """Test streaming a file that does not exist in the project raises a DivBase CLI error."""
+    query_project = CONSTANTS["QUERY_PROJECT"]
+    file_to_stream = "this_file_does_not_exist.vcf.gz"
+
+    result = runner.invoke(app, f"files stream {file_to_stream} --project {query_project}")
+    assert result.exit_code != 0
+    assert isinstance(result.exception, FileNotFoundInProjectError)
+    assert file_to_stream in str(result.exception)
+    assert query_project in str(result.exception)
 
 
 def test_remove_with_dry_run(logged_in_edit_user_with_existing_config, CONSTANTS):
