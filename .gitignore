@@ -56,6 +56,10 @@ site/
 # documentation site's auto generated files
 docs/cli/_auto_generated/*.md
 docs/releases/index.md
+docs/llms.txt
+docs/llms-full.txt
+docs/llms-users.txt
+
 
 # pypi 
 dist/
