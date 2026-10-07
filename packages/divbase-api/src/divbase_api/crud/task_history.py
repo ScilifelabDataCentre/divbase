@@ -40,9 +40,11 @@ async def get_tasks_pg(
                 "submitter_email"
             ),  # TODO consider not using label here since email is unique in this selection
         )
-        .join(TaskHistoryDB, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .select_from(TaskHistoryDB)
         .join(UserDB, TaskHistoryDB.user_id == UserDB.id)
-        .join(TaskStartedAtDB, TaskHistoryDB.task_id == TaskStartedAtDB.task_id)
+        # Outer joins as a queued task has no celery_taskmeta/task_started_at entries until picked up by worker
+        .outerjoin(CeleryTaskMeta, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
+        .outerjoin(TaskStartedAtDB, TaskHistoryDB.task_id == TaskStartedAtDB.task_id)
     )
 
     if user_task_id:

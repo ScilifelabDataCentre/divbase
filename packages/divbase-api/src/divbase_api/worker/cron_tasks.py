@@ -104,8 +104,9 @@ def cleanup_stuck_tasks_task(
                     text("""
                     SELECT th.task_id
                     FROM task_history th
-                    JOIN celery_taskmeta cm ON th.task_id = cm.task_id
-                    WHERE cm.status = 'PENDING'
+                    LEFT JOIN celery_taskmeta cm ON th.task_id = cm.task_id
+                    WHERE (cm.task_id IS NULL OR cm.status = 'PENDING')
+                    AND th.task_id IS NOT NULL
                     AND th.created_at < :pending_cutoff
                     """),
                     {"pending_cutoff": pending_cutoff},

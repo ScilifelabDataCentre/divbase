@@ -13,6 +13,7 @@ from rich import print
 from divbase_cli.cli_exceptions import (
     FileAlreadyUploadedError,
     FileDoesNotExistInSpecifiedVersionError,
+    FileNotFoundInProjectError,
     InvalidInputError,
 )
 from divbase_cli.services.pre_signed_urls import (
@@ -323,7 +324,10 @@ def stream_file_command(
 
     try:
         with httpx.stream("GET", pre_signed_url, timeout=None) as response:
+            if response.status_code == 404:
+                raise FileNotFoundInProjectError(project_name=project_name, file_name=file_name, version_id=version_id)
             response.raise_for_status()
+
             for chunk in response.iter_bytes():
                 sys.stdout.buffer.write(chunk)
     except BrokenPipeError:

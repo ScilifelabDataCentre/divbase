@@ -221,7 +221,6 @@ def test_task_history_user_tsv_output_is_parseable_and_plain(
         "Submitting user",
         "Task ID",
         "State",
-        "Created at",
         "Started at",
         "Runtime (s)",
         "Result",
@@ -233,7 +232,7 @@ def test_task_history_user_tsv_output_is_parseable_and_plain(
 
         task_id = row[1]
         state = row[2]
-        result_text = row[6]
+        result_text = row[5]
 
         assert task_id.isdigit()
         assert (

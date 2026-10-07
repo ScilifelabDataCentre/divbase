@@ -97,9 +97,10 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
             parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
             parsed_kwargs = DimensionUpdateKwargs(**kwargs) if kwargs else None
         else:
-            # Fallback for Unknown task type - keep everything as dicts
+            # Fallback for Unknown task type - keep everything as dicts.
             parsed_result = result_data
-            parsed_kwargs = kwargs
+            # Queued tasks have no celery_taskmeta entry yet (so no name/kwargs).
+            parsed_kwargs = kwargs or None
 
     args_as_str = json.dumps(args) if isinstance(args, list) else str(args)
 

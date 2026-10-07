@@ -105,6 +105,20 @@ class FileDoesNotExistInSpecifiedVersionError(DivBaseCLIError):
         super().__init__(error_message)
 
 
+class FileNotFoundInProjectError(DivBaseCLIError):
+    """Raised when a file (or the specified version of it) does not exist in the project's store on DivBase."""
+
+    def __init__(self, project_name: str, file_name: str, version_id: str | None = None):
+        self.project_name = project_name
+        self.file_name = file_name
+        self.version_id = version_id
+
+        error_message = f"File '{file_name}'"
+        error_message += f" (version_id: '{version_id}') " if version_id else " "
+        error_message += f"was not found in the project '{project_name}'."
+        super().__init__(error_message)
+
+
 class FileAlreadyUploadedError(DivBaseCLIError):
     """Raised when one or more files being uploaded already exist in the project's store on DivBase."""
 

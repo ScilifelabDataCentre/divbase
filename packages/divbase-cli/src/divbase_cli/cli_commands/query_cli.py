@@ -317,6 +317,9 @@ def poll_task_until_final_state_reached(divbase_url: str, task_id: int, timeout_
 
             task_results = TaskHistoryResult(**items[0])  # for task ID lookups, only one entry is returned
 
+            if task_results.status is None:
+                raise PolledTaskNotFinalError(f"Task {task_id} is queued and waiting to start")
+
             if task_results.name not in SUPPORTED_TASK_NAMES:
                 raise typer.BadParameter(
                     f"Task {task_id} has unsupported task type '{task_results.name}'. Only VCF query jobs are supported for this CLI command."

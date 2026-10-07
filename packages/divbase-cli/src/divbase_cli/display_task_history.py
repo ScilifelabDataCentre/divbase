@@ -24,6 +24,7 @@ class TaskHistoryDisplayManager:
         "SUCCESS": "green",
         "FAILURE": "red",
         "PENDING": "yellow",
+        "QUEUING": "yellow",
         "STARTED": "blue",
         "RETRY": "blue",
         "REVOKED": "magenta",
@@ -78,7 +79,6 @@ class TaskHistoryDisplayManager:
                 submitter,
                 str(task.id),
                 state_with_colour,
-                format_datetime_for_cli(task.created_at),
                 format_datetime_for_cli(task.started_at) if task.started_at else "N/A",
                 f"{task.runtime:.2f}" if task.runtime is not None else "N/A",
                 result,
@@ -109,13 +109,12 @@ class TaskHistoryDisplayManager:
             title = title_prefix
 
         table = Table(title=title, show_lines=True)
-        table.add_column("Submitting user", width=12, overflow="fold")
-        table.add_column("Task ID", style="cyan")
-        table.add_column("State", width=8)
-        table.add_column("Created at", style="yellow", width=19, overflow="fold")
-        table.add_column("Started at", style="yellow", width=19, overflow="fold")
-        table.add_column("Runtime (s)", style="blue", width=10, overflow="fold")
-        table.add_column("Result", style="white", width=35, overflow="fold")
+        table.add_column("Submitting user", no_wrap=False)
+        table.add_column("Task ID", style="cyan", no_wrap=True)
+        table.add_column("State", no_wrap=True)
+        table.add_column("Started at", style="yellow", no_wrap=False)
+        table.add_column("Runtime (s)", style="blue", no_wrap=False)
+        table.add_column("Result", style="white", no_wrap=False)
         return table
 
     def _format_result(self, task: TaskHistoryResult, state: str) -> str:
@@ -123,6 +122,9 @@ class TaskHistoryDisplayManager:
         Format the result message based on the task state and type.
         """
         colour = self.STATE_COLOURS.get(state, "white")
+
+        if state == "QUEUING":
+            return self._colourize_if_enabled("Waiting for job to start", colour)
 
         if state == "FAILURE":
             if isinstance(task.result, dict):
