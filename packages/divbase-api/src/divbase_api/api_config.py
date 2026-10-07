@@ -23,7 +23,7 @@ class GeneralSettings:
 
     environment: str = os.getenv("DIVBASE_ENV", "NOT_SET")
     frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "NOT_SET")
-    mkdocs_site_url: str = os.getenv("MKDOCS_SITE_URL", "NOT_SET")
+    docs_site_url: str = os.getenv("DOCS_SITE_URL", "NOT_SET")
     user_support_email: EmailStr = os.getenv("USER_SUPPORT_EMAIL", "NOT_SET")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
@@ -41,8 +41,8 @@ class GeneralSettings:
     def __post_init__(self):
         if self.frontend_base_url.endswith("/"):
             self.frontend_base_url = self.frontend_base_url[:-1]
-        if self.mkdocs_site_url.endswith("/"):
-            self.mkdocs_site_url = self.mkdocs_site_url[:-1]
+        if self.docs_site_url.endswith("/"):
+            self.docs_site_url = self.docs_site_url[:-1]
 
 
 @dataclass
@@ -154,7 +154,7 @@ class APISettings:
         required_fields = {
             "DIVBASE_ENV": self.general.environment,
             "FRONTEND_BASE_URL": self.general.frontend_base_url,
-            "MKDOCS_SITE_URL": self.general.mkdocs_site_url,
+            "DOCS_SITE_URL": self.general.docs_site_url,
             "USER_SUPPORT_EMAIL": self.general.user_support_email,
             "ALTCHA_HMAC_SECRET": self.general.altcha_hmac_secret,
             "ADMIN_SECRET_KEY": self.general.admin_panel_secret,

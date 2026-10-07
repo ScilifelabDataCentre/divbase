@@ -36,7 +36,10 @@ If you make changes to the documentation files inside the `docs/` folder, the lo
 
 !!! info "You technically don't need to run the build script first in local development"
 
-    - The `scripts/build_docs.py` builds some auto-generated pages (`divbase-cli` command reference and a page of recent GitHub releases).
+    - The `scripts/build_docs.py` builds some auto-generated pages:
+      - `divbase-cli` command reference
+      - Page of recent GitHub releases.
+      - Several llms.txt files for LLMs to read the documentation.
     - These pages will just return a 404 if you're try to access them locally if you haven't run the build script.
     - The auto-generated pages are .gitignore'd, and the GH action run to deploy the docs always builds them before a new release (so they are always in sync).
 

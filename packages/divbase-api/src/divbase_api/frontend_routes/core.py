@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,10 +26,33 @@ fr_core_router = APIRouter()
 
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir.resolve())
-templates.env.globals["mkdocs_site_url"] = api_settings.general.mkdocs_site_url
+templates.env.globals["docs_site_url"] = api_settings.general.docs_site_url
 templates.env.globals["divbase_version"] = divbase_version
 templates.env.globals["support_email"] = api_settings.general.user_support_email
 templates.env.globals["altcha_enabled"] = ALTCHA_ENABLED
+
+_docs_url = api_settings.general.docs_site_url
+
+LLMS_TXT = f"""# DivBase
+
+> This is the web interface and REST API for DivBase: a service to manage, query and version VCF files and associated sample metadata.
+
+DivBase is provided by SciLifeLab Data Centre. Users interact via the web interface or the `divbase-cli` CLI tool.
+
+## Documentation
+
+- [Documentation site]({_docs_url}): User and developer guides, plus the full CLI reference
+- [Installation guide]({_docs_url}/user-guides/installation/): How to install `divbase-cli`
+- [Quick start guide]({_docs_url}/user-guides/quick-start/): Getting started with DivBase
+- [Documentation llms.txt]({_docs_url}/llms.txt): Full documentation index for LLMs
+- [Documentation llms-users.txt]({_docs_url}/llms-users.txt): User guides and CLI reference concatenated into a single file (~200 KB)
+- [Documentation llms-full.txt]({_docs_url}/llms-full.txt): Complete documentation, including the developer guide, concatenated into a single file (~400 KB)
+
+## API
+
+- It is recommended to use `divbase-cli`, a command line tool, to interact with DivBase's API.
+- `divbase-cli` handles things like authentication and pagination automatically and provides many convenient features for working with DivBase.
+"""
 
 
 @fr_core_router.get("/")
@@ -45,6 +68,12 @@ async def get_home_page(
         name="index.html",
         context={"request": request, "current_user": current_user, "announcements": announcements},
     )
+
+
+@fr_core_router.get("/llms.txt", response_class=PlainTextResponse)
+async def get_llms_txt(request: Request):
+    """Serve llms.txt for LLM crawlers."""
+    return LLMS_TXT
 
 
 def _simple_page(name: str, template: str) -> Callable[..., Awaitable[HTMLResponse]]:
