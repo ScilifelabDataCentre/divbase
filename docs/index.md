@@ -1,6 +1,6 @@
 # DivBase
 
-!!! warning "DivBase is in pre-release stage and under active development. Expect changes to features, commands, and documentation before the official release. If you want to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues)."
+!!! warning "DivBase is currently being tested by a limited number of users and is under active development. Expect changes to features, commands, and documentation as we incorporate feedback. If you want to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues)."
 
 ---
 

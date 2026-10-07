@@ -7,7 +7,7 @@
 DivBase is a service built and maintained by [SciLifeLab Data Centre](https://www.scilifelab.se/) that enables life science researchers at Swedish institutions and their collaborators to manage, explore, and query genomic variants in VCF format alongside associated sample metadata. The service provides a secure platform for managing genomic variants and metadata files for non-human and non-sensitive data.
 
 > [!NOTE]
-> DivBase is currently in pre-release for a limited number of users. We are actively seeking feedback to help shape the service. If you would like to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
+> DivBase is currently being tested by a limited number of users. We are actively seeking feedback to help shape the service. If you would like to be involved in testing or have suggestions, please reach out at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).
 
 ---
 
