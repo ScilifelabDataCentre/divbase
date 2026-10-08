@@ -34,6 +34,7 @@ from divbase_api.worker.cron_tasks import (
     remove_old_log_files,
     update_storage_usage_metrics,
 )
+from divbase_api.worker.tasks import BCFTOOLS_QUERY_TASK_NAME
 
 
 class TaskStatus(StrEnum):
@@ -95,6 +96,7 @@ def create_task_entry(db_session_sync, project_map):
             task_id=task_id,
             user_id=user_id,
             project_id=project_id,
+            task_name=BCFTOOLS_QUERY_TASK_NAME,
             created_at=created_at,
         )
         db_session_sync.add(task_history)
@@ -365,6 +367,7 @@ def test_cleanup_stuck_tasks_removes_queued_task_without_celery_meta(db_session_
                 task_id=task_id,
                 user_id=1,
                 project_id=project_id,
+                task_name=BCFTOOLS_QUERY_TASK_NAME,
                 created_at=datetime.now(timezone.utc) - timedelta(hours=hours_old),
             )
         )

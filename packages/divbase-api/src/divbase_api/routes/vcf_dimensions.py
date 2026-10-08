@@ -22,7 +22,7 @@ from divbase_api.deps import get_project_member
 from divbase_api.exceptions import AuthorizationError, VCFDimensionsEntryMissingError
 from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
-from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_api.worker.tasks import UPDATE_VCF_DIMENSIONS_TASK_NAME, update_vcf_dimensions_task
 from divbase_lib.api_schemas.vcf_dimensions import (
     DimensionsSamplesResult,
     DimensionsScaffoldsResult,
@@ -110,6 +110,7 @@ async def update_vcf_dimensions_endpoint(
     job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
+        task_name=UPDATE_VCF_DIMENSIONS_TASK_NAME,
         task_id=results.id,
         db=db,
     )

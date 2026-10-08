@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
+from divbase_api.worker.tasks import BCFTOOLS_QUERY_TASK_NAME, SAMPLE_METADATA_QUERY_TASK_NAME
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.divbase_cli import app
 
@@ -89,10 +90,20 @@ def test_queued_tasks_without_celery_meta_are_shown_as_queuing(
         user_id = db.execute(select(UserDB.id).where(UserDB.email == user_email)).scalar_one()
         queued_tasks = [
             # initial state when created by query tsv task
-            TaskHistoryDB(task_id=f"{uuid.uuid4()}", user_id=user_id, project_id=project_id),
-            TaskHistoryDB(task_id=f"{uuid.uuid4()}", user_id=user_id, project_id=project_id),
+            TaskHistoryDB(
+                task_id=f"{uuid.uuid4()}",
+                user_id=user_id,
+                project_id=project_id,
+                task_name=SAMPLE_METADATA_QUERY_TASK_NAME,
+            ),
+            TaskHistoryDB(
+                task_id=f"{uuid.uuid4()}",
+                user_id=user_id,
+                project_id=project_id,
+                task_name=SAMPLE_METADATA_QUERY_TASK_NAME,
+            ),
             # initial state when created by query vcf task
-            TaskHistoryDB(task_id=None, user_id=user_id, project_id=project_id),
+            TaskHistoryDB(task_id=None, user_id=user_id, project_id=project_id, task_name=BCFTOOLS_QUERY_TASK_NAME),
         ]
         db.add_all(queued_tasks)
         db.commit()

@@ -19,6 +19,8 @@ from divbase_api.models.projects import ProjectDB, ProjectRoles
 from divbase_api.models.users import UserDB
 from divbase_api.services.vcf_queries import validate_user_submitted_bcftools_command
 from divbase_api.worker.tasks import (
+    BCFTOOLS_QUERY_TASK_NAME,
+    SAMPLE_METADATA_QUERY_TASK_NAME,
     bcftools_pipe_task,
     sample_metadata_query_task,
 )
@@ -80,6 +82,7 @@ async def submit_sample_metadata_query_job_endpoint(
     job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
+        task_name=SAMPLE_METADATA_QUERY_TASK_NAME,
         task_id=results.id,
         db=db,
     )
@@ -156,6 +159,7 @@ async def submit_vcf_query_job_endpoint(
     job_id = await create_task_history_entry(
         user_id=current_user.id,
         project_id=project.id,
+        task_name=BCFTOOLS_QUERY_TASK_NAME,
         db=db,
     )
 

@@ -80,6 +80,7 @@ async def create_task_history_entry(
     db: AsyncSession,
     user_id: int,
     project_id: int,
+    task_name: str,
     task_id: str | None = None,
 ) -> int:
     """
@@ -87,9 +88,8 @@ async def create_task_history_entry(
     (which is an integer rather than the celery task_id which is a UUID).
 
     The task_id parameter is optional to allow creating entries before the celery task is created (e.g., for bcftools pipe tasks).
-
     """
-    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=user_id, project_id=project_id)
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=user_id, project_id=project_id, task_name=task_name)
     db.add(task_history_entry)
     await db.commit()
     await db.refresh(task_history_entry)

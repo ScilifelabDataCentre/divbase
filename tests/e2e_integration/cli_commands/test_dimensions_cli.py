@@ -28,7 +28,11 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
-from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_api.worker.tasks import (
+    BCFTOOLS_QUERY_TASK_NAME,
+    UPDATE_VCF_DIMENSIONS_TASK_NAME,
+    update_vcf_dimensions_task,
+)
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
@@ -36,8 +40,6 @@ from divbase_lib.exceptions import NoVCFFilesFoundError
 from tests.conftest import REGRESSION_GUARD_PREFIX
 
 runner = CliRunner()
-
-DIMENSIONS_UPDATE_TASK_NAME = "tasks.update_vcf_dimensions_task"
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -55,13 +57,15 @@ def clean_dimensions_update_task_history(db_session_sync):
     and cause a guard in the router to raise a 409.
     The guard prevents more than 1 dimensions update task from running at a time in a given project.
     """
-    stmt = select(CeleryTaskMeta.task_id).where(CeleryTaskMeta.name == DIMENSIONS_UPDATE_TASK_NAME)
+    stmt = select(CeleryTaskMeta.task_id).where(CeleryTaskMeta.name == UPDATE_VCF_DIMENSIONS_TASK_NAME)
     result = db_session_sync.execute(stmt)
     task_ids = result.scalars().all()
     if task_ids:
         db_session_sync.execute(delete(CeleryTaskMeta).where(CeleryTaskMeta.task_id.in_(task_ids)))
         db_session_sync.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id.in_(task_ids)))
-        db_session_sync.commit()
+    # a queued task would not have a CeleryTaskMeta entry yet, so here we make sure to delete those too.
+    db_session_sync.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_name == UPDATE_VCF_DIMENSIONS_TASK_NAME))
+    db_session_sync.commit()
     yield
 
 
@@ -95,14 +99,14 @@ def _read_text_from_gz_file(path: os.PathLike) -> str:
 
 
 def _insert_fake_dimensions_tasks(
-    db, project_id: int, status: str, task_name: str = DIMENSIONS_UPDATE_TASK_NAME
+    db, project_id: int, status: str, task_name: str = UPDATE_VCF_DIMENSIONS_TASK_NAME
 ) -> None:
     """
     Insert a TaskHistoryDB + CeleryTaskMeta row to simulate a dimensions update task in a given state.
     Entries autocleaned after test by the clean_dimensions_update_task_history fixture.
     """
     task_id = str(uuid.uuid4())
-    db.add(TaskHistoryDB(task_id=task_id, project_id=project_id, user_id=1))
+    db.add(TaskHistoryDB(task_id=task_id, project_id=project_id, user_id=1, task_name=task_name))
     # as this is a celery managed table, sqlalchemy can't autoincrement the id, so we figure out the biggest id and add 1.
     next_id = db.execute(select(func.coalesce(func.max(CeleryTaskMeta.id), 0) + 1)).scalar()
     db.add(CeleryTaskMeta(id=next_id, task_id=task_id, status=status, name=task_name))
@@ -159,6 +163,57 @@ def test_dimensions_update_blocked_when_task_already_in_progress_for_same_projec
     assert isinstance(result.exception, DivBaseAPIError)
     assert "409" in str(result.exception)
     assert "DimensionsUpdateAlreadyInProcessError" in str(result.exception)
+
+
+def test_dimensions_update_blocked_when_task_queued_for_same_project(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+):
+    """
+    A queued dimensions update task has a TaskHistoryDB entry but no CeleryTaskMeta entry until a worker picks it up.
+    It should still block a new dimensions update for the same project.
+    """
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+
+    db_session_sync.add(
+        TaskHistoryDB(
+            task_id=str(uuid.uuid4()), project_id=project_id, user_id=1, task_name=UPDATE_VCF_DIMENSIONS_TASK_NAME
+        )
+    )
+    db_session_sync.commit()
+
+    result = runner.invoke(app, f"dimensions update --project {project_name}")
+    assert result.exit_code != 0
+    assert isinstance(result.exception, DivBaseAPIError)
+    assert "409" in str(result.exception)
+    assert "DimensionsUpdateAlreadyInProcessError" in str(result.exception)
+
+
+def test_dimensions_update_allowed_when_other_task_type_queued_for_same_project(
+    CONSTANTS,
+    project_map,
+    db_session_sync,
+    logged_in_edit_user_with_existing_config,
+):
+    """A queued task of a different type (no CeleryTaskMeta entry yet) should not block a dimensions update."""
+    project_name = CONSTANTS["CLEANED_PROJECT"]
+    project_id = project_map[project_name]
+
+    task_id = str(uuid.uuid4())
+    db_session_sync.add(
+        TaskHistoryDB(task_id=task_id, project_id=project_id, user_id=1, task_name=BCFTOOLS_QUERY_TASK_NAME)
+    )
+    db_session_sync.commit()
+
+    try:
+        result = runner.invoke(app, f"dimensions update --project {project_name}")
+        assert result.exit_code == 0
+    finally:
+        db_session_sync.execute(delete(TaskHistoryDB).where(TaskHistoryDB.task_id == task_id))
+        db_session_sync.commit()
 
 
 def test_dimensions_update_allowed_when_ongoing_task_is_for_different_project(

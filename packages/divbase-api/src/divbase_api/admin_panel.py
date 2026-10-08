@@ -429,6 +429,7 @@ class RevokedTokenView(DivBaseModelView):
 class TaskHistoryView(DivBaseModelView):
     fields = [
         StringField("task_id"),
+        StringField("task_name"),
         HasOne("user", key="user", label="User"),
         HasOne("project", key="project", label="Project"),
         HasOne("celery_meta", key="celery-meta", label="Celery Task Details"),

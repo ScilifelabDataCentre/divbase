@@ -241,7 +241,6 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
     For cron_tasks: create TaskHistoryDB entry when task is published to broker.
 
     NOTE! User-submitted tasks are created by the API. This signal handler is for system-submitted tasks.
-
     """
     task_name = headers["task"]
     if not task_name.startswith("cron_tasks"):
@@ -249,7 +248,7 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
 
     task_id = headers["id"]
 
-    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None)
+    task_history_entry = TaskHistoryDB(task_id=task_id, user_id=None, project_id=None, task_name=task_name)
     with SyncSessionLocal() as db:
         db.add(task_history_entry)
         db.commit()

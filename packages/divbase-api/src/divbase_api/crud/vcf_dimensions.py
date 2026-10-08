@@ -7,13 +7,14 @@ packages/divbase-api/src/divbase_api/worker/crud_dimensions.py
 """
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from divbase_api.exceptions import DimensionsUpdateAlreadyInProcessError
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
+from divbase_api.worker.tasks import UPDATE_VCF_DIMENSIONS_TASK_NAME
 
 logger = structlog.get_logger(__name__)
 
@@ -138,19 +139,22 @@ async def check_no_dimensions_update_task_already_in_progress(
     This check includes jobs that are both queued and running.
 
     There only needs to be one dimensions update job run at a time per project, otherwise it is just wasted compute + bandwidth.
-    """
-    ongoing_dimensions_tasks_subq = (
-        select(CeleryTaskMeta.task_id)
-        .where(CeleryTaskMeta.status.in_(["PENDING", "STARTED", "RETRY"]))
-        .where(CeleryTaskMeta.name == "tasks.update_vcf_dimensions_task")
-        .subquery()
-    )
 
+    A queued task has no celery_taskmeta entry until a worker picks it up, so
+    if TaskHistoryDB has a queued dimensions update task for that project, we reject it.
+    """
     # the .id is the user facing id (aka rolling int) and not the celery internal uuid which is .task_id
     stmt = (
         select(TaskHistoryDB.id)
-        .join(ongoing_dimensions_tasks_subq, TaskHistoryDB.task_id == ongoing_dimensions_tasks_subq.c.task_id)
+        .outerjoin(CeleryTaskMeta, CeleryTaskMeta.task_id == TaskHistoryDB.task_id)
         .where(TaskHistoryDB.project_id == project_id)
+        .where(TaskHistoryDB.task_name == UPDATE_VCF_DIMENSIONS_TASK_NAME)
+        .where(
+            or_(
+                CeleryTaskMeta.task_id.is_(None),
+                CeleryTaskMeta.status.in_(["PENDING", "STARTED", "RETRY"]),
+            )
+        )
     )
     result = await db.execute(stmt)
     # NOTE: don't use one_or_none() here since we can't guarantee there is only one ongoing task.
