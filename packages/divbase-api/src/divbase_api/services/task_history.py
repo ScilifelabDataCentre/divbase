@@ -4,6 +4,11 @@ from datetime import datetime
 
 import structlog
 
+from divbase_api.worker.tasks import (
+    BCFTOOLS_QUERY_TASK_NAME,
+    SAMPLE_METADATA_QUERY_TASK_NAME,
+    UPDATE_VCF_DIMENSIONS_TASK_NAME,
+)
 from divbase_lib.api_schemas.queries import (
     BcftoolsQueryKwargs,
     BcftoolsQueryTaskResult,
@@ -87,13 +92,13 @@ def _deserialize_celery_task_metadata(task: dict) -> TaskHistoryResult:
         parsed_result = result_data
         parsed_kwargs = kwargs
     else:
-        if task_name == "tasks.sample_metadata_query":
+        if task_name == SAMPLE_METADATA_QUERY_TASK_NAME:
             parsed_result = SampleMetadataQueryTaskResult(**result_data) if result_data else None
             parsed_kwargs = SampleMetadataQueryKwargs(**kwargs) if kwargs else None
-        elif task_name == "tasks.bcftools_query":
+        elif task_name == BCFTOOLS_QUERY_TASK_NAME:
             parsed_result = BcftoolsQueryTaskResult(**result_data) if result_data else None
             parsed_kwargs = BcftoolsQueryKwargs(**kwargs) if kwargs else None
-        elif task_name == "tasks.update_vcf_dimensions_task":
+        elif task_name == UPDATE_VCF_DIMENSIONS_TASK_NAME:
             parsed_result = DimensionUpdateTaskResult(**result_data) if result_data else None
             parsed_kwargs = DimensionUpdateKwargs(**kwargs) if kwargs else None
         else:

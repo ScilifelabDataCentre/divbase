@@ -73,6 +73,11 @@ from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFi
 logger = structlog.get_logger(__name__)
 
 
+SAMPLE_METADATA_QUERY_TASK_NAME = "tasks.sample_metadata_query"
+BCFTOOLS_QUERY_TASK_NAME = "tasks.bcftools_query"
+UPDATE_VCF_DIMENSIONS_TASK_NAME = "tasks.update_vcf_dimensions_task"
+
+
 app = Celery(
     "divbase_worker",
     broker=worker_settings.general.broker_url.get_secret_value(),
@@ -218,11 +223,11 @@ def dynamic_router(name, args, kwargs, options, task=None, **kw):
         return {"queue": "quick"}
     if "long" in name:
         return {"queue": "long"}
-    if name == "tasks.sample_metadata_query":
+    if name == SAMPLE_METADATA_QUERY_TASK_NAME:
         return {"queue": "quick"}
-    if name == "tasks.bcftools_query":
+    if name == BCFTOOLS_QUERY_TASK_NAME:
         return {"queue": "long"}
-    if name == "tasks.update_vcf_dimensions_task":
+    if name == UPDATE_VCF_DIMENSIONS_TASK_NAME:
         return {"queue": "long"}  # can take minutes for large VCF files
     return {"queue": "celery"}
 
@@ -266,7 +271,7 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-@app.task(name="tasks.sample_metadata_query", tags=["quick"])
+@app.task(name=SAMPLE_METADATA_QUERY_TASK_NAME, tags=["quick"])
 def sample_metadata_query_task(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -328,7 +333,7 @@ def sample_metadata_query_task(
     return result
 
 
-@app.task(name="tasks.bcftools_query", tags=["slow"])
+@app.task(name=BCFTOOLS_QUERY_TASK_NAME, tags=["slow"])
 def bcftools_pipe_task(
     tsv_filter: str | None,
     metadata_tsv_name: str | None,
@@ -547,7 +552,7 @@ def bcftools_pipe_task(
 
         task_metrics = TaskMetrics(
             job_id=job_id,
-            task_name=bcftools_pipe_task.name,
+            task_name=BCFTOOLS_QUERY_TASK_NAME,
             task_cpu_seconds=total_task_cpu,
             task_python_overhead_cpu_seconds=python_overhead_cpu,
             task_memory_peak_bytes=memory_stats["peak_bytes"],
@@ -567,7 +572,7 @@ def bcftools_pipe_task(
     return {"status": "completed", "output_file": str(output_file), "log_file": str(log_file)}
 
 
-@app.task(name="tasks.update_vcf_dimensions_task")
+@app.task(name=UPDATE_VCF_DIMENSIONS_TASK_NAME)
 def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
