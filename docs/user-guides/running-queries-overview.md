@@ -72,6 +72,18 @@ divbase-cli task-history id <TASK_ID>
 divbase-cli task-history user
 ```
 
+## Maximum run times
+
+Jobs that run longer than their maximum run time are stopped and marked as failed:
+
+| Job | Maximum run time |
+|---|---|
+| `divbase-cli query tsv` | 10 minutes |
+| `divbase-cli query vcf` | 10 hours |
+| `divbase-cli dimensions update` | 10 hours |
+
+Please tell us if you need to run longer jobs.
+
 ## Read next
 
 - [VCF Dimensions caching](vcf-dimensions.md)
