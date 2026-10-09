@@ -13,6 +13,7 @@ from pathlib import Path
 import psutil
 import structlog
 from celery import Celery
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import (
     after_task_publish,
     beat_init,
@@ -69,6 +70,7 @@ from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.divbase_constants import DIVBASE_SERVER_TIMEZONE, QUERY_RESULTS_FILE_PREFIX
 from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFilesFoundError, TaskUserError
+from divbase_lib.utils import format_duration
 
 logger = structlog.get_logger(__name__)
 
@@ -126,7 +128,7 @@ class SampleSetOverlapResults:
 # Celery results backend config
 app.conf.update(
     task_track_started=True,
-    task_acks_late=False,  # tasks are not redelivered if a worker dies mid-execution.
+    task_acks_late=False,  # tasks are not redelivered if a worker dies mid-run, overridden by some tasks.
     task_default_delivery_mode="persistent",
     task_serializer="json",
     accept_content=["json"],
@@ -270,7 +272,12 @@ def handle_task_started(sender=None, task_id=None, **kwargs):
         db.commit()
 
 
-@app.task(name=SAMPLE_METADATA_QUERY_TASK_NAME, tags=["quick"])
+@app.task(
+    name=SAMPLE_METADATA_QUERY_TASK_NAME,
+    tags=["quick"],
+    time_limit=worker_settings.task_limits.sample_metadata_hard_limit_seconds,
+    soft_time_limit=worker_settings.task_limits.sample_metadata_soft_limit_seconds,
+)
 def sample_metadata_query_task(
     tsv_filter: str,
     metadata_tsv_name: str,
@@ -324,6 +331,10 @@ def sample_metadata_query_task(
             f"Metadata query completed: {len(metadata_result.unique_sample_ids)} samples "
             f"mapped to {len(metadata_result.unique_filenames)} VCF files"
         )
+    except SoftTimeLimitExceeded:
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.sample_metadata_hard_limit_seconds)
+        logger.error(error_msg)
+        raise TaskUserError(error_msg) from None
     finally:
         if metadata_path and metadata_path.exists():
             metadata_path.unlink(missing_ok=True)
@@ -332,7 +343,13 @@ def sample_metadata_query_task(
     return result
 
 
-@app.task(name=BCFTOOLS_QUERY_TASK_NAME, tags=["slow"])
+@app.task(
+    name=BCFTOOLS_QUERY_TASK_NAME,
+    tags=["slow"],
+    acks_late=True,  # acks_late so a busy worker-long does not reserve the next task while running a long one (via prefetch)
+    time_limit=worker_settings.task_limits.bcftools_query_hard_limit_seconds,
+    soft_time_limit=worker_settings.task_limits.bcftools_query_soft_limit_seconds,
+)
 def bcftools_pipe_task(
     tsv_filter: str | None,
     metadata_tsv_name: str | None,
@@ -501,6 +518,11 @@ def bcftools_pipe_task(
         _upload_results_file(output_file=output_file, bucket_name=bucket_name, s3_file_manager=s3_file_manager)
         task_succeeded = True
 
+    except SoftTimeLimitExceeded:
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.bcftools_query_hard_limit_seconds)
+        logger.error(error_msg)
+        raise TaskUserError(error_msg) from None
+
     except Exception as e:
         # This ensures the user gets any error message from the run in their log file
         # We do not include the stacktrace since it could contain sensitive info.
@@ -571,7 +593,12 @@ def bcftools_pipe_task(
     return {"status": "completed", "output_file": str(output_file), "log_file": str(log_file)}
 
 
-@app.task(name=UPDATE_VCF_DIMENSIONS_TASK_NAME)
+@app.task(
+    name=UPDATE_VCF_DIMENSIONS_TASK_NAME,
+    acks_late=True,  # acks_late so a busy worker-long does not reserve the next task while running a long one (via prefetch)
+    time_limit=worker_settings.task_limits.dimensions_update_hard_limit_seconds,
+    soft_time_limit=worker_settings.task_limits.dimensions_update_soft_limit_seconds,
+)
 def update_vcf_dimensions_task(
     bucket_name: str,
     project_id: int,
@@ -581,6 +608,23 @@ def update_vcf_dimensions_task(
     """
     Update VCF dimensions in the database for the specified bucket.
     """
+    try:
+        return _update_vcf_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+    except SoftTimeLimitExceeded:
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.dimensions_update_hard_limit_seconds)
+        logger.error(error_msg)
+        raise TaskUserError(error_msg) from None
+
+
+def _update_vcf_dimensions(
+    bucket_name: str,
+    project_id: int,
+    project_name: str,
+    user_id: int,
+) -> dict:
+    """Body of update_vcf_dimensions_task, split out so the task can turn a soft time limit into a clear user error."""
     s3_file_manager = _create_s3_file_manager()
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
@@ -698,6 +742,10 @@ def update_vcf_dimensions_task(
                     f"To continue, delete the file from the project (e.g. 'divbase-cli files rm {s3_key}') "
                     "or replace it with a corrected version, then run 'divbase-cli dimensions update' again."
                 ) from None
+            except SoftTimeLimitExceeded:
+                # handled by update_vcf_dimensions_task, must not be reported as an unexpected error below.
+                _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
+                raise
             except Exception as e:
                 logger.error(f"Unexpected error indexing {s3_key}", exc_info=True)
                 _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
@@ -957,12 +1005,18 @@ def _resolve_inputs_for_sample_metadata_mode(
         project_name=project_name,
     )
 
-    metadata_result = run_sidecar_metadata_query(
-        file=metadata_path,
-        filter_string=tsv_filter,
-        project_id=project_id,
-        vcf_dimensions_data=vcf_dimensions_data,
-    )
+    try:
+        metadata_result = run_sidecar_metadata_query(
+            file=metadata_path,
+            filter_string=tsv_filter,
+            project_id=project_id,
+            vcf_dimensions_data=vcf_dimensions_data,
+        )
+    except Exception:
+        # otherwise remains on the worker between tasks
+        metadata_path.unlink(missing_ok=True)
+        raise
+
     return SampleModeResult(
         files_to_download=metadata_result.unique_filenames,
         sample_and_filename_subset=[
@@ -1097,6 +1151,15 @@ def _check_for_unnecessary_files_for_region_query(
         )
 
     return files_to_download_updated
+
+
+def _max_run_time_exceeded_message(time_limit_seconds: int) -> str:
+    """User facing error message for a task stopped by its (soft) time limit."""
+    return (
+        f"The job was stopped because it exceeded the maximum run time of {format_duration(time_limit_seconds)}.\n"
+        "Consider splitting the job into several smaller jobs, "
+        "or contact us if you need to run longer jobs."
+    )
 
 
 def _delete_job_files_from_worker(

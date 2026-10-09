@@ -79,6 +79,15 @@ def format_file_size(size_bytes: int | float | None, decimals: int = 2) -> str:
     return f"{size_bytes:.{decimals}f} {power_labels[n]}B"
 
 
+def format_duration(seconds: int) -> str:
+    """Format a duration in seconds for user facing messages"""
+    for unit_seconds, unit in ((3600, "hour"), (60, "minute")):
+        if seconds % unit_seconds == 0:
+            value = seconds // unit_seconds
+            return f"{value} {unit}{'s' if value != 1 else ''}"
+    return f"{seconds} seconds"
+
+
 def split_semicolon_bcftools_command_segments(command: str) -> list[str]:
     """
     Split a user provided bcftools command string on semicolons while respecting quoted substrings.

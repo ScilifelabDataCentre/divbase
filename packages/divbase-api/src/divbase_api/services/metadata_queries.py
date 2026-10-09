@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 import structlog
+from celery.exceptions import SoftTimeLimitExceeded
 
 from divbase_api.services.vcf_queries import SampleFileMapping
 from divbase_api.worker.crud_dimensions import ProjectVCFDimensionsData
@@ -171,6 +172,7 @@ class SidecarQueryManager:
             SidecarInvalidFilterError,
             SidecarMetadataFormatError,
             SidecarNoDataLoadedError,
+            SoftTimeLimitExceeded,
         ):
             # Let validation errors propagate directly to user with specific error messages
             raise
@@ -408,8 +410,8 @@ class SidecarQueryManager:
                             logger.warning(warning_msg)
                             self.warnings.append(warning_msg)
                         filter_conditions.append(condition)
-            except SidecarInvalidFilterError:
-                # Allow specific validation errors (like "contains commas") to propagate unchanged.
+            except SidecarInvalidFilterError, SoftTimeLimitExceeded:
+                # Allow specific validation errors (like "contains commas") and the Celery soft time limit to propagate unchanged.
                 # This preserves detailed error messages for user-facing exceptions.
                 raise
             except Exception as e:

@@ -72,6 +72,27 @@ class WorkerCronSettings:
 
 
 @dataclass
+class WorkerTaskLimitSettings:
+    """Celery hard and soft time limits for the user-facing tasks."""
+
+    sample_metadata_hard_limit_seconds: int = int(os.getenv("SAMPLE_METADATA_TIME_LIMIT_SECONDS", "600"))  # 10 min
+    bcftools_query_hard_limit_seconds: int = int(os.getenv("BCFTOOLS_QUERY_TIME_LIMIT_SECONDS", "36000"))  # 10 h
+    dimensions_update_hard_limit_seconds: int = int(os.getenv("VCF_DIMENSIONS_TIME_LIMIT_SECONDS", "36000"))  # 10 h
+
+    @property
+    def sample_metadata_soft_limit_seconds(self) -> int:
+        return self.sample_metadata_hard_limit_seconds - 60  # 1 min less
+
+    @property
+    def bcftools_query_soft_limit_seconds(self) -> int:
+        return self.bcftools_query_hard_limit_seconds - 300  # 5 mins less
+
+    @property
+    def dimensions_update_soft_limit_seconds(self) -> int:
+        return self.dimensions_update_hard_limit_seconds - 300  # 5 mins less
+
+
+@dataclass
 class WorkerSettings:
     """Configuration settings for DivBase Celery workers."""
 
@@ -79,6 +100,7 @@ class WorkerSettings:
     s3: WorkerS3Settings = field(default_factory=WorkerS3Settings)
     metrics: WorkerMetricsSettings = field(default_factory=WorkerMetricsSettings)
     cron: WorkerCronSettings = field(default_factory=WorkerCronSettings)
+    task_limits: WorkerTaskLimitSettings = field(default_factory=WorkerTaskLimitSettings)
 
     def validate(self) -> None:
         """Validate all required settings are set. Called on worker process startup."""
@@ -111,6 +133,17 @@ class WorkerSettings:
                 "ENABLE_WORKER_METRICS_PER_TASK cannot be set if ENABLE_WORKER_METRICS is not set."
                 "Set both to '1' to enable per-task metrics collection, or set ENABLE_WORKER_METRICS_PER_TASK to '0' to disable per-task metrics collection."
             )
+
+        # validate all soft time limits are >= 5 mins.
+        for setting_name, soft_limit in {
+            "SAMPLE_METADATA_TIME_LIMIT_SECONDS": self.task_limits.sample_metadata_soft_limit_seconds,
+            "BCFTOOLS_QUERY_TIME_LIMIT_SECONDS": self.task_limits.bcftools_query_soft_limit_seconds,
+            "VCF_DIMENSIONS_TIME_LIMIT_SECONDS": self.task_limits.dimensions_update_soft_limit_seconds,
+        }.items():
+            if soft_limit < 300:  # 5 mins
+                raise ValueError(
+                    f"{setting_name} is too small, the resulting soft time limit would be {soft_limit} seconds (minimum 300 seconds)."
+                )
 
 
 # This instance can be imported and used across the worker codebase to access settings.

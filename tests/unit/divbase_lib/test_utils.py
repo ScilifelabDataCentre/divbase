@@ -7,6 +7,7 @@ import pytest
 
 from divbase_lib.utils import (
     format_datetime,
+    format_duration,
     format_file_size,
     split_semicolon_bcftools_command_segments,
     to_unix_timestamp,
@@ -80,3 +81,11 @@ def test_format_datetime():
 def test_split_semicolon_command_segments(command, expected_segments):
     """Test that command splitting keeps semicolons inside quoted substrings."""
     assert split_semicolon_bcftools_command_segments(command) == expected_segments
+
+
+@pytest.mark.parametrize(
+    "seconds, expected",
+    [(36000, "10 hours"), (3600, "1 hour"), (600, "10 minutes"), (60, "1 minute"), (90, "90 seconds")],
+)
+def test_format_duration(seconds, expected):
+    assert format_duration(seconds) == expected
