@@ -1,9 +1,12 @@
 """Collection of utility functions for divbase-cli package that haven't found a better home"""
 
 import csv
+import re
 import sys
 
 from rich.table import Table
+
+_TSV_UNSAFE_WHITESPACE = re.compile(r"[\t\r\n]+")
 
 
 def print_rich_table_as_tsv(table: Table) -> None:
@@ -12,6 +15,8 @@ def print_rich_table_as_tsv(table: Table) -> None:
 
     This is useful for CLI commands that want to offer both rich table output
     for human users as well as TSV output for programmatic parsing.
+
+    Tabs and newlines within a cell are replaced with a single space, so each row is always exactly one line.
 
     NOTE: This function expects all table rows to be of same length (you can have None values in cells).
     """
@@ -24,5 +29,12 @@ def print_rich_table_as_tsv(table: Table) -> None:
 
     num_rows = min(len(col) for col in columns_data)
     for row_index in range(num_rows):
-        row = [str(columns_data[col_index][row_index]) for col_index in range(len(columns_data))]
+        row = []
+
+        for col_index in range(len(columns_data)):
+            cell_value = str(columns_data[col_index][row_index])
+            # Replace tabs and newlines with a single space
+            safe_cell_value = _TSV_UNSAFE_WHITESPACE.sub(" ", cell_value)
+            row.append(safe_cell_value)
+
         writer.writerow(row)
