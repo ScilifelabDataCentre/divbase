@@ -12,7 +12,7 @@ from pathlib import Path
 
 import psutil
 import structlog
-from celery import Celery
+from celery import Celery, Task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import (
     after_task_publish,
@@ -23,6 +23,7 @@ from celery.signals import (
     task_prerun,
     worker_process_init,
 )
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -257,19 +258,32 @@ def task_pending_handler(sender=None, headers=None, body=None, **kwargs):
 
 
 @task_prerun.connect
-def handle_task_started(sender=None, task_id=None, **kwargs):
+def handle_task_started(sender: Task, task_id: str | None = None, **kwargs) -> None:
     """
-    Signal handler that inserts the started_at timestamp in TaskStartedAtDB
-    for the given task_id.
+    Signal handler that inserts the started_at timestamp in TaskStartedAtDB for the given task_id.
+
+    If an entry already exists for this task_id (uuid), the task was run before
+    and has been redelivered because the original worker running it died unexpectedly.
+
+    In such case, we don't run the task again, but fail fast. So we set "task_already_ran" to True.
+    The new task will stop the task when it starts, not this handler.
     """
     started_at = datetime.now(timezone.utc)
     if task_id is None:
         raise ValueError("task_id is None in task_prerun signal handler")
 
+    stmt = (
+        insert(TaskStartedAtDB)
+        .values(task_id=task_id, started_at=started_at)
+        .on_conflict_do_nothing(index_elements=["task_id"])
+    )
     with SyncSessionLocal() as db:
-        entry = TaskStartedAtDB(task_id=task_id, started_at=started_at)
-        db.add(entry)
+        result = db.execute(stmt)
+        # rowcount is 0 if this task already has run before
+        task_already_ran = result.rowcount == 0
         db.commit()
+
+    sender.request.task_already_ran = task_already_ran
 
 
 @app.task(
@@ -365,6 +379,7 @@ def bcftools_pipe_task(
     """
     Run a full bcftools query command as a Celery task, with sample metadata filtering run first.
     """
+    _fail_if_task_already_ran(task=bcftools_pipe_task)  # pyright: ignore[reportArgumentType]
     if worker_settings.metrics.enabled_per_task:
         task_walltime_start = time.time()
         process = psutil.Process()
@@ -608,6 +623,7 @@ def update_vcf_dimensions_task(
     """
     Update VCF dimensions in the database for the specified bucket.
     """
+    _fail_if_task_already_ran(task=update_vcf_dimensions_task)  # pyright: ignore[reportArgumentType]
     try:
         return _update_vcf_dimensions(
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
@@ -1151,6 +1167,20 @@ def _check_for_unnecessary_files_for_region_query(
         )
 
     return files_to_download_updated
+
+
+def _fail_if_task_already_ran(task: Task) -> None:
+    """
+    Fail a redelivered long task instead of running it again from the start.
+
+    With acks_late, a task is redelivered if the worker running it died unexpectedly (e.g. out of memory or the pod was deleted).
+    The "task_already_ran" flag is set by "handle_task_started" signal handler.
+    """
+    if getattr(task.request, "task_already_ran", False):
+        logger.error(f"Task {task.request.id} was started before and has been redelivered, failing it.")
+        raise TaskUserError(
+            "The worker running this job stopped unexpectedly before the job finished. Please resubmit the job."
+        )
 
 
 def _max_run_time_exceeded_message(time_limit_seconds: int) -> str:
