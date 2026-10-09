@@ -36,7 +36,7 @@ from divbase_api.worker.tasks import (
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app
-from divbase_lib.exceptions import NoVCFFilesFoundError
+from divbase_lib.exceptions import NoVCFFilesFoundError, TaskUserError
 from tests.conftest import REGRESSION_GUARD_PREFIX
 
 runner = CliRunner()
@@ -530,17 +530,17 @@ def test_regression_update_dimensions_fails_for_vcf_with_duplicate_sample_ids_in
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={duplicate_sample_fixture: fixture_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for duplicate sample IDs, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=duplicate_sample_fixture, failure_reason="duplicate sample IDs"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "contains duplicate sample ids in the header" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected explicit duplicate-sample header message, got: {error_msg}"
@@ -582,17 +582,17 @@ def test_regression_update_dimensions_fails_for_vcf_with_unsorted_positions(
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={unsorted_fixture: fixture_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for unsorted positions, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=unsorted_fixture, failure_reason="unsorted positions"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "not sorted by position" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected unsorted-position guidance, got: {error_msg}"
@@ -641,17 +641,17 @@ def test_regression_update_dimensions_fails_for_vcf_gz_that_is_not_bgzf(
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={not_bgzf_name: not_bgzf_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for non-BGZF .vcf.gz, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=not_bgzf_name, failure_reason="non-BGZF .vcf.gz"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "not bgzip-compressed" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected explicit non-BGZF guidance, got: {error_msg}"
@@ -696,17 +696,17 @@ def test_regression_update_dimensions_fails_for_truncated_vcf_gz(
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={truncated_name: truncated_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for truncated .vcf.gz, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=truncated_name, failure_reason="truncated .vcf.gz"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "corrupted or truncated" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected explicit corrupted/truncated guidance, got: {error_msg}"
@@ -745,17 +745,17 @@ def test_regression_update_dimensions_fails_for_vcf_with_invalid_header_content(
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={malformed_name: malformed_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for malformed header, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=malformed_name, failure_reason="malformed header"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "invalid vcf header" in normalized_error_msg or "invalid vcf header/content" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected explicit invalid-header guidance, got: {error_msg}"
@@ -796,17 +796,17 @@ def test_regression_update_dimensions_fails_for_non_vcf_file_disguised_as_vcf_gz
     s3_file_manager = create_s3_file_manager(url=CONSTANTS["MINIO_URL"])
     s3_file_manager.upload_files(to_upload={fixture_name: fixture_path}, bucket_name=bucket_name)
 
-    result = run_update_dimensions(
+    error = run_update_dimensions(
         bucket_name=bucket_name,
         project_id=project_id,
         project_name=project_name,
         user_id=user_id,
+        expect_failure=True,
     )
 
-    assert result["status"] == "error", (
-        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for non-VCF file with .vcf.gz extension, got: {result}"
+    error_msg = _assert_dimensions_update_failed_for_file(
+        error=error, file_name=fixture_name, failure_reason="non-VCF file with .vcf.gz extension"
     )
-    error_msg = str(result.get("error", ""))
     normalized_error_msg = error_msg.lower()
     assert "invalid vcf header/content" in normalized_error_msg, (
         f"{REGRESSION_GUARD_PREFIX} expected 'invalid vcf header/content' in error message, got: {error_msg}"
@@ -1656,3 +1656,18 @@ def test_update_dimensions_indexes_uncompressed_vcf(
         # Remove the uploaded file from the bucket to avoid polluting subsequent tests.
         # auto_clean_dimensions_entries_for_all_projects only cleans the DB, not the bucket.
         s3_file_manager.soft_delete_objects(objects=[plain_vcf_name], bucket_name=bucket_name)
+
+
+def _assert_dimensions_update_failed_for_file(error: Exception, file_name: str, failure_reason: str) -> str:
+    """Shared helper for a dimensions update that fails because a VCF file in the project cannot be indexed."""
+    assert isinstance(error, TaskUserError), (
+        f"{REGRESSION_GUARD_PREFIX} expected dimensions update to fail for {failure_reason}, got: {error!r}"
+    )
+    error_msg = str(error)
+    assert f"the VCF file '{file_name}' could not be indexed" in error_msg, (
+        f"{REGRESSION_GUARD_PREFIX} expected the failing file to be named, got: {error_msg}"
+    )
+    assert "divbase-cli files rm" in error_msg, (
+        f"{REGRESSION_GUARD_PREFIX} expected guidance to delete the file, got: {error_msg}"
+    )
+    return error_msg

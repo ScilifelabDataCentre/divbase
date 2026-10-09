@@ -104,7 +104,7 @@ def _raise_task_user_error_from_bcftools_stderr(stderr: str, operation: str, tar
         raise TaskUserError(
             f"{target} is not sorted by position and cannot be indexed by bcftools.\n"
             "DivBase requires VCF files to be sorted by position per scaffold for bcftools orchestration.\n"
-            "Please sort the file (for example with 'bcftools sort'), upload the file to the DivBase project, and submit the query again."
+            "Please sort the file (for example with 'bcftools sort'), upload the corrected file to the DivBase project, and try again."
         ) from None
 
     if "duplicated sample name" in stderr_lower:

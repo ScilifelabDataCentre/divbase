@@ -13,6 +13,7 @@ from pathlib import Path
 import boto3
 import keyring
 import pytest
+from celery import states as celery_states
 from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
@@ -204,6 +205,7 @@ def run_update_dimensions(CONSTANTS):
         user_id=None,
         max_wait_seconds: int = 120,
         max_timeout_retries: int = 1,
+        expect_failure: bool = False,
     ):
         kwargs = {
             "bucket_name": bucket_name,
@@ -215,14 +217,25 @@ def run_update_dimensions(CONSTANTS):
         def _wait_for_completion(async_result):
             start_time = time.time()
             while True:
-                if async_result.state == "FAILURE":
+                # read the state once per loop,
+                # otherwise task finishing between the two checks could race
+                state = async_result.state
+                if state == "FAILURE":
+                    if expect_failure:
+                        # the exception raised in the task, e.g. TaskUserError
+                        return async_result.result
                     raise AssertionError(
                         "update_vcf_dimensions_task failed in worker.\n"
                         f"task_id={async_result.id}, project_name={project_name}, bucket_name={bucket_name}\n"
                         f"result={async_result.result!r}"
                     )
 
-                if async_result.ready():
+                if state in celery_states.READY_STATES:
+                    if expect_failure:
+                        raise AssertionError(
+                            "update_vcf_dimensions_task was expected to fail but succeeded.\n"
+                            f"task_id={async_result.id}, result={async_result.result!r}"
+                        )
                     return async_result.get()
 
                 if time.time() - start_time > max_wait_seconds:

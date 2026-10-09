@@ -581,8 +581,6 @@ def update_vcf_dimensions_task(
     """
     Update VCF dimensions in the database for the specified bucket.
     """
-    task_id = update_vcf_dimensions_task.request.id
-
     s3_file_manager = _create_s3_file_manager()
     all_files = s3_file_manager.list_files(bucket_name=bucket_name)
     vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
@@ -691,10 +689,23 @@ def update_vcf_dimensions_task(
                 files_indexed_by_this_job.append(s3_key)
                 logger.info(f"Indexed VCF metadata for: {s3_key}")
 
-            except Exception as e:
+            except TaskUserError as e:
                 logger.error(f"Error indexing {s3_key}: {str(e)}")
                 _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
-                return {"status": "error", "error": str(e), "task_id": task_id}
+                raise TaskUserError(
+                    f"The dimensions update failed because the VCF file '{s3_key}' could not be indexed.\n"
+                    f"{e}\n"
+                    f"To continue, delete the file from the project (e.g. 'divbase-cli files rm {s3_key}') "
+                    "or replace it with a corrected version, then run 'divbase-cli dimensions update' again."
+                ) from None
+            except Exception as e:
+                logger.error(f"Unexpected error indexing {s3_key}", exc_info=True)
+                _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
+                raise TaskUserError(
+                    f"The dimensions update failed due to an unexpected error while processing the VCF file '{s3_key}'.\n"
+                    "Please try running 'divbase-cli dimensions update' again. If the problem persists, please contact DivBase support.\n"
+                    f"Error message: {e}"
+                ) from None
 
         _delete_job_files_from_worker(vcf_paths=list(s3_key_to_path.values()))
 
