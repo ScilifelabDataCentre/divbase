@@ -17,7 +17,6 @@ from pydantic import SecretStr
 
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
-
 SAMPLE_METADATA_QUERY_TASK_NAME = "tasks.sample_metadata_query"
 BCFTOOLS_QUERY_TASK_NAME = "tasks.bcftools_query"
 UPDATE_VCF_DIMENSIONS_TASK_NAME = "tasks.update_vcf_dimensions_task"

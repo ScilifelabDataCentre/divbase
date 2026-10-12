@@ -32,9 +32,7 @@ task_history_app = typer.Typer(
 def list_task_history_for_user(
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
-    project: str | None = typer.Option(
-        None, help="Optional project name to filter your task history by project."
-    ),
+    project: str | None = typer.Option(None, help="Optional project name to filter your task history by project."),
 ):
     """
     Check the status of all tasks you have submitted. Displays the latest 10 tasks by default, unless --limit is specified. Can be filtered by project name.

@@ -52,7 +52,9 @@ from divbase_lib.divbase_constants import (
 )
 from divbase_lib.utils import format_datetime_for_cli, format_file_size
 
-file_app = typer.Typer(no_args_is_help=True, help="Upload, download, list and manage files in the project's store on DivBase.")
+file_app = typer.Typer(
+    no_args_is_help=True, help="Upload, download, list and manage files in the project's store on DivBase."
+)
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 NO_UPLOAD_MATCHES_MSG = "The following file paths or glob patterns did not match any existing files:"
