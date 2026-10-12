@@ -28,11 +28,8 @@ from divbase_api.worker.crud_dimensions import (
     get_skipped_vcfs_by_project_worker,
     get_vcf_metadata_by_project,
 )
-from divbase_api.worker.tasks import (
-    BCFTOOLS_QUERY_TASK_NAME,
-    UPDATE_VCF_DIMENSIONS_TASK_NAME,
-    update_vcf_dimensions_task,
-)
+from divbase_api.worker.tasks import update_vcf_dimensions_task
+from divbase_api.worker.worker_config import BCFTOOLS_QUERY_TASK_NAME, UPDATE_VCF_DIMENSIONS_TASK_NAME
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.cli_exceptions import DivBaseAPIError
 from divbase_cli.divbase_cli import app

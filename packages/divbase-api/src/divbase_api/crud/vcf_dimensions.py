@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from divbase_api.exceptions import DimensionsUpdateAlreadyInProcessError
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.vcf_dimensions import SkippedVCFDB, VCFMetadataDB, VCFMetadataSamplesDB, VCFMetadataScaffoldsDB
-from divbase_api.worker.tasks import UPDATE_VCF_DIMENSIONS_TASK_NAME
+from divbase_api.worker.worker_config import UPDATE_VCF_DIMENSIONS_TASK_NAME
 
 logger = structlog.get_logger(__name__)
 

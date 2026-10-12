@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 
 from divbase_api.services.task_history import _deserialize_celery_task_metadata
-from divbase_api.worker.tasks import SAMPLE_METADATA_QUERY_TASK_NAME
+from divbase_api.worker.worker_config import SAMPLE_METADATA_QUERY_TASK_NAME
 
 
 def test_deserialize_sample_metadata_task_with_legacy_result_keys():

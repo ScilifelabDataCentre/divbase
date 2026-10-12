@@ -4,7 +4,7 @@ from datetime import datetime
 
 import structlog
 
-from divbase_api.worker.tasks import (
+from divbase_api.worker.worker_config import (
     BCFTOOLS_QUERY_TASK_NAME,
     SAMPLE_METADATA_QUERY_TASK_NAME,
     UPDATE_VCF_DIMENSIONS_TASK_NAME,

@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from divbase_api.models.task_history import CeleryTaskMeta, TaskHistoryDB
 from divbase_api.models.users import UserDB
-from divbase_api.worker.tasks import BCFTOOLS_QUERY_TASK_NAME, SAMPLE_METADATA_QUERY_TASK_NAME
+from divbase_api.worker.worker_config import BCFTOOLS_QUERY_TASK_NAME, SAMPLE_METADATA_QUERY_TASK_NAME
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_cli.divbase_cli import app
 

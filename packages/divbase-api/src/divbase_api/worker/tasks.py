@@ -66,7 +66,12 @@ from divbase_api.worker.metrics import (
     store_task_metric_in_cache,
     update_prometheus_gauges_from_cache,
 )
-from divbase_api.worker.worker_config import worker_settings
+from divbase_api.worker.worker_config import (
+    BCFTOOLS_QUERY_TASK_NAME,
+    SAMPLE_METADATA_QUERY_TASK_NAME,
+    UPDATE_VCF_DIMENSIONS_TASK_NAME,
+    worker_settings,
+)
 from divbase_api.worker.worker_db import SyncSessionLocal
 from divbase_lib.api_schemas.vcf_dimensions import DimensionUpdateTaskResult
 from divbase_lib.divbase_constants import DIVBASE_SERVER_TIMEZONE, QUERY_RESULTS_FILE_PREFIX
@@ -74,11 +79,6 @@ from divbase_lib.exceptions import DimensionsNotUpToDateWithBucketError, NoVCFFi
 from divbase_lib.utils import format_duration
 
 logger = structlog.get_logger(__name__)
-
-
-SAMPLE_METADATA_QUERY_TASK_NAME = "tasks.sample_metadata_query"
-BCFTOOLS_QUERY_TASK_NAME = "tasks.bcftools_query"
-UPDATE_VCF_DIMENSIONS_TASK_NAME = "tasks.update_vcf_dimensions_task"
 
 
 app = Celery(
@@ -130,6 +130,7 @@ class SampleSetOverlapResults:
 app.conf.update(
     task_track_started=True,
     task_acks_late=False,  # tasks are not redelivered if a worker dies mid-run, overridden by some tasks.
+    worker_prefetch_multiplier=1,
     task_default_delivery_mode="persistent",
     task_serializer="json",
     accept_content=["json"],
@@ -346,7 +347,7 @@ def sample_metadata_query_task(
             f"mapped to {len(metadata_result.unique_filenames)} VCF files"
         )
     except SoftTimeLimitExceeded:
-        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.sample_metadata_hard_limit_seconds)
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.sample_metadata_soft_limit_seconds)
         logger.error(error_msg)
         raise TaskUserError(error_msg) from None
     finally:
@@ -534,7 +535,7 @@ def bcftools_pipe_task(
         task_succeeded = True
 
     except SoftTimeLimitExceeded:
-        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.bcftools_query_hard_limit_seconds)
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.bcftools_query_soft_limit_seconds)
         logger.error(error_msg)
         raise TaskUserError(error_msg) from None
 
@@ -629,7 +630,7 @@ def update_vcf_dimensions_task(
             bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
         )
     except SoftTimeLimitExceeded:
-        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.dimensions_update_hard_limit_seconds)
+        error_msg = _max_run_time_exceeded_message(worker_settings.task_limits.dimensions_update_soft_limit_seconds)
         logger.error(error_msg)
         raise TaskUserError(error_msg) from None
 

@@ -34,7 +34,7 @@ from divbase_api.worker.cron_tasks import (
     remove_old_log_files,
     update_storage_usage_metrics,
 )
-from divbase_api.worker.tasks import BCFTOOLS_QUERY_TASK_NAME
+from divbase_api.worker.worker_config import BCFTOOLS_QUERY_TASK_NAME
 
 
 class TaskStatus(StrEnum):

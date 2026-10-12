@@ -18,6 +18,11 @@ from pydantic import SecretStr
 from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 
 
+SAMPLE_METADATA_QUERY_TASK_NAME = "tasks.sample_metadata_query"
+BCFTOOLS_QUERY_TASK_NAME = "tasks.bcftools_query"
+UPDATE_VCF_DIMENSIONS_TASK_NAME = "tasks.update_vcf_dimensions_task"
+
+
 @dataclass
 class WorkerGeneralSettings:
     """General configuration settings for the worker."""
@@ -61,7 +66,7 @@ class WorkerCronSettings:
     """
 
     stuck_pending_hours: int = int(os.getenv("STUCK_PENDING_STATUS_HOURS", "168"))  # 168 h = 7 days
-    stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "168"))  # 168 h = 7 days
+    stuck_started_hours: int = int(os.getenv("STUCK_STARTED_STATUS_HOURS", "24"))  # > all task hard time limits
     task_retention_days: int = int(os.getenv("TASK_RETENTION_DAYS", "30"))
     log_retention_days: int = int(os.getenv("LOG_RETENTION_DAYS", "30"))
     revoked_token_retention_days: int = int(os.getenv("REVOKED_TOKEN_RETENTION_DAYS", "7"))
@@ -73,23 +78,28 @@ class WorkerCronSettings:
 
 @dataclass
 class WorkerTaskLimitSettings:
-    """Celery hard and soft time limits for the user-facing tasks."""
+    """
+    Celery soft and hard time limits for the user-facing tasks.
 
-    sample_metadata_hard_limit_seconds: int = int(os.getenv("SAMPLE_METADATA_TIME_LIMIT_SECONDS", "600"))  # 10 min
-    bcftools_query_hard_limit_seconds: int = int(os.getenv("BCFTOOLS_QUERY_TIME_LIMIT_SECONDS", "36000"))  # 10 h
-    dimensions_update_hard_limit_seconds: int = int(os.getenv("VCF_DIMENSIONS_TIME_LIMIT_SECONDS", "36000"))  # 10 h
+    The soft limit is the maximum run time users are told about, when reached the task is stopped and marked failed.
+    The hard limit is a little longer to give the task time to clean up after the soft limit is reached.
+    """
 
-    @property
-    def sample_metadata_soft_limit_seconds(self) -> int:
-        return self.sample_metadata_hard_limit_seconds - 60  # 1 min less
-
-    @property
-    def bcftools_query_soft_limit_seconds(self) -> int:
-        return self.bcftools_query_hard_limit_seconds - 300  # 5 mins less
+    sample_metadata_soft_limit_seconds: int = int(os.getenv("SAMPLE_METADATA_TIME_LIMIT_SECONDS", "600"))  # 10 min
+    bcftools_query_soft_limit_seconds: int = int(os.getenv("BCFTOOLS_QUERY_TIME_LIMIT_SECONDS", "36000"))  # 10 h
+    dimensions_update_soft_limit_seconds: int = int(os.getenv("VCF_DIMENSIONS_TIME_LIMIT_SECONDS", "36000"))  # 10 h
 
     @property
-    def dimensions_update_soft_limit_seconds(self) -> int:
-        return self.dimensions_update_hard_limit_seconds - 300  # 5 mins less
+    def sample_metadata_hard_limit_seconds(self) -> int:
+        return self.sample_metadata_soft_limit_seconds + 60  # 1 min more
+
+    @property
+    def bcftools_query_hard_limit_seconds(self) -> int:
+        return self.bcftools_query_soft_limit_seconds + 300  # 5 mins more
+
+    @property
+    def dimensions_update_hard_limit_seconds(self) -> int:
+        return self.dimensions_update_soft_limit_seconds + 300  # 5 mins more
 
 
 @dataclass
@@ -134,15 +144,16 @@ class WorkerSettings:
                 "Set both to '1' to enable per-task metrics collection, or set ENABLE_WORKER_METRICS_PER_TASK to '0' to disable per-task metrics collection."
             )
 
-        # validate all soft time limits are >= 5 mins.
-        for setting_name, soft_limit in {
-            "SAMPLE_METADATA_TIME_LIMIT_SECONDS": self.task_limits.sample_metadata_soft_limit_seconds,
-            "BCFTOOLS_QUERY_TIME_LIMIT_SECONDS": self.task_limits.bcftools_query_soft_limit_seconds,
-            "VCF_DIMENSIONS_TIME_LIMIT_SECONDS": self.task_limits.dimensions_update_soft_limit_seconds,
+        # validate no task can still be running when the cron job considers it stuck.
+        for setting_name, hard_limit in {
+            "SAMPLE_METADATA_TIME_LIMIT_SECONDS": self.task_limits.sample_metadata_hard_limit_seconds,
+            "BCFTOOLS_QUERY_TIME_LIMIT_SECONDS": self.task_limits.bcftools_query_hard_limit_seconds,
+            "VCF_DIMENSIONS_TIME_LIMIT_SECONDS": self.task_limits.dimensions_update_hard_limit_seconds,
         }.items():
-            if soft_limit < 300:  # 5 mins
+            if hard_limit >= self.cron.stuck_started_hours * 3600:
                 raise ValueError(
-                    f"{setting_name} is too small, the resulting soft time limit would be {soft_limit} seconds (minimum 300 seconds)."
+                    f"{setting_name} ({hard_limit} seconds incl. cleanup time) must be less than STUCK_STARTED_STATUS_HOURS "
+                    f"({self.cron.stuck_started_hours} hours), otherwise running tasks could be cleaned up as stuck."
                 )
 
 
