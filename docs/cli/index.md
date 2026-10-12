@@ -17,10 +17,10 @@ divbase-cli config add -h # help for the divbase-cli config add command.
 
 `divbase-cli` is made up of a series of subcommands grouped into categories. These categories are:
 
-- `auth`: Commands for logging in and out of DivBase.
+- `auth`: Log in/out of DivBase and manage your personal access tokens.
 - `config`: Manage your user configuration file. Your configuration file contains information about which DivBase projects you're a member of.
-- `dimensions`: Create and inspect dimensions (number of samples, number of variants, scaffold names) of the VCF files in a project"
-- `files`: Download/upload/list files to/from the project's store on DivBase.
-- `queries`: Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase server.
-- `task-history`: Get the task history of query jobs submitted by the user to the DivBase server.
-- `versions`: Add, view and remove versions representing the state of all files in the entire project at the current timestamp.
+- `dimensions`: Create and inspect dimensions (number of samples, number of variants, scaffold names) of the VCF files in a project, and create/validate sample metadata files.
+- `files`: Upload, download, list and manage files in the project's store on DivBase.
+- `query`: Query the sample metadata and VCF files stored in the project's data store on DivBase. Queries are run on DivBase's server.
+- `task-history`: View the status of tasks submitted to DivBase.
+- `version`: Add, view and remove versions representing the state of all files in the entire project at the current timestamp.

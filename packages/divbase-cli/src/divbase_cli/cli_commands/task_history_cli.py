@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 task_history_app = typer.Typer(
-    help="Get the task history of query jobs submitted by the user to the DivBase API.",
+    help="View the status of tasks submitted to DivBase.",
     no_args_is_help=True,
 )
 
@@ -33,11 +33,11 @@ def list_task_history_for_user(
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
     limit: int = typer.Option(10, help="Maximum number of tasks to display in the terminal. Sorted by recency."),
     project: str | None = typer.Option(
-        None, help="Optional project name to filter the user's task history by project."
+        None, help="Optional project name to filter your task history by project."
     ),
 ):
     """
-    Check status of all tasks submitted by the user. Displays the latest 10 tasks by default, unless --limit is specified. Can be filtered by project name.
+    Check the status of all tasks you have submitted. Displays the latest 10 tasks by default, unless --limit is specified. Can be filtered by project name.
     """
     # TODO add option to sort ASC/DESC by task timestamp
     divbase_url = resolve_url_for_non_project_specific_commands()
@@ -70,11 +70,11 @@ def list_task_history_for_user(
 
 @task_history_app.command("id")
 def task_history_by_id(
-    task_id: int | None = typer.Argument(..., help="Task ID to check the status of a specific query job."),
+    task_id: int | None = typer.Argument(..., help="ID of the task to check the status of."),
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
-    Check status of a specific task submitted by the user by its task ID.
+    Check the status of a specific task you have submitted, by its task ID.
     """
     divbase_url = resolve_url_for_non_project_specific_commands()
 

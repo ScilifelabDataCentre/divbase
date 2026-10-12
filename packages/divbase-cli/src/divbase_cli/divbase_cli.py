@@ -24,11 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 app = typer.Typer(
-    help="""
+    help=f"""
     This tool lets you interact with your DivBase project(s) in order to: \n
-        - Query the metadata for the VCF files stored in the project. \n
-        - Upload/download files to/from the project. \n
-        - Version the state of all files in the entire project at a given timestamp.
+    - Query the metadata for the VCF files stored in the project. \n
+    - Upload/download files to/from the project. \n
+    - Version the state of all files in the entire project at a given timestamp. \n
+    For user guides and full documentation, see: {cli_settings.DIVBASE_DOCS_URL}
     """,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},

@@ -68,13 +68,13 @@ Check VCF job status with:
 # By the DivBase Task ID
 divbase-cli task-history id <TASK_ID>
 
-# Or by all the jobs submitted by the user
+# Or by all the jobs you have submitted
 divbase-cli task-history user
 ```
 
 ## Maximum run times
 
-Jobs that run longer than their maximum run time are stopped and marked as failed:
+Jobs that run longer than their maximum run time are stopped and marked as failed. Time spent waiting in the queue does not count towards the run time.
 
 | Job | Maximum run time |
 |---|---|

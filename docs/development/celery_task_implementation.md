@@ -294,7 +294,7 @@ Example:
 
 # Define a Typer app
 query_app = typer.Typer(
-    help="Run queries on the VCF files stored in the project's storage bucket. Queries are run on the DivBase API",
+    help="Query the sample metadata and VCF files stored in the project's data store on DivBase. Queries are run on DivBase's server.",
     no_args_is_help=True,
 )
 

@@ -52,7 +52,7 @@ from divbase_lib.divbase_constants import (
 )
 from divbase_lib.utils import format_datetime_for_cli, format_file_size
 
-file_app = typer.Typer(no_args_is_help=True, help="Download/upload/list files to/from the project's store on DivBase.")
+file_app = typer.Typer(no_args_is_help=True, help="Upload, download, list and manage files in the project's store on DivBase.")
 
 NO_FILES_SPECIFIED_MSG = "No files specified for the command, exiting..."
 NO_UPLOAD_MATCHES_MSG = "The following file paths or glob patterns did not match any existing files:"
@@ -73,7 +73,7 @@ PROJECT_VERSION_OPTION = typer.Option(
     None,
     "--project-version",
     "-pv",
-    help="User defined version of the project's at which to download the files. If not provided, downloads the latest version of all selected files.",
+    help="Name of the project version to download the files from. If not provided, downloads the latest version of all selected files.",
 )
 DRY_RUN_OPTION = typer.Option(
     False,
@@ -201,7 +201,7 @@ def tree_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Display the project's file store in a tree like manner.
+    Display the project's file store in a tree-like manner.
 
     Examples:
 
@@ -517,7 +517,7 @@ def stream_file(
         default=None,
         help="Specify this if you want to look at an older/specific version of the file. "
         "If not provided, the latest version of the file is used. "
-        "To get a file's version ids, use the 'divbase-cli files info [FILE_NAME]' command.",
+        "To get a file's version IDs, use the 'divbase-cli files info [FILE_NAME]' command.",
     ),
     project: str | None = PROJECT_NAME_OPTION,
 ):
@@ -548,7 +548,7 @@ def stream_file(
 
 @file_app.command("upload")
 def upload_files(
-    files: list[str] | None = typer.Argument(None, help="Space separated list of files or glob patterns to upload."),
+    files: list[str] | None = typer.Argument(None, help="Space-separated list of files or glob patterns to upload."),
     file_list: Path | None = typer.Option(None, "--file-list", "-l", help="Text file with list of files to upload."),
     remote_dir: str | None = typer.Option(
         None,
@@ -560,17 +560,17 @@ def upload_files(
         False,
         "--skip-existing",
         "-s",
-        help="If set, will skip already uploaded files, from the files you provided in the command. "
-        "Already uploaded files are determined by checking if a file with the same name and MD5 checksum already exists in the project's store on DivBase. ",
+        help="If set, will skip any of the files you provided that have already been uploaded. "
+        "A file counts as already uploaded if a file with the same name and MD5 checksum already exists in the project's store on DivBase.",
     ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
         "-r",
         "-R",
-        help="If set, recursively include subdirectories contents when uploading (i.e. '**' is expanded). "
+        help="If set, recursively include the contents of subdirectories when uploading (i.e. '**' is expanded). "
         "Without this flag, patterns only match files in the specified directory. "
-        "Put your argument in quotes to prevent shell expansion of the glob before it gets to the CLI, e.g. files upload 'data/**/*.vcf.gz' ",
+        "Put your argument in quotes to prevent shell expansion of the glob before it gets to the CLI, e.g. divbase-cli files upload 'data/**/*.vcf.gz'",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", "-n", help="If set, will show what files would be uploaded, but not actually upload them."
@@ -579,9 +579,9 @@ def upload_files(
         bool,
         typer.Option(
             "--disable-safe-mode",
-            help="Turn off safe mode which is on by default. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload:"
-            "(1) Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process."
-            "(2) Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums)."
+            help="Turn off safe mode which is on by default. Safe mode adds 2 extra bits of security by first calculating the MD5 checksum of each file that you're about to upload: "
+            "(1) Checks if any of the files you're about to upload already exist (by comparing name and checksum) and if so stops the upload process. "
+            "(2) Sends the file's checksum when the file is uploaded so the server can verify the upload was successful (by calculating and comparing the checksums). "
             "It is recommended to leave safe mode enabled unless you have a specific reason to disable it.",
         ),
     ] = False,
@@ -773,7 +773,7 @@ def remove_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Soft delete files from the project's store on DivBase
+    Soft delete files from the project's store on DivBase.
 
     Note that deleting a non existent file will be treated as a successful deletion.
 
@@ -819,7 +819,7 @@ def restore_soft_deleted_files(
     project: str | None = PROJECT_NAME_OPTION,
 ):
     """
-    Restore soft deleted files from the project's store on DivBase
+    Restore soft deleted files from the project's store on DivBase.
 
     Attempts to restore a file that is not soft deleted will be considered successful and the file will remain live.
 

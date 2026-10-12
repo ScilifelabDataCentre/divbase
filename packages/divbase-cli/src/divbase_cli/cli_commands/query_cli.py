@@ -56,8 +56,8 @@ BCFTOOLS_ARGUMENT = typer.Option(
 
 # Sample metadata and VCF queries both use the same core text, so it is defined up here.
 TSV_FILTER_SYNTAX = (
-    "String consisting of keys:values in the tsv file to filter on. "
-    "The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the keys are the column header names in the tsv, "
+    "String consisting of keys:values in the TSV file to filter on. "
+    "The syntax is 'Key1:Value1,Value2;Key2:Value3,Value4', where the keys are the column header names in the TSV, "
     "and values are the column values. Multiple values for a key are separated by commas, and multiple keys are "
     "separated by semicolons. When multiple keys are provided, an intersect query will be performed. "
     "E.g. 'Area:West of Ireland,Northern Portugal;Sex:F'."
@@ -71,7 +71,7 @@ TSV_FILTER_HELP_TEXT_VCF = (
 
 SAMPLE_SELECTION_HELP_PANEL = "Sample Selection (Required: Include Exactly One)"
 VCF_QUERY_HELP_TEXT = (
-    "Submit a VCF query to run on the DivBase API. "
+    "Submit a VCF query to run on DivBase's server. "
     "A single, merged VCF file with the query results will be added to the project on success.\n\n"
     "Exactly one sample-selection mode is required: "
     "--tsv-filter | --samples | --samples-file | --all-samples."
@@ -83,11 +83,11 @@ GET_RESULTS_HELP_TEXT = (
     "Wait for a 'divbase-cli query vcf' job to complete and download the results file when complete. "
     "Similar to running 'divbase-cli task-history id <TASK_ID>' but with the added benefit of polling for the "
     "terminal state of the job (SUCCESS/FAILED). Designed to be of particular use in scripts and other automated workflows. "
-    "Error codes (e.g. for scripts): 0 — task succeeded and file downloaded; 1 — task failed; 2 — unsupported task type"
+    "Exit codes (e.g. for scripts): 0 — task succeeded and file downloaded; 1 — task failed; 2 — unsupported task type."
 )
 
 query_app = typer.Typer(
-    help="Run queries on the VCF files stored in the project's data store on DivBase. Queries are run on the DivBase API",
+    help="Query the sample metadata and VCF files stored in the project's data store on DivBase. Queries are run on DivBase's server.",
     no_args_is_help=True,
 )
 
@@ -106,7 +106,7 @@ def sample_metadata_query(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Query the tsv sidecar metadata file for the VCF files in the project's data store on DivBase.
+    Query the TSV sidecar metadata file for the VCF files in the project's data store on DivBase.
     Returns the sample IDs and filenames that match the query.
     """
     project_config = resolve_and_authenticate_project(project_name=project)
@@ -179,7 +179,7 @@ def vcf_query(
     project: str | None = PROJECT_NAME_OPTION,
 ) -> None:
     """
-    Submit a VCF query to run on the DivBase API. A single, merged VCF file with the query results will be added to the project on success.
+    Submit a VCF query to run on DivBase's server. A single, merged VCF file with the query results will be added to the project on success.
     """
 
     # TODO Error handling for subprocess calls.

@@ -31,14 +31,14 @@ def get_and_display_announcements(divbase_base_url: str) -> None:
     announcements = [AnnouncementResponse.model_validate(ann) for ann in announcements_data]
 
     if len(announcements) == 1:
-        print("[bold]An Announcement from DivBase Server:[/bold]")
+        print("[bold]An announcement from DivBase:[/bold]")
         color = COLOR_MAPPING.get(announcements[0].level)
         print(f"[bold {color}]{announcements[0].heading}[/bold {color}]")
         if announcements[0].message:
             print(f"{announcements[0].message}\n")
         return
 
-    print("[bold]Announcements from DivBase Server:[/bold]")
+    print("[bold]Announcements from DivBase:[/bold]")
     for idx, ann in enumerate(announcements, start=1):
         color = COLOR_MAPPING.get(ann.level)
         print(f"[bold {color}]{idx}) {ann.heading}[/bold {color}]")

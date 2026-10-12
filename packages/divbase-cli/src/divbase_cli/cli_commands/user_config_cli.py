@@ -88,16 +88,16 @@ def show_default_project_command() -> None:
     if config.default_project:
         print(config.default_project)
     else:
-        print("No default project is set in the user configuration file.")
+        print("No default project is set in your user configuration file.")
 
 
 @config_app.command("set-dload-dir")
 def set_default_dload_dir_command(
     download_dir: str = typer.Argument(
         ...,
-        help="Set the default directory to download files to. "
-        "By default files are downloaded to the current working directory. "
-        "Do not use a relative path. To use the current working directory (where each command is run from), use '.' as the argument.",
+        help="Directory to download files to by default. "
+        "If no default is set, files are downloaded to the current working directory. "
+        "Use an absolute path. To always download to the directory you run each command from, use '.' as the argument.",
     ),
 ):
     """
@@ -108,7 +108,7 @@ def set_default_dload_dir_command(
     config = load_user_config()
     dload_dir = config.set_default_download_dir(download_dir=download_dir)
     if dload_dir == ".":
-        print("The default download directory will be whereever you run the command from.")
+        print("The default download directory will be wherever you run the command from.")
     else:
         print(f"The default download directory is now set to: {dload_dir}.")
 

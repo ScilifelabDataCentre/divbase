@@ -127,7 +127,7 @@ This submits a task to the DivBase task management system. The task will wait in
 Check the task history to confirm the dimensions update job has completed:
 
 ```bash
-# By all the jobs submitted by the user, show last 10 jobs by default (adjustable with --limit)
+# for all the jobs you have submitted, show last 10 jobs by default (adjustable with --limit)
 divbase-cli task-history user
 
 # Or by the DivBase Task ID printed in the terminal when submitting a job

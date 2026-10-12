@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 dimensions_app = typer.Typer(
     no_args_is_help=True,
-    help="Create and inspect dimensions (number of samples, number of variants, scaffold names) of the VCF files in a project",
+    help="Create and inspect dimensions (number of samples, number of variants, scaffold names) of the VCF files in a project, and create/validate sample metadata files.",
 )
 
 
@@ -73,7 +73,7 @@ def show_dimensions_index(
         typer.Option(
             False,
             "--cached-vcf-files",
-            help="If set, will show all VCF file entries (filename + s3 version ID) found in the project's VCF dimensions cache.",
+            help="If set, will show all VCF file entries (filename and version ID) found in the project's VCF dimensions cache.",
         )
     ),
     sample_names_limit: int = typer.Option(

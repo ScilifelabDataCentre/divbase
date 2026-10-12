@@ -41,7 +41,7 @@ def add_version(
 
 @version_app.command("update")
 def update_version(
-    version_name: str = typer.Argument(help="Name of the existing version you want to modify", show_default=False),
+    version_name: str = typer.Argument(help="Name of the existing version you want to modify.", show_default=False),
     new_name: str | None = typer.Option(
         None, "--new-name", "-n", help="New name for the version. If not specified, the name will remain unchanged."
     ),
@@ -134,12 +134,12 @@ def list_versions(
 
 @version_app.command("info")
 def get_version_info(
-    version: str = typer.Argument(help="Specific version to retrieve information for"),
+    version: str = typer.Argument(help="Name of the version to show information for."),
     project: str | None = PROJECT_NAME_OPTION,
     format_output_as_tsv: bool = FORMAT_AS_TSV_OPTION,
 ):
     """
-    Provide detailed information about a user specified project version, including all files present and their unique hashes.
+    Show detailed information about a specific project version, including all files present and their unique hashes.
     """
     project_config = resolve_and_authenticate_project(project_name=project)
     version_details = get_version_details_command(

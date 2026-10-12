@@ -1,7 +1,7 @@
 
 # Setup DivBase CLI configuration guide
 
-This section covers how to configure divbase-cli to know which projects you're a member of and log you in and out of the DivBase server.
+This section covers how to configure divbase-cli to know which projects you're a member of and log you in and out of DivBase.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ divbase-cli config show
 
 ## 2. Logging into DivBase server
 
-With the config setup you can now log into DivBase server via `divbase-cli`. This will keep you logged in for 1 week.
+With the config setup you can now log in to DivBase via `divbase-cli`. This will keep you logged in for 1 week.
 
 ```bash
 divbase-cli auth login [YOUR_EMAIL] # you'll be prompted for your password

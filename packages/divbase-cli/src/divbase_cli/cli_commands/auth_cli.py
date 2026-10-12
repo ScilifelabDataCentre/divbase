@@ -38,7 +38,7 @@ divbase_home_url = cli_settings.DIVBASE_API_URL.replace("/api", "")
 
 auth_app = typer.Typer(
     no_args_is_help=True,
-    help=f"Login/logout of DivBase server. To register, visit {divbase_home_url}.",
+    help=f"Log in/out of DivBase and manage your personal access tokens. To register, visit {divbase_home_url}.",
 )
 
 
@@ -46,10 +46,10 @@ auth_app = typer.Typer(
 def login(
     email: str,
     divbase_url: str = typer.Option(cli_settings.DIVBASE_API_URL, help="DivBase server URL to connect to."),
-    force: bool = typer.Option(False, "--force", "-f", help="Force login again even if already logged in"),
+    force: bool = typer.Option(False, "--force", "-f", help="Log in again even if already logged in."),
 ):
     """
-    Log in to the DivBase server.
+    Log in to DivBase.
 
     You'll be prompted for your password after running the command.
     """
@@ -83,7 +83,7 @@ def login(
 @auth_app.command("logout")
 def logout():
     """
-    Log out of the DivBase server.
+    Log out of DivBase.
 
     Removes your locally stored credentials and invalidates the server-side refresh token.
     """
@@ -93,12 +93,12 @@ def logout():
 
 @auth_app.command("add-pat")
 def add_pat(
-    name: str = typer.Argument(..., help="Name of the personal access token (PAT). E.g. 'work-laptop-pat'"),
+    name: str = typer.Argument(..., help="Name of the personal access token (PAT), e.g. 'work-laptop-pat'."),
     expires_unix_timestamp: int | None = typer.Option(
         None,
         "--expires",
         "-e",
-        help="When the personal access token (PAT) expires (if it does), as a unix timestamp.",
+        help="When the personal access token (PAT) expires (if it does), as a Unix timestamp.",
         min=1,
     ),
     overwrite_existing: bool = typer.Option(
@@ -108,7 +108,7 @@ def add_pat(
     """
     Add a personal access token (PAT) to your device for authentication with DivBase.
 
-    PATs are used for authenticating with the DivBase API instead of using your password, and are recommended for use in scripts and pipelines.
+    PATs are used for authenticating with DivBase instead of using your password, and are recommended for use in scripts and pipelines.
     See https://scilifelabdatacentre.github.io/divbase/user-guides/using-divbase-programmatically/ for more details on how to create a personal access token.
     You can only store one personal access token at a time.
     """
@@ -174,7 +174,7 @@ def pat_info():
 @auth_app.command("whoami")
 def whoami():
     """
-    Return information about the currently logged-in user.
+    Show information about the account you are currently logged in with.
     """
     divbase_url = resolve_url_for_non_project_specific_commands()
 
