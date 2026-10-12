@@ -49,7 +49,7 @@ def add_project_command(
     if make_default:
         print(f"Project '{project.name}' is now set as your default project")
     else:
-        print(f"To make '{project.name}' your default project you can run: 'divbase config set-default {project.name}'")
+        print(f"To make '{project.name}' your default project, run: 'divbase-cli config set-default {project.name}'")
 
 
 @config_app.command("rm")
