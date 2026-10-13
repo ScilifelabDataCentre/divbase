@@ -169,7 +169,7 @@ Below are examples that cover the most common filter patterns. For more details,
 divbase-cli query tsv "Area:North,South,East"
 
 # Exclude rows where Area is North
-divbase-cli query tsv "Area:!North"
+divbase-cli query tsv 'Area:!North'
 
 # Match rows where Weight is greater than 25
 divbase-cli query tsv "Weight:>25"
@@ -184,15 +184,15 @@ divbase-cli query tsv "Weight:25,30,35"
 divbase-cli query tsv "Sample_ID:S1"
 
 # Combine multiple keys and mix inclusive/exclusive filters in one query
-divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
+divbase-cli query tsv 'Area:North,West,!South;Weight:>10,<=20,!15,18-22'
 ```
 
 ### 2.2. Overview: queries are applied as filters on columns in the TSV
 
-Filters are passed to divbase-cli query tsv as a single string, enclosed in quotes ("").
+Filters are passed to divbase-cli query tsv as a single string, enclosed in quotes. Use single quotes ('') if the filter contains a `!`.
 
 The TSV query syntax is `"Key1:Value1,Value2;Key2:Value3,Value4"`, where `Key1:`...`Key2:` are the column header names in the TSV, and `Value1`...`Value4` are the values. Multiple filter values for a key are separated by commas, and multiple keys are separated by semicolons. There can be any number keys and values to filter on, but it is up to you to write queries that return useful results.
-It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `"Key:!Value"`. When mixing inclusive and exclusive filters (e.g. `"Key1:Value1,Value2; Key2:!Value3"`), only the rows that match the positive filters and do not match any of the excluded values will be returned. This can be used to write complex queries.
+It is possible to exclude a value by prefixing it with a `!` (NOT) operator: `'Key:!Value'`. When mixing inclusive and exclusive filters (e.g. `'Key1:Value1,Value2; Key2:!Value3'`), only the rows that match the positive filters and do not match any of the excluded values will be returned. This can be used to write complex queries.
 
 !!! note
     Please note that semicolons (`;`) have special meaning in the query filter syntax: to separate key:value filter pairs (e.g. `"Area:North;Population:1"`). This means that if a TSV cell contains a literal semicolon, it cannot be matched via query filters because the query parser will consider it a delimiter and split the string on it. DivBase will return warnings if the TSV contains semicolons.
@@ -251,12 +251,12 @@ will return all samples where **at least one** of the values (including the indi
 The `!`(NOT) operator can be used to exclude specific cell values from a column. When a `!` is used on its own, such as in the command:
 
 ```bash
-divbase-cli query tsv "Area:!North"
+divbase-cli query tsv 'Area:!North'
 ```
 
 it will return all rows that do not contain `North` in the `Area`. Multi-column values that contain `North`, such as a row with e.g. `["North", "South"]` will also be excluded by this query.
 
-Note that when inclusive and exclusive are combined (e.g. `"Area:East,!South"`), only rows that match both filters (include `East`, exclude `South`) will be returned in the results.
+Note that when inclusive and exclusive are combined (e.g. `'Area:East,!South'`), only rows that match both filters (include `East`, exclude `South`) will be returned in the results.
 
 !!! Note
     It is also possible to use quotes in the query filters to match TSV cell values that have e.g. a comma or a white space. When doing this, the whole outer filter string must be enclosed in single quotes in order to prevent the shell from interpreting the inner double quotes incorrectly.  For instance, if there is a cell value in the TSV with `North, South` (i.e. containing a comma and a whitespace), it IS possible to filter on this value with:
@@ -299,9 +299,9 @@ Furthermore, it is possible to combine filters on inequalities, ranges, and disc
 
 The `!` (NOT) operator can really come to good use for numerical filters:
 
-- `"Weight:!25"` returns rows where the value is not 25.
-- `"Weight:>5,!10-15"`  returns rows where the value is greater than 5, but not in the range 10–15.
-- `"Weight:!1-2,4"`  returns rows where the value is not in the range 1–2, or is 4.
+- `'Weight:!25'` returns rows where the value is not 25.
+- `'Weight:>5,!10-15'`  returns rows where the value is greater than 5, but not in the range 10–15.
+- `'Weight:!1-2,4'`  returns rows where the value is not in the range 1–2, or is 4.
 
 !!! Tip
     Numeric operations such as inequalities like `>25`, and ranges like `20-40` are fully supported for multi-value cells in numeric columns as long as every element in the bracket array (`[1, 2]`) in every cell in the column is of numerical type. For instance: a `Population` column with values `1`, `[2,4]`, `[1,3,5]`; in this case a query like `divbase-cli query tsv "Population:>3"` will correctly match cells like `[2,4]` and `[1,3,5]`.
@@ -349,7 +349,7 @@ If none of the filter values match any values in the column, DivBase print a war
 Assuming that the sidecar metadata TSV file looks like in the [Example](#113-example) above, a query like will:
 
 ```bash
-divbase-cli query tsv "Area:North,West,!South;Weight:>10,<=20,!15,18-22"
+divbase-cli query tsv 'Area:North,West,!South;Weight:>10,<=20,!15,18-22'
 ```
 
 - include rows where the `Area` column contains either `North` or `West` (also applied to bracket array multi-value cells), **but excludes** any row where `South` is present in the `Area` column—even if `North` or `West` is also present.

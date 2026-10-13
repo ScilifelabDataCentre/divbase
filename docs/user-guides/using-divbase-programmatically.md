@@ -61,25 +61,25 @@ You may prefer this if you want explicit per-job control of which token is used.
 
 You can make the output of the `divbase-cli files info` and `divbase-cli files ls` commands be TSV formated for easier parsing. Use the `--tsv` flag:
 
-    ```bash
-    divbase-cli files ls --tsv
-    divbase-cli files info FILE_NAME --tsv
-    ```
+```bash
+divbase-cli files ls --tsv
+divbase-cli files info FILE_NAME --tsv
+```
 
-    You can do the same for any [project versions](./project-versioning.md) you've created for your project:
+You can do the same for any [project versions](./project-versioning.md) you've created for your project:
 
-    ```bash
-    divbase-cli version ls --tsv
-    divbase-cli version info VERSION_NAME --tsv
-    ```
+```bash
+divbase-cli version ls --tsv
+divbase-cli version info VERSION_NAME --tsv
+```
 
 ## Stream files from the command line
 
 Rather than first downloading a file, you can stream a file from the command line and pipe it into other tools for processing directly without saving it to disk.
 
-    ```bash
-    divbase-cli files stream my_file.vcf.gz | zcat | less
-    ```
+```bash
+divbase-cli files stream my_file.vcf.gz | zcat | less
+```
 
 !!! info "BCFTools accepts stdin as input"
     You can pipe a VCF file directly into BCFTools without downloading it first:

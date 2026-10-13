@@ -1,7 +1,5 @@
 # How to create efficient DivBase queries
 
-TODO add more tips here
-
 ## General advice
 
 Split large VCF files into smaller files. For instance by chromosome. If the assembly does not have chromosome level contiguity, we suggest to store a range of scaffolds per file.

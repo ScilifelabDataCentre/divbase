@@ -66,9 +66,9 @@ We have a GH action that checks that all pre-commit hooks pass on every PR and c
 
 divbase-cli relies on 2 local files to preserve state between runs:
 
-1. A config file stored in your home directory at `~/.config/divbase/config.yaml`.
+1. A config file stored in your home directory at `~/.config/divbase-cli/config.yaml`.
     This config contains information about your DivBase projects and which divbase server (if any) you're logged into.
-2. A secrets file stored in your home directory at `~/.config/divbase/.secrets`.
+2. A secrets file stored in your home directory at `~/.config/divbase-cli/.secrets`.
     This file contains your access/refresh tokens for the DivBase server you're logged into.
 
 You can read [the user guides](../user-guides/index.md) for more information on how to setup the CLI tool for the first time use.
@@ -78,7 +78,7 @@ For convenience, we provide a local development setup script, but in order to ru
 !!! Tip "Local development environment variable"
     To make local development easier when working on divbase-cli, you may want to set the environment variable:
     ```bash
-    export DIVBASE_DEV=true
+    export DIVBASE_DEV=1
     ```
     This will configure logging and set the cli to interact with the local docker compose instance of the divbase api (aka `localhost:8000/api`). This logic is handled by `divbase_cli/cli_config.py`. Look in there if you want more specific control over things like logging level etc... via environment variables.
 

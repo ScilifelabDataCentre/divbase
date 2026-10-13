@@ -314,8 +314,6 @@ See also the manual for `bcftools view` [bcftools manual](https://samtools.githu
     - Result files are outputs, not treated as new source data for future dimensions/indexing workflows
     - Keep bucket tidy by deleting obsolete result files if needed, they will take up space
 
-TODO describe cron job for old results files
-
 ### 5.3. How does DivBase process the VCF files?
 
 This section is aimed towards the technical user that would like to understand how DivBase uses `bcftools` to process VCF data queries on the files in a project's data storage.
