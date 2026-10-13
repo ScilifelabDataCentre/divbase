@@ -351,11 +351,34 @@ class TestQueryVCFSuccess:
                 "view -r 1,4,6,21,24",
                 "9ef2d87a9adf577c2f45b47d1e70138b",
             ),
+            (  # Case 4: Same as case 3, but samples are injected at a 'view -s' placeholder in the second pipe segment.
+                # Region and sample subsetting commute, so the results must be identical to case 3 (same checksum).
+                [
+                    "HOM_20ind_17SNPs.1.vcf.gz",
+                    "HOM_20ind_17SNPs.4.vcf.gz",
+                    "HOM_20ind_17SNPs.5.vcf.gz",
+                    "HOM_20ind_17SNPs.6.vcf.gz",
+                    "HOM_20ind_17SNPs.7.vcf.gz",
+                    "HOM_20ind_17SNPs.8.vcf.gz",
+                    "HOM_20ind_17SNPs.13.vcf.gz",
+                    "HOM_20ind_17SNPs.18.vcf.gz",
+                    "HOM_20ind_17SNPs.20.vcf.gz",
+                    "HOM_20ind_17SNPs.21.vcf.gz",
+                    "HOM_20ind_17SNPs.22.vcf.gz",
+                    "HOM_20ind_17SNPs.24.vcf.gz",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
+                ],
+                "sample_metadata_HOM_20ind_17SNPs.tsv",
+                "--tsv-filter 'Area:West of Ireland;Sex:F'",
+                "view -r 1,4,6,21,24; view -s",
+                "9ef2d87a9adf577c2f45b47d1e70138b",
+            ),
         ],
         ids=[
             "case-1-sample-metadata-HOM-20ind",
             "case-2-sample-metadata-HOM-chr-split",
             "case-3-sample-metadata-HOM-chr-split-view-r-subset",
+            "case-4-sample-metadata-HOM-chr-split-view-r-subset-later-samples-placeholder",
         ],
     )
     def test_vcf_query_result_file_by_headerless_checksum(
@@ -603,6 +626,128 @@ class TestQueryVCFSuccess:
             f"Second run task failed. task-history output:\n{second_task_stdout}\n"
             "This suggests that result files from the first run are incorrectly triggering DimensionsNotUpToDateWithBucketError."
         )
+
+    @pytest.mark.parametrize(
+        "files_to_upload, sample_selection_args, placeholder_later_command, placeholder_first_command, expected_samples",
+        [
+            (  # Samples split across two files -> results are combined with bcftools merge.
+                [
+                    "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+                    "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+                    "sample_metadata_HOM_20ind_17SNPs.tsv",
+                ],
+                "--tsv-filter 'Area:West of Ireland,Northern Portugal;Sex:F' "
+                "--metadata-tsv-name sample_metadata_HOM_20ind_17SNPs.tsv",
+                "view -r 1,4,21; view -s",
+                "view -s; view -r 1,4,21",
+                {"5a_HOM-I7", "1b_HOM-G58", "5a_HOM-I13", "5a_HOM-I14", "5a_HOM-I20", "5a_HOM-I21"},
+            ),
+            (  # Chromosomes split across files with identical samples -> results are combined with bcftools concat.
+                [
+                    "HOM_20ind_17SNPs.1.vcf.gz",
+                    "HOM_20ind_17SNPs.4.vcf.gz",
+                    "HOM_20ind_17SNPs.6.vcf.gz",
+                    "HOM_20ind_17SNPs.21.vcf.gz",
+                    "HOM_20ind_17SNPs.24.vcf.gz",
+                ],
+                "--samples '5a_HOM-I13,1b_HOM-G58,8_HOM-E57'",
+                "view -r 1,4,6,21,24; view -s",
+                "view -s; view -r 1,4,6,21,24",
+                {"5a_HOM-I13", "1b_HOM-G58", "8_HOM-E57"},
+            ),
+            (  # Placeholder in the middle of a three segment pipe, one sample from each of the two merged files.
+                [
+                    "HOM_20ind_17SNPs_first_10_samples.vcf.gz",
+                    "HOM_20ind_17SNPs_last_10_samples.vcf.gz",
+                ],
+                "--samples '5a_HOM-I7,8_HOM-E57'",
+                "view -r 1,4,21; view -s; view -v snps",
+                "view -s; view -r 1,4,21; view -v snps",
+                {"5a_HOM-I7", "8_HOM-E57"},
+            ),
+        ],
+        ids=[
+            "merge-files-tsv-filter-placeholder-last",
+            "concat-files-samples-placeholder-last",
+            "merge-files-samples-placeholder-middle",
+        ],
+    )
+    def test_samples_placeholder_after_first_segment_matches_placeholder_in_first_segment(
+        self,
+        CONSTANTS,
+        logged_in_edit_user_with_existing_config,
+        run_update_dimensions,
+        project_map,
+        fixtures_dir,
+        cleaned_project_bucket,
+        tmp_path,
+        files_to_upload,
+        sample_selection_args,
+        placeholder_later_command,
+        placeholder_first_command,
+        expected_samples,
+    ):
+        """
+        Test that a 'view -s' placeholder placed after the first pipe segment gets the resolved samples injected.
+
+        From the second segment onwards, the inputs to each bcftools command are temp files written by the previous
+        segment, not the source VCF files. The samples must still be injected per source VCF file. Region and sample
+        subsetting commute, so the results must be identical to the same query with the placeholder first.
+        """
+        project_name, bucket_name = cleaned_project_bucket
+        project_id = project_map[project_name]
+        user_id = 1
+
+        for fixture_name in files_to_upload:
+            fixture_path = (fixtures_dir / fixture_name).resolve()
+            upload_result = runner.invoke(app, f"files upload {fixture_path} --project {project_name}")
+            assert upload_result.exit_code == 0, f"Upload failed for {fixture_name}: {upload_result.stdout}"
+
+        run_update_dimensions(
+            bucket_name=bucket_name, project_id=project_id, project_name=project_name, user_id=user_id
+        )
+
+        def run_query_and_download(bcftools_view_command: str, download_dir: Path) -> Path:
+            query_result = runner.invoke(
+                app,
+                f"query vcf {sample_selection_args} --command '{bcftools_view_command}' --project {project_name}",
+            )
+            assert query_result.exit_code == 0, f"Query submission failed: {query_result.stdout}"
+            user_task_id = query_result.stdout.strip().split()[-1]
+
+            task_state, task_stdout = wait_for_task_terminal_state_using_CLI(user_task_id=user_task_id)
+            assert task_state == "SUCCESS", (
+                f"Expected SUCCESS for --command '{bcftools_view_command}'. task-history output:\n{task_stdout}"
+            )
+
+            output_file = f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz"
+            download_dir.mkdir()
+            download_result = runner.invoke(
+                app, f"files download {output_file} --download-dir {download_dir} --project {project_name}"
+            )
+            assert download_result.exit_code == 0, f"Downloading query result failed: {download_result.stdout}"
+            return download_dir / output_file
+
+        placeholder_later_result = run_query_and_download(placeholder_later_command, tmp_path / "placeholder_later")
+        placeholder_first_result = run_query_and_download(placeholder_first_command, tmp_path / "placeholder_first")
+
+        result_text = gzip.decompress(placeholder_later_result.read_bytes()).decode("utf-8")
+        header_line = next(line for line in result_text.splitlines() if line.startswith("#CHROM"))
+        result_samples = header_line.split("\t")[9:]
+        assert set(result_samples) == expected_samples
+
+        # The bcftools audit trail in the results header shows the injected samples were applied to the temp
+        # files written by the first segment (not to the source VCFs).
+        injected_sample_lists = re.findall(
+            r"^##bcftools_viewCommand=view -s (\S+) .*temp_subset_\S+_0_\d+\.bcf;", result_text, flags=re.MULTILINE
+        )
+        assert injected_sample_lists, "Expected a 'view -s <SAMPLES>' step on the first segment's temp files"
+        for sample_list in injected_sample_lists:
+            assert set(sample_list.split(",")) <= expected_samples
+
+        checksum_placeholder_later = _checksum_vcf_skip_double_hash_headers(placeholder_later_result, tmp_path)
+        checksum_placeholder_first = _checksum_vcf_skip_double_hash_headers(placeholder_first_result, tmp_path)
+        assert checksum_placeholder_later == checksum_placeholder_first
 
 
 class TestQueryVCFSubmissionValidation:

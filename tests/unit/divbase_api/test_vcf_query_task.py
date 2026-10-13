@@ -331,6 +331,7 @@ class TestSamplesPlaceholderDetectionAndInjection:
             command="view -s -r 1:1000-2000",
             counter=1,
             input_files=["file1.vcf.gz"],
+            source_files=["file1.vcf.gz"],
             sample_subset=[
                 SampleFileMapping(sample_id="S1", filename="file1.vcf.gz"),
                 SampleFileMapping(sample_id="S2", filename="file1.vcf.gz"),

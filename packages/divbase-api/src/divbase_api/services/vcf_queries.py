@@ -59,6 +59,9 @@ class BCFToolsCommandConfig:
     command: str
     counter: int
     input_files: list[str]
+    # Original VCF filename for each entry in input_files (same order). After the first command, input_files are
+    # temp files, so this is needed to look up which samples belong to each file.
+    source_files: list[str]
     sample_subset: list[SampleFileMapping]
     output_temp_files: list[str]
     pipe_has_sample_placeholder: bool
@@ -672,6 +675,7 @@ class BcftoolsQueryManager:
                 command=cmd,
                 counter=c_counter,
                 input_files=current_inputs,
+                source_files=filenames,
                 sample_subset=sample_and_filename_subset,
                 output_temp_files=output_temp_files,
                 pipe_has_sample_placeholder=pipe_has_sample_placeholder,
@@ -765,10 +769,11 @@ class BcftoolsQueryManager:
 
         for f_counter, file in enumerate(input_files):
             temp_file = output_temp_files[f_counter]
+            source_file = cmd_config.source_files[f_counter]
 
             samples_in_file = []
             for record in sample_subset:
-                if record.filename == file:
+                if record.filename == source_file:
                     samples_in_file.append(record.sample_id)
 
             cmd_with_samples = command.strip()  # Use user-submitted command as starting point
