@@ -33,7 +33,7 @@ class GeneralSettings:
     admin_panel_secret: SecretStr = SecretStr(os.getenv("ADMIN_SECRET_KEY", "NOT_SET"))
 
     # versions before this are denied access to the API, until the user has upgraded
-    minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.1")
+    minimum_cli_version: str = os.getenv("MINIMUM_CLI_VERSION", "0.1.2")
     # Used in deciding if to give the user an announcement on login that a new version of the CLI is available.
     # Whilst we are keeping version numbers identical across each component of divbase, this does not need to be manually set.
     latest_cli_version: str = lib_version
