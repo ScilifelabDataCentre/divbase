@@ -43,8 +43,7 @@ def test_add_project_replaces_existing_project() -> None:
     assert user_config.projects[0].divbase_url == "https://old.com"
     assert user_config.default_project is None
 
-    with pytest.warns(UserWarning):
-        user_config.add_project(name="project1", divbase_url="https://new.com", is_default=True)
+    user_config.add_project(name="project1", divbase_url="https://new.com", is_default=True)
     assert len(user_config.projects) == 1
     assert user_config.projects[0].divbase_url == "https://new.com"
     assert user_config.default_project == "project1"

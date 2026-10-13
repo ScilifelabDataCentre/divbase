@@ -1426,6 +1426,7 @@ def test_create_metadata_template(
         lines = f.readlines()
     assert lines[0].strip() == "#Sample_ID", f"Expected header '#Sample_ID', got {lines[0].strip()}"
     assert len(lines) > 1, "Expected at least one sample in the template"
+    assert b"\r" not in output_path.read_bytes(), "Expected Unix (LF) line endings in the template, not CRLF"
     stdout_lower = cli_result.stdout.lower()
     assert "unique samples" in stdout_lower or "samples found" in stdout_lower, (
         f"Expected message about unique samples, got: {cli_result.stdout}"

@@ -8,7 +8,6 @@ under the user application data directory on Linux, macOS, or Windows).
 """
 
 import logging
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,9 +68,8 @@ class UserConfig:
         new_project = ProjectConfig(name=name, divbase_url=divbase_url)
 
         if new_project.name in self.all_project_names:
-            warnings.warn(
-                f"""The project: '{new_project.name}' already existed in your configuration file. It will be replaced with your new params""",
-                stacklevel=2,
+            print(
+                f"The project: '{new_project.name}' already existed in your configuration file. It will be replaced with your new params."
             )
 
             self.projects = [project for project in self.projects if project.name != new_project.name]

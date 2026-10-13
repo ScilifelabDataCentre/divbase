@@ -2,6 +2,7 @@
 Service layer for DivBase CLI S3 file operations.
 """
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -331,9 +332,11 @@ def stream_file_command(
             for chunk in response.iter_bytes():
                 sys.stdout.buffer.write(chunk)
     except BrokenPipeError:
-        # This happens when the user pipes to a command that closes early
+        # This happens when the user pipes to a command that closes early which is okay
         # (e.g., `[divbase-cli stream command] | head -n 10`).
-        pass
+        # See: https://docs.python.org/3/library/signal.html#note-on-sigpipe
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
 
 
 def upload_files_command(

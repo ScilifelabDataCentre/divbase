@@ -6,7 +6,6 @@ Tests start from 1 of 2 types of user config files:
 - logged_out_user_with_existing_config: A config file with some pre-existing projects and a default project set.
 """
 
-import pytest
 from typer.testing import CliRunner
 
 from divbase_cli.divbase_cli import app
@@ -55,7 +54,7 @@ def test_add_project_and_specify_urls():
 
 def test_add_project_that_already_exists():
     """
-    Should warn user and not be duplicated in the config.
+    Should tell the user and not be duplicated in the config.
     The newer project settings should be in the config file (i.e. overwrite the old ones).
     """
     project_name = "test_project"
@@ -73,9 +72,9 @@ def test_add_project_that_already_exists():
 
     new_command = f"config add {project_name} --divbase-url {new_divbase_url}"
 
-    with pytest.warns(UserWarning, match=f"The project: '{project_name}' already existed"):
-        result = runner.invoke(app, new_command)
+    result = runner.invoke(app, new_command)
     assert result.exit_code == 0
+    assert f"The project: '{project_name}' already existed" in result.stdout
 
     user_config = load_user_config()
     project_info = user_config.project_info(name=project_name)

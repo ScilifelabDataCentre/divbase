@@ -305,7 +305,7 @@ def create_metadata_template_with_project_samples_names(
             return
 
     with open(output_path, mode="w", newline="") as tsvfile:
-        writer = csv.writer(tsvfile, delimiter="\t")
+        writer = csv.writer(tsvfile, delimiter="\t", lineterminator="\n")
         writer.writerow(["#Sample_ID"])
         for sample in unique_sample_names_sorted:
             writer.writerow([sample])

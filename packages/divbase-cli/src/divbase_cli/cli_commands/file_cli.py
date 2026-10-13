@@ -2,6 +2,7 @@
 Command line interface for managing files in a DivBase project's store on DivBase.
 """
 
+import sys
 from collections import defaultdict
 from glob import glob
 from pathlib import Path
@@ -904,12 +905,13 @@ def _print_ls_simple(files: list[ObjectDetails], folders: list[str]) -> None:
 
 
 def _print_ls_tsv_format(files: list[ObjectDetails], folders: list[str]) -> None:
-    """Prints the files and folders in a tab-separated format - for programmatic use"""
+    """Prints the files and folders in a tab-separated format - for programmatic use."""
     for folder in folders:
-        print(f"{markup_escape(folder)}\t-\t-")
+        # using sys.stdout instead of rich's print, as rich converts tabs into spaces.
+        sys.stdout.write(f"{folder}\t-\t-\n")
     for f in files:
         last_modified = format_datetime_for_cli(dt=f.last_modified)
-        print(f"{markup_escape(f.name)}\t{format_file_size(f.size)}\t{last_modified}")
+        sys.stdout.write(f"{f.name}\t{format_file_size(f.size)}\t{last_modified}\n")
 
 
 def _print_ls_detailed(files: list[ObjectDetails], folders: list[str]) -> None:
