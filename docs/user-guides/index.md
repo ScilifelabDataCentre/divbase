@@ -3,6 +3,7 @@
 ## Get started
 
 - **[Quick Start Guide](quick-start.md)** - Get up and running in minutes
+- **[FAQ](faq.md)** - Short answers to common questions
 
 ## Detailed guides
 

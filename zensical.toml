@@ -11,6 +11,7 @@ nav = [
   { "User Guides" = [
       { "Overview" = "user-guides/index.md" },
       { "Quick Start Guide" = "user-guides/quick-start.md" },
+      { "FAQ" = "user-guides/faq.md" },
       { "Account Management" = "user-guides/account-management.md" },
       { "Installation" = "user-guides/installation.md" },
       { "Setup DivBase CLI" = "user-guides/setup_divbase_cli.md" },

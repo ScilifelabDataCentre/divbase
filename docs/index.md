@@ -42,6 +42,8 @@ See the [Installation Guide](user-guides/installation.md) for detailed instructi
 
 See our [Quick Start Guide](user-guides/quick-start.md) to get up and running in minutes or follow our tutorial on [Running a query on a public dataset](user-guides/tutorial-query-on-public-data.md).
 
+Short answers to common questions are in the [FAQ](user-guides/faq.md).
+
 ## Getting Support
 
 - **Need help?** Contact us at [datacentre@scilifelab.se](mailto:datacentre@scilifelab.se) or open a [GitHub Issue](https://github.com/ScilifelabDataCentre/divbase/issues).

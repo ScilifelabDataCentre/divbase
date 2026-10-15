@@ -244,7 +244,7 @@ Replacing `<TASK_ID>` with the DivBase Task ID from the task history.
 
 ## Next steps
 
-This quick start guide was hopefully enough to get you started using DivBase. If you want to learn more about the different features of DivBase, we have many detailed guides.
+This quick start guide was hopefully enough to get you started using DivBase. If you want to learn more about the different features of DivBase, we have many detailed guides. For short answers to common questions, see the [FAQ](faq.md).
 
 For details on:
 
