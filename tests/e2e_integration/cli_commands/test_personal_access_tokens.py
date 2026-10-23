@@ -139,6 +139,8 @@ def test_no_scope_pat_can_only_run_whoami(CONSTANTS, logged_out_user_with_existi
     result = runner.invoke(app, "auth whoami")
     assert result.exit_code == 0
     assert EDIT_USER_EMAIL in result.output
+    assert "Authenticated via personal access token (PAT)." in result.output
+    assert "Login session" not in result.output
 
     result = runner.invoke(app, "task-history user")
     assert_403_error(result)
@@ -287,6 +289,8 @@ def test_pat_stored_via_add_pat_cmd_works(CONSTANTS, logged_out_user_with_existi
         result = runner.invoke(app, "auth whoami")
         assert result.exit_code == 0
         assert EDIT_USER_EMAIL in result.output
+        assert "Authenticated via personal access token (PAT)." in result.output
+        assert "Login session" not in result.output
 
         result = runner.invoke(app, f"files ls --project {CONSTANTS['DEFAULT_PROJECT']}")
         assert_403_error(result)

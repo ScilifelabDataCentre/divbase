@@ -183,6 +183,15 @@ def whoami():
         divbase_base_url=divbase_url,
         api_route="v1/auth/whoami",
     )
-
+    # non-authenticated request will have raised by now, so either login session or valid PAT.
     current_user = request.json()
     print(f"Currently logged in as: {current_user['email']} (Name: {current_user['name']})")
+
+    config = load_user_config()
+    login_session_expires_at = check_existing_session(divbase_url=divbase_url, config=config)
+    if login_session_expires_at:
+        print(f"Login session will expire at: {format_unix_timestamp_for_cli(unix_timestamp=login_session_expires_at)}")
+    else:
+        # PAT can come from env var or os keyring, if env var we can't know expiry time and env var takes priority over keyring.
+        # so best to not show expiry time here as could be wrong if both are set.
+        print("Authenticated via personal access token (PAT).")

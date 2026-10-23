@@ -166,6 +166,8 @@ def test_whoami_command():
     result = runner.invoke(app=app, args=command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
+    assert "Login session will expire at:" in result.stdout
+    assert "personal access token" not in result.stdout
 
 
 def test_whoami_command_fails_if_not_logged_in():
@@ -190,6 +192,7 @@ def test_whoami_command_needing_refresh_token(disable_keyring_backend):
     result = runner.invoke(app=app, args=whoami_command)
     assert result.exit_code == 0
     assert USER_EMAIL in result.stdout
+    assert "Login session will expire at:" in result.stdout
 
 
 def test_whoami_with_expired_tokens_fails(disable_keyring_backend):
