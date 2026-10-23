@@ -401,6 +401,7 @@ def bcftools_pipe_task(
 
     # assigned here so even if early exit from error the finally block will be able to clean them up.
     s3_key_to_path: dict[str, Path] = {}
+    files_to_download: dict[str, str] = {}
     metadata_path: Path | None = None
     output_file: Path | None = None
     task_succeeded = False
@@ -564,6 +565,7 @@ def bcftools_pipe_task(
                 f"Project: {project_name}\n"
                 f"Sample Selection Mode: {_build_sample_selection_replacement(sample_selection_mode, tsv_filter, samples)}\n"
                 f"User inputted bcftools command used: '{command}'\n"
+                f"VCF files queried:\n{_format_downloaded_vcf_versions(files_to_download, s3_key_to_path)}"
                 f"Task ID: {job_id}\n"
                 f"DivBase internal task ID: {task_id}\n"
                 "Note: VCF files are downloaded to the worker with folder separators '/' replaced by '@@' to preserve the full path.\n"
@@ -892,6 +894,16 @@ def _get_bcftools_version() -> str:
     except Exception:
         return "unknown"
     return result.stdout.splitlines()[0].strip()
+
+
+def _format_downloaded_vcf_versions(files_to_download: dict[str, str], s3_key_to_path: dict[str, Path]) -> str:
+    """
+    Format the exact version of each VCF file the query ran against, for the user's task log header.
+    Only files that were downloaded to the worker are listed.
+    """
+    if not s3_key_to_path:
+        return "  None (no VCF files were downloaded)\n"
+    return "".join(f"  - '{s3_key}' (version_id: '{files_to_download[s3_key]}')\n" for s3_key in s3_key_to_path)
 
 
 def _upload_results_file(output_file: Path, bucket_name: str, s3_file_manager: S3FileManager) -> None:

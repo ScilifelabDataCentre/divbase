@@ -1,5 +1,6 @@
 """Unit tests for VCF queries modes in tasks.py"""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,6 +22,7 @@ from divbase_api.worker.tasks import (
     _calculate_pairwise_overlap_types_for_sample_sets,
     _check_if_samples_can_be_combined_with_bcftools,
     _determine_sample_selection_mode,
+    _format_downloaded_vcf_versions,
     _resolve_inputs_for_all_samples_mode,
     _resolve_inputs_for_cli_samples_mode,
 )
@@ -407,6 +409,26 @@ class TestResolveInputsForAllSamplesMode:
         ]
         assert set(result.unique_sample_ids) == {"S1", "S2", "S3"}
         assert result.metadata_path is None
+
+
+class TestFormatDownloadedVCFVersions:
+    def test_lists_only_downloaded_files_with_their_version_ids(self):
+        """Test that the task log header lists each downloaded VCF file with the exact version that was queried."""
+        files_to_download = {"fileA.vcf.gz": "v1", "folder/fileB.vcf.gz": "v2", "fileC.vcf.gz": "v3"}
+        s3_key_to_path = {
+            "fileA.vcf.gz": Path("fileA.vcf.gz"),
+            "folder/fileB.vcf.gz": Path("folder@@fileB.vcf.gz"),
+        }
+
+        result = _format_downloaded_vcf_versions(files_to_download, s3_key_to_path)
+
+        assert result == "  - 'fileA.vcf.gz' (version_id: 'v1')\n  - 'folder/fileB.vcf.gz' (version_id: 'v2')\n"
+
+    def test_no_files_downloaded(self):
+        """Test the message used when the task failed before any VCF files were downloaded."""
+        result = _format_downloaded_vcf_versions(files_to_download={"fileA.vcf.gz": "v1"}, s3_key_to_path={})
+
+        assert result == "  None (no VCF files were downloaded)\n"
 
 
 class TestBcftoolsReturnCodeHandling:
