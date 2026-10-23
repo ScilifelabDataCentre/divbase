@@ -111,7 +111,7 @@ class TestWorkerDimensionsOrderPreservation:
 
         with pytest.raises(TaskUserError) as excinfo:
             _check_if_samples_can_be_combined_with_bcftools(
-                files_to_download=["fileA.vcf.gz", "fileB.vcf.gz"],
+                files_to_download={"fileA.vcf.gz": "v1", "fileB.vcf.gz": "v1"},
                 vcf_dimensions_data=vcf_dimensions_data,
             )
 
@@ -151,6 +151,6 @@ class TestWorkerDimensionsOrderPreservation:
         )
 
         _check_if_samples_can_be_combined_with_bcftools(
-            files_to_download=["fileA.vcf.gz", "fileB.vcf.gz"],
+            files_to_download={"fileA.vcf.gz": "v1", "fileB.vcf.gz": "v1"},
             vcf_dimensions_data=vcf_dimensions_data,
         )

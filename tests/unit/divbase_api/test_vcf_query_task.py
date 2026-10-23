@@ -363,7 +363,7 @@ class TestResolveInputsForCliSamplesMode:
             samples=["S3", "S1", "S3"], vcf_dimensions_data=vcf_dimensions_data
         )
 
-        assert result.files_to_download == ["fileA.vcf.gz", "fileB.vcf.gz"]
+        assert list(result.files_to_download.items()) == [("fileA.vcf.gz", "v1"), ("fileB.vcf.gz", "v2")]
         assert result.sample_and_filename_subset == [
             SampleFileMapping(sample_id="S1", filename="fileA.vcf.gz"),
             SampleFileMapping(sample_id="S3", filename="fileB.vcf.gz"),
@@ -399,7 +399,7 @@ class TestResolveInputsForAllSamplesMode:
         )
         result = _resolve_inputs_for_all_samples_mode(vcf_dimensions_data=vcf_dimensions_data)
 
-        assert result.files_to_download == ["fileA.vcf.gz", "fileB.vcf.gz"]
+        assert list(result.files_to_download.items()) == [("fileA.vcf.gz", "v1"), ("fileB.vcf.gz", "v2")]
         assert result.sample_and_filename_subset == [
             SampleFileMapping(sample_id="S1", filename="fileA.vcf.gz"),
             SampleFileMapping(sample_id="S2", filename="fileA.vcf.gz"),
@@ -646,7 +646,7 @@ class TestSampleSetOverlapHelpers:
         "files_to_download,dimensions_index,should_raise_error,expected_message_part",
         [
             (
-                ["file1.vcf.gz", "file2.vcf.gz"],
+                {"file1.vcf.gz": "v1", "file2.vcf.gz": "v2"},
                 {
                     "vcf_files": [
                         {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
@@ -657,7 +657,7 @@ class TestSampleSetOverlapHelpers:
                 "identical elements but different order",
             ),
             (
-                ["file1.vcf.gz", "file2.vcf.gz"],
+                {"file1.vcf.gz": "v1", "file2.vcf.gz": "v2"},
                 {
                     "vcf_files": [
                         {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A", "B"]},
@@ -668,7 +668,7 @@ class TestSampleSetOverlapHelpers:
                 "partly overlapping",
             ),
             (
-                ["file1.vcf.gz", "file2.vcf.gz"],
+                {"file1.vcf.gz": "v1", "file2.vcf.gz": "v2"},
                 {
                     "vcf_files": [
                         {"vcf_file_s3_key": "file1.vcf.gz", "samples": ["A"]},
@@ -695,7 +695,7 @@ class TestSampleSetOverlapHelpers:
             vcf_files=[
                 ProjectVCFDimensionsEntry(
                     vcf_file_s3_key=entry["vcf_file_s3_key"],
-                    s3_version_id=None,
+                    s3_version_id=files_to_download[entry["vcf_file_s3_key"]],
                     samples=entry.get("samples", []),
                 )
                 for entry in dimensions_index["vcf_files"]

@@ -109,7 +109,7 @@ class SampleModeResult:
     so the rest of the pipeline can be shared regardless of how samples were selected.
     """
 
-    files_to_download: list[str]
+    files_to_download: dict[str, str]
     sample_and_filename_subset: list[SampleFileMapping]
     unique_sample_ids: list[str]
     metadata_path: Path | None = None
@@ -643,8 +643,8 @@ def _update_vcf_dimensions(
 ) -> dict:
     """Body of update_vcf_dimensions_task, split out so the task can turn a soft time limit into a clear user error."""
     s3_file_manager = _create_s3_file_manager()
-    all_files = s3_file_manager.list_files(bucket_name=bucket_name)
-    vcf_files = [file for file in all_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
+    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
+    vcf_files = [file for file in latest_versions_of_bucket_files if file.endswith(".vcf") or file.endswith(".vcf.gz")]
 
     # First, compare the list of VCF files in the bucket with the list of VCF files in the dimensions table. Use one db session here that closes, since there is a bit of other logic before we need db access again.
     with SyncSessionLocal() as db:
@@ -683,8 +683,6 @@ def _update_vcf_dimensions(
         if (entry.sample_count > 0 and not entry.samples) or (entry.variant_count > 0 and not entry.scaffolds)
     }
 
-    latest_versions_of_bucket_files = s3_file_manager.latest_version_of_all_files(bucket_name=bucket_name)
-
     if incomplete_indexed_vcfs:
         logger.warning(
             "Found %d VCF dimension entries with missing child rows. Forcing re-index even when version is unchanged: %s",
@@ -710,8 +708,11 @@ def _update_vcf_dimensions(
         )
     ]
 
+    non_indexed_vcfs_to_download = {file: latest_versions_of_bucket_files[file] for file in non_indexed_vcfs}
     s3_key_to_path = _download_vcf_files(
-        files_to_download=non_indexed_vcfs, bucket_name=bucket_name, s3_file_manager=s3_file_manager
+        files_to_download=non_indexed_vcfs_to_download,
+        bucket_name=bucket_name,
+        s3_file_manager=s3_file_manager,
     )
 
     calculator = VCFDimensionCalculator()
@@ -728,7 +729,7 @@ def _update_vcf_dimensions(
                     skipped_vcf_data = SkippedVCFData(
                         vcf_file_s3_key=s3_key,
                         project_id=project_id,
-                        s3_version_id=latest_versions_of_bucket_files.get(s3_key),
+                        s3_version_id=latest_versions_of_bucket_files[s3_key],
                         skip_reason="divbase_generated",
                     )
                     create_or_update_skipped_vcf(db=db, skipped_vcf_data=skipped_vcf_data)
@@ -739,7 +740,7 @@ def _update_vcf_dimensions(
                 vcf_metadata_data = VCFMetadataData(
                     vcf_file_s3_key=s3_key,
                     project_id=project_id,
-                    s3_version_id=latest_versions_of_bucket_files.get(s3_key),
+                    s3_version_id=latest_versions_of_bucket_files[s3_key],
                     samples=vcf_dims.sample_names,
                     scaffolds=vcf_dims.scaffolds,
                     variant_count=vcf_dims.variants,
@@ -853,10 +854,10 @@ def _download_sample_metadata(metadata_tsv_name: str, bucket_name: str, s3_file_
 
 
 def _download_vcf_files(
-    files_to_download: list[str], bucket_name: str, s3_file_manager: S3FileManager
+    files_to_download: dict[str, str], bucket_name: str, s3_file_manager: S3FileManager
 ) -> dict[str, Path]:
     """
-    Fetch input VCF files from the project's s3 bucket.
+    Fetch input VCF files [key, version_id] from the project's s3 bucket.
     Returns a mapping of S3 keys (keys) to their downloaded local file path (values).
     """
     logger.info(f"Starting download of {len(files_to_download)} VCF file(s) from bucket '{bucket_name}'")
@@ -864,9 +865,11 @@ def _download_vcf_files(
     download_dir = Path.cwd()
     s3_key_to_path: dict[str, Path] = {}
 
-    for s3_key in files_to_download:
+    for s3_key, version_id in files_to_download.items():
         target_path = download_dir / _convert_s3_key_to_local_filename(s3_key)
-        s3_file_manager._download_single_file(key=s3_key, dest=target_path, bucket_name=bucket_name, version_id=None)
+        s3_file_manager._download_single_file(
+            key=s3_key, dest=target_path, bucket_name=bucket_name, version_id=version_id
+        )
         s3_key_to_path[s3_key] = target_path
 
     logger.info(f"Downloaded VCF files: {list(s3_key_to_path.keys())}")
@@ -1034,8 +1037,12 @@ def _resolve_inputs_for_sample_metadata_mode(
         metadata_path.unlink(missing_ok=True)
         raise
 
+    # creates a map of s3_key, version_id for all VCF files in the project that matched the query.
+    version_lookup = {entry.vcf_file_s3_key: entry.s3_version_id for entry in vcf_dimensions_data.vcf_files}
+    files_to_download = {filename: version_lookup[filename] for filename in metadata_result.unique_filenames}
+
     return SampleModeResult(
-        files_to_download=metadata_result.unique_filenames,
+        files_to_download=files_to_download,
         sample_and_filename_subset=[
             SampleFileMapping(sample_id=row.sample_id, filename=row.filename)
             for row in metadata_result.sample_and_filename_subset
@@ -1056,7 +1063,7 @@ def _resolve_inputs_for_cli_samples_mode(
     """
     requested_samples = list(dict.fromkeys(samples))
     requested_set = set(requested_samples)
-    files_to_download: list[str] = []
+    files_to_download: dict[str, str] = {}  # s3_key and version_id
     sample_and_filename_subset: list[SampleFileMapping] = []
     matched_samples: set[str] = set()
 
@@ -1067,7 +1074,7 @@ def _resolve_inputs_for_cli_samples_mode(
                 sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
                 matched_samples.add(sample_id)
                 if filename not in files_to_download:
-                    files_to_download.append(filename)
+                    files_to_download[filename] = vcf_entry.s3_version_id
 
     missing_samples = [sample_id for sample_id in requested_samples if sample_id not in matched_samples]
 
@@ -1096,7 +1103,7 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
     For the mode: VCFQuerySampleSelectionMode.ALL_SAMPLES
     """
     sample_and_filename_subset: list[SampleFileMapping] = []
-    files_to_download = []
+    files_to_download: dict[str, str] = {}  # s3_key and version_id
     unique_sample_ids: list[
         str
     ] = []  # Preserve deterministic bcftools sample ID ordering by using seen_sample_ids for uniqueness and unique_sample_ids as the ordered list.
@@ -1104,7 +1111,8 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
 
     for vcf_entry in vcf_dimensions_data.vcf_files:
         filename = vcf_entry.vcf_file_s3_key
-        files_to_download.append(filename)
+        files_to_download[filename] = vcf_entry.s3_version_id
+
         for sample_id in vcf_entry.samples:
             sample_and_filename_subset.append(SampleFileMapping(sample_id=sample_id, filename=filename))
             if sample_id not in seen_sample_ids:
@@ -1121,16 +1129,13 @@ def _resolve_inputs_for_all_samples_mode(vcf_dimensions_data: ProjectVCFDimensio
 
 def _check_for_unnecessary_files_for_region_query(
     scaffolds: list[str],
-    files_to_download: list[str],
+    files_to_download: dict[str, str],
     vcf_dimensions_data: ProjectVCFDimensionsData,
-) -> list[str]:
+) -> dict[str, str]:
     """
     Given parsed scaffold names from region selectors, check if those scaffolds are available in the VCF files.
     If a file in files_to_download (as identified by sidecar sample metadata query) does not contain any of the specified scaffolds, it will be skipped.
     This will save time and resources by avoiding unnecessary transfer of irrelevant files between the bucket and the worker.
-
-    NOTE! There is a risk that users mistype...
-
     """
     if not vcf_dimensions_data.vcf_files:
         logger.warning(
@@ -1139,7 +1144,7 @@ def _check_for_unnecessary_files_for_region_query(
         )
         return files_to_download
 
-    files_to_download_updated = []
+    files_to_download_updated: dict[str, str] = {}
     if not scaffolds:
         return files_to_download
 
@@ -1156,7 +1161,7 @@ def _check_for_unnecessary_files_for_region_query(
             if scaffold_name in record_scaffolds:
                 logger.info(f"'view -r' query requires scaffold '{scaffold_name}'. It is present in file '{file}'.")
                 if file not in files_to_download_updated:
-                    files_to_download_updated.append(file)
+                    files_to_download_updated[file] = vcf_lookup[file].s3_version_id
 
     if not files_to_download_updated:
         raise TaskUserError(
@@ -1230,7 +1235,7 @@ def _delete_job_files_from_worker(
 
 
 def _check_if_samples_can_be_combined_with_bcftools(
-    files_to_download: list[str],
+    files_to_download: dict[str, str],
     vcf_dimensions_data: ProjectVCFDimensionsData,
 ) -> None:
     """
@@ -1351,7 +1356,7 @@ def _check_that_dimensions_is_up_to_date_with_VCF_files_in_bucket(
     for file_name in indexed_vcf_files:
         if file_name in vcf_files_in_bucket:
             indexed_version = indexed_vcf_lookup[file_name]
-            bucket_version = latest_versions_of_bucket_files.get(file_name, "null")
+            bucket_version = latest_versions_of_bucket_files[file_name]
             if indexed_version != bucket_version:
                 outdated_files.append(file_name)
                 logger.error(

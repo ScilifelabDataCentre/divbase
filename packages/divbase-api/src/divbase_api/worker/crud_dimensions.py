@@ -23,7 +23,7 @@ logger = structlog.get_logger(__name__)
 class VCFMetadataData:
     vcf_file_s3_key: str
     project_id: int
-    s3_version_id: str | None
+    s3_version_id: str
     samples: List[str]
     scaffolds: List[str]
     variant_count: int
@@ -35,14 +35,14 @@ class VCFMetadataData:
 class SkippedVCFData:
     vcf_file_s3_key: str
     project_id: int
-    s3_version_id: str | None
+    s3_version_id: str
     skip_reason: str
 
 
 @dataclass
 class ProjectVCFDimensionsEntry:
     vcf_file_s3_key: str
-    s3_version_id: str | None
+    s3_version_id: str
     samples: list[str] = field(default_factory=list)
     scaffolds: list[str] = field(default_factory=list)
     variant_count: int = 0
