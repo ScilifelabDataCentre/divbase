@@ -237,6 +237,7 @@ class TestQueryVCFSuccess:
         run_update_dimensions,
         project_map,
         should_succeed,
+        tmp_path,
     ):
         """
         Test running a bcftools pipe query using the CLI.
@@ -281,11 +282,12 @@ class TestQueryVCFSuccess:
         else:
             assert f"{QUERY_RESULTS_FILE_PREFIX}{user_task_id}.vcf.gz" not in result.stdout
 
-        command = f"files download {log_file} --project {project_name}"
+        command = f"files download {log_file} --download-dir {tmp_path} --project {project_name}"
         result = runner.invoke(app, command)
         assert result.exit_code == 0
-        assert Path(log_file).exists()
-        log_contents = Path(log_file).read_text()
+        downloaded_log_file = tmp_path / log_file
+        assert downloaded_log_file.exists()
+        log_contents = downloaded_log_file.read_text()
 
         if should_succeed:
             assert "Job Status: SUCCESS" in log_contents

@@ -575,11 +575,12 @@ def test_bcftools_pipe_cli_integration_with_eager_mode(
 
     def patched_delete_job_files_from_worker(vcf_paths=None, metadata_path=None, output_file=None, log_file=None):
         """
-        Only delete the output file, using the correct path. Don't delete the fixtures, since they should persist.
+        Only delete the output and log files. Don't delete the fixtures, since they should persist.
         """
-
         logger = structlog.get_logger(__name__)
 
+        if log_file is not None:
+            Path(log_file).unlink(missing_ok=True)
         if output_file is not None:
             output_file = ensure_fixture_path(str(output_file))
             try:
