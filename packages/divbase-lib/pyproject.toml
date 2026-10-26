@@ -12,7 +12,8 @@ dependencies = [
     "pandas==2.3.3", # TODO - consider major version bump
     "pydantic==2.13.5",
     "httpx==0.28.1",
-    "stamina==26.1.0"
+    "stamina==26.1.0",
+    "certifi>=2026.10.19" # transitive dep (from httpx), added because of eMudhra CA issue
 ]
 dynamic = ["version"]
 
