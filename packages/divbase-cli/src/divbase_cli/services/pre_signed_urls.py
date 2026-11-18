@@ -400,6 +400,9 @@ def perform_multipart_upload(
             divbase_base_url=divbase_base_url,
             api_route=f"v1/s3/upload/multi-part/complete?project_name={project_name}",
             json=complete_request_body.model_dump(),
+            # S3 can take a while to assemble the parts of very large files.
+            # This timeout will likely never be reached, 5 seconds was enough for ~15 GB files, but not a 25 GB file.
+            timeout=httpx.Timeout(10.0, read=300.0),
         )
         completed_upload = CompleteMultipartUploadResponse(**response.json())
         print("[bold green]Success[/bold green]")

@@ -232,6 +232,27 @@ class ObjectDoesNotExistError(DivBaseAPIException):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
 
 
+class MultipartUploadNotFoundError(DivBaseAPIException):
+    """
+    Raised when S3 reports that a multipart upload (upload ID) does not exist (S3 'NoSuchUpload' error).
+
+    NOTE: This is returned both when the upload has already completed or was aborted.
+    """
+
+    log_level = logging.INFO
+    include_exc_info = False
+
+    def __init__(self, key: str):
+        message = (
+            f"Could not confirm the upload of '{key}' finished, it most likely did (this can happen with very large files).\n"
+            "To check, re-run the same upload command with '--skip-existing' added, e.g.:\n"
+            "    divbase-cli files upload <your-file> --skip-existing\n"
+            "If the file was uploaded correctly it will be skipped, otherwise it will be uploaded again."
+            "The --skip-existing flag uses MD5 checksums to validate the file is already present in the project."
+        )
+        super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
 class TSVFileNotFoundInProjectError(DivBaseAPIException):
     """Raised when a TSV doesn't exist in project storage."""
 

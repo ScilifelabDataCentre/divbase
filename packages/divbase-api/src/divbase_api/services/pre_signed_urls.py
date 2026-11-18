@@ -14,6 +14,7 @@ from botocore.config import Config
 from fastapi import HTTPException, status
 
 from divbase_api.api_config import api_settings
+from divbase_api.exceptions import MultipartUploadNotFoundError
 from divbase_lib.api_schemas.s3 import (
     AbortMultipartUploadResponse,
     CompleteMultipartUploadResponse,
@@ -192,12 +193,15 @@ class S3PreSignedService:
         # Parts have to provided in ascending order (client can upload in whatever order).
         s3_formatted_parts.sort(key=lambda x: x["PartNumber"])
 
-        response = self.s3_client.complete_multipart_upload(
-            Bucket=bucket_name,
-            Key=object_name,
-            UploadId=upload_id,
-            MultipartUpload={"Parts": s3_formatted_parts},
-        )
+        try:
+            response = self.s3_client.complete_multipart_upload(
+                Bucket=bucket_name,
+                Key=object_name,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": s3_formatted_parts},
+            )
+        except self.s3_client.exceptions.NoSuchUpload:
+            raise MultipartUploadNotFoundError(key=object_name) from None
 
         # ETag is the combined etag for the entire object,
         # If differs from the individual part etags and has a suffix like "-N" where N is number of parts.
