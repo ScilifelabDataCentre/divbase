@@ -42,8 +42,6 @@ from divbase_lib.divbase_constants import LOCAL_DEV_ENVIRONMENTS
 configure_logging(
     log_level=api_settings.general.log_level,
     environment=api_settings.general.environment,
-    log_to_file=api_settings.general.log_to_file,
-    service_name="divbase_api",
 )
 logger = structlog.get_logger(__name__)
 

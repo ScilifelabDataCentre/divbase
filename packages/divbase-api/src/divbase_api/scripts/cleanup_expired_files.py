@@ -62,7 +62,6 @@ class CronJobConfig:
 
     environment: str = os.environ["DIVBASE_ENV"]
     logging_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_to_file: bool = os.getenv("LOG_TO_FILE", "0") == "1"
     db_url: SecretStr = field(default_factory=lambda: SecretStr(os.environ["SYNC_DATABASE_URL"]))
     endpoint_url: str = field(default_factory=lambda: os.environ["S3_ENDPOINT_URL"])
     access_key: SecretStr = field(default_factory=lambda: SecretStr(os.environ["S3_CRON_SERVICE_ACCOUNT_ACCESS_KEY"]))
@@ -335,8 +334,6 @@ def main() -> None:
     configure_logging(
         log_level=job_config.logging_level,
         environment=job_config.environment,
-        log_to_file=job_config.log_to_file,
-        service_name="divbase_cron_cleanup_expired_files",
     )
 
     s3_file_manager = S3FileManager(

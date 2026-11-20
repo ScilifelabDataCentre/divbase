@@ -11,7 +11,6 @@ import structlog
 from celery.schedules import crontab
 from sqlalchemy import delete, select, text, update
 
-from divbase_api.logging_config import LOG_FILES_DIR
 from divbase_api.models.personal_access_tokens import PersonalAccessTokenDB
 from divbase_api.models.project_versions import ProjectVersionDB
 from divbase_api.models.projects import ProjectDB
@@ -268,43 +267,6 @@ def update_storage_usage_metrics() -> dict:
     }
 
 
-@app.task(name="cron_tasks.remove_old_log_files")
-def remove_old_log_files(log_retention_days: int = worker_settings.cron.log_retention_days) -> dict:
-    """
-    If a deployed enviroment is writing logs to files, this task will clean up outdated log files to prevent disk clutter.
-    NOTE: If loki/grafana alloy is setup, then this task can be removed.
-
-    Runs daily and deletes the log files based on when they were last modified.
-    """
-    if not LOG_FILES_DIR.exists():
-        logger.info(f"Log files directory does not exist, skipping cleanup: {LOG_FILES_DIR}")
-        return {
-            "status": "completed",
-            "number_of_log_files_deleted": "N/A - log directory does not exist",
-            "retention_days": log_retention_days,
-        }
-
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=log_retention_days)
-
-    numb_deleted = 0
-    for log_file in LOG_FILES_DIR.glob("*.log*"):
-        if not log_file.is_file():
-            continue
-
-        last_modified = datetime.fromtimestamp(log_file.stat().st_mtime, tz=timezone.utc)
-        if last_modified < cutoff_date:
-            log_file.unlink(missing_ok=True)
-            numb_deleted += 1
-
-    logger.info(f"Deleted {numb_deleted} log files older than {log_retention_days} days from {LOG_FILES_DIR}")
-
-    return {
-        "status": "completed",
-        "number_of_log_files_deleted": numb_deleted,
-        "retention_days": log_retention_days,
-    }
-
-
 # NOTE! If you add a new task here, make sure it starts with "cron_tasks"
 # Don't set to 2 AM or 3 AM due to daylight saving.
 # Timezone for job schedule is CET (defined in app in tasks.py).
@@ -332,9 +294,5 @@ app.conf.beat_schedule = {
     "update-storage-usage-metrics-daily": {
         "task": "cron_tasks.update_storage_usage_metrics",
         "schedule": crontab(hour=5, minute=15),
-    },
-    "remove-old-log-files-daily": {
-        "task": "cron_tasks.remove_old_log_files",
-        "schedule": crontab(hour=5, minute=30),
     },
 }
