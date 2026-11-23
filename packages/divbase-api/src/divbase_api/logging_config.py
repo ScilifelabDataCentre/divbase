@@ -40,12 +40,14 @@ class SkipHealthyApiChecksFilter(logging.Filter):
     Only those that are healthy (200) are filtered.
     """
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.name != "uvicorn.access":
-            return True
+    HEALTH_PATH = "/api/v1/core/health"
 
-        message = record.getMessage()
-        return "/api/v1/core/health" not in message or "200" not in message
+    def filter(self, record: logging.LogRecord) -> bool:
+        # format: client_addr, method, full_path, http_version, status_code
+        _, _, full_path, _, status_code = record.args
+        path_without_query = full_path.split("?")[0]
+
+        return not (path_without_query == self.HEALTH_PATH and status_code == 200)
 
 
 def configure_logging(log_level: str, environment: str) -> None:
@@ -101,8 +103,8 @@ def configure_logging(log_level: str, environment: str) -> None:
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
 
-    # filter out healthy api checks from uvicorn access logs (otherwise noisy)
-    logging.getLogger("uvicorn.access").addFilter(SkipHealthyApiChecksFilter())
+    # filter out healthy api checks from uvicorn access logs (otherwise noisy).
+    logging.getLogger("uvicorn.access").filters = [SkipHealthyApiChecksFilter()]
 
 
 def create_user_task_log_handler(log_file: Path) -> logging.Handler:
