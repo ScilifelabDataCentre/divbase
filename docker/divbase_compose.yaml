@@ -58,7 +58,7 @@ services:
     environment: &worker-env
       - DIVBASE_ENV=local_dev
       - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
-      - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
+      - CELERY_RESULT_BACKEND=db+postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
       - S3_ENDPOINT_URL=http://host.docker.internal:9000
       - S3_PRESIGNING_URL=http://localhost:9000
@@ -186,7 +186,7 @@ services:
     - DOCS_SITE_URL=http://localhost:8008/divbase 
     - USER_SUPPORT_EMAIL=datacentre@scilifelab.se
     - CELERY_BROKER_URL=pyamqp://celery_user:badpassword@rabbitmq:5672//
-    - CELERY_RESULT_BACKEND=db+postgresql://divbase_user:badpassword@postgres:5432/divbase_db
+    - CELERY_RESULT_BACKEND=db+postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db
     - ASYNC_DATABASE_URL=postgresql+asyncpg://divbase_user:badpassword@postgres:5432/divbase_db 
     - SYNC_DATABASE_URL=postgresql+psycopg2://divbase_user:badpassword@postgres:5432/divbase_db # Needed for lifespan event to check migrations are at HEAD.
     - JWT_SECRET_KEY=a-string-secret-at-least-256-bits-long
