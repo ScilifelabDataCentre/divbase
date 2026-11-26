@@ -138,8 +138,6 @@ app.conf.update(
     result_extended=True,
     timezone=DIVBASE_SERVER_TIMEZONE,  # for internal scheduling, e.g. celery beat
     worker_cancel_long_running_tasks_on_connection_loss=True,  # silence warning as will become default in celery 6
-    control_queue_durable=True,
-    event_queue_durable=True,
     broker_transport_options={"confirm_publish": True},
     # let celery auto-create db tables (alembic is configured to not manage changes to these tables)
     database_table_names={
