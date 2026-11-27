@@ -1,5 +1,5 @@
 ## Stage 1: Build
-FROM ghcr.io/astral-sh/uv:python3.14-alpine3.23@sha256:cf4d33eb056b454a922b80e3594c0621ac56e83e118ec4e7415c58ae65466ede AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-alpine3.23@sha256:179094b1d334e618d67378ecbe2a4e94cb58493d787a1cc4d41881c48140f533 AS builder
 
 ARG BCFTOOLS_VERSION="1.22"
 
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package divbase-api
 
 ## Stage 2: Final image (without uv installed)
-FROM python:3.14.10-alpine3.23@sha256:f6a7dec95e6205059dccfcb07faca3ca38729ea35df01231caf1d127bacedec8
+FROM python:3.15.2-alpine3.23@sha256:32f06114a111c2467804d06194c5584f16804a78cfaf427fb1fcbb0b3391d0f1
 
 WORKDIR /app
 
