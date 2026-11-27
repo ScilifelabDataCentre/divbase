@@ -109,20 +109,27 @@ def EXISTING_ACCOUNTS(CONSTANTS):
     }
 
 
+def empty_mailpit(context: BrowserContext) -> None:
+    """Helper to empty the Mailpit inbox."""
+    response = context.request.delete(f"{MAILPIT_BASE_URL}/api/v1/messages")
+    if not response.ok:
+        raise RuntimeError(f"Failed to empty Mailpit inbox: {response.status} {response.text()}")
+
+
 @pytest.fixture
 def mailpit_page(context: BrowserContext):
-    """Fixture to provide a Mailpit page that auto-closes after each test."""
+    """
+    Fixture to provide a Mailpit page that auto-closes after each test.
+
+    All emails deleted before and after each test to keep tests isolated.
+    """
+    empty_mailpit(context)
     page = context.new_page()
     page.goto(MAILPIT_BASE_URL)
+
     yield page
 
-    # delete all emails after test to keep Mailpit clean
-    page.goto(MAILPIT_BASE_URL)
-    delete_all_button = page.get_by_role("button", name=re.compile("Delete all"))
-    # 0 messages if disabled
-    if delete_all_button.is_enabled():
-        page.get_by_role("button", name=re.compile("Delete all")).click()
-        page.get_by_role("button", name="Delete", exact=True).click()
+    empty_mailpit(context)
     page.close()
 
 
