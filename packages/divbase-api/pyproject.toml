@@ -18,7 +18,7 @@ dependencies = [
     "sqlalchemy[asyncio]==2.1.9", # Note that a minor bump is considered a major change for sqlalchemy
     "prometheus-client==0.26.0",
     "psutil==7.2.2",
-    "boto3==1.44.9",
+    "boto3==1.44.11",
     "structlog==26.1.0",
     "altcha==2.5.0",
     "divbase-lib", # always uses version in repo, handled by uv
